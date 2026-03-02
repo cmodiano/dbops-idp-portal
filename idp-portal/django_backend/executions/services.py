@@ -21,6 +21,7 @@ from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.exceptions import BadRequestError
 from core.middleware import get_correlation_id
+from executions.dtos import ExecutionRequest
 from integrations.models import IntegrationStatus
 
 logger = structlog.get_logger(__name__)
@@ -168,13 +169,7 @@ class ExecutionService:
                 correlation_id=correlation_id,
             )
 
-    def create_execution(self, user: User, action: Action, environment: str,
-                       parameters: dict | None = None, parent_execution_id: int | None = None,
-                       correlation_id: str | None = None,
-                       source: str | None = None, ip_address: str | None = None,
-                       targets: list[str] | None = None,
-                       delegated_referenced_action_ids: list[int] | None = None,
-                       validated_targets: list[dict] | None = None) -> Execution:
+    def create_execution(self, request: ExecutionRequest) -> Execution:
         """
         Create an execution atomically.
 
@@ -182,19 +177,7 @@ class ExecutionService:
         so audit entries survive even when execution is blocked.
 
         Args:
-            user: User instance creating the execution
-            action: Action instance to execute
-            environment: Target environment
-            parameters: Optional execution parameters dict
-            parent_execution_id: Optional parent execution ID (for remediation)
-            correlation_id: Optional correlation ID for tracing
-            source: Optional source identifier ('api' or 'ui') for audit (Story 13.5)
-            ip_address: Optional IP address of the client for audit (Story 13.5)
-            targets: Optional list of target names for audit (Story 13.5)
-            delegated_referenced_action_ids: Story 4.11 - when set, merge workflow delegation
-                into the single audit entry (avoids duplicate EXECUTION_SUBMITTED).
-            validated_targets: Story 25.1 - list of validated target dicts from inventory
-                (keys: name, environment, target_type, metadata). Creates ExecutionTarget records.
+            request: ExecutionRequest DTO encapsulating all execution parameters.
 
         Returns:
             Execution instance
@@ -204,54 +187,42 @@ class ExecutionService:
         """
         # Story 24.4 (AC4): Validate integration status BEFORE atomic block
         self._check_integration_status(
-            action=action,
-            user_id=str(user.id),
-            correlation_id=correlation_id,
+            action=request.action,
+            user_id=str(request.user.id),
+            correlation_id=request.correlation_id,
         )
 
-        return self._create_execution_atomic(
-            user=user, action=action, environment=environment,
-            parameters=parameters, parent_execution_id=parent_execution_id,
-            correlation_id=correlation_id, source=source, ip_address=ip_address,
-            targets=targets, delegated_referenced_action_ids=delegated_referenced_action_ids,
-            validated_targets=validated_targets,
-        )
+        return self._create_execution_atomic(request)
 
     @transaction.atomic
-    def _create_execution_atomic(self, user: User, action: Action, environment: str,
-                       parameters: dict | None = None, parent_execution_id: int | None = None,
-                       correlation_id: str | None = None,
-                       source: str | None = None, ip_address: str | None = None,
-                       targets: list[str] | None = None,
-                       delegated_referenced_action_ids: list[int] | None = None,
-                       validated_targets: list[dict] | None = None) -> Execution:
+    def _create_execution_atomic(self, request: ExecutionRequest) -> Execution:
         """Internal atomic execution creation (after integration validation).
         Story 25.4 / 7.4: If requires_approval for this environment, create as PENDING_APPROVAL
         so the execution waits for DBA approval before being launched.
         """
         requires_approval = bool(
-            (parameters or {}).get("_env_config", {}).get("requires_approval", False)
+            (request.parameters or {}).get("_env_config", {}).get("requires_approval", False)
         )
         initial_status = (
             ExecutionStatus.PENDING_APPROVAL if requires_approval else ExecutionStatus.SUBMITTED
         )
 
         execution = Execution.objects.create(
-            action=action,
-            user=user,
-            environment=environment,
+            action=request.action,
+            user=request.user,
+            environment=request.environment,
             status=initial_status,
-            parent_execution_id=parent_execution_id,
+            parent_execution_id=request.parent_execution_id,
         )
 
         # Set parameters if provided
-        if parameters:
-            execution.set_parameters(parameters)
+        if request.parameters:
+            execution.set_parameters(request.parameters)
             execution.save()
 
         # Story 25.1: Create ExecutionTarget records for each validated target
-        if validated_targets:
-            for target_data in validated_targets:
+        if request.validated_targets:
+            for target_data in request.validated_targets:
                 target_type_str = (target_data.get('target_type') or 'other').upper()
                 # Map to TargetType enum, default to OTHER
                 try:
@@ -283,39 +254,39 @@ class ExecutionService:
             logger.info(
                 "execution_targets_created",
                 execution_id=execution.id,
-                target_count=len(validated_targets),
-                correlation_id=correlation_id,
+                target_count=len(request.validated_targets),
+                correlation_id=request.correlation_id,
             )
 
         # Build audit details (Story 13.5: include source, ip_address, targets)
         audit_details = {
-            'action_id': action.id,
-            'action_name': action.name,
-            'environment': environment,
+            'action_id': request.action.id,
+            'action_name': request.action.name,
+            'environment': request.environment,
         }
         # Story 4.12 (AC6): include workflow_step_parameters when provided (sanitized)
-        raw_wsp = parameters.get("workflow_step_parameters") if isinstance(parameters, dict) else None
+        raw_wsp = request.parameters.get("workflow_step_parameters") if isinstance(request.parameters, dict) else None
         sanitized_wsp = _sanitize_parameters(raw_wsp) if isinstance(raw_wsp, dict) else None
         if sanitized_wsp:
             audit_details["workflow_step_parameters"] = sanitized_wsp
         # Story 43.2: inclure les paramètres d'exécution nettoyés dans audit_details
-        sanitized_params = _sanitize_parameters(parameters)
+        sanitized_params = _sanitize_parameters(request.parameters)
         if sanitized_params:
             sanitized_params.pop("workflow_step_parameters", None)
             if sanitized_params:
                 audit_details["parameters"] = sanitized_params
-        if source:
-            audit_details['source'] = source
-        if ip_address:
-            audit_details['ip_address'] = ip_address
-        if targets:
-            audit_details['targets'] = targets
+        if request.source:
+            audit_details['source'] = request.source
+        if request.ip_address:
+            audit_details['ip_address'] = request.ip_address
+        if request.targets:
+            audit_details['targets'] = request.targets
         # Story 4.11: single audit entry with delegation info (avoids duplicate)
-        if delegated_referenced_action_ids is not None:
+        if request.delegated_referenced_action_ids is not None:
             audit_details['delegated'] = True
-            audit_details['workflow_action_id'] = action.id
-            audit_details['workflow_action_name'] = action.name
-            audit_details['referenced_action_ids'] = delegated_referenced_action_ids
+            audit_details['workflow_action_id'] = request.action.id
+            audit_details['workflow_action_name'] = request.action.name
+            audit_details['referenced_action_ids'] = request.delegated_referenced_action_ids
             audit_details['validation_result'] = 'success'
 
         # Audit (Story 25.4: PENDING_APPROVAL when requires_approval for env)
@@ -325,18 +296,17 @@ class ExecutionService:
             else AuditActionType.EXECUTION_SUBMITTED
         )
         AuditService.create_entry(
-            user_id=str(user.id),
+            user_id=str(request.user.id),
             action_type=audit_action,
             entity_type=AuditEntityType.EXECUTION,
             entity_id=execution.id,
             details=audit_details,
-            ip_address=ip_address,
-            correlation_id=correlation_id
+            ip_address=request.ip_address,
+            correlation_id=request.correlation_id
         )
 
         return execution
-    
-    @transaction.atomic
+
     def create_execution_with_steps(self, user: User, action: Action, environment: str,
                                    parameters: dict | None = None, steps_data: list[dict] | None = None,
                                    parent_execution_id: int | None = None, correlation_id: str | None = None,
@@ -344,7 +314,7 @@ class ExecutionService:
                                    targets: list[str] | None = None) -> Execution:
         """
         Create an execution with steps atomically.
-        
+
         Args:
             user: User instance creating the execution
             action: Action instance to execute
@@ -356,36 +326,53 @@ class ExecutionService:
             source: Optional source ('api' or 'ui') for audit (Story 13.5)
             ip_address: Optional client IP for audit (Story 13.5)
             targets: Optional target names for audit (Story 13.5)
-        
+
         Returns:
             Execution instance with steps created
         """
-        # Create the execution (pass audit fields for SOC1 traceability)
-        execution = self.create_execution(
-            user, action, environment, parameters, parent_execution_id, correlation_id,
-            source=source, ip_address=ip_address, targets=targets,
+        # Story 24.4 (AC4): Validate integration status BEFORE the atomic block
+        # so audit entries survive even when execution is blocked.
+        self._check_integration_status(
+            action=action,
+            user_id=str(user.id),
+            correlation_id=correlation_id,
         )
-        
-        # Create steps if provided
-        if steps_data:
-            for step_data in steps_data:
-                ExecutionStep.objects.create(
-                    execution=execution,
-                    step_order=step_data.get('step_order', 0),
-                    step_name=step_data.get('step_name', 'Step'),
-                    step_type=step_data.get('step_type', 'manual'),
-                    status=ExecutionStepStatus.PENDING,
-                )
-        
+
+        exec_req = ExecutionRequest(
+            user=user,
+            action=action,
+            environment=environment,
+            parameters=parameters,
+            parent_execution_id=parent_execution_id,
+            correlation_id=correlation_id,
+            source=source,
+            ip_address=ip_address,
+            targets=targets,
+        )
+
+        with transaction.atomic():
+            execution = self._create_execution_atomic(exec_req)
+
+            # Create steps if provided
+            if steps_data:
+                for step_data in steps_data:
+                    ExecutionStep.objects.create(
+                        execution=execution,
+                        step_order=step_data.get('step_order', 0),
+                        step_name=step_data.get('step_name', 'Step'),
+                        step_type=step_data.get('step_type', 'manual'),
+                        status=ExecutionStepStatus.PENDING,
+                    )
+
         return execution
-    
+
     def list_all(self, status: str | None = None, user_id: int | None = None,
                 action_id: int | None = None, environment: str | None = None,
                 date_from: datetime | None = None, date_to: datetime | None = None,
                 page: int = 1, page_size: int = 25) -> tuple[list[Execution], int]:
         """
         List all executions with pagination and filters.
-        
+
         Args:
             status: Filter by status
             user_id: Filter by user ID
@@ -395,12 +382,12 @@ class ExecutionService:
             date_to: Filter by created_at <= date_to
             page: Page number (1-based)
             page_size: Number of items per page
-        
+
         Returns:
             Tuple of (list of executions, total count)
         """
         queryset = Execution.objects.select_related('action', 'user').prefetch_related('executionstep_set')
-        
+
         # Apply filters
         if status:
             queryset = queryset.filter(status=status)
@@ -414,25 +401,25 @@ class ExecutionService:
             queryset = queryset.filter(created_at__gte=date_from)
         if date_to:
             queryset = queryset.filter(created_at__lte=date_to)
-        
+
         # Order by created_at DESC
         queryset = queryset.order_by('-created_at')
-        
+
         # Pagination
         total_count = queryset.count()
         start_index = (page - 1) * page_size
         end_index = start_index + page_size
         results = list(queryset[start_index:end_index])
-        
+
         return results, total_count
-    
+
     def get_by_id(self, execution_id: int) -> Execution | None:
         """
         Get execution by ID with steps preloaded.
-        
+
         Args:
             execution_id: ID of the execution
-        
+
         Returns:
             Execution instance or None
         """
@@ -448,6 +435,9 @@ class ExecutionService:
         Runtime dispatch via RuntimeRegistry (Story 34.4 — SOLID-BE-7).
         Used after creation (when not PENDING_APPROVAL) and after DBA approval.
         """
+        # Late import to avoid circular dependency:
+        # runtime_registry → adapter modules → executions.models → executions.services
+        # Moving to top-level would create an import cycle at module load time.
         from executions.runtime_registry import runtime_registry  # noqa: PLC0415
         action = execution.action
         if not action:
@@ -461,11 +451,180 @@ class ExecutionService:
             )
             return
         runtime(execution, correlation_id=correlation_id)
-    
+
+    @staticmethod
+    def _validate_transition(old_status: str, new_status: str) -> None:
+        """
+        Validate that a status transition is allowed by the state machine.
+
+        Raises ValueError with an explicit message if the transition is invalid.
+
+        State machine: valid transitions for execution status.
+
+        SECURITY (Story 22.12): PENDING_APPROVAL → SUBMITTED is explicitly FORBIDDEN.
+          Allowing it would let executions bypass the DBA approval workflow,
+          violating SOC1 compliance. An execution that requires approval must
+          go through RUNNING (after DBA approval) or REJECTED (if DBA refuses).
+
+        Valid transitions by state (with business rationale):
+        ┌─────────────────────┬────────────────────────────────────────────────────────┐
+        │ From State          │ To State → Business Rationale                          │
+        ├─────────────────────┼────────────────────────────────────────────────────────┤
+        │ SUBMITTED           │ → RUNNING: Normal execution start                      │
+        │                     │ → CANCELLED: User cancels before start                 │
+        │                     │ → PENDING_APPROVAL: Elevation to approval required     │
+        │                     │ → INTEGRATION_ERROR: Platform integration failed       │
+        ├─────────────────────┼────────────────────────────────────────────────────────┤
+        │ PENDING_APPROVAL    │ → RUNNING: DBA approves (via /approve endpoint)        │
+        │                     │ → REJECTED: DBA rejects (via /reject endpoint)         │
+        ├─────────────────────┼────────────────────────────────────────────────────────┤
+        │ RUNNING             │ → COMPLETED: Execution succeeded                       │
+        │                     │ → FAILED: Execution failed                             │
+        │                     │ → CANCELLED: User cancels during execution             │
+        ├─────────────────────┼────────────────────────────────────────────────────────┤
+        │ COMPLETED           │ (terminal state - no transitions)                      │
+        │ FAILED              │ (terminal state - no transitions)                      │
+        │ CANCELLED           │ (terminal state - no transitions)                      │
+        │ REJECTED            │ (terminal state - no transitions)                      │
+        │ INTEGRATION_ERROR   │ (terminal state - Story 18.6)                          │
+        └─────────────────────┴────────────────────────────────────────────────────────┘
+        """
+        valid_transitions = {
+            ExecutionStatus.SUBMITTED: [ExecutionStatus.RUNNING, ExecutionStatus.CANCELLED, ExecutionStatus.PENDING_APPROVAL, ExecutionStatus.INTEGRATION_ERROR],
+            ExecutionStatus.PENDING_APPROVAL: [ExecutionStatus.RUNNING, ExecutionStatus.REJECTED],
+            ExecutionStatus.RUNNING: [ExecutionStatus.COMPLETED, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED],
+            ExecutionStatus.COMPLETED: [],
+            ExecutionStatus.FAILED: [],
+            ExecutionStatus.CANCELLED: [],
+            ExecutionStatus.REJECTED: [],
+            ExecutionStatus.INTEGRATION_ERROR: [],  # Terminal state (Story 18.6)
+        }
+
+        if new_status not in (valid_transitions.get(old_status) or []):  # type: ignore[call-overload]
+            valid_list = ", ".join(valid_transitions.get(old_status) or [])  # type: ignore[call-overload]
+            raise ValueError(
+                f"Invalid transition from {old_status} to {new_status}. "
+                f"Valid transitions: {valid_list or 'none (terminal state)'}"
+            )
+
+    @staticmethod
+    def _apply_status_change(execution: 'Execution', new_status: str) -> None:
+        """
+        Apply status change to execution with idempotent timestamp updates and save.
+
+        Updates started_at only when transitioning to RUNNING and not already set.
+        Updates completed_at only when transitioning to a terminal state and not already set.
+        """
+        execution.status = new_status
+
+        # Update timestamps (idempotent - preserve original timestamps)
+        if new_status == ExecutionStatus.RUNNING and not execution.started_at:
+            execution.started_at = timezone.now()
+        elif new_status in [ExecutionStatus.COMPLETED, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED, ExecutionStatus.REJECTED, ExecutionStatus.INTEGRATION_ERROR]:
+            if not execution.completed_at:
+                execution.completed_at = timezone.now()
+
+        execution.save()
+
+    @staticmethod
+    def _create_status_audit_entry(execution: 'Execution', old_status: str, new_status: str, user_id: str) -> None:
+        """Create an audit trail entry for the status change."""
+        status_to_audit_type = {
+            ExecutionStatus.SUBMITTED: AuditActionType.EXECUTION_SUBMITTED,
+            ExecutionStatus.INTEGRATION_ERROR: AuditActionType.EXECUTION_INTEGRATION_ERROR,
+            ExecutionStatus.RUNNING: AuditActionType.EXECUTION_RUNNING,
+            ExecutionStatus.COMPLETED: AuditActionType.EXECUTION_COMPLETED,
+            ExecutionStatus.FAILED: AuditActionType.EXECUTION_FAILED,
+            ExecutionStatus.CANCELLED: AuditActionType.EXECUTION_CANCELLED,
+            ExecutionStatus.PENDING_APPROVAL: AuditActionType.EXECUTION_PENDING_APPROVAL,
+            ExecutionStatus.REJECTED: AuditActionType.EXECUTION_REJECTED,
+        }
+        audit_action_type = status_to_audit_type.get(new_status)  # type: ignore[call-overload]
+        if not audit_action_type:
+            logger.warning(
+                "unknown_execution_status_for_audit",
+                execution_id=execution.id,
+                status=new_status,
+                correlation_id=get_correlation_id()
+            )
+            raise ValueError(
+                f"Unknown execution status for audit: {new_status}"
+            )
+
+        AuditService.create_entry(
+            user_id=user_id,
+            action_type=audit_action_type,
+            entity_type=AuditEntityType.EXECUTION,
+            entity_id=execution.id,
+            details={
+                'action_id': execution.action_id,
+                'action_name': execution.action.name if execution.action else None,
+                'previous_status': old_status,
+                'new_status': new_status,
+            }
+        )
+
+    @staticmethod
+    def _schedule_notification(execution: 'Execution', new_status: str) -> None:
+        """
+        Schedule non-blocking notifications on terminal states (COMPLETED, FAILED).
+
+        Story 31.8: Uses transaction.on_commit() to avoid holding the DB connection
+        open during potentially slow HTTP calls (httpx.post timeout=10s per destination).
+        """
+        if new_status not in (ExecutionStatus.COMPLETED, ExecutionStatus.FAILED):
+            return
+
+        try:
+            from services.notification_service import NotificationService
+            from django.db import transaction as _tx
+            event = "on_success" if new_status == ExecutionStatus.COMPLETED else "on_failure"
+            params: dict = execution.get_parameters() or {}
+            page_me = bool(params.get('__page_me', False))
+            page_me_user_id = params.get('__page_me_user_id')
+            page_me_user_name = params.get('__page_me_user_name')
+            _correlation_id = get_correlation_id()
+            _execution_id_snap = execution.id
+
+            def _send_notifications() -> None:
+                try:
+                    notif_service = NotificationService()
+                    notif_service.notify_execution_event(
+                        execution=execution,
+                        action=execution.action,
+                        event=event,
+                        page_me=page_me,
+                        page_me_user_id=page_me_user_id,
+                        page_me_user_name=page_me_user_name,
+                        correlation_id=_correlation_id,
+                    )
+                except Exception as exc:  # noqa: BLE001 — best-effort-non-critical: notification dispatch failure must not break execution
+                    logger.error(
+                        "notification_dispatch_failed",
+                        execution_id=_execution_id_snap,
+                        error=str(exc),
+                        correlation_id=_correlation_id,
+                        exc_info=True,
+                    )
+
+            _tx.on_commit(_send_notifications)
+        except Exception as exc:  # noqa: BLE001 — best-effort-non-critical: notification setup failure must not break execution
+            logger.error(
+                "notification_setup_failed",
+                execution_id=execution.id,
+                error=str(exc),
+                correlation_id=get_correlation_id(),
+                exc_info=True,
+            )
+
     @transaction.atomic
     def update_status(self, execution_id: int, new_status: str, user_id: str) -> Execution | None:
         """
-        Update execution status with transition validation.
+        Update execution status with transition validation, audit, and notifications.
+
+        Orchestrates the status update by delegating to single-responsibility methods:
+        _validate_transition, _apply_status_change, _create_status_audit_entry,
+        and _schedule_notification.
 
         Args:
             execution_id: ID of the execution
@@ -491,154 +650,20 @@ class ExecutionService:
 
         old_status = execution.status
 
-        # State machine: valid transitions for execution status.
-        #
-        # SECURITY (Story 22.12): PENDING_APPROVAL → SUBMITTED is explicitly FORBIDDEN.
-        #   Allowing it would let executions bypass the DBA approval workflow,
-        #   violating SOC1 compliance. An execution that requires approval must
-        #   go through RUNNING (after DBA approval) or REJECTED (if DBA refuses).
-        #
-        # Valid transitions by state (with business rationale):
-        # ┌─────────────────────┬────────────────────────────────────────────────────────┐
-        # │ From State          │ To State → Business Rationale                          │
-        # ├─────────────────────┼────────────────────────────────────────────────────────┤
-        # │ SUBMITTED           │ → RUNNING: Normal execution start                      │
-        # │                     │ → CANCELLED: User cancels before start                 │
-        # │                     │ → PENDING_APPROVAL: Elevation to approval required     │
-        # │                     │ → INTEGRATION_ERROR: Platform integration failed       │
-        # ├─────────────────────┼────────────────────────────────────────────────────────┤
-        # │ PENDING_APPROVAL    │ → RUNNING: DBA approves (via /approve endpoint)        │
-        # │                     │ → REJECTED: DBA rejects (via /reject endpoint)         │
-        # ├─────────────────────┼────────────────────────────────────────────────────────┤
-        # │ RUNNING             │ → COMPLETED: Execution succeeded                       │
-        # │                     │ → FAILED: Execution failed                             │
-        # │                     │ → CANCELLED: User cancels during execution             │
-        # ├─────────────────────┼────────────────────────────────────────────────────────┤
-        # │ COMPLETED           │ (terminal state - no transitions)                      │
-        # │ FAILED              │ (terminal state - no transitions)                      │
-        # │ CANCELLED           │ (terminal state - no transitions)                      │
-        # │ REJECTED            │ (terminal state - no transitions)                      │
-        # │ INTEGRATION_ERROR   │ (terminal state - Story 18.6)                          │
-        # └─────────────────────┴────────────────────────────────────────────────────────┘
-        valid_transitions = {
-            ExecutionStatus.SUBMITTED: [ExecutionStatus.RUNNING, ExecutionStatus.CANCELLED, ExecutionStatus.PENDING_APPROVAL, ExecutionStatus.INTEGRATION_ERROR],
-            ExecutionStatus.PENDING_APPROVAL: [ExecutionStatus.RUNNING, ExecutionStatus.REJECTED],
-            ExecutionStatus.RUNNING: [ExecutionStatus.COMPLETED, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED],
-            ExecutionStatus.COMPLETED: [],
-            ExecutionStatus.FAILED: [],
-            ExecutionStatus.CANCELLED: [],
-            ExecutionStatus.REJECTED: [],
-            ExecutionStatus.INTEGRATION_ERROR: [],  # Terminal state (Story 18.6)
-        }
-
-        if new_status not in (valid_transitions.get(old_status) or []):  # type: ignore[call-overload]
-            valid_list = ", ".join(valid_transitions.get(old_status) or [])  # type: ignore[call-overload]
-            raise ValueError(
-                f"Invalid transition from {old_status} to {new_status}. "
-                f"Valid transitions: {valid_list or 'none (terminal state)'}"
-            )
-
-        execution.status = new_status
-
-        # Update timestamps (idempotent - preserve original timestamps)
-        if new_status == ExecutionStatus.RUNNING and not execution.started_at:
-            execution.started_at = timezone.now()
-        elif new_status in [ExecutionStatus.COMPLETED, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED, ExecutionStatus.REJECTED]:
-            if not execution.completed_at:
-                execution.completed_at = timezone.now()
-        
-        execution.save()
-        
-        # Map status to audit action type enum
-        status_to_audit_type = {
-            ExecutionStatus.SUBMITTED: AuditActionType.EXECUTION_SUBMITTED,
-            ExecutionStatus.INTEGRATION_ERROR: AuditActionType.EXECUTION_INTEGRATION_ERROR,
-            ExecutionStatus.RUNNING: AuditActionType.EXECUTION_RUNNING,
-            ExecutionStatus.COMPLETED: AuditActionType.EXECUTION_COMPLETED,
-            ExecutionStatus.FAILED: AuditActionType.EXECUTION_FAILED,
-            ExecutionStatus.CANCELLED: AuditActionType.EXECUTION_CANCELLED,
-            ExecutionStatus.PENDING_APPROVAL: AuditActionType.EXECUTION_PENDING_APPROVAL,
-            ExecutionStatus.REJECTED: AuditActionType.EXECUTION_REJECTED,
-        }
-        audit_action_type = status_to_audit_type.get(new_status)  # type: ignore[call-overload]
-        if not audit_action_type:
-            logger.warning(
-                "unknown_execution_status_for_audit",
-                execution_id=execution.id,
-                status=new_status,
-                correlation_id=get_correlation_id()
-            )
-            return execution
-
-        # Audit
-        AuditService.create_entry(
-            user_id=user_id,
-            action_type=audit_action_type,
-            entity_type=AuditEntityType.EXECUTION,
-            entity_id=execution.id,
-            details={
-                'action_id': execution.action_id,
-                'action_name': execution.action.name if execution.action else None,
-                'previous_status': old_status,
-                'new_status': new_status,
-            }
-        )
-
-        # Story 31.8: Trigger notifications on terminal states (non-blocking).
-        # Use transaction.on_commit() to avoid holding the DB connection open during
-        # potentially slow HTTP calls (httpx.post timeout=10s per destination).
-        if new_status in (ExecutionStatus.COMPLETED, ExecutionStatus.FAILED):
-            try:
-                from services.notification_service import NotificationService
-                from django.db import transaction as _tx
-                event = "on_success" if new_status == ExecutionStatus.COMPLETED else "on_failure"
-                params: dict = execution.get_parameters() or {}
-                page_me = bool(params.get('__page_me', False))
-                page_me_user_id = params.get('__page_me_user_id')
-                page_me_user_name = params.get('__page_me_user_name')
-                _correlation_id = get_correlation_id()
-                _execution_id_snap = execution_id
-
-                def _send_notifications() -> None:
-                    try:
-                        notif_service = NotificationService()
-                        notif_service.notify_execution_event(
-                            execution=execution,
-                            action=execution.action,
-                            event=event,
-                            page_me=page_me,
-                            page_me_user_id=page_me_user_id,
-                            page_me_user_name=page_me_user_name,
-                            correlation_id=_correlation_id,
-                        )
-                    except Exception as exc:  # noqa: BLE001 — best-effort-non-critical: notification dispatch failure must not break execution
-                        logger.error(
-                            "notification_dispatch_failed",
-                            execution_id=_execution_id_snap,
-                            error=str(exc),
-                            correlation_id=_correlation_id,
-                            exc_info=True,
-                        )
-
-                _tx.on_commit(_send_notifications)
-            except Exception as exc:  # noqa: BLE001 — best-effort-non-critical: notification setup failure must not break execution
-                logger.error(
-                    "notification_setup_failed",
-                    execution_id=execution_id,
-                    error=str(exc),
-                    correlation_id=get_correlation_id(),
-                    exc_info=True,
-                )
+        self._validate_transition(old_status, new_status)
+        self._apply_status_change(execution, new_status)
+        self._create_status_audit_entry(execution, old_status, new_status, user_id)
+        self._schedule_notification(execution, new_status)
 
         return execution
-    
+
     def list_by_user(self, user_id: int, status: str | None = None,
                     environment: str | None = None, action_id: int | None = None,
                     date_from: datetime | None = None, date_to: datetime | None = None,
                     limit: int | None = None, offset: int = 0) -> QuerySet:
         """
         List executions for a specific user with filters.
-        
+
         Args:
             user_id: ID of the user
             status: Optional status filter
@@ -648,10 +673,10 @@ class ExecutionService:
             date_to: Optional date_to filter
             limit: Optional limit (must be > 0)
             offset: Offset for pagination (must be >= 0)
-        
+
         Returns:
             QuerySet of executions
-        
+
         Raises:
             ValueError: If limit or offset are invalid
         """
@@ -660,9 +685,9 @@ class ExecutionService:
             raise ValueError("offset must be >= 0")
         if limit is not None and limit <= 0:
             raise ValueError("limit must be > 0")
-        
+
         queryset = Execution.objects.list_by_user(user_id).select_related('action', 'user')
-        
+
         if status:
             queryset = queryset.filter(status=status)
         if environment:
@@ -673,58 +698,58 @@ class ExecutionService:
             queryset = queryset.filter(created_at__gte=date_from)
         if date_to:
             queryset = queryset.filter(created_at__lte=date_to)
-        
+
         if offset:
             queryset = queryset[offset:]
         if limit:
             queryset = queryset[:limit]
-        
+
         return queryset
-    
+
     def get_recent(self, limit: int = 10) -> QuerySet:
         """
         Get recent executions for dashboard.
-        
+
         Args:
             limit: Maximum number of executions to return
-        
+
         Returns:
             QuerySet of recent executions
         """
         return Execution.objects.get_recent(limit)
-    
+
     def get_stats(self, user_id: int | None = None, days: int = 30) -> dict:
         """
         Get execution statistics with aggregations.
-        
+
         Args:
             user_id: Optional user ID filter
             days: Number of days to look back
-        
+
         Returns:
             Dict with statistics
         """
         date_from = timezone.now() - timedelta(days=days)
-        
+
         queryset = Execution.objects.filter(created_at__gte=date_from)
-        
+
         if user_id:
             queryset = queryset.filter(user_id=user_id)
-        
+
         total = queryset.count()
         completed = queryset.filter(status=ExecutionStatus.COMPLETED).count()
         failed = queryset.filter(status=ExecutionStatus.FAILED).count()
         running = queryset.filter(status=ExecutionStatus.RUNNING).count()
-        
+
         # Calculate success rate
         success_rate = (completed / total * 100) if total > 0 else 0
-        
+
         # Group by status
         by_status = queryset.values('status').annotate(count=Count('id'))
-        
+
         # Group by environment
         by_environment = queryset.values('environment').annotate(count=Count('id'))
-        
+
         return {
             'total': total,
             'completed': completed,
@@ -757,24 +782,24 @@ class ExecutionService:
                 correlation_id=get_correlation_id()
             )
             raise ValueError(f"Action {action_id} does not exist")
-        
+
         date_from = timezone.now() - timedelta(days=days)
         queryset = Execution.objects.filter(
             action_id=action_id,
             created_at__gte=date_from
         )
-        
+
         # MEDIUM-1: Single aggregation query instead of multiple queries
         stats = queryset.aggregate(
             total=Count('id'),
             completed=Count('id', filter=Q(status=ExecutionStatus.COMPLETED)),
             failed=Count('id', filter=Q(status=ExecutionStatus.FAILED))
         )
-        
+
         total = stats['total']
         completed = stats['completed']
         failed = stats['failed']
-        
+
         # MEDIUM-3: Always return dict (never None)
         # Success rate = COMPLETED / (COMPLETED + FAILED) * 100
         # Only calculated if there are finished executions (completed or failed)
@@ -782,7 +807,7 @@ class ExecutionService:
         success_rate = (
             round((completed / finished_count * 100), 2) if finished_count > 0 else None
         )
-        
+
         # CRITICAL-2: Calculate avg_execution_time_ms from started_at and completed_at
         # Only for COMPLETED executions with both timestamps — aggregated DB-side
         completed_executions = queryset.filter(
@@ -797,7 +822,7 @@ class ExecutionService:
             ))
         )['avg_duration']
         avg_time_ms = round(avg_duration.total_seconds() * 1000, 2) if avg_duration else None
-        
+
         # MEDIUM-4: Add structured logging
         logger.info(
             "get_action_stats_called",
@@ -810,27 +835,27 @@ class ExecutionService:
             avg_execution_time_ms=avg_time_ms,
             correlation_id=get_correlation_id()
         )
-        
+
         return {
             "total_executions": total,
             "incidents_count": failed,
             "success_rate": success_rate,
             "avg_execution_time_ms": avg_time_ms,
         }
-    
+
     # ExecutionStep CRUD methods
     @transaction.atomic
     def create_step(self, execution: Execution, step_order: int, step_name: str,
                    step_type: str) -> ExecutionStep:
         """
         Create an execution step.
-        
+
         Args:
             execution: Execution instance
             step_order: Order of the step
             step_name: Name of the step
             step_type: Type of the step
-        
+
         Returns:
             ExecutionStep instance
         """
@@ -842,26 +867,26 @@ class ExecutionService:
             status=ExecutionStepStatus.PENDING,
         )
         return step
-    
+
     def get_steps_by_execution(self, execution_id: int) -> QuerySet:
         """
         Get all steps for an execution.
-        
+
         Args:
             execution_id: ID of the execution
-        
+
         Returns:
             QuerySet of execution steps ordered by step_order
         """
         return ExecutionStep.objects.filter(execution_id=execution_id).order_by('step_order')
-    
+
     def get_step_by_id(self, step_id: int) -> ExecutionStep | None:
         """
         Get execution step by ID.
-        
+
         Args:
             step_id: ID of the step
-        
+
         Returns:
             ExecutionStep instance or None
         """
@@ -869,17 +894,17 @@ class ExecutionService:
             return ExecutionStep.objects.select_related('execution').get(id=step_id)
         except ExecutionStep.DoesNotExist:
             return None
-    
+
     @transaction.atomic
     def update_step_status(self, step_id: int, new_status: str, output: dict | None = None) -> ExecutionStep | None:
         """
         Update execution step status and output.
-        
+
         Args:
             step_id: ID of the step
             new_status: New status value
             output: Optional output dict
-        
+
         Returns:
             Updated ExecutionStep instance or None
         """
@@ -887,14 +912,14 @@ class ExecutionService:
             step = ExecutionStep.objects.get(id=step_id)
         except ExecutionStep.DoesNotExist:
             return None
-        
+
         step.status = new_status
-        
+
         if output is not None:
             step.set_output(output)
-        
+
         step.save()
-        
+
         return step
 
 

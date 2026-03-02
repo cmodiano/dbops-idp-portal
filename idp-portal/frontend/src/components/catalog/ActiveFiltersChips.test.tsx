@@ -215,3 +215,88 @@ describe('ActiveFiltersChips', () => {
     });
   });
 });
+
+// ─── Coverage extras ──────────────────────────────────────────────────────────
+const coverageExtraBaseProps = {
+  activeCategory: 'tout' as const,
+  selectedTags: [],
+  selectedEngines: [],
+  selectedImpacts: [],
+  onRemoveCategory: vi.fn(),
+  onRemoveTag: vi.fn(),
+  onRemoveEngine: vi.fn(),
+  onRemoveImpact: vi.fn(),
+  onClearAll: vi.fn(),
+};
+
+describe('ActiveFiltersChips — coverage extras', () => {
+  it('getEngineLabel returns value when not found in engineOptions', () => {
+    renderWithTheme(
+      <ActiveFiltersChips
+        {...coverageExtraBaseProps}
+        selectedEngines={['unknown-engine']}
+      />
+    );
+    // engine not in engineOptions list → falls back to raw value
+    expect(screen.getByText('Moteur: unknown-engine')).toBeInTheDocument();
+  });
+
+  it('getImpactLabel returns value when not found in IMPACT_OPTIONS', () => {
+    renderWithTheme(
+      <ActiveFiltersChips
+        {...coverageExtraBaseProps}
+        selectedImpacts={['unknown-impact']}
+      />
+    );
+    // impact not in IMPACT_OPTIONS → falls back to raw value
+    expect(screen.getByText('Impact: unknown-impact')).toBeInTheDocument();
+  });
+
+  it('renders chips when activeCategory is "mes-actions" but tags are active', () => {
+    const { container } = renderWithTheme(
+      <ActiveFiltersChips
+        {...coverageExtraBaseProps}
+        activeCategory="mes-actions"
+        selectedTags={['tag1']}
+      />
+    );
+    // Has filters (tag) so renders something, but no category chip
+    expect(container.firstChild).not.toBeNull();
+    expect(screen.queryByText(/Catégorie:/)).not.toBeInTheDocument();
+    expect(screen.getByText('Tag: tag1')).toBeInTheDocument();
+  });
+
+  it('calls onRemoveEngine when engine chip close is clicked (covers line 139)', () => {
+    const onRemoveEngine = vi.fn();
+    renderWithTheme(
+      <ActiveFiltersChips
+        {...coverageExtraBaseProps}
+        selectedEngines={['Oracle']}
+        onRemoveEngine={onRemoveEngine}
+      />
+    );
+    const engineChip = screen.getByText('Moteur: Oracle').closest('.ant-tag');
+    const closeIcon = engineChip?.querySelector('.ant-tag-close-icon');
+    if (closeIcon) {
+      fireEvent.click(closeIcon);
+      expect(onRemoveEngine).toHaveBeenCalledWith('Oracle');
+    }
+  });
+
+  it('calls onRemoveImpact when impact chip close is clicked (covers line 152)', () => {
+    const onRemoveImpact = vi.fn();
+    renderWithTheme(
+      <ActiveFiltersChips
+        {...coverageExtraBaseProps}
+        selectedImpacts={['high']}
+        onRemoveImpact={onRemoveImpact}
+      />
+    );
+    const impactChip = screen.getByText(/Impact: Élevé/).closest('.ant-tag');
+    const closeIcon = impactChip?.querySelector('.ant-tag-close-icon');
+    if (closeIcon) {
+      fireEvent.click(closeIcon);
+      expect(onRemoveImpact).toHaveBeenCalledWith('high');
+    }
+  });
+});

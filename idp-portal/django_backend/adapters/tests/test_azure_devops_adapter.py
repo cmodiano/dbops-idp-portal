@@ -646,3 +646,309 @@ class TestFactory:
                 base_url="https://jenkins.example.com",
                 auth_headers={},
             )
+
+
+# ---------------------------------------------------------------------------
+# trigger — non-numeric pipeline_id (line 97)
+# ---------------------------------------------------------------------------
+
+class TestTriggerValidation:
+    """Tests for trigger() input validation."""
+
+    @pytest.mark.asyncio
+    async def test_trigger_non_numeric_pipeline_id_raises_value_error(
+        self, adapter: AzureDevOpsAdapter
+    ) -> None:
+        """Non-numeric pipeline_id raises ValueError before any HTTP call."""
+        with pytest.raises(ValueError, match="must be numeric"):
+            await adapter.trigger("my-pipeline-name")
+
+
+# ---------------------------------------------------------------------------
+# get_status — non-404 HTTP error (lines 272-279)
+# ---------------------------------------------------------------------------
+
+class TestGetStatusHttpErrors:
+    """Tests for get_status() HTTP error branches."""
+
+    @pytest.mark.asyncio
+    async def test_get_status_non_404_http_error_raises(
+        self, adapter: AzureDevOpsAdapter
+    ) -> None:
+        """Non-404 HTTPStatusError raises ServiceUnavailableError with AZURE_DEVOPS_HTTP_ERROR."""
+        mock_response = MagicMock()
+        mock_response.status_code = 503
+        mock_response.raise_for_status = MagicMock(
+            side_effect=httpx.HTTPStatusError(
+                "Service Unavailable",
+                request=MagicMock(),
+                response=mock_response,
+            )
+        )
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("adapters.azure_devops_adapter.httpx.AsyncClient", return_value=mock_client):
+            with pytest.raises(ServiceUnavailableError) as exc_info:
+                await adapter.get_status("42", pipeline_id="1")
+        assert exc_info.value.code == "AZURE_DEVOPS_HTTP_ERROR"
+
+
+# ---------------------------------------------------------------------------
+# get_job_logs — fetch_log edge cases (lines 395, 409-433, 441->440)
+# ---------------------------------------------------------------------------
+
+class TestGetJobLogsFetchLogEdgeCases:
+    """Tests for fetch_log() internal retry and edge-case branches."""
+
+    @pytest.mark.asyncio
+    async def test_fetch_log_with_null_id_is_skipped(
+        self, adapter: AzureDevOpsAdapter
+    ) -> None:
+        """Log entry with null id returns empty string and is not written to buffer."""
+        logs_list_response = MagicMock()
+        logs_list_response.status_code = 200
+        # Entry without 'id' key → log_id will be None
+        logs_list_response.json.return_value = {"logs": [{"lineCount": 5}]}
+        logs_list_response.raise_for_status = MagicMock()
+
+        status_response = MagicMock()
+        status_response.status_code = 200
+        status_response.json.return_value = {"state": "completed", "result": "succeeded"}
+        status_response.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(side_effect=[logs_list_response, status_response])
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("adapters.azure_devops_adapter.httpx.AsyncClient", return_value=mock_client):
+            result = await adapter.get_job_logs("42", pipeline_id="1")
+
+        # Null id log is skipped — content should be empty
+        assert result["content"] == ""
+        assert result["complete"] is True
+
+    @pytest.mark.asyncio
+    async def test_fetch_log_retries_on_5xx_then_succeeds(
+        self, adapter: AzureDevOpsAdapter
+    ) -> None:
+        """fetch_log retries once on 5xx error and returns content on second attempt."""
+        logs_list_response = MagicMock()
+        logs_list_response.status_code = 200
+        logs_list_response.json.return_value = {"logs": [{"id": 1, "lineCount": 3}]}
+        logs_list_response.raise_for_status = MagicMock()
+
+        # First call: 500 error (triggers retry)
+        log_retry_fail = MagicMock()
+        log_retry_fail.status_code = 500
+
+        # Second call (retry): 200 success
+        log_retry_ok = MagicMock()
+        log_retry_ok.status_code = 200
+        log_retry_ok.text = "retried successfully"
+
+        status_response = MagicMock()
+        status_response.status_code = 200
+        status_response.json.return_value = {"state": "completed", "result": "succeeded"}
+        status_response.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(
+            side_effect=[logs_list_response, log_retry_fail, log_retry_ok, status_response]
+        )
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("adapters.azure_devops_adapter.httpx.AsyncClient", return_value=mock_client):
+            with patch("asyncio.sleep", return_value=None):
+                result = await adapter.get_job_logs("42", pipeline_id="1")
+
+        assert "retried successfully" in result["content"]
+
+    @pytest.mark.asyncio
+    async def test_fetch_log_non_retryable_4xx_returns_empty(
+        self, adapter: AzureDevOpsAdapter
+    ) -> None:
+        """fetch_log with a non-retryable 4xx status code returns empty string for that log."""
+        logs_list_response = MagicMock()
+        logs_list_response.status_code = 200
+        logs_list_response.json.return_value = {"logs": [{"id": 7, "lineCount": 2}]}
+        logs_list_response.raise_for_status = MagicMock()
+
+        # 403 is non-retryable (not 5xx, not 200)
+        log_403 = MagicMock()
+        log_403.status_code = 403
+
+        status_response = MagicMock()
+        status_response.status_code = 200
+        status_response.json.return_value = {"state": "completed", "result": "succeeded"}
+        status_response.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(
+            side_effect=[logs_list_response, log_403, status_response]
+        )
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("adapters.azure_devops_adapter.httpx.AsyncClient", return_value=mock_client):
+            result = await adapter.get_job_logs("42", pipeline_id="1")
+
+        # Non-retryable 4xx → empty content for that log
+        assert result["content"] == ""
+        assert result["complete"] is True
+
+    @pytest.mark.asyncio
+    async def test_fetch_log_http_error_on_first_attempt_retries(
+        self, adapter: AzureDevOpsAdapter
+    ) -> None:
+        """fetch_log swallows HTTPError on first attempt, retries, succeeds on second."""
+        logs_list_response = MagicMock()
+        logs_list_response.status_code = 200
+        logs_list_response.json.return_value = {"logs": [{"id": 9, "lineCount": 1}]}
+        logs_list_response.raise_for_status = MagicMock()
+
+        log_ok = MagicMock()
+        log_ok.status_code = 200
+        log_ok.text = "recovered log"
+
+        status_response = MagicMock()
+        status_response.status_code = 200
+        status_response.json.return_value = {"state": "completed", "result": "succeeded"}
+        status_response.raise_for_status = MagicMock()
+
+        call_count = 0
+
+        async def mock_get(url):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return logs_list_response
+            if call_count == 2:
+                raise httpx.ConnectError("transient error")
+            if call_count == 3:
+                return log_ok
+            return status_response
+
+        mock_client = MagicMock()
+        mock_client.get = mock_get
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("adapters.azure_devops_adapter.httpx.AsyncClient", return_value=mock_client):
+            with patch("asyncio.sleep", return_value=None):
+                result = await adapter.get_job_logs("42", pipeline_id="1")
+
+        assert "recovered log" in result["content"]
+
+    @pytest.mark.asyncio
+    async def test_fetch_log_http_error_on_both_attempts_returns_empty(
+        self, adapter: AzureDevOpsAdapter
+    ) -> None:
+        """fetch_log with HTTPError on both attempts returns empty string for that log."""
+        logs_list_response = MagicMock()
+        logs_list_response.status_code = 200
+        logs_list_response.json.return_value = {"logs": [{"id": 11, "lineCount": 1}]}
+        logs_list_response.raise_for_status = MagicMock()
+
+        status_response = MagicMock()
+        status_response.status_code = 200
+        status_response.json.return_value = {"state": "completed", "result": "succeeded"}
+        status_response.raise_for_status = MagicMock()
+
+        call_count = 0
+
+        async def mock_get(url):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return logs_list_response
+            if call_count in (2, 3):
+                raise httpx.ConnectError("persistent error")
+            return status_response
+
+        mock_client = MagicMock()
+        mock_client.get = mock_get
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("adapters.azure_devops_adapter.httpx.AsyncClient", return_value=mock_client):
+            with patch("asyncio.sleep", return_value=None):
+                result = await adapter.get_job_logs("42", pipeline_id="1")
+
+        assert result["content"] == ""
+        assert result["complete"] is True
+
+
+# ---------------------------------------------------------------------------
+# health_check (lines 632-648)
+# ---------------------------------------------------------------------------
+
+class TestHealthCheck:
+    """Tests for AzureDevOpsAdapter.health_check()."""
+
+    @pytest.mark.asyncio
+    async def test_health_check_ok(self, adapter: AzureDevOpsAdapter) -> None:
+        """Successful ping returns HealthCheckStatus.OK."""
+        from integrations.health_check import HealthCheckStatus
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("adapters.azure_devops_adapter.httpx.AsyncClient", return_value=mock_client):
+            result = await adapter.health_check()
+
+        assert result.status == HealthCheckStatus.OK
+        assert result.error_message is None
+
+    @pytest.mark.asyncio
+    async def test_health_check_error_on_timeout(self, adapter: AzureDevOpsAdapter) -> None:
+        """Timeout exception returns HealthCheckStatus.ERROR with error_message."""
+        from integrations.health_check import HealthCheckStatus
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(side_effect=httpx.TimeoutException("timeout"))
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("adapters.azure_devops_adapter.httpx.AsyncClient", return_value=mock_client):
+            result = await adapter.health_check()
+
+        assert result.status == HealthCheckStatus.ERROR
+        assert result.error_message is not None
+        assert "timeout" in result.error_message.lower()
+
+    @pytest.mark.asyncio
+    async def test_health_check_error_on_http_error(self, adapter: AzureDevOpsAdapter) -> None:
+        """HTTPStatusError (e.g. 401 Unauthorized) returns HealthCheckStatus.ERROR."""
+        from integrations.health_check import HealthCheckStatus
+
+        mock_response = MagicMock()
+        mock_response.status_code = 401
+        mock_response.raise_for_status = MagicMock(
+            side_effect=httpx.HTTPStatusError(
+                "Unauthorized",
+                request=MagicMock(),
+                response=mock_response,
+            )
+        )
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("adapters.azure_devops_adapter.httpx.AsyncClient", return_value=mock_client):
+            result = await adapter.health_check()
+
+        assert result.status == HealthCheckStatus.ERROR
+        assert result.error_message is not None

@@ -31,7 +31,7 @@ describe('AdoptionTrendChart', () => {
     render(<AdoptionTrendChart data={[]} loading={false} />);
 
     expect(screen.getByText("Tendance d'adoption (par semaine)")).toBeInTheDocument();
-    expect(screen.getByText('Aucune donnee')).toBeInTheDocument();
+    expect(screen.getByText('Aucune donnée')).toBeInTheDocument();
   });
 
   it('renders skeleton when loading', () => {

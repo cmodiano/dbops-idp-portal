@@ -61,6 +61,16 @@ def validate_url(value):
 
     hostname = parsed.hostname or ''
 
+    if not hostname:
+        raise serializers.ValidationError(
+            "URL must contain a valid hostname"
+        )
+
+    if parsed.port is not None and parsed.port == 0:
+        raise serializers.ValidationError(
+            "URL must not use port 0"
+        )
+
     if hostname.lower() in _BLOCKED_HOSTS:
         raise serializers.ValidationError(
             f"URL points to a forbidden host: {hostname}"
@@ -68,6 +78,12 @@ def validate_url(value):
 
     try:
         ip = ipaddress.ip_address(hostname)
+
+        # Handle IPv4-mapped IPv6 addresses (e.g. ::ffff:127.0.0.1)
+        # These bypass IPv4 network checks, so extract the mapped IPv4 address
+        if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+            ip = ip.ipv4_mapped
+
         for network in _PRIVATE_NETWORKS:
             if ip in network:
                 raise serializers.ValidationError(

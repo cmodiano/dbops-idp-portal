@@ -6,13 +6,14 @@ add_comment, error handling, retry logic, and correlation_id propagation.
 """
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
 
 import httpx
 import pytest
 
 from core.exceptions import ServiceUnavailableError
 from services.jira_service import JiraService, MAX_RETRIES
+from integrations.health_check import HealthCheckStatus
 
 
 @pytest.fixture
@@ -154,6 +155,52 @@ class TestUpdateIssue:
         assert result["issue_key"] == "PROJ-123"
         assert result["status"] == "updated"
         mock.put.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_update_issue_all_fields(self, service: JiraService) -> None:
+        """update_issue with status, assignee, labels, and summary fields."""
+        resp = _mock_response(204)
+        mock = _mock_client(resp)
+
+        with patch("services.jira_service.httpx.AsyncClient", return_value=mock):
+            result = await service.update_issue(
+                "PROJ-200",
+                status="In Progress",
+                assignee="jane.smith",
+                labels=["backend", "critical"],
+                summary="Updated summary",
+                correlation_id="test-corr-all",
+            )
+
+        assert result["issue_key"] == "PROJ-200"
+        assert result["status"] == "updated"
+        call_args = mock.put.call_args
+        payload = call_args.kwargs.get("json") or call_args[1].get("json")
+        fields = payload["fields"]
+        assert fields["status"] == {"name": "In Progress"}
+        assert fields["assignee"] == {"name": "jane.smith"}
+        assert fields["labels"] == ["backend", "critical"]
+        assert fields["summary"] == "Updated summary"
+
+    @pytest.mark.asyncio
+    async def test_update_issue_without_status(self, service: JiraService) -> None:
+        """update_issue with only assignee (no status) covers the status-absent branch."""
+        resp = _mock_response(204)
+        mock = _mock_client(resp)
+
+        with patch("services.jira_service.httpx.AsyncClient", return_value=mock):
+            result = await service.update_issue(
+                "PROJ-300",
+                assignee="bob.builder",
+                correlation_id="test-no-status",
+            )
+
+        assert result["issue_key"] == "PROJ-300"
+        call_args = mock.put.call_args
+        payload = call_args.kwargs.get("json") or call_args[1].get("json")
+        fields = payload["fields"]
+        assert "status" not in fields
+        assert fields["assignee"] == {"name": "bob.builder"}
 
 
 # ---------------------------------------------------------------------------
@@ -325,6 +372,67 @@ class TestErrorHandling:
                 await service.create_issue("PROJ", "Task", "Test")
             assert exc_info.value.code == "JIRA_PERMISSION_DENIED"
 
+    @pytest.mark.asyncio
+    async def test_error_unknown_status_code(self, service: JiraService) -> None:
+        """Unknown HTTP status code → JIRA_ERROR_<code>."""
+        resp = _mock_response(418, text="I'm a teapot")
+        mock = _mock_client(resp)
+
+        with patch("services.jira_service.httpx.AsyncClient", return_value=mock):
+            with pytest.raises(ServiceUnavailableError) as exc_info:
+                await service.get_issue("PROJ-1")
+            assert exc_info.value.code == "JIRA_ERROR_418"
+
+    @pytest.mark.asyncio
+    async def test_error_reading_response_text_raises(self, service: JiraService) -> None:
+        """If response.text raises, error_body falls back to empty string."""
+        resp = _mock_response(409)
+        type(resp).text = PropertyMock(side_effect=Exception("stream closed"))
+        mock = _mock_client(resp)
+
+        with patch("services.jira_service.httpx.AsyncClient", return_value=mock):
+            with pytest.raises(ServiceUnavailableError) as exc_info:
+                await service.get_issue("PROJ-1")
+            assert exc_info.value.code == "JIRA_CONFLICT"
+
+    @pytest.mark.asyncio
+    async def test_max_retries_transient_500(self, service: JiraService) -> None:
+        """500 exhausts retries and raises ServiceUnavailableError."""
+        error_resp = _mock_response(500)
+        mock = AsyncMock()
+        mock.get.return_value = error_resp
+        mock.__aenter__ = AsyncMock(return_value=mock)
+        mock.__aexit__ = AsyncMock(return_value=None)
+
+        with (
+            patch("services.jira_service.httpx.AsyncClient", return_value=mock),
+            patch("services.jira_service.asyncio.sleep", new_callable=AsyncMock),
+            pytest.raises(ServiceUnavailableError, match="server error"),
+        ):
+            await service.get_issue("PROJ-1")
+
+        assert mock.get.call_count == MAX_RETRIES
+
+    @pytest.mark.asyncio
+    async def test_unexpected_exception_wrapped(self, service: JiraService) -> None:
+        """Unexpected exception is wrapped into JIRA_UNKNOWN_ERROR."""
+        mock = AsyncMock()
+        mock.get.side_effect = RuntimeError("unexpected network failure")
+        mock.__aenter__ = AsyncMock(return_value=mock)
+        mock.__aexit__ = AsyncMock(return_value=None)
+
+        with patch("services.jira_service.httpx.AsyncClient", return_value=mock):
+            with pytest.raises(ServiceUnavailableError) as exc_info:
+                await service.get_issue("PROJ-1")
+            assert exc_info.value.code == "JIRA_UNKNOWN_ERROR"
+
+    @pytest.mark.asyncio
+    async def test_unsupported_http_method_wrapped_as_unknown_error(self, service: JiraService) -> None:
+        """Passing an unsupported HTTP method raises JIRA_UNKNOWN_ERROR (ValueError is caught by broad handler)."""
+        with pytest.raises(ServiceUnavailableError) as exc_info:
+            await service._request_with_retry("DELETE", "https://jira.example.com/fake")
+        assert exc_info.value.code == "JIRA_UNKNOWN_ERROR"
+
 
 # ---------------------------------------------------------------------------
 # Correlation ID propagation
@@ -351,3 +459,68 @@ class TestCorrelationId:
         assert len(calls) >= 2  # request + retrieved
         for call in calls:
             assert call.kwargs.get("correlation_id") == "corr-abc-123"
+
+
+# ---------------------------------------------------------------------------
+# Health check
+# ---------------------------------------------------------------------------
+
+
+class TestHealthCheck:
+    """Test JiraService.health_check()."""
+
+    @pytest.mark.asyncio
+    async def test_health_check_ok(self, service: JiraService) -> None:
+        """health_check returns OK when serverInfo responds 200."""
+        resp = MagicMock(spec=httpx.Response)
+        resp.status_code = 200
+        resp.raise_for_status = MagicMock()
+
+        mock = AsyncMock()
+        mock.get.return_value = resp
+        mock.__aenter__ = AsyncMock(return_value=mock)
+        mock.__aexit__ = AsyncMock(return_value=None)
+
+        with patch("services.jira_service.httpx.AsyncClient", return_value=mock):
+            result = await service.health_check()
+
+        assert result.status == HealthCheckStatus.OK
+        assert result.error_message is None
+        mock.get.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_health_check_error_on_exception(self, service: JiraService) -> None:
+        """health_check returns ERROR when the request raises."""
+        mock = AsyncMock()
+        mock.get.side_effect = httpx.ConnectError("connection refused")
+        mock.__aenter__ = AsyncMock(return_value=mock)
+        mock.__aexit__ = AsyncMock(return_value=None)
+
+        with patch("services.jira_service.httpx.AsyncClient", return_value=mock):
+            result = await service.health_check()
+
+        assert result.status == HealthCheckStatus.ERROR
+        assert result.error_message is not None
+        assert "connection refused" in result.error_message
+
+    @pytest.mark.asyncio
+    async def test_health_check_error_on_http_status(self, service: JiraService) -> None:
+        """health_check returns ERROR when raise_for_status raises HTTPStatusError."""
+        resp = MagicMock(spec=httpx.Response)
+        resp.status_code = 401
+        resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "401 Unauthorized",
+            request=MagicMock(),
+            response=resp,
+        )
+
+        mock = AsyncMock()
+        mock.get.return_value = resp
+        mock.__aenter__ = AsyncMock(return_value=mock)
+        mock.__aexit__ = AsyncMock(return_value=None)
+
+        with patch("services.jira_service.httpx.AsyncClient", return_value=mock):
+            result = await service.health_check()
+
+        assert result.status == HealthCheckStatus.ERROR
+        assert result.error_message is not None

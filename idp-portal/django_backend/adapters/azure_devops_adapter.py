@@ -21,24 +21,17 @@ import httpx
 import structlog
 
 from adapters.base_adapter import BaseAdapter
+from adapters.status_mappers import (  # noqa: F401 — re-exported for backward compat
+    AZURE_DEVOPS_STATUS_MAP,
+    AZURE_DEVOPS_TERMINAL_RESULTS,
+    map_azure_devops_status,
+)
 from core.exceptions import ServiceUnavailableError
 from integrations.health_check import HealthCheckResult, HealthCheckStatus, IHealthCheckable
 
 logger = structlog.get_logger(__name__)
 
-# Azure DevOps state+result → IDP portal execution status mapping
-# Azure DevOps separates "state" (inProgress, completed, canceling)
-# and "result" (succeeded, failed, canceled) — both must be checked.
-AZURE_DEVOPS_STATUS_MAP: dict[str, str] = {
-    "inProgress": "RUNNING",
-    "canceling": "RUNNING",
-    "completed:succeeded": "COMPLETED",
-    "completed:failed": "FAILED",
-    "completed:canceled": "CANCELLED",
-}
-
-# Terminal result values (when state == "completed")
-AZURE_DEVOPS_TERMINAL_RESULTS = {"succeeded", "failed", "canceled"}
+_map_azure_devops_status = map_azure_devops_status  # backward compat alias for existing tests
 
 # Timeout for Azure DevOps API calls (seconds)
 AZURE_DEVOPS_DEFAULT_TIMEOUT = 30.0
@@ -46,24 +39,6 @@ AZURE_DEVOPS_LOGS_TIMEOUT = 60.0
 
 # API version query parameter
 API_VERSION = "7.1"
-
-
-def _map_azure_devops_status(state: str, result: str | None) -> str:
-    """Map Azure DevOps state+result to IDP Portal status.
-
-    Args:
-        state: Azure DevOps run state (inProgress, completed, canceling).
-        result: Azure DevOps run result (succeeded, failed, canceled) or None.
-
-    Returns:
-        IDP Portal status string (never None).
-    """
-    # LOW-2 FIX: Explicit None handling for mypy strict mode
-    if state == "completed" and result:
-        mapped = AZURE_DEVOPS_STATUS_MAP.get(f"completed:{result}")
-        return mapped if mapped is not None else "FAILED"
-    mapped = AZURE_DEVOPS_STATUS_MAP.get(state)
-    return mapped if mapped is not None else "SUBMITTED"
 
 
 class AzureDevOpsAdapter(BaseAdapter, IHealthCheckable):
@@ -197,7 +172,7 @@ class AzureDevOpsAdapter(BaseAdapter, IHealthCheckable):
         run_id = str(data.get("id", ""))
         state = data.get("state", "inProgress")
         result = data.get("result")
-        idp_status = _map_azure_devops_status(state, result)
+        idp_status = map_azure_devops_status(state, result)
 
         # Extract pipeline_id from response for later use
         pipeline_info = data.get("pipeline", {})
@@ -324,7 +299,7 @@ class AzureDevOpsAdapter(BaseAdapter, IHealthCheckable):
 
         state = data.get("state", "inProgress")
         result = data.get("result")
-        idp_status = _map_azure_devops_status(state, result)
+        idp_status = map_azure_devops_status(state, result)
 
         logger.info(
             "azure_devops_get_status_success",

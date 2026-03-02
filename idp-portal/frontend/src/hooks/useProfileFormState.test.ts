@@ -191,6 +191,21 @@ describe('useProfileFormState', () => {
     expect(result.current.tagsOptions).toEqual([]);
   });
 
+  it('gère l\'erreur en mode création et retourne des tableaux vides', async () => {
+    vi.mocked(getAdminActions).mockRejectedValueOnce(new Error('API error'));
+
+    const { result } = renderHook(() =>
+      useProfileFormState({ open: true, editProfileId: null })
+    );
+
+    await waitFor(() => {
+      expect(result.current.loadingData).toBe(false);
+    });
+
+    expect(result.current.actionsOptions).toEqual([]);
+    expect(result.current.tagsOptions).toEqual([]);
+  });
+
   it('active loadingData en mode création pendant le chargement', async () => {
     // Vérifier que loadingData passe à false après chargement en mode création
     const { result } = renderHook(() =>

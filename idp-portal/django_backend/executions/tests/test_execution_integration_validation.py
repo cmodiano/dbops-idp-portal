@@ -9,6 +9,7 @@ from django.test import TestCase
 from core.exceptions import BadRequestError
 from core.models import AuditLog, AuditActionType
 from executions.models import Execution, ExecutionStatus
+from executions.dtos import ExecutionRequest
 from executions.services import ExecutionService
 from integrations.models import IntegrationStatus
 from tests.factories import (
@@ -36,12 +37,12 @@ class TestExecutionServiceIntegrationValidation(TestCase):
         action = ActionFactory(integration=integration)
 
         with pytest.raises(BadRequestError) as exc_info:
-            self.service.create_execution(
+            self.service.create_execution(ExecutionRequest(
                 user=self.user,
                 action=action,
                 environment='dev',
                 correlation_id='test-corr-001',
-            )
+            ))
 
         assert exc_info.value.code == 'INVALID_INTEGRATION'
         assert 'Invalid Int' in exc_info.value.message
@@ -67,12 +68,12 @@ class TestExecutionServiceIntegrationValidation(TestCase):
         )
         action = ActionFactory(integration=integration)
 
-        execution = self.service.create_execution(
+        execution = self.service.create_execution(ExecutionRequest(
             user=self.user,
             action=action,
             environment='dev',
             correlation_id='test-corr-002',
-        )
+        ))
 
         # Execution should be created successfully
         assert execution is not None
@@ -95,12 +96,12 @@ class TestExecutionServiceIntegrationValidation(TestCase):
         )
         action = ActionFactory(integration=integration)
 
-        execution = self.service.create_execution(
+        execution = self.service.create_execution(ExecutionRequest(
             user=self.user,
             action=action,
             environment='dev',
             correlation_id='test-corr-003',
-        )
+        ))
 
         # Execution should be created
         assert execution is not None
@@ -118,11 +119,11 @@ class TestExecutionServiceIntegrationValidation(TestCase):
         """AC4: Action without integration → no validation, proceeds normally."""
         action = ActionFactory(integration=None)
 
-        execution = self.service.create_execution(
+        execution = self.service.create_execution(ExecutionRequest(
             user=self.user,
             action=action,
             environment='dev',
-        )
+        ))
 
         assert execution is not None
         assert execution.status == ExecutionStatus.SUBMITTED

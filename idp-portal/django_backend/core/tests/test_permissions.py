@@ -488,3 +488,80 @@ class TestIsDBAOrDBOPSHasObjectPermission:
         request = _make_request(user)
         obj = MagicMock(spec=[])  # No attributes at all
         assert IsDBAOrDBOPS().has_object_permission(request, None, obj) is False
+
+
+# ============================================================================
+# is_admin_user — missing branches (coverage story 55-3)
+# ============================================================================
+
+@pytest.mark.unit
+class TestIsAdminUserMissingBranches:
+    """Cover branches in is_admin_user() not yet exercised."""
+
+    def test_ad_groups_non_list_normalized_to_empty(self):
+        """Branch: ad_groups is not a list → normalized to [] (line 46)."""
+        from core.permissions import is_admin_user
+        user = _make_user(ad_groups="not-a-list")
+
+        with patch(FIND_BY_AD_GROUPS, return_value=[]) as mock_find:
+            result = is_admin_user(user)
+
+        assert result is False
+        mock_find.assert_called_once_with([])
+
+
+@pytest.mark.unit
+class TestDBOPSProfilePermissionMissingBranches:
+    """Cover branches in DBOPSProfilePermission not yet exercised."""
+
+    def test_profile_object_with_name_attribute(self):
+        """Branch: profile is an object with .name == 'dbops' (lines 160-161)."""
+        profile_obj = MagicMock()
+        profile_obj.name = "dbops"
+        user = _make_user(profile=profile_obj)
+        request = _make_request(user)
+        permission = DBOPSProfilePermission()
+
+        result = permission.has_permission(request, MagicMock())
+
+        assert result is True
+
+    def test_profiles_m2m_dbops(self):
+        """Branch: user.profiles M2M has a DBOPS profile (lines 165-168)."""
+        dbops_profile = MagicMock()
+        dbops_profile.name = "dbops"
+        profiles_qs = MagicMock()
+        profiles_qs.all.return_value = [dbops_profile]
+
+        user = _make_user(profiles=profiles_qs)
+        request = _make_request(user)
+        permission = DBOPSProfilePermission()
+
+        result = permission.has_permission(request, MagicMock())
+
+        assert result is True
+
+
+@pytest.mark.unit
+class TestOptionalUserPermission:
+    """Cover OptionalUserPermission.has_permission() (line 224)."""
+
+    def test_allows_any_user(self):
+        """OptionalUserPermission always returns True."""
+        from core.permissions import OptionalUserPermission
+        user = _make_user(is_authenticated=False)
+        request = _make_request(user)
+        permission = OptionalUserPermission()
+
+        result = permission.has_permission(request, MagicMock())
+
+        assert result is True
+
+    def test_allows_authenticated_user(self):
+        """OptionalUserPermission returns True for authenticated users too."""
+        from core.permissions import OptionalUserPermission
+        user = _make_user(is_authenticated=True)
+        request = _make_request(user)
+        permission = OptionalUserPermission()
+
+        assert permission.has_permission(request, MagicMock()) is True

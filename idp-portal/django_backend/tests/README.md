@@ -295,7 +295,7 @@ class TestTransactions(TransactionTestCase):
 
 ### Exigences Minimales
 
-- **Objectif:** ≥80% de couverture par module
+- **Objectif:** ≥90% de couverture par module
 - **Rapports:** HTML, XML, terminal
 
 ### Générer les Rapports
@@ -315,15 +315,17 @@ Voir `.coveragerc` pour les exclusions et la configuration.
 ## Intégration CI/CD
 
 Les tests s'exécutent automatiquement sur:
-- Push vers `main` ou `develop`
-- Pull requests vers `main` ou `develop`
+- Push vers `main` (avec enforcement seuil couverture 90 %)
+- Pull requests vers `main` (avec enforcement seuil couverture 90 %)
 - Changements dans `django_backend/**`
+
+> **Note :** `django-tests.yml` exclut la branche `develop` pour éviter de bloquer les commits de développement. La couverture est enforced uniquement lors des PRs/push vers `main`.
 
 Voir `.github/workflows/django-tests.yml` pour la configuration.
 
 ### Vérifications CI
 
-1. **Tests Unitaires** - Tests rapides avec couverture (échec sous 80%)
+1. **Tests Unitaires** - Tests rapides avec couverture (échec sous 90%)
 2. **Tests d'Intégration** - Tests multi-composants
 3. **Linting** - Vérifications qualité code ruff
 4. **Vérification Types** - Analyse statique mypy (consultatif)

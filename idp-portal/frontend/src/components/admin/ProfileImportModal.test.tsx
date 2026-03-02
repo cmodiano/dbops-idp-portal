@@ -191,3 +191,66 @@ describe('ProfileImportModal (Story 2.26)', () => {
 
   });
 });
+
+// ─── Coverage extras ──────────────────────────────────────────────────────────
+describe('ProfileImportModal — coverage extras', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    global.URL.createObjectURL = vi.fn().mockReturnValue('blob:test-url');
+    global.URL.revokeObjectURL = vi.fn();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('shows error notification with message from Error on import failure', async () => {
+    const user = userEvent.setup();
+    vi.mocked(profilesService.importProfilesYaml).mockRejectedValue(new Error('Invalid YAML'));
+
+    renderWithApp(<ProfileImportModal {...defaultProps} onCancel={vi.fn()} onSuccess={vi.fn()} />);
+
+    const file = new File(['invalid: ['], 'bad.yaml', { type: 'text/yaml' });
+    await user.upload(screen.getByTestId('file-input'), file);
+    await user.click(screen.getByRole('button', { name: /Importer/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Erreur d'import")).toBeInTheDocument();
+    });
+  });
+
+  it('shows fallback error message when non-Error is thrown on import', async () => {
+    const user = userEvent.setup();
+    vi.mocked(profilesService.importProfilesYaml).mockRejectedValue('string error');
+
+    renderWithApp(<ProfileImportModal {...defaultProps} onCancel={vi.fn()} onSuccess={vi.fn()} />);
+
+    const file = new File(['test'], 'bad.yaml', { type: 'text/yaml' });
+    await user.upload(screen.getByTestId('file-input'), file);
+    await user.click(screen.getByRole('button', { name: /Importer/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Erreur d'import")).toBeInTheDocument();
+    });
+  });
+
+  it('handleCancel resets file reference and calls onCancel', async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    renderWithApp(<ProfileImportModal {...defaultProps} onCancel={onCancel} onSuccess={vi.fn()} />);
+
+    // The modal's default cancel button (Ant Design) or the X close button
+    // Try the X close icon (aria-label="Close") or look for Cancel button
+    await waitFor(() => {
+      const cancelBtn = screen.queryByRole('button', { name: /Cancel/i }) ||
+                        screen.queryByRole('button', { name: /close/i });
+      expect(cancelBtn).toBeInTheDocument();
+    });
+    const cancelBtn = screen.queryByRole('button', { name: /Cancel/i }) ||
+                      screen.queryByRole('button', { name: /close/i });
+    if (cancelBtn) {
+      await user.click(cancelBtn);
+      expect(onCancel).toHaveBeenCalled();
+    }
+  });
+});

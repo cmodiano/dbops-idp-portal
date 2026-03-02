@@ -169,3 +169,29 @@ class TestServiceNowTLSEnforcement:
 
         call_kwargs = mock_client_class.call_args[1]
         assert call_kwargs["verify"] is False, "verify=False doit être respecté en DEBUG mode"
+
+    @patch("services.servicenow_service.logger")
+    @patch("services.servicenow_service.httpx.Client")
+    @override_settings(DEBUG=False, SERVICENOW_VERIFY_TLS=False)
+    def test_tls_override_logs_warning_in_production(self, mock_client_class, mock_logger):
+        """SEC-13: A warning is logged when TLS override is ignored in production."""
+        self._make_mock_client(mock_client_class)
+
+        self.service.create_change(short_description="SEC-13 warning test")
+
+        mock_logger.warning.assert_called_once_with(
+            "servicenow_tls_override_ignored",
+            reason="TLS verification forced True in production (DEBUG=False)",
+            configured_value=False,
+        )
+
+    @patch("services.servicenow_service.logger")
+    @patch("services.servicenow_service.httpx.Client")
+    @override_settings(DEBUG=False, SERVICENOW_VERIFY_TLS=True)
+    def test_tls_no_warning_when_already_true(self, mock_client_class, mock_logger):
+        """SEC-13: No warning when TLS is already True in production."""
+        self._make_mock_client(mock_client_class)
+
+        self.service.create_change(short_description="SEC-13 no-warning test")
+
+        mock_logger.warning.assert_not_called()

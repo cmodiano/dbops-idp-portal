@@ -737,3 +737,237 @@ describe('ProfileForm', () => {
     });
   });
 });
+
+// ─── detectTargetsMode and exclusion extras ────────────────────────────────────
+import { detectTargetsMode } from './ProfileForm';
+
+describe('detectTargetsMode — coverage extras', () => {
+  it('returns "list" for targets_type=list', () => {
+    expect(detectTargetsMode({ targets_type: 'list', target_names: [], target_patterns: [] })).toBe('list');
+  });
+
+  it('returns "pattern" for targets_type=pattern', () => {
+    expect(detectTargetsMode({ targets_type: 'pattern', target_names: [], target_patterns: [] })).toBe('pattern');
+  });
+
+  it('returns "all" for targets_type=all with no filter', () => {
+    expect(detectTargetsMode({ targets_type: 'all', target_names: [], target_patterns: [] })).toBe('all');
+  });
+
+  it('returns "all" for targets_type=all with null filter', () => {
+    expect(detectTargetsMode({ targets_type: 'all', target_names: [], target_patterns: [], filter_by_attribute: null })).toBe('all');
+  });
+
+  it('returns "all" for targets_type=all with empty filter object', () => {
+    expect(detectTargetsMode({ targets_type: 'all', target_names: [], target_patterns: [], filter_by_attribute: {} })).toBe('all');
+  });
+
+  it('returns "all-oracle" for engine_type=oracle (case insensitive)', () => {
+    expect(detectTargetsMode({ targets_type: 'all', target_names: [], target_patterns: [], filter_by_attribute: { engine_type: ['Oracle'] } })).toBe('all-oracle');
+  });
+
+  it('returns "all-sql" for engine_type=sql', () => {
+    expect(detectTargetsMode({ targets_type: 'all', target_names: [], target_patterns: [], filter_by_attribute: { engine_type: ['sql'] } })).toBe('all-sql');
+  });
+
+  it('returns "all-sql" for engine_type=sqlserver', () => {
+    expect(detectTargetsMode({ targets_type: 'all', target_names: [], target_patterns: [], filter_by_attribute: { engine_type: ['sqlserver'] } })).toBe('all-sql');
+  });
+
+  it('returns "advanced" for unknown engine_type value', () => {
+    expect(detectTargetsMode({ targets_type: 'all', target_names: [], target_patterns: [], filter_by_attribute: { engine_type: ['postgresql'] } })).toBe('advanced');
+  });
+
+  it('returns "advanced" for multiple engine_type values', () => {
+    expect(detectTargetsMode({ targets_type: 'all', target_names: [], target_patterns: [], filter_by_attribute: { engine_type: ['oracle', 'sqlserver'] } })).toBe('advanced');
+  });
+
+  it('returns "advanced" for multi-key filter', () => {
+    expect(detectTargetsMode({ targets_type: 'all', target_names: [], target_patterns: [], filter_by_attribute: { engine_type: ['oracle'], zone: ['prod'] } })).toBe('advanced');
+  });
+
+  it('returns "all" as fallback for unknown targets_type', () => {
+    // Covers the final `return "all"` branch
+    expect(detectTargetsMode({ targets_type: 'all', target_names: [], target_patterns: [], filter_by_attribute: undefined })).toBe('all');
+  });
+});
+
+describe('ProfileForm — exclusion patterns validator', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(profilesService.getProfileTargets).mockResolvedValue({
+      targets_type: 'all',
+      target_names: [],
+      target_patterns: [],
+      filter_by_attribute: null,
+      exclusion_patterns: [],
+    });
+    vi.mocked(profilesService.putProfileTargets).mockResolvedValue({ targets_type: 'all', target_names: [], target_patterns: [] });
+    vi.mocked(profilesService.getProfileActions).mockResolvedValue({ actions_type: 'all', action_ids: [], tag_patterns: [], environments: [] });
+    vi.mocked(profilesService.putProfileActions).mockResolvedValue({ actions_type: 'all', action_ids: [], tag_patterns: [], environments: [] });
+    vi.mocked(adminService.getAdminActions).mockResolvedValue({ data: [], pagination: { page: 1, page_size: 10, total: 0, total_pages: 0 } });
+    vi.mocked(adminService.getTags).mockResolvedValue([]);
+    const mockUseEnvironments = useEnvironments as ReturnType<typeof vi.fn>;
+    mockUseEnvironments.mockReturnValue({
+      environments: ['dev', 'staging', 'prod'],
+      environmentOptions: [
+        { value: 'dev', label: 'Développement' },
+        { value: 'staging', label: 'Staging' },
+        { value: 'prod', label: 'Production' },
+      ],
+      loading: false,
+      error: null,
+    });
+  });
+
+  it('renders exclusion_patterns field when editing', async () => {
+    const editProfile: import('../../types/api').ProfileResponse = {
+      id: 1,
+      name: 'Test',
+      description: null,
+      ad_group: 'GRP-X',
+      is_admin: false,
+      is_auditor: false,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    };
+    render(<ProfileForm {...{ open: true, onCancel: vi.fn(), onSubmit: vi.fn().mockResolvedValue(editProfile), loading: false, error: null, editProfile, onSuccess: vi.fn() }} />);
+    await waitFor(() => {
+      expect(screen.getByText("Patterns d'exclusion")).toBeInTheDocument();
+    });
+  });
+
+  it('target_patterns validator rejette quand vide (targetsMode=pattern)', async () => {
+    const user = userEvent.setup();
+    const editProfile: import('../../types/api').ProfileResponse = {
+      id: 1,
+      name: 'Test',
+      description: null,
+      ad_group: 'GRP-X',
+      is_admin: false,
+      is_auditor: false,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    };
+    render(<ProfileForm {...{ open: true, onCancel: vi.fn(), onSubmit: vi.fn(), loading: false, error: null, editProfile, onSuccess: vi.fn() }} />);
+    await waitFor(() => {
+      expect(screen.getByText(/Pattern de serveurs/i)).toBeInTheDocument();
+    });
+
+    // Switch to pattern mode
+    await user.click(screen.getByRole('radio', { name: /Pattern de serveurs/i }));
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Patterns \(ex. assurance-\*\)/i)).toBeInTheDocument();
+    });
+
+    // Submit without adding any patterns
+    await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Saisissez au moins un pattern/i)).toBeInTheDocument();
+    });
+  });
+
+  it('exclusion_patterns validator rejette si >100 patterns', async () => {
+    const user = userEvent.setup();
+    const editProfile: import('../../types/api').ProfileResponse = {
+      id: 1,
+      name: 'Test',
+      description: null,
+      ad_group: 'GRP-X',
+      is_admin: false,
+      is_auditor: false,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    };
+
+    // Return 101 patterns from service
+    vi.mocked(profilesService.getProfileTargets).mockResolvedValue({
+      targets_type: 'all',
+      target_names: [],
+      target_patterns: [],
+      exclusion_patterns: Array.from({ length: 101 }, (_, i) => `pattern-${i}`),
+    });
+
+    render(<ProfileForm {...{ open: true, onCancel: vi.fn(), onSubmit: vi.fn(), loading: false, error: null, editProfile, onSuccess: vi.fn() }} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Patterns d'exclusion")).toBeInTheDocument();
+    });
+
+    // Try to submit
+    await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Maximum 100 patterns/i)).toBeInTheDocument();
+    });
+  });
+
+  it('exclusion_patterns validator rejette les patterns regex-like', async () => {
+    const user = userEvent.setup();
+    const editProfile: import('../../types/api').ProfileResponse = {
+      id: 1,
+      name: 'Test',
+      description: null,
+      ad_group: 'GRP-X',
+      is_admin: false,
+      is_auditor: false,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    };
+
+    // Return a regex-like pattern
+    vi.mocked(profilesService.getProfileTargets).mockResolvedValue({
+      targets_type: 'all',
+      target_names: [],
+      target_patterns: [],
+      exclusion_patterns: ['prod\\d+'],
+    });
+
+    render(<ProfileForm {...{ open: true, onCancel: vi.fn(), onSubmit: vi.fn(), loading: false, error: null, editProfile, onSuccess: vi.fn() }} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Patterns d'exclusion")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/syntaxe regex détectée/i)).toBeInTheDocument();
+    });
+  });
+
+  it('exclusion_patterns validator rejette les patterns invalides (non-glob, non-simple)', async () => {
+    const user = userEvent.setup();
+    const editProfile: import('../../types/api').ProfileResponse = {
+      id: 1,
+      name: 'Test',
+      description: null,
+      ad_group: 'GRP-X',
+      is_admin: false,
+      is_auditor: false,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    };
+
+    // Return a pattern that is not valid glob and not a simple name
+    vi.mocked(profilesService.getProfileTargets).mockResolvedValue({
+      targets_type: 'all',
+      target_names: [],
+      target_patterns: [],
+      exclusion_patterns: ['invalid pattern!'],
+    });
+
+    render(<ProfileForm {...{ open: true, onCancel: vi.fn(), onSubmit: vi.fn(), loading: false, error: null, editProfile, onSuccess: vi.fn() }} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Patterns d'exclusion")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Patterns invalides:/i)).toBeInTheDocument();
+    });
+  });
+});

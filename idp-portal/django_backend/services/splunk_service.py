@@ -8,6 +8,7 @@ consumed by the portal for logging, not for executing jobs.
 from __future__ import annotations
 
 import asyncio
+from typing import cast
 
 import httpx
 import structlog
@@ -280,6 +281,158 @@ class SplunkService(IHealthCheckable):
             message="Splunk HEC max retries exceeded",
             details={"url": url},
         ) from last_exc
+
+    # ------------------------------------------------------------------
+    # Search — retrieve platform logs on demand
+    # ------------------------------------------------------------------
+
+    async def _run_splunk_search_job(
+        self,
+        spl: str,
+        execution_id: int,
+        *,
+        poll_timeout_sec: float = 30.0,
+    ) -> list[dict] | None:
+        """Run a Splunk search job and return parsed results.
+
+        Creates the job, polls until dispatchState==DONE (or timeout), fetches
+        results with count=0 (all available). Best-effort: returns None on
+        any error or timeout.
+
+        Args:
+            spl: The SPL search string.
+            execution_id: For logging.
+            poll_timeout_sec: Max seconds to wait for job completion.
+
+        Returns:
+            List of result dicts (each has _raw etc.), or None on error.
+        """
+        import time  # noqa: PLC0415
+
+        search_url = f"{self.base_url}/services/search/jobs"
+        headers = {**self.auth_headers, "Content-Type": "application/x-www-form-urlencoded"}
+
+        try:
+            async with httpx.AsyncClient(
+                timeout=self.timeout,
+                verify=False,  # nosec B501  # noqa: S501
+            ) as client:
+                resp = await client.post(
+                    search_url,
+                    data={"search": spl, "output_mode": "json"},
+                    headers=headers,
+                )
+                resp.raise_for_status()
+                sid = resp.json().get("sid")
+                if not sid:
+                    logger.warning("splunk_search_no_sid", execution_id=execution_id)
+                    return None
+
+                job_url = f"{search_url}/{sid}"
+                poll_timeout = min(self.timeout, 5.0)
+                deadline = time.monotonic() + poll_timeout_sec
+                while time.monotonic() < deadline:
+                    status_resp = await client.get(
+                        job_url,
+                        params={"output_mode": "json"},
+                        headers=self.auth_headers,
+                        timeout=poll_timeout,
+                    )
+                    status_resp.raise_for_status()
+                    dispatch_state = (
+                        status_resp.json()
+                        .get("entry", [{}])[0]
+                        .get("content", {})
+                        .get("dispatchState", "")
+                    )
+                    if dispatch_state == "DONE":
+                        break
+                    await asyncio.sleep(1)
+                else:
+                    logger.warning("splunk_search_timeout", execution_id=execution_id, sid=sid)
+                    return None
+
+                results_resp = await client.get(
+                    f"{job_url}/results",
+                    params={"output_mode": "json", "count": 0},
+                    headers=self.auth_headers,
+                )
+                results_resp.raise_for_status()
+                return cast("list[dict[str, object]]", results_resp.json().get("results", []))
+
+        except Exception:  # noqa: BLE001 — best-effort retrieval
+            logger.exception("splunk_search_error", execution_id=execution_id)
+            return None
+
+    async def search_platform_logs(
+        self, execution_id: int, platform_job_id: str | None = None
+    ) -> str | None:
+        """Search Splunk for platform logs of a given execution.
+
+        Uses the Splunk REST search API (not HEC) to retrieve previously
+        forwarded platform logs.  Best-effort: returns ``None`` on any error
+        or timeout (30 s).
+
+        Args:
+            execution_id: The IDP execution ID (indexed field in Splunk events).
+            platform_job_id: Optional. When provided, filters by this platform job ID.
+
+        Returns:
+            The log content string, or ``None`` if not found / error.
+        """
+        import json  # noqa: PLC0415
+
+        def _escape_spl_value(val: str) -> str:
+            """Escape backslash and double-quote for safe SPL string interpolation."""
+            return val.replace("\\", "\\\\").replace('"', '\\"')
+
+        spl = f'search sourcetype="idp:platform_log" execution_id={execution_id}'
+        if platform_job_id:
+            escaped_pid = _escape_spl_value(platform_job_id)
+            spl += f' platform_job_id="{escaped_pid}"'
+
+        results = await self._run_splunk_search_job(spl, execution_id)
+        if results is None:
+            return None
+        if not results:
+            logger.info("splunk_search_no_results", execution_id=execution_id)
+            return None
+
+        raw = results[0].get("_raw", "")
+        try:
+            event_data = json.loads(raw) if isinstance(raw, str) else raw
+            return event_data.get("content")  # type: ignore[no-any-return]
+        except (json.JSONDecodeError, AttributeError):
+            return raw or None
+
+    async def search_platform_logs_mapping(
+        self, execution_id: int
+    ) -> dict[str, str]:
+        """Search Splunk for all platform logs of an execution, keyed by platform_job_id.
+
+        Returns a mapping platform_job_id -> log content. Steps without a
+        platform_job_id in Splunk are skipped. Best-effort: returns empty dict
+        on any error or timeout.
+        """
+        import json  # noqa: PLC0415
+
+        spl = f'search sourcetype="idp:platform_log" execution_id={execution_id}'
+        results = await self._run_splunk_search_job(spl, execution_id)
+        if results is None:
+            return {}
+
+        mapping: dict[str, str] = {}
+        for r in results:
+            raw = r.get("_raw", "")
+            try:
+                event_data = json.loads(raw) if isinstance(raw, str) else raw
+                pid = event_data.get("platform_job_id")
+                content = event_data.get("content")
+                if pid is not None and content is not None:
+                    mapping[str(pid)] = content
+            except (json.JSONDecodeError, AttributeError, TypeError):
+                continue
+        return mapping
 
     # ------------------------------------------------------------------
     # Health check — Story 51.1

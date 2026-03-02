@@ -7,6 +7,7 @@ import { Table, Button, Space, App } from 'antd';
 import { EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import type { TableProps } from 'antd';
 import type { ProfileListItem } from '../../types/api';
+import { formatLocalDate } from '../../utils/dateFormat';
 
 export interface ProfilesTableProps {
   dataSource: ProfileListItem[];
@@ -66,7 +67,7 @@ export function ProfilesTable({ dataSource, loading, onEdit, onDelete, onNew, on
       title: 'Date de création',
       dataIndex: 'created_at',
       key: 'created_at',
-      render: (d: string) => new Date(d).toLocaleDateString('fr-CA'),
+      render: (d: string) => formatLocalDate(d),
       sorter: (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
       defaultSortOrder: 'descend',
     },

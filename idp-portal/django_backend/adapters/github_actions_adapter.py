@@ -25,33 +25,16 @@ import httpx
 import structlog
 
 from adapters.base_adapter import BaseAdapter
+from adapters.status_mappers import (
+    GITHUB_ACTIONS_TERMINAL_CONCLUSIONS as GITHUB_ACTIONS_TERMINAL_CONCLUSIONS,
+    map_github_actions_status,
+)
 from core.exceptions import ServiceUnavailableError
 from integrations.health_check import HealthCheckResult, HealthCheckStatus, IHealthCheckable
 
 logger = structlog.get_logger(__name__)
 
-# GitHub Actions status+conclusion → IDP portal execution status mapping
-# GitHub Actions separates "status" (queued, in_progress, completed)
-# and "conclusion" (success, failure, cancelled, timed_out, action_required, skipped).
-GITHUB_ACTIONS_STATUS_MAP: dict[str, str] = {
-    "queued": "SUBMITTED",
-    "in_progress": "RUNNING",
-    "completed:success": "COMPLETED",
-    "completed:failure": "FAILED",
-    "completed:cancelled": "CANCELLED",
-    "completed:timed_out": "FAILED",
-    "completed:action_required": "SUBMITTED",
-    "completed:skipped": "CANCELLED",
-}
-
-# Terminal conclusion values (when status == "completed")
-GITHUB_ACTIONS_TERMINAL_CONCLUSIONS = {
-    "success",
-    "failure",
-    "cancelled",
-    "timed_out",
-    "skipped",
-}
+_map_github_actions_status = map_github_actions_status  # backward compat alias for existing tests
 
 # Timeout for GitHub Actions API calls (seconds)
 GITHUB_ACTIONS_DEFAULT_TIMEOUT = 30.0
@@ -65,23 +48,6 @@ GITHUB_API_VERSION = "2022-11-28"
 RUN_ID_POLL_DELAY = 3.0  # seconds to wait before first poll
 RUN_ID_POLL_MAX_ATTEMPTS = 5
 RUN_ID_POLL_INTERVAL = 2.0  # seconds between retries
-
-
-def _map_github_actions_status(status: str, conclusion: str | None) -> str:
-    """Map GitHub Actions status+conclusion to IDP Portal status.
-
-    Args:
-        status: GitHub Actions run status (queued, in_progress, completed).
-        conclusion: GitHub Actions run conclusion (success, failure, etc.) or None.
-
-    Returns:
-        IDP Portal status string (never None).
-    """
-    if status == "completed" and conclusion:
-        mapped = GITHUB_ACTIONS_STATUS_MAP.get(f"completed:{conclusion}")
-        return mapped if mapped is not None else "FAILED"
-    mapped = GITHUB_ACTIONS_STATUS_MAP.get(status)
-    return mapped if mapped is not None else "SUBMITTED"
 
 
 class GitHubActionsAdapter(BaseAdapter, IHealthCheckable):
@@ -413,7 +379,7 @@ class GitHubActionsAdapter(BaseAdapter, IHealthCheckable):
 
         gh_status = data.get("status", "queued")
         gh_conclusion = data.get("conclusion")
-        idp_status = _map_github_actions_status(gh_status, gh_conclusion)
+        idp_status = map_github_actions_status(gh_status, gh_conclusion)
 
         logger.info(
             "github_actions_get_status_success",

@@ -532,6 +532,9 @@ SAML_IDP_SSO_URL = os.getenv('SAML_IDP_SSO_URL', 'https://idp.example.com/sso')
 SAML_IDP_SLO_URL = os.getenv('SAML_IDP_SLO_URL', 'https://idp.example.com/slo')
 SAML_IDP_CERT_PATH = os.getenv('SAML_IDP_CERT_PATH', '')
 
+# Default SAML profile fallback when 'profile' attribute is absent (Story 54.5)
+DEFAULT_SAML_PROFILE = os.getenv('DEFAULT_SAML_PROFILE', 'dba_applicatif')
+
 # ============================================================================
 # JWT Configuration (Story M.7)
 # ============================================================================
@@ -694,7 +697,7 @@ VAULT_ADDR = os.getenv('VAULT_ADDR', 'http://localhost:8200')
 
 # ServiceNow configuration for health check and ITSM integration
 SERVICENOW_INSTANCE_URL = os.getenv('SERVICENOW_INSTANCE_URL', 'https://instance.service-now.com')
-# TLS verification for ServiceNow API calls (default True); set SERVICENOW_VERIFY_TLS=false to disable
+# TLS verification for ServiceNow API calls (default True). Dev only — ignored in production (DEBUG=False), see SEC-13
 SERVICENOW_VERIFY_TLS = os.getenv('SERVICENOW_VERIFY_TLS', 'true').lower() == 'true'
 
 # Story 31.8: Notification service configuration

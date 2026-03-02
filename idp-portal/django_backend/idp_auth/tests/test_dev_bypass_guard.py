@@ -21,7 +21,7 @@ class TestDevBypassGuardSAMLLogin:
     @override_settings(AUTH_DEV_BYPASS=True, DEBUG=False)
     def test_dev_bypass_in_production_logs_critical(self, api_client):
         """AUTH_DEV_BYPASS=True + DEBUG=False must emit CRITICAL log."""
-        with patch('idp_auth.views.logger') as mock_logger:
+        with patch('idp_auth.views.saml.logger') as mock_logger:
             response = api_client.get('/api/v1/auth/saml/login/')
             # Should still work (redirect) but log CRITICAL
             assert response.status_code in (301, 302)
@@ -33,7 +33,7 @@ class TestDevBypassGuardSAMLLogin:
     @override_settings(AUTH_DEV_BYPASS=True, DEBUG=True)
     def test_dev_bypass_in_debug_no_critical_log(self, api_client):
         """AUTH_DEV_BYPASS=True + DEBUG=True must NOT emit CRITICAL log."""
-        with patch('idp_auth.views.logger') as mock_logger:
+        with patch('idp_auth.views.saml.logger') as mock_logger:
             response = api_client.get('/api/v1/auth/saml/login/')
             assert response.status_code in (301, 302)
             mock_logger.critical.assert_not_called()
@@ -41,8 +41,8 @@ class TestDevBypassGuardSAMLLogin:
     @override_settings(AUTH_DEV_BYPASS=False)
     def test_no_bypass_no_critical_log(self, api_client):
         """AUTH_DEV_BYPASS=False must NOT emit CRITICAL log (normal SAML flow)."""
-        with patch('idp_auth.views.logger') as mock_logger:
-            with patch('idp_auth.views.create_saml_auth') as mock_saml:
+        with patch('idp_auth.views.saml.logger') as mock_logger:
+            with patch('idp_auth.views.saml.create_saml_auth') as mock_saml:
                 mock_auth = MagicMock()
                 mock_auth.login.return_value = 'https://idp.example.com/sso'
                 mock_saml.return_value = mock_auth

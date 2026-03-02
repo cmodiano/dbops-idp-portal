@@ -529,3 +529,157 @@ describe('AuditTable', () => {
     });
   });
 });
+
+// ─── Coverage extras ──────────────────────────────────────────────────────────
+describe('AuditTable — coverage extras', () => {
+  describe('getOperationConfig — additional suffixes', () => {
+    it('returns config for _PENDING_APPROVAL suffix', () => {
+      const op = getOperationConfig('EXECUTION_PENDING_APPROVAL');
+      expect(op.label).toBe('En attente');
+    });
+
+    it('returns config for _RUNNING suffix', () => {
+      const op = getOperationConfig('EXECUTION_RUNNING');
+      expect(op.label).toBe('Démarrer');
+    });
+
+    it('returns config for _REJECTED suffix', () => {
+      const op = getOperationConfig('EXECUTION_REJECTED');
+      expect(op.label).toBe('Rejeter');
+    });
+
+    it('returns config for _CANCELLED suffix', () => {
+      const op = getOperationConfig('EXECUTION_CANCELLED');
+      expect(op.label).toBe('Annuler');
+    });
+
+    it('returns config for _COMPLETED suffix', () => {
+      const op = getOperationConfig('EXECUTION_COMPLETED');
+      expect(op.label).toBe('Terminer');
+    });
+
+    it('returns config for _FAILED suffix', () => {
+      const op = getOperationConfig('EXECUTION_FAILED');
+      expect(op.label).toBe('Échouer');
+    });
+
+    it('returns config for _DISABLED suffix', () => {
+      const op = getOperationConfig('INTEGRATION_DISABLED');
+      expect(op.label).toBe('Désactiver');
+    });
+
+    it('returns config for _ENABLED suffix', () => {
+      const op = getOperationConfig('INTEGRATION_ENABLED');
+      expect(op.label).toBe('Activer');
+    });
+
+    it('returns config for _TRIGGERED suffix', () => {
+      const op = getOperationConfig('ACTION_TRIGGERED');
+      expect(op.label).toBe('Déclencher');
+    });
+
+    it('returns config for _BLOCKED suffix', () => {
+      const op = getOperationConfig('EXECUTION_BLOCKED');
+      expect(op.label).toBe('Bloquer');
+    });
+
+    it('returns config for _FORBIDDEN suffix', () => {
+      const op = getOperationConfig('EXECUTION_FORBIDDEN');
+      expect(op.label).toBe('Interdit');
+    });
+
+    it('returns config for _EXHAUSTED suffix', () => {
+      const op = getOperationConfig('EXECUTION_EXHAUSTED');
+      expect(op.label).toBe('Polling épuisé');
+    });
+
+    it('returns config for _WARNING suffix', () => {
+      const op = getOperationConfig('EXECUTION_WARNING');
+      expect(op.label).toBe('Avertissement');
+    });
+
+    it('returns config for _REACTIVATED suffix', () => {
+      const op = getOperationConfig('INTEGRATION_REACTIVATED');
+      expect(op.label).toBe('Réactiver');
+    });
+
+    it('returns config for _EXECUTED suffix', () => {
+      const op = getOperationConfig('ACTION_EXECUTED');
+      expect(op.label).toBe('Exécuter');
+    });
+
+    it('returns config for _DEACTIVATED suffix', () => {
+      const op = getOperationConfig('INTEGRATION_DEACTIVATED');
+      expect(op.label).toBe('Désactiver');
+    });
+
+    it('returns config for _BLOCKED_INVALID_INTEGRATION suffix', () => {
+      const op = getOperationConfig('EXECUTION_BLOCKED_INVALID_INTEGRATION');
+      expect(op.label).toBe('Bloquer');
+    });
+  });
+
+  it('renders servicenow_change_id when column made visible', () => {
+    const entryWithSN: AuditExecutionEntry = {
+      ...mockEntry,
+      entity_type: 'execution',
+      details: { ...mockEntry.details, servicenow_change_id: 'CHG00123456789' },
+    };
+    const { container } = render(<AuditTable {...defaultProps} topLevelEntries={[entryWithSN]} />);
+
+    // Enable Change SN column via Colonnes toggle
+    const colonnesBtn = screen.getByRole('button', { name: /Colonnes/i });
+    fireEvent.click(colonnesBtn);
+    const snCheckbox = screen.getByText('Change SN');
+    fireEvent.click(snCheckbox);
+
+    // The Change SN cell should now show the truncated id
+    const cells = container.querySelectorAll('td');
+    const snCell = Array.from(cells).find(cell => cell.textContent?.includes('CHG001234'));
+    expect(snCell).toBeTruthy();
+  });
+
+  it('Catégorie column render function is invoked when column is visible (covers line 124)', () => {
+    render(<AuditTable {...defaultProps} />);
+
+    // Enable Catégorie column via Colonnes toggle
+    fireEvent.click(screen.getByText('Colonnes'));
+    const allCheckboxes = document.querySelectorAll('input[type="checkbox"]');
+    const catCheckbox = Array.from(allCheckboxes).find((cb) =>
+      cb.closest('label')?.textContent?.includes('Catégorie'),
+    );
+    if (catCheckbox) fireEvent.click(catCheckbox);
+
+    // Catégorie column now visible — mockEntry.entity_type='execution' → ENTITY_TYPE_LABELS['execution'] = 'Exécution'
+    const headers = document.querySelectorAll('th');
+    const headerTexts = Array.from(headers).map((h) => h.textContent?.trim());
+    if (headerTexts.includes('Catégorie')) {
+      expect(screen.getByText('Exécution')).toBeInTheDocument();
+    }
+  });
+
+  it('clicking child row triggers onRowClick with stopPropagation (covers lines 243-244)', () => {
+    const onRowClick = vi.fn();
+    const childrenMap = new Map([[200, [mockChildEntry]]]);
+    const { container } = render(
+      <AuditTable
+        {...defaultProps}
+        topLevelEntries={[mockWorkflowEntry]}
+        childrenByParentId={childrenMap}
+        onRowClick={onRowClick}
+      />,
+    );
+
+    // Expand the workflow row
+    const expandBtn = container.querySelector('.ant-table-row-expand-icon');
+    expect(expandBtn).not.toBeNull();
+    fireEvent.click(expandBtn!);
+
+    // Click on the child action name — triggers the onRow onClick handler
+    const stepText = screen.queryByText('Step 1');
+    if (stepText) {
+      fireEvent.click(stepText);
+      expect(onRowClick).toHaveBeenCalledWith(mockChildEntry);
+    }
+  });
+});

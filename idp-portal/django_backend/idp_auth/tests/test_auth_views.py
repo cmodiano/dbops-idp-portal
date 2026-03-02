@@ -218,7 +218,7 @@ class TestRefreshTokenView(TestCase):
             profile='dbops'
         )
 
-    @patch('idp_auth.views.AuditService')
+    @patch('idp_auth.views.jwt.AuditService')
     def test_refresh_token_success(self, mock_audit):
         """Test POST /auth/refresh with valid cookie returns new access token."""
         from idp_auth.jwt_utils import create_refresh_token
@@ -314,7 +314,7 @@ class TestLogoutView(TestCase):
         """Set up test data."""
         self.client = APIClient()
 
-    @patch('idp_auth.views.AuditService')
+    @patch('idp_auth.views.jwt.AuditService')
     def test_logout_success(self, mock_audit):
         """Test POST /auth/logout returns success and clears cookie."""
         response = self.client.post('/api/v1/auth/logout/')
@@ -324,7 +324,7 @@ class TestLogoutView(TestCase):
         self.assertIn('message', response.data['data'])
         self.assertEqual(response.data['data']['message'], 'Deconnexion reussie')
 
-    @patch('idp_auth.views.AuditService')
+    @patch('idp_auth.views.jwt.AuditService')
     def test_logout_clears_cookie(self, mock_audit):
         """Test POST /auth/logout clears refresh_token cookie."""
         from idp_auth.jwt_utils import create_refresh_token

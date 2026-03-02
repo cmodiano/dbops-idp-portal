@@ -25,6 +25,7 @@ import { ComparisonChart } from './ComparisonChart';
 import { PeriodComparisonChart } from './PeriodComparisonChart';
 import { ComparisonSummaryCards } from './ComparisonSummaryCards';
 import { ComparisonExecutionsDrawer } from './ComparisonExecutionsDrawer';
+import logger from '../../../services/logger';
 import {
   fetchStatsByTechnology,
   fetchStatsByEnvironment,
@@ -161,9 +162,7 @@ export function ReportingDashboard() {
     fetchFilterOptions()
       .then(setFilterOptions)
       .catch((err: unknown) => {
-        // Fallback silencieux pour l'utilisateur — filtres ignorés en cas d'échec
-        // eslint-disable-next-line no-console
-        console.warn('[ReportingDashboard] fetchFilterOptions failed, using fallback options', err);
+        logger.warn('reporting_filter_options_error', { error: err instanceof Error ? err.message : String(err), fallback: 'default_options' });
       });
   }, []);
 

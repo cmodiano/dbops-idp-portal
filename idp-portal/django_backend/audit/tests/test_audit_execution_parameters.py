@@ -10,6 +10,7 @@ from django.test import TestCase
 
 from catalog.models import Action, ActionStatus
 from core.models import AuditActionType, AuditLog
+from executions.dtos import ExecutionRequest
 from executions.services import ExecutionService, _sanitize_parameters
 from idp_auth.models import User
 from integrations.models import Integration
@@ -176,12 +177,13 @@ class TestAuditDetailsParameters(TestCase):
     def test_audit_details_includes_parameters_on_submitted(self):
         """AC1 : EXECUTION_SUBMITTED contient details.parameters avec les params métier."""
         params = {"db_name": "PROD01", "target": "server1.example.com"}
-        self.service._create_execution_atomic(
+        req = ExecutionRequest(
             user=self.user,
             action=self.action,
             environment="production",
             parameters=params,
         )
+        self.service._create_execution_atomic(req)
         entry = _last_audit(AuditActionType.EXECUTION_SUBMITTED)
         assert entry is not None
         details = entry.get_details()
@@ -197,12 +199,13 @@ class TestAuditDetailsParameters(TestCase):
             "db_name": "PROD02",
             "_env_config": {"requires_approval": True},
         }
-        self.service._create_execution_atomic(
+        req = ExecutionRequest(
             user=self.user,
             action=self.action,
             environment="production",
             parameters=params,
         )
+        self.service._create_execution_atomic(req)
         entry = _last_audit(AuditActionType.EXECUTION_PENDING_APPROVAL)
         assert entry is not None
         details = entry.get_details()
@@ -225,12 +228,13 @@ class TestAuditDetailsParameters(TestCase):
             "secret": "shhh",
             "credential": "cred",
         }
-        self.service._create_execution_atomic(
+        req = ExecutionRequest(
             user=self.user,
             action=self.action,
             environment="production",
             parameters=params,
         )
+        self.service._create_execution_atomic(req)
         entry = _last_audit(AuditActionType.EXECUTION_SUBMITTED)
         assert entry is not None
         details = entry.get_details()
@@ -244,24 +248,26 @@ class TestAuditDetailsParameters(TestCase):
     def test_audit_details_no_parameter_key_when_empty(self):
         """AC6 : si parameters est None ou vide après nettoyage, pas de clé 'parameters' dans details."""
         # Cas 1 : parameters = None
-        self.service._create_execution_atomic(
+        req_none = ExecutionRequest(
             user=self.user,
             action=self.action,
             environment="production",
             parameters=None,
         )
+        self.service._create_execution_atomic(req_none)
         entry_none = _last_audit(AuditActionType.EXECUTION_SUBMITTED)
         details_none = entry_none.get_details()
         assert "parameters" not in (details_none or {})
 
         # Cas 2 : parameters = uniquement des clés sensibles → vide après nettoyage
         params_all_sensitive = {"password": "x", "_env_config": {"requires_approval": False}}
-        self.service._create_execution_atomic(
+        req_empty = ExecutionRequest(
             user=self.user,
             action=self.action,
             environment="production",
             parameters=params_all_sensitive,
         )
+        self.service._create_execution_atomic(req_empty)
         entry_empty = _last_audit(AuditActionType.EXECUTION_SUBMITTED)
         details_empty = entry_empty.get_details()
         assert "parameters" not in (details_empty or {})
@@ -274,12 +280,13 @@ class TestAuditDetailsParameters(TestCase):
             "db_name": "PROD04",
             "workflow_step_parameters": wsp,
         }
-        self.service._create_execution_atomic(
+        req = ExecutionRequest(
             user=self.user,
             action=self.action,
             environment="production",
             parameters=params,
         )
+        self.service._create_execution_atomic(req)
         entry = _last_audit(AuditActionType.EXECUTION_SUBMITTED)
         assert entry is not None
         details = entry.get_details()

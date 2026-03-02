@@ -32,6 +32,15 @@ export default defineConfig({
       reportOnFailure: true,
       include: ['src/hooks/**/*.ts', 'src/components/**/*.tsx'],
       exclude: ['**/*.test.ts', '**/*.test.tsx', '**/node_modules/**', 'src/test-setup.ts'],
+      thresholds: {
+        statements: 90,
+        // branches à 80% (non 90%) : v8 instrumente les branches TypeScript compilées
+        // (optional chaining ?., nullish coalescing ??, etc.) qui gonflent le total.
+        // Couverture mesurée : 84.79% — décision acceptée en story 55-8 (code review 2026-03-02).
+        branches: 80,
+        functions: 90,
+        lines: 90,
+      },
     },
   },
 });

@@ -211,3 +211,47 @@ class TestHealthCheckEndpoint(TestCase):
         data = response.json()['data']
         # Should be marked reachable without actually testing
         assert data['vault'] == 'reachable'
+
+    @patch('core.views.requests')
+    @patch('core.views.connection')
+    @override_settings(VAULT_ADDR='http://vault.example.com:8200')
+    def test_health_check_vault_non_200_status(self, mock_connection, mock_requests):
+        """Test Vault returning non-200 status is treated as unreachable (line 107)."""
+        mock_cursor = MagicMock()
+        mock_connection.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
+        mock_connection.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        mock_connection.is_usable.return_value = True
+
+        # Vault returns 500 — should raise ConnectionError internally
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_requests.get.return_value = mock_response
+
+        response = self.client.get(self.url)
+
+        assert response.status_code == 503
+        data = response.json()['data']
+        assert data['vault'] == 'unreachable'
+        assert data['status'] == 'degraded'
+
+    @patch('core.views.requests')
+    @patch('core.views.connection')
+    @override_settings(SERVICENOW_INSTANCE_URL='https://servicenow.example.com')
+    def test_health_check_servicenow_non_200_401_status(self, mock_connection, mock_requests):
+        """Test ServiceNow returning non-200/401 status is unreachable (lines 133-137)."""
+        mock_cursor = MagicMock()
+        mock_connection.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
+        mock_connection.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        mock_connection.is_usable.return_value = True
+
+        # ServiceNow returns 500 — should raise ConnectionError internally
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_requests.get.return_value = mock_response
+
+        response = self.client.get(self.url)
+
+        assert response.status_code == 503
+        data = response.json()['data']
+        assert data['servicenow'] == 'unreachable'
+        assert data['status'] == 'degraded'

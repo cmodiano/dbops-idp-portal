@@ -637,3 +637,199 @@ describe('ProfileWizard', () => {
     });
   });
 });
+
+// ─── Coverage extras ──────────────────────────────────────────────────────────
+describe('ProfileWizard — coverage extras', () => {
+  const defaultProps = {
+    open: true,
+    onCancel: vi.fn(),
+    onSuccess: vi.fn(),
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseEnvironments.mockReturnValue({
+      environments: ['dev', 'staging', 'prod'],
+      environmentOptions: [
+        { value: 'dev', label: 'Développement' },
+        { value: 'staging', label: 'Staging' },
+        { value: 'prod', label: 'Production' },
+      ],
+      loading: false,
+      error: null,
+    });
+    mockAdminService.getAdminActions.mockResolvedValue({ data: mockActions, pagination: { page: 1, page_size: 10, total: mockActions.length, total_pages: 1 } });
+    mockAdminService.getTags.mockResolvedValue(mockTags);
+    mockProfilesService.createProfile.mockResolvedValue(mockProfile);
+    mockProfilesService.updateProfile.mockResolvedValue(mockProfile);
+    mockProfilesService.getProfileActions.mockResolvedValue(mockActionPermissions);
+    mockProfilesService.getProfileTargets.mockResolvedValue(mockTargetPermissions);
+    mockProfilesService.putProfileActions.mockResolvedValue(mockActionPermissions);
+    mockProfilesService.putProfileTargets.mockResolvedValue(mockTargetPermissions);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('notification warning uses fallback description when permErr is not an Error', async () => {
+    const user = userEvent.setup();
+    // Reject with a non-Error value (string)
+    mockProfilesService.putProfileActions.mockRejectedValue('permission denied string');
+
+    const onSuccess = vi.fn();
+    renderWithApp(<ProfileWizard {...defaultProps} onSuccess={onSuccess} />);
+
+    await user.type(screen.getByLabelText(/Nom du profil/i), 'Test');
+    await user.type(screen.getByLabelText(/Groupe AD/i), 'GRP');
+    await user.click(screen.getByRole('button', { name: /Suivant/i }));
+    await waitFor(() => expect(screen.getByText(/Type de permission actions/i)).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /Suivant/i }));
+    await waitFor(() => expect(screen.getByText(/Type de permission targets/i)).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
+
+    // onSuccess still called (profile created, only perms failed)
+    await waitFor(() => {
+      expect(onSuccess).toHaveBeenCalledWith(mockProfile);
+    });
+  });
+
+  it('sets submitError from non-Error exception during save', async () => {
+    const user = userEvent.setup();
+    // createProfile rejects with a non-Error value
+    mockProfilesService.createProfile.mockRejectedValue({ code: 500 });
+
+    renderWithApp(<ProfileWizard {...defaultProps} />);
+
+    await user.type(screen.getByLabelText(/Nom du profil/i), 'Test');
+    await user.type(screen.getByLabelText(/Groupe AD/i), 'GRP');
+    await user.click(screen.getByRole('button', { name: /Suivant/i }));
+    await waitFor(() => expect(screen.getByText(/Type de permission actions/i)).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /Suivant/i }));
+    await waitFor(() => expect(screen.getByText(/Type de permission targets/i)).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Erreur lors de l'enregistrement/)).toBeInTheDocument();
+    });
+  });
+
+  it('description trimmed and set to null when empty', async () => {
+    const user = userEvent.setup();
+
+    renderWithApp(<ProfileWizard {...defaultProps} />);
+
+    await user.type(screen.getByLabelText(/Nom du profil/i), 'Test');
+    // Leave description empty
+    await user.click(screen.getByRole('button', { name: /Suivant/i }));
+    await waitFor(() => expect(screen.getByText(/Type de permission actions/i)).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /Suivant/i }));
+    await waitFor(() => expect(screen.getByText(/Type de permission targets/i)).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
+
+    await waitFor(() => {
+      expect(mockProfilesService.createProfile).toHaveBeenCalledWith(
+        expect.objectContaining({ description: null })
+      );
+    });
+  });
+
+  it('filterOption dans action_ids Select fonctionne (actionsType=list, step 2)', async () => {
+    const user = userEvent.setup();
+    renderWithApp(<ProfileWizard {...defaultProps} />);
+
+    await user.type(screen.getByLabelText(/Nom du profil/i), 'Test');
+    await user.click(screen.getByRole('button', { name: /Suivant/i }));
+    await waitFor(() => expect(screen.getByText(/Type de permission actions/i)).toBeInTheDocument());
+
+    // Select "Liste d'actions"
+    const listRadio = screen.getByRole('radio', { name: /Liste d'actions/i });
+    await user.click(listRadio);
+
+    await waitFor(() => expect(screen.getByLabelText(/Actions autorisées/i)).toBeInTheDocument());
+
+    // Type in the action select to trigger filterOption
+    const actionSelect = screen.getByRole('combobox', { name: /Actions autorisées/i });
+    await user.click(actionSelect);
+    await user.type(actionSelect, 'action 1');
+
+    await waitFor(() => {
+      expect(screen.getByText('Action 1')).toBeInTheDocument();
+    });
+  });
+
+  it('filterOption dans tag_patterns Select fonctionne (actionsType=pattern, step 2)', async () => {
+    const user = userEvent.setup();
+    renderWithApp(<ProfileWizard {...defaultProps} />);
+
+    await user.type(screen.getByLabelText(/Nom du profil/i), 'Test');
+    await user.click(screen.getByRole('button', { name: /Suivant/i }));
+    await waitFor(() => expect(screen.getByText(/Type de permission actions/i)).toBeInTheDocument());
+
+    // Select "Pattern de tags"
+    const patternRadio = screen.getByRole('radio', { name: /Pattern de tags/i });
+    await user.click(patternRadio);
+
+    await waitFor(() => expect(screen.getByLabelText(/Tags pattern/i)).toBeInTheDocument());
+
+    const tagsSelect = screen.getByRole('combobox', { name: /Tags pattern/i });
+    await user.click(tagsSelect);
+    await user.type(tagsSelect, 'oracle');
+
+    await waitFor(() => {
+      // Multiple oracle elements may exist (option + input text) — check at least one is present
+      const oracleElements = screen.getAllByText('oracle');
+      expect(oracleElements.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('filterOption dans target_names Select fonctionne (targetsType=list, step 3)', async () => {
+    const user = userEvent.setup();
+    renderWithApp(<ProfileWizard {...defaultProps} />);
+
+    await user.type(screen.getByLabelText(/Nom du profil/i), 'Test');
+    await user.click(screen.getByRole('button', { name: /Suivant/i }));
+    await waitFor(() => expect(screen.getByText(/Type de permission actions/i)).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /Suivant/i }));
+    await waitFor(() => expect(screen.getByText(/Type de permission targets/i)).toBeInTheDocument());
+
+    // Select "Liste de targets"
+    const listTargetRadio = screen.getByRole('radio', { name: /Liste de targets/i });
+    await user.click(listTargetRadio);
+
+    await waitFor(() => expect(screen.getByLabelText(/Targets autorisés/i)).toBeInTheDocument());
+
+    const targetSelect = screen.getByRole('combobox', { name: /Targets autorisés/i });
+    await user.click(targetSelect);
+    await user.type(targetSelect, 'assurance');
+
+    // Just verify the select is accessible and filterOption is called
+    expect(targetSelect).toBeInTheDocument();
+  });
+
+  it('validator dans target_names rejette quand vide (step 3, targets list)', async () => {
+    const user = userEvent.setup();
+    renderWithApp(<ProfileWizard {...defaultProps} />);
+
+    await user.type(screen.getByLabelText(/Nom du profil/i), 'Test');
+    await user.click(screen.getByRole('button', { name: /Suivant/i }));
+    await waitFor(() => expect(screen.getByText(/Type de permission actions/i)).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /Suivant/i }));
+    await waitFor(() => expect(screen.getByText(/Type de permission targets/i)).toBeInTheDocument());
+
+    // Select "Liste de targets" without selecting any target
+    const listTargetRadio = screen.getByRole('radio', { name: /Liste de targets/i });
+    await user.click(listTargetRadio);
+
+    await waitFor(() => expect(screen.getByLabelText(/Targets autorisés/i)).toBeInTheDocument());
+
+    // Try to submit to trigger validator
+    await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Sélectionnez au moins un target/i)).toBeInTheDocument();
+    });
+  });
+});

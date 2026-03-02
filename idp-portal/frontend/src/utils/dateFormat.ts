@@ -33,3 +33,37 @@ export function formatUtcToLocal(
     minute: '2-digit',
   });
 }
+
+/**
+ * Format a date string for display in fr-CA locale (YYYY-MM-DD).
+ * Use for dates that should display in ISO-like order (e.g. created_at columns).
+ *
+ * @param dateStr - ISO 8601 string or any parseable date string
+ * @returns Formatted string in fr-CA (YYYY-MM-DD), or '—' if null/empty/invalid
+ */
+export function formatLocalDate(dateStr: string | null | undefined): string {
+  if (!dateStr || typeof dateStr !== 'string') return '—';
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleDateString('fr-CA', { year: 'numeric', month: '2-digit', day: '2-digit' });
+}
+
+/**
+ * Format a datetime string for display in fr-CA locale (YYYY-MM-DD HH:mm).
+ * Use for datetime fields that should display in ISO-like order.
+ *
+ * Uses manual time formatting to guarantee consistent "HH:mm" output across
+ * all environments (fr-CA toLocaleString produces "HH h mm" on macOS/Safari).
+ *
+ * @param dateStr - ISO 8601 string or any parseable date string
+ * @returns Formatted string "YYYY-MM-DD HH:mm", or '—' if null/empty/invalid
+ */
+export function formatLocalDateTime(dateStr: string | null | undefined): string {
+  if (!dateStr || typeof dateStr !== 'string') return '—';
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return '—';
+  const datePart = date.toLocaleDateString('fr-CA', { year: 'numeric', month: '2-digit', day: '2-digit' });
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${datePart} ${hours}:${minutes}`;
+}

@@ -664,3 +664,302 @@ class TestRolloutLogic:
         for i in range(50):
             results.add(feature_flags.get_rollout_status('test_flag', f'user_{i}', 50))
         assert len(results) == 2  # Both True and False should appear
+
+    @pytest.mark.django_db
+    def test_get_rollout_status_none_rollout_with_missing_flag(self):
+        """Lines 298-300: get_rollout_status() with rollout_percent=None and missing flag returns False."""
+        cache.clear()
+        with override_settings(
+            FEATURE_FLAGS_SOURCE='env',
+            FEATURE_FLAGS_ENABLED=True,
+            FEATURE_FLAGS='{}',
+        ):
+            result = feature_flags.get_rollout_status('missing_flag', 'user_1', rollout_percent=None)
+            assert result is False
+
+    @pytest.mark.django_db
+    def test_get_rollout_status_none_rollout_uses_flag_config(self):
+        """Line 301: get_rollout_status() with rollout_percent=None reads rollout_percent from flag config."""
+        cache.clear()
+        with override_settings(
+            FEATURE_FLAGS_SOURCE='env',
+            FEATURE_FLAGS_ENABLED=True,
+            FEATURE_FLAGS='{"exists_flag":{"enabled":true,"rollout_percent":100}}',
+        ):
+            result = feature_flags.get_rollout_status('exists_flag', 'user_1', rollout_percent=None)
+            assert result is True
+
+
+# ============================================================================
+# Lock Timeout and Validation Tests
+# ============================================================================
+
+class TestGetLockTimeout:
+
+    def test_invalid_lock_timeout_negative_returns_default(self):
+        """Lines 72-77: negative lock timeout logs warning and returns default."""
+        with override_settings(FEATURE_FLAGS_LOCK_TIMEOUT=-5):
+            result = feature_flags._get_lock_timeout()
+            assert result == feature_flags.DEFAULT_LOCK_TIMEOUT
+
+    def test_invalid_lock_timeout_string_returns_default(self):
+        """Lines 72-77: string lock timeout logs warning and returns default."""
+        with override_settings(FEATURE_FLAGS_LOCK_TIMEOUT="bad"):
+            result = feature_flags._get_lock_timeout()
+            assert result == feature_flags.DEFAULT_LOCK_TIMEOUT
+
+    def test_invalid_lock_timeout_zero_returns_default(self):
+        """Lines 71-77: zero lock timeout (not > 0) logs warning and returns default."""
+        with override_settings(FEATURE_FLAGS_LOCK_TIMEOUT=0):
+            result = feature_flags._get_lock_timeout()
+            assert result == feature_flags.DEFAULT_LOCK_TIMEOUT
+
+    def test_valid_lock_timeout_returns_value(self):
+        """Valid lock timeout returns the configured value."""
+        with override_settings(FEATURE_FLAGS_LOCK_TIMEOUT=10):
+            result = feature_flags._get_lock_timeout()
+            assert result == 10
+
+
+# ============================================================================
+# Load Flags from Env — Edge Cases
+# ============================================================================
+
+class TestLoadFlagsFromEnvEdgeCases:
+
+    def test_load_flags_empty_string_returns_empty(self):
+        """Line 85: empty FEATURE_FLAGS returns {}."""
+        with override_settings(FEATURE_FLAGS=''):
+            result = feature_flags._load_flags_from_env()
+            assert result == {}
+
+    def test_load_flags_none_returns_empty(self):
+        """Line 85: None FEATURE_FLAGS returns {}."""
+        with override_settings(FEATURE_FLAGS=None):
+            result = feature_flags._load_flags_from_env()
+            assert result == {}
+
+    def test_load_flags_non_dict_json_returns_empty(self):
+        """Lines 89-90: JSON list returns {} with warning."""
+        with override_settings(FEATURE_FLAGS='["a", "b"]'):
+            result = feature_flags._load_flags_from_env()
+            assert result == {}
+
+
+# ============================================================================
+# Load Flags from Database — Exception Paths
+# ============================================================================
+
+@pytest.mark.django_db
+class TestLoadFlagsFromDatabaseExceptions:
+
+    def setup_method(self):
+        cache.clear()
+
+    def test_load_flags_database_error_returns_empty(self):
+        """Lines 107-115: DatabaseError in _load_flags_from_database() returns {}."""
+        from django.db import DatabaseError
+        from unittest.mock import MagicMock
+
+        mock_qs = MagicMock()
+        mock_qs.__iter__ = MagicMock(side_effect=DatabaseError("DB connection failed"))
+
+        with patch('core.feature_flags.FeatureFlag', create=True) as mock_ff_cls:
+            mock_ff_cls.objects.all.return_value = mock_qs
+            # Patch the local import inside _load_flags_from_database
+            with patch.dict('sys.modules', {'core.models': type('m', (), {'FeatureFlag': mock_ff_cls})}):
+                pass  # We need a different approach
+
+        # Directly patch what _load_flags_from_database uses via its local import
+        import core.models as core_models
+        _original_objects = core_models.FeatureFlag.objects
+
+        mock_manager = patch.object(core_models.FeatureFlag, 'objects')
+        with mock_manager as mock_objects:
+            mock_objects.all.side_effect = DatabaseError("DB connection failed")
+            result = feature_flags._load_flags_from_database()
+            assert result == {}
+
+    def test_load_flags_unexpected_error_returns_empty(self):
+        """Lines 116-127: unexpected exception in _load_flags_from_database() returns {}."""
+        import core.models as core_models
+        with patch.object(core_models.FeatureFlag, 'objects') as mock_objects:
+            mock_objects.all.side_effect = RuntimeError("Unexpected ORM error")
+            result = feature_flags._load_flags_from_database()
+            assert result == {}
+
+
+# ============================================================================
+# Anti-Thundering Herd — Lock Wait Path
+# ============================================================================
+
+@pytest.mark.django_db
+class TestGetAllFlagsLockWait:
+
+    def setup_method(self):
+        cache.clear()
+
+    @override_settings(
+        FEATURE_FLAGS_SOURCE='env',
+        FEATURE_FLAGS_ENABLED=True,
+        FEATURE_FLAGS='{"herd_flag":{"enabled":true,"rollout_percent":100}}',
+        FEATURE_FLAGS_LOCK_TIMEOUT=1,
+    )
+    def test_lock_wait_succeeds_when_cache_populated(self):
+        """Lines 190-204: when lock is held by another, wait loop finds cached value."""
+        source = 'env'
+        cache_key = f'feature_flags:all:{source}'
+        lock_key = f'{cache_key}:lock'
+
+        # Simulate another worker holding the lock
+        cache.add(lock_key, 'other-worker-token', 5)
+
+        # Pre-populate cache as if the lock holder just wrote it
+        expected_flags = {'herd_flag': {'enabled': True, 'rollout_percent': 100}}
+        cache.set(cache_key, expected_flags, 300)
+
+        result = feature_flags._get_all_flags()
+        assert result == expected_flags
+
+    @override_settings(
+        FEATURE_FLAGS_SOURCE='env',
+        FEATURE_FLAGS_ENABLED=True,
+        FEATURE_FLAGS='{"herd_flag":{"enabled":true,"rollout_percent":100}}',
+        FEATURE_FLAGS_LOCK_TIMEOUT=1,
+    )
+    def test_lock_wait_cache_hit_in_loop_returns_cached(self):
+        """Lines 196-204: cache gets populated while waiting in loop — returns it."""
+        source = 'env'
+        cache_key = f'feature_flags:all:{source}'
+        lock_key = f'{cache_key}:lock'
+
+        # Simulate another worker holding the lock
+        cache.add(lock_key, 'other-worker-token', 5)
+
+        # cache.get() will return None first, then the flags on subsequent call
+        expected_flags = {'herd_flag': {'enabled': True, 'rollout_percent': 100}}
+        call_count = [0]
+        original_get = cache.get
+
+        def mock_cache_get(key, *args, **kwargs):
+            if key == cache_key:
+                call_count[0] += 1
+                if call_count[0] >= 2:
+                    return expected_flags
+                return None
+            return original_get(key, *args, **kwargs)
+
+        import unittest.mock as umock
+        with umock.patch.object(feature_flags, 'MAX_LOCK_WAIT', 1.0), \
+             umock.patch.object(feature_flags, 'LOCK_WAIT_INTERVAL', 0.01), \
+             umock.patch('core.feature_flags.cache') as mock_cache:
+            mock_cache.get.side_effect = mock_cache_get
+            mock_cache.add.return_value = False  # Lock not acquired
+            result = feature_flags._get_all_flags()
+
+        # The cache was populated while waiting
+        assert result == expected_flags
+
+    @override_settings(
+        FEATURE_FLAGS_SOURCE='env',
+        FEATURE_FLAGS_ENABLED=True,
+        FEATURE_FLAGS='{"timeout_flag":{"enabled":true,"rollout_percent":100}}',
+        FEATURE_FLAGS_LOCK_TIMEOUT=1,
+    )
+    def test_lock_wait_timeout_falls_back_to_load(self):
+        """Lines 206-217: lock wait timeout triggers direct load (availability > consistency)."""
+        source = 'env'
+        cache_key = f'feature_flags:all:{source}'
+        lock_key = f'{cache_key}:lock'
+
+        # Simulate another worker holding the lock — never releasing it
+        cache.add(lock_key, 'stuck-worker-token', 10)
+        # Do NOT populate cache — force timeout path
+
+        import unittest.mock as umock
+
+        # Speed up the test: patch MAX_LOCK_WAIT and LOCK_WAIT_INTERVAL
+        with umock.patch.object(feature_flags, 'MAX_LOCK_WAIT', 0.1), \
+             umock.patch.object(feature_flags, 'LOCK_WAIT_INTERVAL', 0.05):
+            result = feature_flags._get_all_flags()
+
+        # Should fall back to direct load from env
+        assert isinstance(result, dict)
+
+    @override_settings(
+        FEATURE_FLAGS_SOURCE='database',
+        FEATURE_FLAGS_ENABLED=True,
+        FEATURE_FLAGS_LOCK_TIMEOUT=1,
+    )
+    def test_lock_wait_timeout_database_falls_back_to_load(self):
+        """Lines 215-216: lock timeout for database source falls back to _load_flags_from_database()."""
+        source = 'database'
+        cache_key = f'feature_flags:all:{source}'
+        lock_key = f'{cache_key}:lock'
+
+        # Simulate another worker holding the lock
+        cache.add(lock_key, 'stuck-db-worker-token', 10)
+
+        import unittest.mock as umock
+
+        with umock.patch.object(feature_flags, 'MAX_LOCK_WAIT', 0.1), \
+             umock.patch.object(feature_flags, 'LOCK_WAIT_INTERVAL', 0.05), \
+             umock.patch('core.feature_flags._load_flags_from_database', return_value={'db_flag': {'enabled': True}}) as mock_load:
+            result = feature_flags._get_all_flags()
+
+        mock_load.assert_called_once()
+        assert result == {'db_flag': {'enabled': True}}
+
+
+# ============================================================================
+# is_enabled() — Partial Rollout Without User Context
+# ============================================================================
+
+@pytest.mark.django_db
+class TestIsEnabledPartialRolloutNoUser:
+
+    def setup_method(self):
+        cache.clear()
+
+    @override_settings(
+        FEATURE_FLAGS_SOURCE='env',
+        FEATURE_FLAGS_ENABLED=True,
+        FEATURE_FLAGS='{"partial":{"enabled":true,"rollout_percent":50}}',
+    )
+    def test_partial_rollout_no_context_returns_false(self):
+        """Lines 273->276, 279-280: partial rollout with no context returns False."""
+        result = feature_flags.is_enabled('partial')
+        assert result is False
+
+    @override_settings(
+        FEATURE_FLAGS_SOURCE='env',
+        FEATURE_FLAGS_ENABLED=True,
+        FEATURE_FLAGS='{"partial":{"enabled":true,"rollout_percent":50}}',
+    )
+    def test_partial_rollout_empty_context_returns_false(self):
+        """Lines 273->276, 279-280: partial rollout with empty context dict returns False."""
+        result = feature_flags.is_enabled('partial', {})
+        assert result is False
+
+    @override_settings(
+        FEATURE_FLAGS_SOURCE='env',
+        FEATURE_FLAGS_ENABLED=True,
+        FEATURE_FLAGS='{"partial":{"enabled":true,"rollout_percent":50}}',
+    )
+    def test_partial_rollout_context_without_user_id_returns_false(self):
+        """Lines 273->276, 279-280: partial rollout with context missing user_id returns False."""
+        result = feature_flags.is_enabled('partial', {'profile': 'admin'})
+        assert result is False
+
+
+# ============================================================================
+# get_all_flags_status() — Globally Disabled
+# ============================================================================
+
+class TestGetAllFlagsStatusDisabled:
+
+    def test_get_all_flags_status_globally_disabled_returns_empty(self):
+        """Line 321: get_all_flags_status() returns {} when feature flags globally disabled."""
+        with override_settings(FEATURE_FLAGS_ENABLED=False):
+            result = feature_flags.get_all_flags_status()
+            assert result == {}

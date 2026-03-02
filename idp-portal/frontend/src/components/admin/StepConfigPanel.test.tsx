@@ -357,3 +357,121 @@ describe('StepConfigPanel', () => {
     expect(screen.getByText(/Tentative 3 : 1 min/)).toBeInTheDocument();
   });
 });
+
+// ─── Coverage extras ──────────────────────────────────────────────────────────
+describe('StepConfigPanel — coverage extras', () => {
+  it('renders without action_platform (no platform suffix shown)', () => {
+    render(
+      <StepConfigPanel
+        node={makeNode({ action_platform: undefined })}
+        open={true}
+        onClose={vi.fn()}
+        onNodeUpdate={vi.fn()}
+        onNodeDelete={vi.fn()}
+      />,
+    );
+    // Platform suffix " / Linux" should not appear
+    expect(screen.queryByText(/\/ Linux/)).not.toBeInTheDocument();
+    // Action name is still shown
+    expect(screen.getByText('Create PDB')).toBeInTheDocument();
+  });
+
+  it('does not set retry defaults when retry values are already set', () => {
+    const onNodeUpdate = vi.fn();
+    render(
+      <StepConfigPanel
+        node={makeNode({ retry_enabled: false, retry_max_attempts: 5, retry_interval_seconds: 30, retry_backoff_multiplier: 1.5 })}
+        open={true}
+        onClose={vi.fn()}
+        onNodeUpdate={onNodeUpdate}
+        onNodeDelete={vi.fn()}
+      />,
+    );
+    const retrySwitch = screen.getByRole('switch', { name: 'Activer le retry automatique' });
+    fireEvent.click(retrySwitch);
+    // Since values are already set (not null), defaults should NOT be added
+    expect(onNodeUpdate).toHaveBeenCalledWith('step-1', { retry_enabled: true });
+  });
+
+  it('updates name field via input change', () => {
+    const onNodeUpdate = vi.fn();
+    render(
+      <StepConfigPanel
+        node={makeNode()}
+        open={true}
+        onClose={vi.fn()}
+        onNodeUpdate={onNodeUpdate}
+        onNodeDelete={vi.fn()}
+      />,
+    );
+    const nameInput = screen.getByLabelText("Nom d'affichage de l'étape");
+    fireEvent.change(nameInput, { target: { value: 'My Step' } });
+    expect(onNodeUpdate).toHaveBeenCalledWith('step-1', { name: 'My Step' });
+  });
+
+  it('calls onNodeUpdate with null when name is cleared', () => {
+    const onNodeUpdate = vi.fn();
+    render(
+      <StepConfigPanel
+        node={makeNode({ name: 'Existing Step' })}
+        open={true}
+        onClose={vi.fn()}
+        onNodeUpdate={onNodeUpdate}
+        onNodeDelete={vi.fn()}
+      />,
+    );
+    const nameInput = screen.getByLabelText("Nom d'affichage de l'étape");
+    fireEvent.change(nameInput, { target: { value: '' } });
+    expect(onNodeUpdate).toHaveBeenCalledWith('step-1', { name: null });
+  });
+
+  it('calls onNodeUpdate with retry_max_attempts when InputNumber changes', () => {
+    const onNodeUpdate = vi.fn();
+    render(
+      <StepConfigPanel
+        node={makeNode({ retry_enabled: true, retry_max_attempts: 3, retry_interval_seconds: 60, retry_backoff_multiplier: 2.0 })}
+        open={true}
+        onClose={vi.fn()}
+        onNodeUpdate={onNodeUpdate}
+        onNodeDelete={vi.fn()}
+      />,
+    );
+    // Trigger change on Nombre maximum de tentatives input
+    const maxAttemptsInput = screen.getByRole('spinbutton', { name: 'Nombre maximum de tentatives' });
+    fireEvent.change(maxAttemptsInput, { target: { value: '5' } });
+    // At minimum, the onNodeUpdate was called
+    expect(onNodeUpdate).toHaveBeenCalled();
+  });
+
+  it('calls onNodeUpdate with retry_interval_seconds when InputNumber changes', () => {
+    const onNodeUpdate = vi.fn();
+    render(
+      <StepConfigPanel
+        node={makeNode({ retry_enabled: true, retry_max_attempts: 3, retry_interval_seconds: 60, retry_backoff_multiplier: 2.0 })}
+        open={true}
+        onClose={vi.fn()}
+        onNodeUpdate={onNodeUpdate}
+        onNodeDelete={vi.fn()}
+      />,
+    );
+    const intervalInput = screen.getByRole('spinbutton', { name: 'Intervalle entre tentatives' });
+    fireEvent.change(intervalInput, { target: { value: '30' } });
+    expect(onNodeUpdate).toHaveBeenCalled();
+  });
+
+  it('calls onNodeUpdate with retry_backoff_multiplier when InputNumber changes', () => {
+    const onNodeUpdate = vi.fn();
+    render(
+      <StepConfigPanel
+        node={makeNode({ retry_enabled: true, retry_max_attempts: 3, retry_interval_seconds: 60, retry_backoff_multiplier: 2.0 })}
+        open={true}
+        onClose={vi.fn()}
+        onNodeUpdate={onNodeUpdate}
+        onNodeDelete={vi.fn()}
+      />,
+    );
+    const backoffInput = screen.getByRole('spinbutton', { name: 'Multiplicateur de backoff' });
+    fireEvent.change(backoffInput, { target: { value: '3.0' } });
+    expect(onNodeUpdate).toHaveBeenCalled();
+  });
+});

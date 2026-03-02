@@ -252,7 +252,11 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
           <div
             class="ant-card-head-title"
           >
-            Tendances temporelles
+            <span
+              style="font-size: 15px; font-weight: 600;"
+            >
+              Tendances temporelles
+            </span>
           </div>
         </div>
       </div>
@@ -304,7 +308,7 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
           <div
             class="ant-empty-description"
           >
-            Aucune donnee sur la periode
+            Aucune donnée sur la période
           </div>
         </div>
       </div>
@@ -357,6 +361,46 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
             </div>
           </div>
         </div>
+        <div
+          class="ant-card-extra"
+        >
+          <button
+            class="ant-btn css-dev-only-do-not-override-1d8anct css-var-root ant-btn-default ant-btn-color-default ant-btn-variant-outlined"
+            data-testid="filter-reset"
+            disabled=""
+            type="button"
+          >
+            <span
+              class="ant-btn-icon"
+            >
+              <span
+                aria-label="clear"
+                class="anticon anticon-clear"
+                role="img"
+              >
+                <svg
+                  aria-hidden="true"
+                  data-icon="clear"
+                  fill="currentColor"
+                  focusable="false"
+                  height="1em"
+                  viewBox="64 64 896 896"
+                  width="1em"
+                >
+                  <defs>
+                    <style />
+                  </defs>
+                  <path
+                    d="M899.1 869.6l-53-305.6H864c14.4 0 26-11.6 26-26V346c0-14.4-11.6-26-26-26H618V138c0-14.4-11.6-26-26-26H432c-14.4 0-26 11.6-26 26v182H160c-14.4 0-26 11.6-26 26v192c0 14.4 11.6 26 26 26h17.9l-53 305.6a25.95 25.95 0 0025.6 30.4h723c1.5 0 3-.1 4.4-.4a25.88 25.88 0 0021.2-30zM204 390h272V182h72v208h272v104H204V390zm468 440V674c0-4.4-3.6-8-8-8h-48c-4.4 0-8 3.6-8 8v156H416V674c0-4.4-3.6-8-8-8h-48c-4.4 0-8 3.6-8 8v156H202.8l45.1-260H776l45.1 260H672z"
+                  />
+                </svg>
+              </span>
+            </span>
+            <span>
+              Réinitialiser
+            </span>
+          </button>
+        </div>
       </div>
     </div>
     <div
@@ -400,8 +444,8 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
                       class="ant-form-item-control-input-content"
                     >
                       <div
-                        class="ant-picker ant-picker-range ant-picker-large ant-picker-outlined css-dev-only-do-not-override-1d8anct css-var-root ant-picker-css-var"
-                        style="width: 100%; min-height: 44px;"
+                        class="ant-picker ant-picker-range ant-picker-middle ant-picker-outlined css-dev-only-do-not-override-1d8anct css-var-root ant-picker-css-var"
+                        style="width: 100%;"
                       >
                         <div
                           class="ant-picker-input ant-picker-input-start"
@@ -522,9 +566,9 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
                       class="ant-form-item-control-input-content"
                     >
                       <div
-                        class="ant-select ant-select-lg ant-select-outlined ant-select-in-form-item css-var-root ant-select-css-var css-dev-only-do-not-override-1d8anct ant-select-single ant-select-show-arrow ant-select-show-search"
+                        class="ant-select ant-select-outlined ant-select-in-form-item css-var-root ant-select-css-var css-dev-only-do-not-override-1d8anct ant-select-single ant-select-show-arrow ant-select-show-search"
                         data-testid="filter-action"
-                        style="min-height: 44px;"
+                        style="width: 100%;"
                       >
                         <div
                           class="ant-select-content"
@@ -608,9 +652,9 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
                       class="ant-form-item-control-input-content"
                     >
                       <div
-                        class="ant-select ant-select-lg ant-select-outlined ant-select-in-form-item css-var-root ant-select-css-var css-dev-only-do-not-override-1d8anct ant-select-single ant-select-show-arrow"
+                        class="ant-select ant-select-outlined ant-select-in-form-item css-var-root ant-select-css-var css-dev-only-do-not-override-1d8anct ant-select-single ant-select-show-arrow"
                         data-testid="filter-engine"
-                        style="min-height: 44px;"
+                        style="width: 100%;"
                       >
                         <div
                           class="ant-select-content"
@@ -666,11 +710,11 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
           </div>
         </div>
         <div
-          class="ant-row ant-row-bottom css-dev-only-do-not-override-1d8anct css-var-root"
+          class="ant-row css-dev-only-do-not-override-1d8anct css-var-root"
           style="margin-inline: -8px;"
         >
           <div
-            class="ant-col ant-col-xs-24 ant-col-md-6 css-dev-only-do-not-override-1d8anct css-var-root"
+            class="ant-col ant-col-xs-24 ant-col-md-8 css-dev-only-do-not-override-1d8anct css-var-root"
             style="padding-inline: 8px;"
           >
             <div
@@ -700,9 +744,9 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
                       class="ant-form-item-control-input-content"
                     >
                       <div
-                        class="ant-select ant-select-lg ant-select-outlined ant-select-in-form-item css-var-root ant-select-css-var css-dev-only-do-not-override-1d8anct ant-select-multiple ant-select-show-arrow ant-select-show-search"
+                        class="ant-select ant-select-outlined ant-select-in-form-item css-var-root ant-select-css-var css-dev-only-do-not-override-1d8anct ant-select-multiple ant-select-show-arrow ant-select-show-search"
                         data-testid="filter-tags"
-                        style="min-height: 44px;"
+                        style="width: 100%;"
                       >
                         <div
                           class="ant-select-content"
@@ -767,7 +811,7 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
             </div>
           </div>
           <div
-            class="ant-col ant-col-xs-24 ant-col-md-5 css-dev-only-do-not-override-1d8anct css-var-root"
+            class="ant-col ant-col-xs-24 ant-col-md-8 css-dev-only-do-not-override-1d8anct css-var-root"
             style="padding-inline: 8px;"
           >
             <div
@@ -797,9 +841,9 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
                       class="ant-form-item-control-input-content"
                     >
                       <div
-                        class="ant-select ant-select-lg ant-select-outlined ant-select-in-form-item css-var-root ant-select-css-var css-dev-only-do-not-override-1d8anct ant-select-single ant-select-show-arrow"
+                        class="ant-select ant-select-outlined ant-select-in-form-item css-var-root ant-select-css-var css-dev-only-do-not-override-1d8anct ant-select-single ant-select-show-arrow"
                         data-testid="filter-status"
-                        style="min-height: 44px;"
+                        style="width: 100%;"
                       >
                         <div
                           class="ant-select-content"
@@ -809,93 +853,6 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
                             style="visibility: visible;"
                           >
                             Tous les statuts
-                          </div>
-                          <input
-                            aria-autocomplete="list"
-                            aria-expanded="false"
-                            aria-haspopup="listbox"
-                            autocomplete="off"
-                            class="ant-select-input"
-                            id="test-id"
-                            readonly=""
-                            role="combobox"
-                            type="search"
-                            value=""
-                          />
-                        </div>
-                        <div
-                          class="ant-select-suffix"
-                        >
-                          <span
-                            aria-label="down"
-                            class="anticon anticon-down"
-                            role="img"
-                          >
-                            <svg
-                              aria-hidden="true"
-                              data-icon="down"
-                              fill="currentColor"
-                              focusable="false"
-                              height="1em"
-                              viewBox="64 64 896 896"
-                              width="1em"
-                            >
-                              <path
-                                d="M884 256h-75c-5.1 0-9.9 2.5-12.9 6.6L512 654.2 227.9 262.6c-3-4.1-7.8-6.6-12.9-6.6h-75c-6.5 0-10.3 7.4-6.5 12.7l352.6 486.1c12.8 17.6 39 17.6 51.7 0l352.6-486.1c3.9-5.3.1-12.7-6.4-12.7z"
-                              />
-                            </svg>
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div
-            class="ant-col ant-col-xs-24 ant-col-md-5 css-dev-only-do-not-override-1d8anct css-var-root"
-            style="padding-inline: 8px;"
-          >
-            <div
-              class="ant-form-item css-var-root ant-form-css-var css-dev-only-do-not-override-1d8anct ant-form-item-vertical"
-              style="margin-bottom: 12px;"
-            >
-              <div
-                class="ant-row ant-form-item-row css-dev-only-do-not-override-1d8anct css-var-root"
-              >
-                <div
-                  class="ant-col ant-form-item-label css-dev-only-do-not-override-1d8anct css-var-root"
-                >
-                  <label
-                    class=""
-                    title="Environnement"
-                  >
-                    Environnement
-                  </label>
-                </div>
-                <div
-                  class="ant-col ant-form-item-control css-dev-only-do-not-override-1d8anct css-var-root"
-                >
-                  <div
-                    class="ant-form-item-control-input"
-                  >
-                    <div
-                      class="ant-form-item-control-input-content"
-                    >
-                      <div
-                        class="ant-select ant-select-lg ant-select-outlined ant-select-in-form-item css-var-root ant-select-css-var css-dev-only-do-not-override-1d8anct ant-select-single ant-select-show-arrow"
-                        data-testid="filter-environment"
-                        style="min-height: 44px;"
-                      >
-                        <div
-                          class="ant-select-content"
-                        >
-                          <div
-                            class="ant-select-placeholder"
-                            style="visibility: visible;"
-                          >
-                            Tous les env.
                           </div>
                           <input
                             aria-autocomplete="list"
@@ -956,9 +913,9 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
                 >
                   <label
                     class=""
-                    title=" "
+                    title="Environnement"
                   >
-                     
+                    Environnement
                   </label>
                 </div>
                 <div
@@ -970,42 +927,57 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
                     <div
                       class="ant-form-item-control-input-content"
                     >
-                      <button
-                        class="ant-btn css-dev-only-do-not-override-1d8anct css-var-root ant-btn-default ant-btn-color-default ant-btn-variant-outlined ant-btn-lg"
-                        data-testid="filter-reset"
-                        disabled=""
-                        type="button"
+                      <div
+                        class="ant-select ant-select-outlined ant-select-in-form-item css-var-root ant-select-css-var css-dev-only-do-not-override-1d8anct ant-select-single ant-select-show-arrow"
+                        data-testid="filter-environment"
+                        style="width: 100%;"
                       >
-                        <span
-                          class="ant-btn-icon"
+                        <div
+                          class="ant-select-content"
+                        >
+                          <div
+                            class="ant-select-placeholder"
+                            style="visibility: visible;"
+                          >
+                            Tous les env.
+                          </div>
+                          <input
+                            aria-autocomplete="list"
+                            aria-expanded="false"
+                            aria-haspopup="listbox"
+                            autocomplete="off"
+                            class="ant-select-input"
+                            id="test-id"
+                            readonly=""
+                            role="combobox"
+                            type="search"
+                            value=""
+                          />
+                        </div>
+                        <div
+                          class="ant-select-suffix"
                         >
                           <span
-                            aria-label="clear"
-                            class="anticon anticon-clear"
+                            aria-label="down"
+                            class="anticon anticon-down"
                             role="img"
                           >
                             <svg
                               aria-hidden="true"
-                              data-icon="clear"
+                              data-icon="down"
                               fill="currentColor"
                               focusable="false"
                               height="1em"
                               viewBox="64 64 896 896"
                               width="1em"
                             >
-                              <defs>
-                                <style />
-                              </defs>
                               <path
-                                d="M899.1 869.6l-53-305.6H864c14.4 0 26-11.6 26-26V346c0-14.4-11.6-26-26-26H618V138c0-14.4-11.6-26-26-26H432c-14.4 0-26 11.6-26 26v182H160c-14.4 0-26 11.6-26 26v192c0 14.4 11.6 26 26 26h17.9l-53 305.6a25.95 25.95 0 0025.6 30.4h723c1.5 0 3-.1 4.4-.4a25.88 25.88 0 0021.2-30zM204 390h272V182h72v208h272v104H204V390zm468 440V674c0-4.4-3.6-8-8-8h-48c-4.4 0-8 3.6-8 8v156H416V674c0-4.4-3.6-8-8-8h-48c-4.4 0-8 3.6-8 8v156H202.8l45.1-260H776l45.1 260H672z"
+                                d="M884 256h-75c-5.1 0-9.9 2.5-12.9 6.6L512 654.2 227.9 262.6c-3-4.1-7.8-6.6-12.9-6.6h-75c-6.5 0-10.3 7.4-6.5 12.7l352.6 486.1c12.8 17.6 39 17.6 51.7 0l352.6-486.1c3.9-5.3.1-12.7-6.4-12.7z"
                               />
                             </svg>
                           </span>
-                        </span>
-                        <span>
-                          Réinitialiser
-                        </span>
-                      </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>

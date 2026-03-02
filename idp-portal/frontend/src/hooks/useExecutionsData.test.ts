@@ -240,7 +240,7 @@ describe('useExecutionsData — Story 36.3 : polling observateur', () => {
     vi.restoreAllMocks();
   });
 
-  it('3.5 — retour au premier plan (visibilitychange) → refetchSilent déclenché immédiatement', async () => {
+  it('3.5 — retour au premier plan (visibilitychange) → refetchSilent déclenché immédiatement  ', async () => {
     // Start with tab hidden
     Object.defineProperty(document, 'hidden', { value: true, configurable: true });
 
@@ -260,5 +260,121 @@ describe('useExecutionsData — Story 36.3 : polling observateur', () => {
     await waitFor(() => {
       expect(mockListExecutions.mock.calls.length).toBeGreaterThan(callsBefore);
     });
+  });
+});
+
+describe('useExecutionsData — coverage extras', () => {
+  beforeEach(() => {
+    mockListExecutions.mockResolvedValue(makeListResponse([]));
+    mockFetchStats.mockResolvedValue({ executions_jour: 0, taux_succes_pct: 0, executions_en_cours: 0, executions_en_erreur: 0 });
+    mockFetchTimeSeries.mockResolvedValue([]);
+    mockListPending.mockResolvedValue(makeListResponse([]));
+    mockActorSync.mockReset();
+    Object.defineProperty(document, 'hidden', { value: false, configurable: true });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    Object.defineProperty(document, 'hidden', { value: false, configurable: true });
+  });
+
+  it('fetchData error case sets error state', async () => {
+    mockListExecutions.mockRejectedValue(new Error('Server error'));
+    const { result } = renderHook(() => useExecutionsData(defaultFilters, false));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.error).toBe('Server error');
+  });
+
+  it('refetchCurrentState calls listExecutions', async () => {
+    const { result } = renderHook(() => useExecutionsData(defaultFilters, false));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    const callsBefore = mockListExecutions.mock.calls.length;
+    await act(async () => { await result.current.refetchCurrentState(); });
+    expect(mockListExecutions.mock.calls.length).toBeGreaterThan(callsBefore);
+  });
+
+  it('updateExecutionInList updates a single execution', async () => {
+    mockListExecutions.mockResolvedValue(makeListResponse([makeExecution(1, 'RUNNING', 42)]));
+    const { result } = renderHook(() => useExecutionsData(defaultFilters, false));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.executions[0].status).toBe('RUNNING');
+    act(() => { result.current.updateExecutionInList(1, { status: 'COMPLETED' }); });
+    expect(result.current.executions[0].status).toBe('COMPLETED');
+  });
+
+  it('loadPendingApprovals when canApprove=true calls listPendingApprovals', async () => {
+    mockListPending.mockResolvedValue(makeListResponse([makeExecution(10, 'PENDING_APPROVAL', 42)]));
+    const { result } = renderHook(() => useExecutionsData(defaultFilters, true));
+    await waitFor(() => expect(result.current.pendingApprovalsLoading).toBe(false));
+    expect(mockListPending).toHaveBeenCalled();
+    expect(result.current.pendingApprovals).toHaveLength(1);
+  });
+
+  it('loadPendingApprovals when canApprove=false skips call', async () => {
+    renderHook(() => useExecutionsData(defaultFilters, false));
+    await waitFor(() => expect(mockListExecutions).toHaveBeenCalled());
+    expect(mockListPending).not.toHaveBeenCalled();
+  });
+
+  it('loadPendingApprovals error returns empty array', async () => {
+    mockListPending.mockRejectedValue(new Error('Forbidden'));
+    const { result } = renderHook(() => useExecutionsData(defaultFilters, true));
+    await waitFor(() => expect(result.current.pendingApprovalsLoading).toBe(false));
+    expect(result.current.pendingApprovals).toEqual([]);
+  });
+
+  it('stats loading error sets statsData to defaults', async () => {
+    mockFetchStats.mockRejectedValue(new Error('Stats error'));
+    const { result } = renderHook(() => useExecutionsData(defaultFilters, false));
+    await waitFor(() => expect(result.current.statsLoading).toBe(false));
+    expect(result.current.statsData).toEqual({ executions_jour: 0, taux_succes_pct: 0, executions_en_cours: 0, executions_en_erreur: 0 });
+  });
+
+  it('timeSeries loading error sets timeSeriesData to empty', async () => {
+    mockFetchTimeSeries.mockRejectedValue(new Error('TimeSeries error'));
+    const { result } = renderHook(() => useExecutionsData(defaultFilters, false));
+    await waitFor(() => expect(result.current.timeSeriesLoading).toBe(false));
+    expect(result.current.timeSeriesData).toEqual([]);
+  });
+
+  it('setCurrentPage triggers re-fetch', async () => {
+    const { result } = renderHook(() => useExecutionsData(defaultFilters, false));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    const callsBefore = mockListExecutions.mock.calls.length;
+    act(() => { result.current.setCurrentPage(2); });
+    await waitFor(() => expect(mockListExecutions.mock.calls.length).toBeGreaterThan(callsBefore));
+  });
+
+  it('setActiveScope changes scope and triggers re-fetch', async () => {
+    const { result } = renderHook(() => useExecutionsData(defaultFilters, false));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    const callsBefore = mockListExecutions.mock.calls.length;
+    act(() => { result.current.setActiveScope('mine'); });
+    await waitFor(() => expect(mockListExecutions.mock.calls.length).toBeGreaterThan(callsBefore));
+    expect(result.current.activeScope).toBe('mine');
+  });
+
+  it('sortField and sortOrder setters are exposed', async () => {
+    const { result } = renderHook(() => useExecutionsData(defaultFilters, false));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => {
+      result.current.setSortField('status');
+      result.current.setSortOrder('ascend');
+    });
+    expect(result.current.sortField).toBe('status');
+    expect(result.current.sortOrder).toBe('ascend');
+  });
+
+  it('handleActorStatusUpdate with data payload merges extra fields', async () => {
+    let capturedCallback: ((id: number, status: string, data?: Partial<import('../types/api').ExecutionResponse>) => void) | null = null;
+    mockActorSync.mockImplementation((_ids, cb) => { capturedCallback = cb as typeof capturedCallback; });
+    mockListExecutions.mockResolvedValue(makeListResponse([makeExecution(1, 'RUNNING', 42)]));
+    const { result } = renderHook(() => useExecutionsData(defaultFilters, false));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      capturedCallback!(1, 'COMPLETED', { completed_at: '2026-01-01T12:00:00Z' });
+    });
+    expect(result.current.executions[0].status).toBe('COMPLETED');
+    expect(result.current.executions[0].completed_at).toBe('2026-01-01T12:00:00Z');
   });
 });

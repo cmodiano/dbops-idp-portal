@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ChangeTypeConfig } from './ChangeTypeConfig';
 import { useEnvironments } from '../../hooks/useEnvironments';
@@ -373,5 +373,97 @@ describe('ChangeTypeConfig', () => {
         })
       );
     });
+  });
+});
+
+// ─── Coverage extras ──────────────────────────────────────────────────────────
+describe('ChangeTypeConfig — coverage extras', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseEnvironments.mockReturnValue(defaultEnvMock);
+    mockUseServiceNowIntegrations.mockReturnValue(defaultSnMock);
+  });
+
+  it('shows error alert for model/template input longer than max length', async () => {
+    const onChange = vi.fn();
+    const { container } = render(
+      <ChangeTypeConfig value={{ dev: { required: true, change_model_code: '' } }} onChange={onChange} />
+    );
+    const input = container.querySelector('input[aria-label="Modèle / Template ID pour dev"]') as HTMLInputElement;
+    expect(input).not.toBeNull();
+    // Simulate input with value > 50 chars
+    const longValue = 'A'.repeat(51);
+    const { fireEvent } = await import('@testing-library/react');
+    fireEvent.change(input, { target: { value: longValue } });
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+    });
+    // onChange should NOT have been called since length > max
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('shows error for model/template input with invalid characters', async () => {
+    const onChange = vi.fn();
+    const { container } = render(
+      <ChangeTypeConfig value={{ dev: { required: true, change_model_code: '' } }} onChange={onChange} />
+    );
+    const input = container.querySelector('input[aria-label="Modèle / Template ID pour dev"]') as HTMLInputElement;
+    const { fireEvent } = await import('@testing-library/react');
+    fireEvent.change(input, { target: { value: 'has space!' } });
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+    });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('clears model/template errors when required is toggled off', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <ChangeTypeConfig value={{ dev: { required: true, change_model_code: '' } }} onChange={onChange} />
+    );
+    const reqSwitch = screen.getByLabelText(/Changement requis pour dev/i);
+    await user.click(reqSwitch);
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ dev: expect.objectContaining({ required: false }) })
+    );
+  });
+
+  it('sets change_model_code and template_id to undefined when model/template value cleared', async () => {
+    const { fireEvent } = await import('@testing-library/react');
+    const onChange = vi.fn();
+    const { container } = render(
+      <ChangeTypeConfig value={{ dev: { required: true, change_model_code: 'ABC' } }} onChange={onChange} />
+    );
+    const input = container.querySelector('input[aria-label="Modèle / Template ID pour dev"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '' } });
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ dev: expect.objectContaining({ change_model_code: undefined, template_id: undefined }) })
+    );
+  });
+
+  it('sets change_type to undefined when change type field is cleared', async () => {
+    const { fireEvent } = await import('@testing-library/react');
+    const onChange = vi.fn();
+    const { container } = render(
+      <ChangeTypeConfig value={{ dev: { required: false, change_type: 'normal' } }} onChange={onChange} />
+    );
+    const ctInput = container.querySelector('input[aria-label="Change type pour dev"]') as HTMLInputElement;
+    fireEvent.change(ctInput, { target: { value: '' } });
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ dev: expect.objectContaining({ change_type: undefined }) })
+    );
+  });
+
+  it('getLabel returns env.toUpperCase() when no option found for that env', () => {
+    mockUseEnvironments.mockReturnValue({
+      environments: ['custom_env'],
+      environmentOptions: [],
+      loading: false,
+      error: null,
+    });
+    render(<ChangeTypeConfig value={{}} onChange={() => {}} />);
+    // Falls back to 'custom_env'.toUpperCase() = 'CUSTOM_ENV'
+    expect(screen.getAllByText('CUSTOM_ENV')).toHaveLength(2);
   });
 });

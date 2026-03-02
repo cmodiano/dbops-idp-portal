@@ -209,3 +209,47 @@ describe('EnginesAdminTable', () => {
     });
   });
 });
+
+// ─── Coverage extras ──────────────────────────────────────────────────────────
+describe('EnginesAdminTable — coverage extras', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFetchEnginesForAdmin.mockResolvedValue(engines);
+  });
+
+  it('handleDeactivate: uses fallback message when non-Error thrown', async () => {
+    const user = userEvent.setup();
+    mockUpdateEngine.mockRejectedValue('string error');
+    mockModalConfirm.mockImplementation(({ onOk }: { onOk: () => Promise<void> }) => { onOk(); });
+
+    renderWithApp(<EnginesAdminTable />);
+    await waitFor(() => expect(screen.getByText('Oracle')).toBeInTheDocument());
+
+    const deactivateButtons = screen.getAllByRole('button', { name: /Désactiver/i });
+    await user.click(deactivateButtons[0]);
+
+    await waitFor(() => {
+      expect(mockNotification.error).toHaveBeenCalledWith(
+        expect.objectContaining({ description: 'Impossible de désactiver le moteur' })
+      );
+    });
+  });
+
+  it('handleFormCancel closes form without saving', async () => {
+    const user = userEvent.setup();
+    renderWithApp(<EnginesAdminTable />);
+    await waitFor(() => expect(screen.getByText('Oracle')).toBeInTheDocument());
+
+    // Open edit form
+    const editButtons = screen.getAllByRole('button', { name: /Modifier/i });
+    await user.click(editButtons[0]);
+    await waitFor(() => expect(screen.getByText('Modifier le moteur')).toBeInTheDocument());
+
+    // Cancel the form
+    await user.click(screen.getByRole('button', { name: /Annuler/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByText('Modifier le moteur')).not.toBeInTheDocument();
+    });
+  });
+});

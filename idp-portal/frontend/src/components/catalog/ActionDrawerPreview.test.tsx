@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, within, waitFor } from '@testing-library/react';
+import { render, screen, within, waitFor, fireEvent } from '@testing-library/react';
 import { ThemeProvider } from '../../contexts/ThemeContext';
 import { ActionDrawerPreview } from './ActionDrawerPreview';
 import type { ActionPreviewData } from '../../types/api';
@@ -166,7 +166,7 @@ describe('ActionDrawerPreview', () => {
   });
 
   it('renders enabled Execute button when canExecute is true (Story 3.2, AC3)', () => {
-    renderWithTheme(<ActionDrawerPreview action={mockAction} canExecute={true} allowedEnvironments={['DEV', 'PROD']} />);
+    renderWithTheme(<ActionDrawerPreview action={mockAction} canExecute={true} />);
 
     const button = screen.getByRole('button', { name: /Executer/i });
     expect(button).toBeInTheDocument();
@@ -469,6 +469,297 @@ describe('ActionDrawerPreview', () => {
 
       // Metrics section should be hidden for business users
       expect(screen.queryByTestId('metrics-section')).not.toBeInTheDocument();
+    });
+  });
+
+  // === Story 55.6: Extended coverage tests ===
+  describe('Extended coverage 55.6', () => {
+    it('isWorkflow = true — affiche WorkflowIcon et Badge pour item_type = workflow', () => {
+      const workflowAction: ActionPreviewData = {
+        ...mockAction,
+        item_type: 'workflow',
+      };
+      renderWithTheme(<ActionDrawerPreview action={workflowAction} />);
+
+      // WorkflowIcon is rendered with aria-label="Workflow"
+      const workflowIcon = document.querySelector('[aria-label="Workflow"]');
+      expect(workflowIcon).toBeInTheDocument();
+    });
+
+    it('paramètre requis dans le schéma — affiche astérisque rouge *', () => {
+      const actionWithRequired: ActionPreviewData = {
+        ...mockAction,
+        parameters_schema: {
+          type: 'object',
+          properties: {
+            required_param: { type: 'string', description: 'Required param' },
+            optional_param: { type: 'string', description: 'Optional param' },
+          },
+          required: ['required_param'],
+        },
+      };
+      renderWithTheme(<ActionDrawerPreview action={actionWithRequired} />);
+
+      // Required parameters show " *" as danger text
+      expect(screen.getByText('*')).toBeInTheDocument();
+    });
+
+    it('action.engine undefined — pas de Descriptions.Item Moteur', () => {
+      const actionNoEngine: ActionPreviewData = {
+        ...mockAction,
+        engine: null,
+      };
+      renderWithTheme(<ActionDrawerPreview action={actionNoEngine} />);
+
+      expect(screen.queryByText('Moteur')).not.toBeInTheDocument();
+    });
+
+    it('action.platform undefined — pas de Descriptions.Item Plateforme', () => {
+      const actionNoPlatform: ActionPreviewData = {
+        ...mockAction,
+        platform: null,
+      };
+      renderWithTheme(<ActionDrawerPreview action={actionNoPlatform} />);
+
+      expect(screen.queryByText('Plateforme')).not.toBeInTheDocument();
+    });
+
+    it('inline code dans documentation — rendu sans className → Text code', async () => {
+      const actionWithInlineCode: ActionPreviewData = {
+        ...mockAction,
+        documentation_md: 'Utiliser la commande `kubectl apply` pour déployer.',
+      };
+      renderWithTheme(<ActionDrawerPreview action={actionWithInlineCode} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('documentation-content')).toBeInTheDocument();
+      });
+    });
+
+    it('isWorkflow = false (action normale) — pas de WorkflowIcon', () => {
+      const normalAction: ActionPreviewData = {
+        ...mockAction,
+        item_type: 'action',
+      };
+      renderWithTheme(<ActionDrawerPreview action={normalAction} />);
+
+      const workflowIcon = document.querySelector('[aria-label="Workflow"]');
+      expect(workflowIcon).not.toBeInTheDocument();
+    });
+
+    it('paramètres non requis — pas d\'astérisque dans la liste', () => {
+      const actionNoRequired: ActionPreviewData = {
+        ...mockAction,
+        parameters_schema: {
+          type: 'object',
+          properties: {
+            param_a: { type: 'string' },
+            param_b: { type: 'number' },
+          },
+          // no 'required' array → all optional
+        },
+      };
+      renderWithTheme(<ActionDrawerPreview action={actionNoRequired} />);
+
+      expect(screen.queryByText('*')).not.toBeInTheDocument();
+    });
+
+    it('action sans tags — pas de section Categorie', () => {
+      const actionNoTags: ActionPreviewData = {
+        ...mockAction,
+        tags: [],
+      };
+      renderWithTheme(<ActionDrawerPreview action={actionNoTags} />);
+
+      expect(screen.queryByText('oracle')).not.toBeInTheDocument();
+    });
+  });
+
+  // === Story 55.7: Additional coverage for extractParametersWithTypes and Markdown components ===
+  describe('Additional coverage 55.7', () => {
+    it('extractParametersWithTypes — retourne [] quand properties est absent du schéma', () => {
+      const actionNoProperties: ActionPreviewData = {
+        ...mockAction,
+        parameters_schema: {
+          type: 'object',
+          // No properties key
+        },
+      };
+      renderWithTheme(<ActionDrawerPreview action={actionNoProperties} />);
+
+      // When schema has no properties, no parameters are shown
+      expect(screen.getByText('Aucun parametre defini')).toBeInTheDocument();
+    });
+
+    it('extractParametersWithTypes — retourne [] quand properties est null (ligne 82)', () => {
+      const actionNullProperties: ActionPreviewData = {
+        ...mockAction,
+        parameters_schema: {
+          type: 'object',
+          properties: null as unknown as Record<string, Record<string, unknown>>,
+        },
+      };
+      renderWithTheme(<ActionDrawerPreview action={actionNullProperties} />);
+
+      expect(screen.getByText('Aucun parametre defini')).toBeInTheDocument();
+    });
+
+    it('extractParametersWithTypes — retourne [] quand properties est une chaîne (non-objet)', () => {
+      const actionStringProperties: ActionPreviewData = {
+        ...mockAction,
+        parameters_schema: {
+          type: 'object',
+          properties: 'not-an-object' as unknown as Record<string, Record<string, unknown>>,
+        },
+      };
+      renderWithTheme(<ActionDrawerPreview action={actionStringProperties} />);
+
+      expect(screen.getByText('Aucun parametre defini')).toBeInTheDocument();
+    });
+
+    it('Markdown h1 composant — rend un titre de niveau 3', async () => {
+      const actionWithH1: ActionPreviewData = {
+        ...mockAction,
+        documentation_md: '# Titre Principal',
+      };
+      renderWithTheme(<ActionDrawerPreview action={actionWithH1} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('documentation-content')).toBeInTheDocument();
+        expect(screen.getByText('Titre Principal')).toBeInTheDocument();
+      });
+    });
+
+    it('Markdown h2/h3 composants — rendus depuis le mock', async () => {
+      const actionWithHeadings: ActionPreviewData = {
+        ...mockAction,
+        documentation_md: '## Sous-titre\n### Sous-sous-titre',
+      };
+      renderWithTheme(<ActionDrawerPreview action={actionWithHeadings} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('documentation-content')).toBeInTheDocument();
+      });
+    });
+
+    it('Markdown p composant — rendu depuis documentation_md', async () => {
+      const actionWithParagraph: ActionPreviewData = {
+        ...mockAction,
+        documentation_md: 'Ceci est un paragraphe de documentation.',
+      };
+      renderWithTheme(<ActionDrawerPreview action={actionWithParagraph} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Ceci est un paragraphe de documentation.')).toBeInTheDocument();
+      });
+    });
+
+    it('Markdown code block (className défini) — rendu comme pre/code', async () => {
+      const actionWithCodeBlock: ActionPreviewData = {
+        ...mockAction,
+        documentation_md: '```sql\nSELECT * FROM test;\n```',
+      };
+      renderWithTheme(<ActionDrawerPreview action={actionWithCodeBlock} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('SELECT * FROM test;')).toBeInTheDocument();
+      });
+    });
+
+    it('Markdown table — rendu avec th et td', async () => {
+      const actionWithFullTable: ActionPreviewData = {
+        ...mockAction,
+        documentation_md: '| Nom | Valeur |\n|-----|--------|\n| foo | bar    |',
+      };
+      renderWithTheme(<ActionDrawerPreview action={actionWithFullTable} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Nom')).toBeInTheDocument();
+        expect(screen.getByText('Valeur')).toBeInTheDocument();
+        expect(screen.getByText('foo')).toBeInTheDocument();
+        expect(screen.getByText('bar')).toBeInTheDocument();
+      });
+    });
+
+    it('onExecute callback — appelé quand le bouton Executer est cliqué', () => {
+      const onExecute = vi.fn();
+      renderWithTheme(<ActionDrawerPreview action={mockAction} onExecute={onExecute} />);
+
+      const button = screen.getByRole('button', { name: /Executer/i });
+      fireEvent.click(button);
+
+      expect(onExecute).toHaveBeenCalledTimes(1);
+    });
+
+    it('action avec impact_level medium — impactAlertType est warning pour utilisateur business', () => {
+      vi.mocked(useAuth).mockReturnValue({
+        isAuthenticated: true,
+        isBusinessProfile: true,
+        isLoading: false,
+        user: null,
+        accessToken: null,
+        login: vi.fn(),
+        logout: vi.fn(),
+        refreshToken: vi.fn().mockResolvedValue(null),
+        hasTab: vi.fn().mockReturnValue(true),
+      });
+
+      const actionMediumImpact: ActionPreviewData = {
+        ...mockAction,
+        impact_level: 'medium',
+      };
+      renderWithTheme(<ActionDrawerPreview action={actionMediumImpact} />);
+
+      // Impact callout shown for business with medium impact → type="warning"
+      expect(screen.getByText("Niveau d'impact: Moyen")).toBeInTheDocument();
+
+      // Reset
+      vi.mocked(useAuth).mockReturnValue({
+        isAuthenticated: true,
+        isBusinessProfile: false,
+        isLoading: false,
+        user: null,
+        accessToken: null,
+        login: vi.fn(),
+        logout: vi.fn(),
+        refreshToken: vi.fn().mockResolvedValue(null),
+        hasTab: vi.fn().mockReturnValue(true),
+      });
+    });
+
+    it('action avec impact_level low — impactAlertType est info pour utilisateur business', () => {
+      vi.mocked(useAuth).mockReturnValue({
+        isAuthenticated: true,
+        isBusinessProfile: true,
+        isLoading: false,
+        user: null,
+        accessToken: null,
+        login: vi.fn(),
+        logout: vi.fn(),
+        refreshToken: vi.fn().mockResolvedValue(null),
+        hasTab: vi.fn().mockReturnValue(true),
+      });
+
+      const actionLowImpact: ActionPreviewData = {
+        ...mockAction,
+        impact_level: 'low',
+      };
+      renderWithTheme(<ActionDrawerPreview action={actionLowImpact} />);
+
+      expect(screen.getByText("Niveau d'impact: Faible")).toBeInTheDocument();
+
+      // Reset
+      vi.mocked(useAuth).mockReturnValue({
+        isAuthenticated: true,
+        isBusinessProfile: false,
+        isLoading: false,
+        user: null,
+        accessToken: null,
+        login: vi.fn(),
+        logout: vi.fn(),
+        refreshToken: vi.fn().mockResolvedValue(null),
+        hasTab: vi.fn().mockReturnValue(true),
+      });
     });
   });
 

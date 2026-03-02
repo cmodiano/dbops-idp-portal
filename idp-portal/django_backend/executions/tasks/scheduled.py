@@ -20,6 +20,7 @@ from executions.models import (
     ScheduledExecution,
     ScheduledExecutionStatus,
 )
+from executions.dtos import ExecutionRequest
 from executions.services import ExecutionService
 from executions.utils.scheduling import calculate_next_execution_date
 from core.services import AuditService
@@ -82,7 +83,7 @@ def process_pending_scheduled_executions(self: Any) -> dict:
         try:
             # AC3: Create execution via ExecutionService
             params = se.get_parameters()
-            execution = ExecutionService().create_execution(
+            exec_req = ExecutionRequest(
                 user=se.user,
                 action=se.action,
                 environment=se.environment,
@@ -90,6 +91,7 @@ def process_pending_scheduled_executions(self: Any) -> dict:
                 correlation_id=se.correlation_id,
                 source='celery_beat',
             )
+            execution = ExecutionService().create_execution(exec_req)
 
             # AC4: Launch execution (unless pending approval)
             if execution.status != ExecutionStatus.PENDING_APPROVAL:

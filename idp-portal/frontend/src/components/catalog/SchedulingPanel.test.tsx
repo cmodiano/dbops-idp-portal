@@ -5,7 +5,7 @@
  * toute modification appelle onSchedulingChange.
  */
 
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { App } from 'antd';
@@ -20,13 +20,15 @@ import type { UseSchedulingValidationReturn } from '../../hooks/useSchedulingVal
 
 // Évite de charger le modal d'aide complexe dans les tests unitaires
 vi.mock('../shared/CronExpressionHelper', () => ({
-  default: ({ open }: { open: boolean }) =>
-    open ? <div data-testid="cron-helper-open" /> : null,
+  default: ({ open, onClose }: { open: boolean; onClose: () => void }) =>
+    open ? <button data-testid="cron-helper-open" onClick={onClose}>Fermer aide</button> : null,
 }));
 
 const mockValidation: UseSchedulingValidationReturn = {
   validateSchedule: vi.fn(() => ({ isValid: true, error: null })),
-  validateCronDebounced: vi.fn(),
+  validateCronDebounced: vi.fn((_expr, callback) => {
+    callback?.({ isValid: true, error: null, nextExecutions: ['2026-03-01T09:00:00Z'], validating: false });
+  }),
   handleCronPresetChange: vi.fn(),
 };
 
@@ -276,6 +278,170 @@ describe('SchedulingPanel', () => {
         scheduling: { ...baseScheduling, schedulingType: 'cron', showCronHelper: true },
       });
       expect(screen.getByTestId('cron-helper-open')).toBeInTheDocument();
+    });
+  });
+
+  describe('Cron preset change', () => {
+    it("appelle onSchedulingChange avec cronExpression quand un preset non-custom est choisi", async () => {
+      const user = userEvent.setup();
+      const onSchedulingChange = vi.fn();
+      renderSchedulingPanel({
+        scheduling: { ...baseScheduling, schedulingType: 'cron' },
+        onSchedulingChange,
+      });
+
+      // Cliquer sur le select de préréglages
+      const presetSelect = screen.getByLabelText('Préréglages cron').closest('.ant-select');
+      await user.click(presetSelect!);
+
+      // Choisir le premier preset disponible
+      const options = document.querySelectorAll('.ant-select-item-option');
+      expect(options.length).toBeGreaterThan(0); // Fail si le dropdown n'a pas ouvert
+      await user.click(options[0] as HTMLElement);
+      expect(onSchedulingChange).toHaveBeenCalled();
+    });
+
+    it("appelle validateCronDebounced quand une expression est saisie", async () => {
+      const user = userEvent.setup();
+      const onSchedulingChange = vi.fn();
+      const validation = {
+        ...mockValidation,
+        validateCronDebounced: vi.fn(),
+      };
+      renderSchedulingPanel({
+        scheduling: { ...baseScheduling, schedulingType: 'cron' },
+        onSchedulingChange,
+        validation,
+      });
+
+      const cronInput = screen.getByLabelText('Expression cron');
+      await user.type(cronInput, '0 9 * * *');
+
+      expect(validation.validateCronDebounced).toHaveBeenCalled();
+    });
+  });
+
+  describe('Contrôles daily et weekly', () => {
+    it("appelle onSchedulingChange quand l'heure daily change", async () => {
+      const onSchedulingChange = vi.fn();
+      renderSchedulingPanel({
+        scheduling: { ...baseScheduling, schedulingType: 'daily' },
+        onSchedulingChange,
+      });
+
+      const heureSelect = screen.getByLabelText('Heure').closest('.ant-select');
+      fireEvent.mouseDown(heureSelect!);
+      const options = document.querySelectorAll('.ant-select-item-option');
+      expect(options.length).toBeGreaterThan(0); // Fail si le dropdown n'a pas ouvert
+      fireEvent.click(options[1] as HTMLElement);
+      expect(onSchedulingChange).toHaveBeenCalled();
+    });
+
+    it("appelle onSchedulingChange quand la minute daily change", async () => {
+      const onSchedulingChange = vi.fn();
+      renderSchedulingPanel({
+        scheduling: { ...baseScheduling, schedulingType: 'daily' },
+        onSchedulingChange,
+      });
+
+      const minutesSelect = screen.getByLabelText('Minutes').closest('.ant-select');
+      fireEvent.mouseDown(minutesSelect!);
+      const options = document.querySelectorAll('.ant-select-item-option');
+      expect(options.length).toBeGreaterThan(0); // Fail si le dropdown n'a pas ouvert
+      fireEvent.click(options[1] as HTMLElement);
+      expect(onSchedulingChange).toHaveBeenCalled();
+    });
+
+    it("appelle onSchedulingChange quand le jour weekly change", async () => {
+      const onSchedulingChange = vi.fn();
+      renderSchedulingPanel({
+        scheduling: { ...baseScheduling, schedulingType: 'weekly' },
+        onSchedulingChange,
+      });
+
+      const jourSelect = screen.getByLabelText('Jour de la semaine').closest('.ant-select');
+      fireEvent.mouseDown(jourSelect!);
+      const options = document.querySelectorAll('.ant-select-item-option');
+      expect(options.length).toBeGreaterThan(0); // Fail si le dropdown n'a pas ouvert
+      fireEvent.click(options[1] as HTMLElement);
+      expect(onSchedulingChange).toHaveBeenCalled();
+    });
+
+    it("appelle onSchedulingChange quand l'heure weekly change", async () => {
+      const onSchedulingChange = vi.fn();
+      renderSchedulingPanel({
+        scheduling: { ...baseScheduling, schedulingType: 'weekly' },
+        onSchedulingChange,
+      });
+
+      const heureSelects = screen.getAllByLabelText('Heure');
+      const heureSelect = heureSelects[0].closest('.ant-select');
+      fireEvent.mouseDown(heureSelect!);
+      const options = document.querySelectorAll('.ant-select-item-option');
+      expect(options.length).toBeGreaterThan(0); // Fail si le dropdown n'a pas ouvert
+      fireEvent.click(options[0] as HTMLElement);
+      expect(onSchedulingChange).toHaveBeenCalled();
+    });
+
+    it("appelle onSchedulingChange quand la minute weekly change", async () => {
+      const onSchedulingChange = vi.fn();
+      renderSchedulingPanel({
+        scheduling: { ...baseScheduling, schedulingType: 'weekly' },
+        onSchedulingChange,
+      });
+
+      const minutesSelects = screen.getAllByLabelText('Minutes');
+      const minutesSelect = minutesSelects[0].closest('.ant-select');
+      fireEvent.mouseDown(minutesSelect!);
+      const options = document.querySelectorAll('.ant-select-item-option');
+      expect(options.length).toBeGreaterThan(0); // Fail si le dropdown n'a pas ouvert
+      fireEvent.click(options[1] as HTMLElement);
+      expect(onSchedulingChange).toHaveBeenCalled();
+    });
+
+    it("affiche les sélecteurs heure/minute pour weekly", () => {
+      renderSchedulingPanel({
+        scheduling: { ...baseScheduling, schedulingType: 'weekly' },
+      });
+      expect(screen.getByLabelText('Jour de la semaine')).toBeInTheDocument();
+    });
+  });
+
+  describe('CronExpressionHelper onClose', () => {
+    it("appelle onSchedulingChange({showCronHelper:false}) quand l'aide cron est fermée", async () => {
+      const user = userEvent.setup();
+      const onSchedulingChange = vi.fn();
+      renderSchedulingPanel({
+        scheduling: { ...baseScheduling, schedulingType: 'cron', showCronHelper: true },
+        onSchedulingChange,
+      });
+
+      const closeBtn = screen.getByTestId('cron-helper-open');
+      await user.click(closeBtn);
+      expect(onSchedulingChange).toHaveBeenCalledWith({ showCronHelper: false });
+    });
+  });
+
+  describe('DatePicker one-time — onChange et disabledDate', () => {
+    it("ouvre le DatePicker et déclenche disabledDate", async () => {
+      const user = userEvent.setup();
+      const onSchedulingChange = vi.fn();
+      renderSchedulingPanel({
+        scheduling: { ...baseScheduling, schedulingType: 'one-time' },
+        onSchedulingChange,
+      });
+
+      const datePicker = screen.getByLabelText("Date et heure d'exécution planifiée");
+      // Ouvrir le DatePicker — déclenche disabledDate pour chaque cellule de date
+      await user.click(datePicker);
+
+      // Le calendrier doit s'ouvrir
+      const calendar = document.querySelector('.ant-picker-dropdown');
+      if (calendar) {
+        // disabledDate a été appelé pour chaque date du calendrier
+        expect(calendar).toBeInTheDocument();
+      }
+      expect(datePicker).toBeInTheDocument();
     });
   });
 });

@@ -186,6 +186,70 @@ describe('useExecutionSubmit', () => {
     });
   });
 
+  describe('submitImmediate — extra error branches', () => {
+    it('handles PARENT_NOT_FOUND error', async () => {
+      const error = new Error('not found') as Error & { code: string };
+      error.code = 'PARENT_NOT_FOUND';
+      vi.mocked(submitExecution).mockRejectedValue(error);
+
+      const { result } = renderHook(() => useExecutionSubmit(), { wrapper });
+      await act(async () => { await result.current.submitImmediate({ action_id: 1, environment: 'dev', parameters: null }); });
+      expect(result.current.submitError).toContain('introuvable');
+    });
+
+    it('handles FORBIDDEN error', async () => {
+      const error = new Error('forbidden') as Error & { code: string };
+      error.code = 'FORBIDDEN';
+      vi.mocked(submitExecution).mockRejectedValue(error);
+
+      const { result } = renderHook(() => useExecutionSubmit(), { wrapper });
+      await act(async () => { await result.current.submitImmediate({ action_id: 1, environment: 'dev', parameters: null }); });
+      expect(result.current.submitError).toContain('refusé');
+    });
+  });
+
+  describe('submitScheduled — error branches', () => {
+    it('handles INVALID_SCHEDULED_DATE error', async () => {
+      const error = new Error('past date') as Error & { code: string };
+      error.code = 'INVALID_SCHEDULED_DATE';
+      vi.mocked(createScheduledExecution).mockRejectedValue(error);
+
+      const { result } = renderHook(() => useExecutionSubmit(), { wrapper });
+      await act(async () => { await result.current.submitScheduled({ action_id: 1, environment: 'dev', parameters: null }); });
+      expect(result.current.schedulingError).toContain('futur');
+    });
+
+    it('handles PERMISSION_DENIED error', async () => {
+      const error = new Error('permission denied') as Error & { code: string };
+      error.code = 'PERMISSION_DENIED';
+      vi.mocked(createScheduledExecution).mockRejectedValue(error);
+
+      const { result } = renderHook(() => useExecutionSubmit(), { wrapper });
+      await act(async () => { await result.current.submitScheduled({ action_id: 1, environment: 'dev', parameters: null }); });
+      expect(result.current.schedulingError).toContain('permission');
+    });
+
+    it('handles ACTION_NOT_FOUND error', async () => {
+      const error = new Error('not found') as Error & { code: string };
+      error.code = 'ACTION_NOT_FOUND';
+      vi.mocked(createScheduledExecution).mockRejectedValue(error);
+
+      const { result } = renderHook(() => useExecutionSubmit(), { wrapper });
+      await act(async () => { await result.current.submitScheduled({ action_id: 1, environment: 'dev', parameters: null }); });
+      expect(result.current.schedulingError).toContain('introuvable');
+    });
+
+    it('handles INVALID_PARAMETERS error', async () => {
+      const error = new Error('bad param') as Error & { code: string };
+      error.code = 'INVALID_PARAMETERS';
+      vi.mocked(createScheduledExecution).mockRejectedValue(error);
+
+      const { result } = renderHook(() => useExecutionSubmit(), { wrapper });
+      await act(async () => { await result.current.submitScheduled({ action_id: 1, environment: 'dev', parameters: null }); });
+      expect(result.current.schedulingError).toContain('invalide');
+    });
+  });
+
   describe('scheduling state', () => {
     it('has initial scheduling state', () => {
       const { result } = renderHook(() => useExecutionSubmit(), { wrapper });

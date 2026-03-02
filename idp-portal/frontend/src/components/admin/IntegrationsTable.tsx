@@ -3,7 +3,6 @@
  * Story 24.3: Colonne Statut (badges colorés), filtre par statut, bouton Re-valider par ligne, bouton Re-valider tout.
  */
 
-import { useState } from 'react';
 import { Table, Button, Space, Avatar, Tag, Tooltip, App } from 'antd';
 import type { TableProps } from 'antd';
 import { ReloadOutlined, ApiOutlined, EditOutlined, DeleteOutlined, SyncOutlined } from '@ant-design/icons';
@@ -11,7 +10,8 @@ import type { IntegrationListItem, IntegrationStatusType, HealthStatus } from '.
 import { AUTH_FLOW_LABELS } from '../../types/api';
 import { getIconUrl } from '../../utils/iconUrl';
 import { HEALTH_CONFIG } from '../../utils/healthConfig';
-import { validateIntegration, validateAllIntegrations } from '../../services/integrations_service';
+import { useIntegrationValidation } from '../../hooks/useIntegrationValidation';
+import { formatLocalDate, formatLocalDateTime } from '../../utils/dateFormat';
 
 // Statut intégration (admin) — domaine distinct, config locale justifiée (SOLID-FE-10, Story 48.5 2026-02-26).
 // Clés = IntegrationStatusType (valid/invalid/deprecated) ≠ statuts d'exécution (SUBMITTED/RUNNING/COMPLETED…).
@@ -26,7 +26,7 @@ const STATUS_CONFIG: Record<string, { color: string; text: string }> = {
 
 function buildHealthTooltip(record: IntegrationListItem): string {
   if (!record.health_checked_at) return 'Jamais vérifié';
-  const date = new Date(record.health_checked_at).toLocaleString('fr-CA');
+  const date = formatLocalDateTime(record.health_checked_at);
   const base = `Dernière vérification : ${date}`;
   return record.health_error_message ? `${base}\nErreur : ${record.health_error_message}` : base;
 }
@@ -63,13 +63,11 @@ export function IntegrationsTable({
   onRefresh,
 }: IntegrationsTableProps) {
   const { modal, message, notification } = App.useApp();
-  const [validatingId, setValidatingId] = useState<number | null>(null);
-  const [validatingAll, setValidatingAll] = useState(false);
+  const { validateOne, validateAll: validateAllHook, validatingId, validatingAll } = useIntegrationValidation();
 
   const handleValidate = async (record: IntegrationListItem) => {
-    setValidatingId(record.id);
     try {
-      const result = await validateIntegration(record.id);
+      const result = await validateOne(record.id);
       const config = STATUS_CONFIG[result.current_status] ?? STATUS_CONFIG.invalid;
       if (result.current_status === 'valid') {
         message.success(`Intégration validée avec succès. Statut : ${config.text}`);
@@ -81,15 +79,12 @@ export function IntegrationsTable({
       onRefresh?.();
     } catch {
       message.error('Erreur lors de la validation');
-    } finally {
-      setValidatingId(null);
     }
   };
 
   const handleValidateAll = async () => {
-    setValidatingAll(true);
     try {
-      const stats = await validateAllIntegrations();
+      const stats = await validateAllHook();
       modal.info({
         title: 'Rapport de validation',
         content: (
@@ -103,9 +98,7 @@ export function IntegrationsTable({
       });
       onRefresh?.();
     } catch {
-      notification.error({ title: 'Erreur', description: 'Erreur lors de la validation batch' });
-    } finally {
-      setValidatingAll(false);
+      notification.error({ message: 'Erreur', description: 'Erreur lors de la validation batch' });
     }
   };
 
@@ -196,7 +189,7 @@ export function IntegrationsTable({
       title: 'Date de création',
       dataIndex: 'created_at',
       key: 'created_at',
-      render: (d: string) => new Date(d).toLocaleDateString('fr-CA'),
+      render: (d: string) => formatLocalDate(d),
       sorter: (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
       defaultSortOrder: 'descend',
     },

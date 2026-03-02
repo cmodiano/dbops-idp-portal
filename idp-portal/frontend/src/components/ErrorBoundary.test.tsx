@@ -186,3 +186,73 @@ describe('ErrorBoundary', () => {
     );
   });
 });
+
+// ─── Coverage extras ──────────────────────────────────────────────────────────
+describe('ErrorBoundary — coverage extras', () => {
+  it('falls back to console.error when logger.error throws', () => {
+    vi.mocked(logger.error).mockImplementationOnce(() => { throw new Error('Logger crashed'); });
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    render(
+      <MemoryRouter>
+        <ErrorBoundary>
+          <ThrowError shouldThrow={true} />
+        </ErrorBoundary>
+      </MemoryRouter>,
+    );
+
+    // Should still show error fallback UI (not crash)
+    expect(screen.getByText(/Une erreur est survenue/)).toBeInTheDocument();
+    consoleSpy.mockRestore();
+  });
+
+  it('resetError via custom fallback is callable and the fallback renders the reset button', async () => {
+    const user = userEvent.setup();
+    const onReset = vi.fn();
+    const customFallback = (error: Error, resetError: () => void) => (
+      <div>
+        <span>Custom error: {error.message}</span>
+        <button onClick={() => { resetError(); onReset(); }}>Reset</button>
+      </div>
+    );
+
+    render(
+      <MemoryRouter>
+        <ErrorBoundary fallback={customFallback}>
+          <ThrowError shouldThrow={true} />
+        </ErrorBoundary>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('Custom error: Test error')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Reset/i }));
+    // resetError was called (internally resets hasError, but ThrowError re-throws since shouldThrow=true)
+    expect(onReset).toHaveBeenCalled();
+  });
+
+  it('handleGoHome navigates to / when home button is clicked', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <ErrorBoundary>
+          <ThrowError shouldThrow={true} />
+        </ErrorBoundary>
+      </MemoryRouter>,
+    );
+    await user.click(screen.getByRole('button', { name: /Retour à l'accueil/i }));
+    expect(mockNavigate).toHaveBeenCalledWith('/');
+  });
+
+  it('handleReload calls resetError and navigate(0) when reload clicked', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <ErrorBoundary>
+          <ThrowError shouldThrow={true} />
+        </ErrorBoundary>
+      </MemoryRouter>,
+    );
+    await user.click(screen.getByRole('button', { name: /Recharger la page/i }));
+    expect(mockNavigate).toHaveBeenCalledWith(0);
+  });
+});

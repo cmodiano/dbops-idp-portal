@@ -259,3 +259,259 @@ describe('IntegrationsTable', () => {
     }, { timeout: 3000 });
   });
 });
+
+// === Story 55.6: Extended coverage tests ===
+
+const mockValidateOne = vi.fn();
+const mockValidateAll = vi.fn();
+
+vi.mock('../../hooks/useIntegrationValidation', () => ({
+  useIntegrationValidation: () => ({
+    validateOne: mockValidateOne,
+    validateAll: mockValidateAll,
+    validatingId: null,
+    validatingAll: false,
+  }),
+}));
+
+describe('IntegrationsTable - Extended coverage 55.6', () => {
+  beforeEach(() => {
+    mockModalConfirm.mockReset();
+    mockValidateOne.mockReset();
+    mockValidateAll.mockReset();
+  });
+
+  it('handleValidate — succès avec statut valid → message.success', async () => {
+    const mockMessageSuccess = vi.fn();
+    const mockMessageError = vi.fn();
+    const mockMessageWarning = vi.fn();
+    const mockOnRefresh = vi.fn();
+
+    vi.spyOn(App, 'useApp').mockReturnValue({
+      message: {
+        success: mockMessageSuccess,
+        error: mockMessageError,
+        info: vi.fn(),
+        warning: mockMessageWarning,
+        loading: vi.fn(),
+        open: vi.fn(),
+        destroy: vi.fn(),
+      },
+      notification: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), open: vi.fn() },
+      modal: { confirm: mockModalConfirm },
+    } as unknown as ReturnType<typeof App.useApp>);
+
+    mockValidateOne.mockResolvedValue({ current_status: 'valid' });
+
+    const user = userEvent.setup();
+    render(
+      <App>
+        <IntegrationsTable {...defaultProps} onRefresh={mockOnRefresh} />
+      </App>
+    );
+
+    const revalidateBtn = screen.getAllByRole('button', { name: /Re-valider/i }).find(
+      (btn) => btn.textContent?.includes('Re-valider') && !btn.textContent?.includes('tout')
+    );
+    await user.click(revalidateBtn!);
+
+    await waitFor(() => {
+      expect(mockValidateOne).toHaveBeenCalledWith(1);
+      expect(mockMessageSuccess).toHaveBeenCalledWith(expect.stringContaining('Valide'));
+      expect(mockOnRefresh).toHaveBeenCalled();
+    });
+  });
+
+  it('handleValidate — statut deprecated → message.warning', async () => {
+    const mockMessageWarning = vi.fn();
+    const mockOnRefresh = vi.fn();
+
+    vi.spyOn(App, 'useApp').mockReturnValue({
+      message: {
+        success: vi.fn(),
+        error: vi.fn(),
+        info: vi.fn(),
+        warning: mockMessageWarning,
+        loading: vi.fn(),
+        open: vi.fn(),
+        destroy: vi.fn(),
+      },
+      notification: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), open: vi.fn() },
+      modal: { confirm: mockModalConfirm },
+    } as unknown as ReturnType<typeof App.useApp>);
+
+    mockValidateOne.mockResolvedValue({ current_status: 'deprecated' });
+
+    const user = userEvent.setup();
+    render(
+      <App>
+        <IntegrationsTable {...defaultProps} onRefresh={mockOnRefresh} />
+      </App>
+    );
+
+    const revalidateBtn = screen.getAllByRole('button', { name: /Re-valider/i }).find(
+      (btn) => btn.textContent?.includes('Re-valider') && !btn.textContent?.includes('tout')
+    );
+    await user.click(revalidateBtn!);
+
+    await waitFor(() => {
+      expect(mockMessageWarning).toHaveBeenCalledWith(expect.stringContaining('déprécié'));
+    });
+  });
+
+  it('handleValidate — statut invalid → message.error', async () => {
+    const mockMessageError = vi.fn();
+
+    vi.spyOn(App, 'useApp').mockReturnValue({
+      message: {
+        success: vi.fn(),
+        error: mockMessageError,
+        info: vi.fn(),
+        warning: vi.fn(),
+        loading: vi.fn(),
+        open: vi.fn(),
+        destroy: vi.fn(),
+      },
+      notification: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), open: vi.fn() },
+      modal: { confirm: mockModalConfirm },
+    } as unknown as ReturnType<typeof App.useApp>);
+
+    mockValidateOne.mockResolvedValue({ current_status: 'invalid' });
+
+    const user = userEvent.setup();
+    render(
+      <App>
+        <IntegrationsTable {...defaultProps} />
+      </App>
+    );
+
+    const revalidateBtn = screen.getAllByRole('button', { name: /Re-valider/i }).find(
+      (btn) => btn.textContent?.includes('Re-valider') && !btn.textContent?.includes('tout')
+    );
+    await user.click(revalidateBtn!);
+
+    await waitFor(() => {
+      expect(mockMessageError).toHaveBeenCalledWith(expect.stringContaining('invalide'));
+    });
+  });
+
+  it('handleValidate — erreur API → message.error générique', async () => {
+    const mockMessageError = vi.fn();
+
+    vi.spyOn(App, 'useApp').mockReturnValue({
+      message: {
+        success: vi.fn(),
+        error: mockMessageError,
+        info: vi.fn(),
+        warning: vi.fn(),
+        loading: vi.fn(),
+        open: vi.fn(),
+        destroy: vi.fn(),
+      },
+      notification: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), open: vi.fn() },
+      modal: { confirm: mockModalConfirm },
+    } as unknown as ReturnType<typeof App.useApp>);
+
+    mockValidateOne.mockRejectedValue(new Error('Network error'));
+
+    const user = userEvent.setup();
+    render(
+      <App>
+        <IntegrationsTable {...defaultProps} />
+      </App>
+    );
+
+    const revalidateBtn = screen.getAllByRole('button', { name: /Re-valider/i }).find(
+      (btn) => btn.textContent?.includes('Re-valider') && !btn.textContent?.includes('tout')
+    );
+    await user.click(revalidateBtn!);
+
+    await waitFor(() => {
+      expect(mockMessageError).toHaveBeenCalledWith('Erreur lors de la validation');
+    });
+  });
+
+  it('handleValidateAll — succès → modal.info avec statistiques', async () => {
+    const mockModalInfo = vi.fn();
+    const mockOnRefresh = vi.fn();
+
+    vi.spyOn(App, 'useApp').mockReturnValue({
+      message: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), loading: vi.fn(), open: vi.fn(), destroy: vi.fn() },
+      notification: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), open: vi.fn() },
+      modal: { confirm: mockModalConfirm, info: mockModalInfo },
+    } as unknown as ReturnType<typeof App.useApp>);
+
+    mockValidateAll.mockResolvedValue({ valid: 5, invalid: 1, deprecated: 2, updated: 8 });
+
+    const user = userEvent.setup();
+    render(
+      <App>
+        <IntegrationsTable {...defaultProps} onRefresh={mockOnRefresh} />
+      </App>
+    );
+
+    await user.click(screen.getByRole('button', { name: /Re-valider tout/i }));
+
+    await waitFor(() => {
+      expect(mockValidateAll).toHaveBeenCalled();
+      expect(mockModalInfo).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Rapport de validation' })
+      );
+      expect(mockOnRefresh).toHaveBeenCalled();
+    });
+  });
+
+  it('handleValidateAll — erreur API → notification.error', async () => {
+    const mockNotifError = vi.fn();
+
+    vi.spyOn(App, 'useApp').mockReturnValue({
+      message: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), loading: vi.fn(), open: vi.fn(), destroy: vi.fn() },
+      notification: { success: vi.fn(), error: mockNotifError, info: vi.fn(), warning: vi.fn(), open: vi.fn() },
+      modal: { confirm: mockModalConfirm, info: vi.fn() },
+    } as unknown as ReturnType<typeof App.useApp>);
+
+    mockValidateAll.mockRejectedValue(new Error('Batch error'));
+
+    const user = userEvent.setup();
+    render(
+      <App>
+        <IntegrationsTable {...defaultProps} />
+      </App>
+    );
+
+    await user.click(screen.getByRole('button', { name: /Re-valider tout/i }));
+
+    await waitFor(() => {
+      expect(mockNotifError).toHaveBeenCalledWith(
+        expect.objectContaining({ description: 'Erreur lors de la validation batch' })
+      );
+    });
+  });
+
+  it('truncateUrl — URL plus longue que 40 caractères est tronquée avec ellipse', () => {
+    const longUrlItem: IntegrationListItem[] = [
+      {
+        ...items[0],
+        base_url: 'https://very-long-url-that-exceeds-forty-characters.example.com/api/v1',
+      },
+    ];
+    renderWithApp(<IntegrationsTable {...defaultProps} dataSource={longUrlItem} />);
+    // The URL should be truncated — we check the cell contains the ellipsis character
+    expect(document.body.textContent).toContain('…');
+  });
+
+  it('auth_flow — affiche le label de flow quand renseigné', () => {
+    const itemsWithFlow: IntegrationListItem[] = [
+      { ...items[0], auth_flow: 'token' as const },
+    ];
+    renderWithApp(<IntegrationsTable {...defaultProps} dataSource={itemsWithFlow} />);
+    // AUTH_FLOW_LABELS['token'] should be displayed as a Tag
+    expect(screen.getByText('Token (Bearer)')).toBeInTheDocument();
+  });
+
+  it('auth_flow — affiche "—" quand auth_flow est null', () => {
+    renderWithApp(<IntegrationsTable {...defaultProps} />);
+    // items[0] has auth_flow: null → should render em dash
+    expect(document.body.textContent).toContain('—');
+  });
+});

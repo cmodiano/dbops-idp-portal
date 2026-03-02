@@ -47,7 +47,13 @@ class ServiceNowService(IHealthCheckable):
         """SEC-13: Return TLS verification flag, forced True in production (DEBUG=False)."""
         verify_tls = getattr(settings, 'SERVICENOW_VERIFY_TLS', True)
         if not settings.DEBUG:
-            verify_tls = True
+            if not verify_tls:
+                logger.warning(
+                    "servicenow_tls_override_ignored",
+                    reason="TLS verification forced True in production (DEBUG=False)",
+                    configured_value=verify_tls,
+                )
+                verify_tls = True
         return verify_tls
 
     def create_change(

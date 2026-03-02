@@ -560,3 +560,140 @@ describe('RemediationRulesEditor', () => {
     });
   });
 });
+
+// ─── Coverage extras ──────────────────────────────────────────────────────────
+describe('RemediationRulesEditor — coverage extras', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseEnvironments.mockReturnValue(defaultEnvMock);
+  });
+
+  it('updates error_pattern via Input onChange', async () => {
+    const onChange = vi.fn();
+    const { fireEvent: fe } = await import('@testing-library/react');
+    const rules: RemediationRuleDefinition[] = [
+      {
+        id: '1',
+        error_pattern: '',
+        target_action_id: 10,
+        environments: ['dev'],
+        auto_trigger: false,
+        risk_level: 'low',
+      },
+    ];
+    render(<RemediationRulesEditor value={rules} onChange={onChange} />);
+
+    const patternInput = screen.getByRole('textbox', { name: /Pattern d'erreur règle 1/i });
+    fe.change(patternInput, { target: { value: 'ORA-123' } });
+
+    expect(onChange).toHaveBeenCalled();
+    const lastCall = onChange.mock.calls[onChange.mock.calls.length - 1][0] as RemediationRuleDefinition[];
+    expect(lastCall[0].error_pattern).toBe('ORA-123');
+  });
+
+  it('updates target_action_id via Select onChange', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const rules: RemediationRuleDefinition[] = [
+      {
+        id: '1',
+        error_pattern: 'error',
+        target_action_id: 0,
+        environments: ['dev'],
+        auto_trigger: false,
+        risk_level: 'low',
+      },
+    ];
+    render(<RemediationRulesEditor value={rules} onChange={onChange} />);
+
+    const actionSelect = screen.getByRole('combobox', { name: /Action cible règle 1/i });
+    await user.click(actionSelect);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Fix Database/)).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText(/Fix Database/));
+
+    expect(onChange).toHaveBeenCalled();
+    const lastCall = onChange.mock.calls[onChange.mock.calls.length - 1][0] as RemediationRuleDefinition[];
+    expect(lastCall[0].target_action_id).toBe(10);
+  });
+
+  it('updates environments via Select onChange', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const rules: RemediationRuleDefinition[] = [
+      {
+        id: '1',
+        error_pattern: 'error',
+        target_action_id: 10,
+        environments: ['dev'],
+        auto_trigger: false,
+        risk_level: 'low',
+      },
+    ];
+    render(<RemediationRulesEditor value={rules} onChange={onChange} />);
+
+    const envSelect = screen.getByRole('combobox', { name: /Environnements règle 1/i });
+    await user.click(envSelect);
+
+    await waitFor(() => {
+      expect(screen.getByText('Staging')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('Staging'));
+
+    expect(onChange).toHaveBeenCalled();
+    const lastCall = onChange.mock.calls[onChange.mock.calls.length - 1][0] as RemediationRuleDefinition[];
+    expect(lastCall[0].environments).toContain('staging');
+  });
+
+  it('updates auto_trigger Switch onChange', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const rules: RemediationRuleDefinition[] = [
+      {
+        id: '1',
+        error_pattern: 'error',
+        target_action_id: 10,
+        environments: ['dev'],
+        auto_trigger: false,
+        risk_level: 'low',
+      },
+    ];
+    render(<RemediationRulesEditor value={rules} onChange={onChange} />);
+
+    const autoSwitch = screen.getByRole('switch', { name: /Déclenchement auto règle 1/i });
+    await user.click(autoSwitch);
+
+    expect(onChange).toHaveBeenCalled();
+    const lastCall = onChange.mock.calls[onChange.mock.calls.length - 1][0] as RemediationRuleDefinition[];
+    expect(lastCall[0].auto_trigger).toBe(true);
+  });
+
+  it('filterOption in action Select works with partial match', async () => {
+    const user = userEvent.setup();
+    const rules: RemediationRuleDefinition[] = [
+      {
+        id: '1',
+        error_pattern: 'error',
+        target_action_id: 0,
+        environments: ['dev'],
+        auto_trigger: false,
+        risk_level: 'low',
+      },
+    ];
+    render(<RemediationRulesEditor value={rules} onChange={vi.fn()} />);
+
+    const actionSelect = screen.getByRole('combobox', { name: /Action cible règle 1/i });
+    await user.click(actionSelect);
+    await user.type(actionSelect, 'fix');
+
+    await waitFor(() => {
+      expect(screen.getByText(/Fix Database/)).toBeInTheDocument();
+    });
+    // "Restart Service" should be filtered out
+    expect(screen.queryByText(/Restart Service/)).not.toBeInTheDocument();
+  });
+});

@@ -248,6 +248,63 @@ def _update_execution_from_poll(
         )
 
 
+def _forward_platform_logs_to_splunk(
+    execution_id: int,
+    platform_job_id: str,
+    platform_type: str,
+    logs_content: str,
+    correlation_id: str | None = None,
+) -> None:
+    """Forward platform logs to Splunk HEC at terminal state (best-effort).
+
+    Silently skipped when no active Splunk integration is configured.
+    """
+    if not logs_content:
+        return
+
+    try:
+        from services.splunk_utils import get_splunk_service  # noqa: PLC0415
+        from asgiref.sync import async_to_sync  # noqa: PLC0415
+
+        splunk_client = get_splunk_service(correlation_id=correlation_id)
+        if splunk_client is None:
+            logger.debug(
+                "splunk_integration_not_configured",
+                execution_id=execution_id,
+                correlation_id=correlation_id,
+            )
+            return
+
+        async_to_sync(splunk_client.send_event)(
+            event={
+                "event": "platform_log",
+                "execution_id": execution_id,
+                "platform_job_id": platform_job_id,
+                "platform_type": platform_type,
+                "content": logs_content,
+                "correlation_id": correlation_id,
+            },
+            sourcetype="idp:platform_log",
+            correlation_id=correlation_id,
+        )
+        logger.info(
+            "platform_logs_forwarded_to_splunk",
+            execution_id=execution_id,
+            platform_job_id=platform_job_id,
+            correlation_id=correlation_id,
+        )
+    except Exception as exc:  # noqa: BLE001 — best-effort: Splunk forwarding must never interrupt polling
+        logger.warning(
+            "platform_logs_splunk_forward_error",
+            execution_id=execution_id,
+            platform_job_id=platform_job_id,
+            error=str(exc),
+            error_type=type(exc).__name__,
+            correlation_id=correlation_id,
+            exc_info=True,
+        )
+
+
 # ---------------------------------------------------------------------------
 # Story 34.5 (SOLID-BE-3): Tâche Celery générique — OCP poller
 # ---------------------------------------------------------------------------
@@ -398,6 +455,13 @@ def poll_platform_job_status(
             platform_job_id=platform_job_id,
             platform_type=platform_type,
             idp_status=idp_status,
+            correlation_id=correlation_id,
+        )
+        _tasks._forward_platform_logs_to_splunk(
+            execution_id=execution_id,
+            platform_job_id=platform_job_id,
+            platform_type=platform_type,
+            logs_content=logs_data.get("content", ""),
             correlation_id=correlation_id,
         )
         return {"outcome": "complete", "status": idp_status}

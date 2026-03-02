@@ -3,10 +3,10 @@
  * Pattern: CategoryForm (Modal + Form). Edit only, no creation.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { Modal, Form, Input, InputNumber, Switch, App } from 'antd';
 import type { RefEngine } from '../../services/reference_service';
-import { updateEngine } from '../../services/engines_service';
+import { useEngineForm } from '../../hooks/useEngineForm';
 
 export interface EngineFormProps {
   open: boolean;
@@ -18,7 +18,7 @@ export interface EngineFormProps {
 export function EngineForm({ open, onCancel, onSuccess, editEngine }: EngineFormProps) {
   const { notification } = App.useApp();
   const [form] = Form.useForm();
-  const [saving, setSaving] = useState(false);
+  const { handleUpdate, saving } = useEngineForm();
 
   useEffect(() => {
     if (open && editEngine) {
@@ -44,7 +44,6 @@ export function EngineForm({ open, onCancel, onSuccess, editEngine }: EngineForm
 
     if (!editEngine) return;
 
-    setSaving(true);
     try {
       const payload = {
         label: values.label,
@@ -53,7 +52,7 @@ export function EngineForm({ open, onCancel, onSuccess, editEngine }: EngineForm
         is_active: values.is_active ? 1 : 0,
       };
 
-      await updateEngine(editEngine.id, payload);
+      await handleUpdate(editEngine.id, payload);
       notification.success({
         message: 'Succès',
         description: `Moteur « ${values.label} » mis à jour`,
@@ -64,8 +63,6 @@ export function EngineForm({ open, onCancel, onSuccess, editEngine }: EngineForm
         message: 'Erreur',
         description: err instanceof Error ? err.message : "Erreur lors de l'enregistrement",
       });
-    } finally {
-      setSaving(false);
     }
   };
 

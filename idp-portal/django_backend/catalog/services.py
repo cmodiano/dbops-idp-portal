@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import structlog
 from typing import cast, Any
-from django.db import transaction
+from django.db import connection, transaction
 from django.core.paginator import Paginator
 from django.utils import timezone
 from django.db.models import QuerySet
@@ -674,22 +674,33 @@ class CatalogService:
     def _find_workflows_referencing_action(self, action_id: int) -> list[Action]:
         """Find workflows whose execution_steps reference the given action_id.
 
-        Optimized: uses DB-side text filter on execution_steps (OracleJSONField stored as CLOB)
-        to pre-filter candidates, then validates in Python for exact match accuracy.
-        This avoids loading ALL workflows into memory.
+        Uses Oracle JSON_EXISTS for precise DB-side filtering when Oracle is the backend
+        (no false positives at DB level). Falls back to text CONTAINS pre-filter +
+        Python validation for non-Oracle backends (tests/dev with SQLite).
 
-        Performance trade-off: execution_steps__contains=str(action_id) may return false positives
-        (e.g., action_id=42 matches "421" or "step_42" in JSON). Python validation filters these out.
-        In worst case (many false positives), this still outperforms loading all workflows.
-        For tighter filtering, consider raw SQL with JSON_EXISTS (Oracle 19c+).
+        Python validation is always applied as a safety net on both paths.
+
+        Story 54.10 (MAINT-BE-5): eliminate false positives from substring text search
+        (e.g., action_id=42 used to match "421", "142", "420" via CLOB substring filter).
         """
-        # DB-side pre-filter: execution_steps CLOB contains the action_id string
-        # This may include false positives, which are filtered out below
-        candidates = Action.objects.filter(
+        base_qs = Action.objects.filter(
             item_type=ActionItemType.WORKFLOW,
             status__in=[ActionStatus.DRAFT, ActionStatus.PUBLISHED],
-            execution_steps__contains=str(action_id),
         )
+
+        if connection.vendor == 'oracle':
+            # Precise DB-side filter: JSON_EXISTS on CLOB (Oracle 12c R2+, stable on Oracle 19c)
+            # int() guards against any non-int value — action_id is typed as int.
+            # extra() is used because Django ORM has no JSON_EXISTS expression and RawSQL()
+            # cannot be embedded as a WHERE predicate on a CLOB JSONField without extra().
+            candidates = base_qs.extra(
+                where=[f"JSON_EXISTS(EXECUTION_STEPS, '$[*]?(@.referenced_action_id == {int(action_id)})')"]
+            )
+        else:
+            # Non-Oracle fallback (SQLite in tests): text substring pre-filter
+            # May include false positives filtered by Python validation below
+            candidates = base_qs.filter(execution_steps__contains=str(action_id))
+
         result = []
         for wf in candidates:
             steps = wf.execution_steps

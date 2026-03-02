@@ -1,6 +1,7 @@
 """
 Tests for favorites API endpoints.
 Story 18.5: GET /users/me/favorites/ should exclude disabled actions.
+Story 55.2: Étendre la couverture à ≥ 90 % (UserFavoriteItemView.post/delete, accès non auth).
 """
 
 import pytest
@@ -141,3 +142,117 @@ class TestFavoritesCountConsistency(TestCase):
         # Should be in descending order (newest first)
         self.assertEqual(created_at_list, sorted(created_at_list, reverse=True),
                         "Favorites should be ordered by created_at DESC")
+
+
+# ---------------------------------------------------------------------------
+# Story 55.2 — Nouveaux tests pour UserFavoriteItemView (post/delete) et auth
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestUserFavoriteItemViewPost(TestCase):
+    """Tests pour UserFavoriteItemView.post — Story 55.2."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create(username='testuser_post', profile='DBA')
+        self.client.force_authenticate(user=self.user)
+        self.action = Action.objects.create(
+            name='Test Action Post', engine='Oracle', platform='AAP',
+            status=ActionStatus.PUBLISHED
+        )
+
+    def test_post_existing_action_returns_204(self):
+        """POST avec une action existante → 204 No Content."""
+        response = self.client.post(f'/api/v1/users/me/favorites/{self.action.id}/')
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+    def test_post_adds_favorite(self):
+        """POST → le favori est créé en base."""
+        self.client.post(f'/api/v1/users/me/favorites/{self.action.id}/')
+        self.assertTrue(
+            UserFavorite.objects.filter(user=self.user, action=self.action).exists()
+        )
+
+    def test_post_nonexistent_action_returns_404(self):
+        """POST avec action inexistante → Action.DoesNotExist → 404."""
+        response = self.client.post('/api/v1/users/me/favorites/99999/')
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_post_unauthenticated_returns_401(self):
+        """POST non authentifié → 401."""
+        self.client.force_authenticate(user=None)
+        response = self.client.post(f'/api/v1/users/me/favorites/{self.action.id}/')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+@pytest.mark.django_db
+class TestUserFavoriteItemViewDelete(TestCase):
+    """Tests pour UserFavoriteItemView.delete — Story 55.2."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create(username='testuser_del', profile='DBA')
+        self.client.force_authenticate(user=self.user)
+        self.action = Action.objects.create(
+            name='Test Action Del', engine='Oracle', platform='AAP',
+            status=ActionStatus.PUBLISHED
+        )
+
+    def test_delete_existing_favorite_returns_204(self):
+        """DELETE favori existant → 204."""
+        UserFavorite.objects.create(user=self.user, action=self.action)
+
+        response = self.client.delete(f'/api/v1/users/me/favorites/{self.action.id}/')
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(
+            UserFavorite.objects.filter(user=self.user, action=self.action).exists()
+        )
+
+    def test_delete_nonexistent_favorite_is_idempotent_204(self):
+        """DELETE favori inexistant → 204 (idempotent)."""
+        # Pas de favori créé
+        response = self.client.delete(f'/api/v1/users/me/favorites/{self.action.id}/')
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+    def test_delete_unauthenticated_returns_401(self):
+        """DELETE non authentifié → 401."""
+        self.client.force_authenticate(user=None)
+        response = self.client.delete(f'/api/v1/users/me/favorites/{self.action.id}/')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+@pytest.mark.django_db
+class TestUserFavoritesViewGetWithCreatedAt(TestCase):
+    """Tests pour UserFavoritesView.get — Story 55.2 (ensure_utc_isoformat)."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create(username='testuser_ts', profile='DBA')
+        self.client.force_authenticate(user=self.user)
+
+    def test_get_returns_created_at_field(self):
+        """GET favorites → created_at présent dans chaque entrée (ensure_utc_isoformat)."""
+        action = Action.objects.create(
+            name='Action With Timestamp', engine='Oracle', platform='AAP',
+            status=ActionStatus.PUBLISHED
+        )
+        UserFavorite.objects.create(user=self.user, action=action)
+
+        response = self.client.get('/api/v1/users/me/favorites/')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data['data']), 1)
+        item = response.data['data'][0]
+        self.assertIn('created_at', item)
+        self.assertIsNotNone(item['created_at'])
+        # ensure_utc_isoformat retourne une string ISO avec Z ou +00:00
+        created_at_str = item['created_at']
+        self.assertIsInstance(created_at_str, str)
+
+    def test_get_unauthenticated_returns_401(self):
+        """GET non authentifié → 401."""
+        self.client.force_authenticate(user=None)
+        response = self.client.get('/api/v1/users/me/favorites/')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)

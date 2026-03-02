@@ -22,45 +22,15 @@ import httpx
 import structlog
 
 from adapters.base_adapter import BaseAdapter
+from adapters.status_mappers import (
+    TERRAFORM_CLOUD_STATUS_MAP as TERRAFORM_CLOUD_STATUS_MAP,
+    TERRAFORM_CLOUD_TERMINAL_STATUSES as TERRAFORM_CLOUD_TERMINAL_STATUSES,
+    map_terraform_cloud_status as map_terraform_cloud_status,
+)
 from core.exceptions import ServiceUnavailableError
 from integrations.health_check import HealthCheckResult, HealthCheckStatus, IHealthCheckable
 
 logger = structlog.get_logger(__name__)
-
-# Terraform Cloud status → IDP Portal execution status mapping
-# Terraform Cloud uses a single complex 'status' field with 18+ states.
-TERRAFORM_CLOUD_STATUS_MAP: dict[str, str] = {
-    "pending": "SUBMITTED",
-    "fetching": "SUBMITTED",
-    "plan_queued": "SUBMITTED",
-    "planning": "RUNNING",
-    "planned": "SUBMITTED",
-    "cost_estimating": "RUNNING",
-    "cost_estimated": "SUBMITTED",
-    "policy_checking": "RUNNING",
-    "policy_override": "SUBMITTED",
-    "policy_soft_failed": "SUBMITTED",
-    "policy_checked": "SUBMITTED",
-    "confirmed": "SUBMITTED",
-    "apply_queued": "SUBMITTED",
-    "applying": "RUNNING",
-    "applied": "COMPLETED",
-    "planned_and_finished": "COMPLETED",
-    "errored": "FAILED",
-    "canceled": "CANCELLED",
-    "force_canceled": "CANCELLED",
-    "discarded": "CANCELLED",
-}
-
-# Terminal statuses where the run is finished
-TERRAFORM_CLOUD_TERMINAL_STATUSES = {
-    "applied",
-    "planned_and_finished",
-    "errored",
-    "canceled",
-    "force_canceled",
-    "discarded",
-}
 
 # Timeout for Terraform Cloud API calls (seconds)
 TERRAFORM_CLOUD_DEFAULT_TIMEOUT = 30.0
@@ -68,19 +38,6 @@ TERRAFORM_CLOUD_LOGS_TIMEOUT = 60.0
 
 # Terraform Cloud JSON API headers
 TERRAFORM_CLOUD_CONTENT_TYPE = "application/vnd.api+json"
-
-
-def map_terraform_cloud_status(tc_status: str) -> str:
-    """Map Terraform Cloud run status to IDP Portal status.
-
-    Args:
-        tc_status: Terraform Cloud run status string.
-
-    Returns:
-        IDP Portal status string (never None).
-    """
-    mapped = TERRAFORM_CLOUD_STATUS_MAP.get(tc_status)
-    return mapped if mapped is not None else "SUBMITTED"
 
 
 class TerraformCloudAdapter(BaseAdapter, IHealthCheckable):

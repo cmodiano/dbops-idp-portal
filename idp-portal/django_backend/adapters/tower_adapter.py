@@ -15,21 +15,11 @@ import httpx
 import structlog
 
 from adapters.base_adapter import BaseAdapter
+from adapters.status_mappers import AAP_TOWER_TERMINAL_STATUSES, TOWER_STATUS_MAP  # noqa: F401 — re-exported for backward compat
 from core.exceptions import ServiceUnavailableError
 from integrations.health_check import HealthCheckResult, HealthCheckStatus, IHealthCheckable
 
 logger = structlog.get_logger(__name__)
-
-# Tower/AWX job status → IDP portal execution status mapping (identical to AAP)
-TOWER_STATUS_MAP: dict[str, str] = {
-    "pending": "SUBMITTED",
-    "waiting": "SUBMITTED",
-    "running": "RUNNING",
-    "successful": "COMPLETED",
-    "failed": "FAILED",
-    "error": "FAILED",
-    "canceled": "CANCELLED",
-}
 
 # Timeout for Tower API calls (seconds)
 TOWER_DEFAULT_TIMEOUT = 30.0
@@ -344,8 +334,7 @@ class TowerAdapter(BaseAdapter, IHealthCheckable):
             ) from exc
 
         tower_status = status_data.get("status", "unknown")
-        terminal_statuses = {"successful", "failed", "error", "canceled"}
-        is_complete = tower_status in terminal_statuses
+        is_complete = tower_status in AAP_TOWER_TERMINAL_STATUSES
 
         logger.info(
             "tower_get_job_logs_success",

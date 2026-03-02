@@ -21,6 +21,7 @@ from core.utils import ensure_utc_isoformat
 from executions.builders.response_builder import ExecutionResponseBuilder
 from executions.models import Execution, ExecutionStep, ExecutionStatus
 from executions.serializers import ExecutionSerializer, ExecutionStepSerializer
+from executions.dtos import ExecutionRequest
 from executions.services import ExecutionService
 from core.permissions import IsDBAOrDBOPS
 from executions.utils import (
@@ -43,6 +44,68 @@ exec_logger = structlog.get_logger(__name__)
 
 # AC2: Story 26.8 — Instance shared across views for owner-or-admin object-level checks
 _dba_permission = IsDBAOrDBOPS()
+
+
+def _fetch_splunk_logs_for_execution(
+    execution_id: int, platform_job_id: str | None = None
+) -> str | None:
+    """Best-effort retrieval of platform logs from Splunk for a given execution.
+
+    When platform_job_id is provided, returns logs for that platform job only.
+    Returns the log content string, or ``None`` on any error.
+    """
+    try:
+        from services.splunk_utils import get_splunk_service  # noqa: PLC0415
+        from asgiref.sync import async_to_sync  # noqa: PLC0415
+
+        splunk = get_splunk_service()
+        if splunk is None:
+            return None
+
+        return async_to_sync(splunk.search_platform_logs)(
+            execution_id=execution_id, platform_job_id=platform_job_id
+        )
+    except Exception:  # noqa: BLE001 — best-effort
+        exec_logger.exception(
+            "splunk_logs_retrieval_error",
+            execution_id=execution_id,
+        )
+        return None
+
+
+def _fetch_splunk_logs_mapping_for_execution(execution_id: int) -> dict[str, str]:
+    """Best-effort retrieval of all platform logs from Splunk, keyed by platform_job_id."""
+    try:
+        from services.splunk_utils import get_splunk_service  # noqa: PLC0415
+        from asgiref.sync import async_to_sync  # noqa: PLC0415
+
+        splunk = get_splunk_service()
+        if splunk is None:
+            return {}
+
+        return async_to_sync(splunk.search_platform_logs_mapping)(execution_id=execution_id)
+    except Exception:  # noqa: BLE001 — best-effort
+        exec_logger.exception(
+            "splunk_logs_mapping_retrieval_error",
+            execution_id=execution_id,
+        )
+        return {}
+
+
+def _retrieve_purged_logs_from_splunk(
+    output: dict, execution_id: int, platform_job_id: str | None = None
+) -> dict:
+    """Best-effort retrieval of purged platform logs from Splunk.
+
+    If successful, injects ``platform_logs`` and ``logs_source`` into *output*.
+    On failure, returns *output* unchanged (``logs_purged=True`` stays visible
+    to the frontend so it can inform the user).
+    """
+    content = _fetch_splunk_logs_for_execution(execution_id, platform_job_id=platform_job_id)
+    if content is not None:
+        output["platform_logs"] = content
+        output["logs_source"] = "splunk"
+    return output
 
 
 class ExecutionsCreateView(APIView):
@@ -169,7 +232,7 @@ class ExecutionsCreateView(APIView):
         )
 
         # Step 7: Create execution
-        execution = self.get_execution_service().create_execution(
+        exec_req = ExecutionRequest(
             user=request.user,  # type: ignore[arg-type]
             action=action,
             environment=env_config['env_str'],
@@ -182,9 +245,9 @@ class ExecutionsCreateView(APIView):
             delegated_referenced_action_ids=delegated_referenced_action_ids,
             validated_targets=validated_targets if target_names else None,
         )
+        execution = self.get_execution_service().create_execution(exec_req)
 
         # Step 8: Launch execution (skip when requires_approval → PENDING_APPROVAL; DBA will launch via /approve)
-        from executions.models import ExecutionStatus
         if execution.status != ExecutionStatus.PENDING_APPROVAL:
             self._launch_execution(execution, action, correlation_id, request)
 
@@ -472,11 +535,21 @@ class ExecutionStepLogsView(APIView):
         if not _dba_permission.has_object_permission(request, self, execution):
             raise ForbiddenError(code="FORBIDDEN", message="Accès interdit", details={"execution_id": execution_id})
 
+        output = step.get_output() if hasattr(step, "get_output") else None
+
+        # If logs were purged, attempt retrieval from Splunk (only when we have
+        # a platform_job_id for platform-specific logs; otherwise skip to avoid
+        # execution-wide Splunk search)
+        if output and output.get("logs_purged"):
+            pid = step.platform_job_id or output.get("platform_job_id")
+            if pid:
+                output = _retrieve_purged_logs_from_splunk(output, execution_id, platform_job_id=pid)
+
         return Response(
             {
                 "data": {
                     "step_id": step.id,
-                    "output": step.get_output() if hasattr(step, "get_output") else None,
+                    "output": output,
                     "error_message": step.error_message,
                     "started_at": ensure_utc_isoformat(step.started_at),
                     "completed_at": ensure_utc_isoformat(step.completed_at),
@@ -533,9 +606,25 @@ class ExecutionLogsView(APIView):
                 correlation_id=correlation_id,
             )
             steps = ExecutionStep.objects.filter(execution_id=execution_id).order_by("step_order")
+            step_outputs = [
+                (step, step.get_output() if hasattr(step, "get_output") else None)
+                for step in steps
+            ]
+
+            # Fetch all Splunk logs once, keyed by platform_job_id
+            any_purged = any(o and o.get("logs_purged") for _, o in step_outputs)
+            splunk_map: dict[str, str] = {}
+            if any_purged:
+                splunk_map = _fetch_splunk_logs_mapping_for_execution(execution_id)
+
             step_logs = []
-            for step in steps:
-                output = step.get_output() if hasattr(step, "get_output") else None
+            for step, output in step_outputs:
+                if output and output.get("logs_purged"):
+                    pid = step.platform_job_id or output.get("platform_job_id")
+                    splunk_logs = splunk_map.get(pid) if pid else None
+                    if splunk_logs is not None:
+                        output["platform_logs"] = splunk_logs
+                        output["logs_source"] = "splunk"
                 step_logs.append({
                     "step_id": step.id,
                     "step_name": step.step_name,

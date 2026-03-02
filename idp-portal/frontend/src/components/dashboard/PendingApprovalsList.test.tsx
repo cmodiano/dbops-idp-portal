@@ -404,3 +404,44 @@ describe('PendingApprovalsList', () => {
   // that are difficult to test reliably. The core functionality (opening modal, confirm action)
   // is already covered by other tests.
 });
+
+// ─── Coverage extras ──────────────────────────────────────────────────────────
+describe('PendingApprovalsList — coverage extras', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('shows "Action #id" fallback when action_name is null', () => {
+    const executionWithNoName = [{ ...mockExecutions[0], action_name: null }];
+    render(
+      <PendingApprovalsList executions={executionWithNoName} loading={false} onActionComplete={vi.fn()} />
+    );
+    expect(screen.getByText('Action #5')).toBeInTheDocument();
+  });
+
+  it('shows "Utilisateur #id" fallback when user_display_name is null', () => {
+    const executionWithNoUser = [{ ...mockExecutions[0], user_display_name: null }];
+    render(
+      <PendingApprovalsList executions={executionWithNoUser} loading={false} onActionComplete={vi.fn()} />
+    );
+    expect(screen.getByText(/Utilisateur #10/)).toBeInTheDocument();
+  });
+
+  it('shows error message on reject failure', async () => {
+    const user = userEvent.setup();
+    mockRejectExecution.mockRejectedValue(new Error('Reject failed'));
+
+    render(
+      <PendingApprovalsList executions={mockExecutions} loading={false} onActionComplete={vi.fn()} />
+    );
+
+    const rejectButtons = screen.getAllByRole('button', { name: /Refuser/ });
+    await user.click(rejectButtons[0]);
+    const confirmButton = screen.getByRole('button', { name: 'Refuser' });
+    await user.click(confirmButton);
+
+    await waitFor(() => {
+      expect(mockMessage.error).toHaveBeenCalledWith('Reject failed');
+    });
+  });
+});

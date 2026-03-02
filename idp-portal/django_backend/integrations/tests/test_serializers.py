@@ -124,6 +124,85 @@ class TestValidateUrl(TestCase):
         with self.assertRaises(drf_serializers.ValidationError):
             validate_url('http://0.0.0.0/api')
 
+    # --- Story 54.1: IPv4-mapped IPv6 bypass prevention ---
+
+    def test_ipv4_mapped_ipv6_loopback_rejected(self):
+        """AC-6: IPv4-mapped IPv6 loopback ::ffff:127.0.0.1 is rejected."""
+        with self.assertRaises(drf_serializers.ValidationError):
+            validate_url('http://[::ffff:127.0.0.1]/api')
+
+    def test_ipv4_mapped_ipv6_private_10_rejected(self):
+        """AC-6: IPv4-mapped IPv6 private ::ffff:10.0.0.1 is rejected."""
+        with self.assertRaises(drf_serializers.ValidationError):
+            validate_url('http://[::ffff:10.0.0.1]/api')
+
+    def test_ipv4_mapped_ipv6_private_192_rejected(self):
+        """AC-6: IPv4-mapped IPv6 private ::ffff:192.168.1.1 is rejected."""
+        with self.assertRaises(drf_serializers.ValidationError):
+            validate_url('http://[::ffff:192.168.1.1]/api')
+
+    def test_ipv4_mapped_ipv6_metadata_rejected(self):
+        """AC-5: IPv4-mapped IPv6 metadata ::ffff:169.254.169.254 is rejected."""
+        with self.assertRaises(drf_serializers.ValidationError):
+            validate_url('http://[::ffff:169.254.169.254]/latest/meta-data/')
+
+    # --- Story 54.1: Port 0 and empty hostname ---
+
+    def test_port_zero_rejected(self):
+        """URL with port 0 is rejected."""
+        with self.assertRaises(drf_serializers.ValidationError):
+            validate_url('https://example.com:0/api')
+
+    def test_empty_hostname_rejected(self):
+        """URL without hostname is rejected."""
+        with self.assertRaises(drf_serializers.ValidationError):
+            validate_url('http:///path')
+
+    # --- Story 54.1: Explicit exotic scheme tests ---
+
+    def test_file_scheme_rejected(self):
+        """AC-1: file:// scheme is rejected."""
+        with self.assertRaises(drf_serializers.ValidationError):
+            validate_url('file:///etc/passwd')
+
+    def test_data_scheme_rejected(self):
+        """AC-1: data: scheme is rejected."""
+        with self.assertRaises(drf_serializers.ValidationError):
+            validate_url('data:text/html,<h1>test</h1>')
+
+    def test_javascript_scheme_rejected(self):
+        """AC-1: javascript: scheme is rejected."""
+        with self.assertRaises(drf_serializers.ValidationError):
+            validate_url('javascript:alert(1)')
+
+    # --- Story 54.1: Additional edge cases ---
+
+    def test_username_only_in_url_rejected(self):
+        """AC-2: URL with username only (no password) is rejected."""
+        with self.assertRaises(drf_serializers.ValidationError):
+            validate_url('https://admin@api.example.com')
+
+    def test_ipv4_mapped_ipv6_private_172_rejected(self):
+        """AC-4: IPv4-mapped IPv6 private ::ffff:172.16.0.1 is rejected."""
+        with self.assertRaises(drf_serializers.ValidationError):
+            validate_url('http://[::ffff:172.16.0.1]/api')
+
+    def test_ipv4_mapped_ipv6_public_accepted(self):
+        """IPv4-mapped IPv6 with public IP is accepted."""
+        result = validate_url('http://[::ffff:8.8.8.8]/api')
+        self.assertEqual(result, 'http://[::ffff:8.8.8.8]/api')
+
+    def test_percent_encoded_ip_not_resolved(self):
+        """Percent-encoded IP in hostname is treated as FQDN, not decoded.
+
+        urlparse does not decode percent-encoding in hostnames, so
+        http://127%2E0%2E0%2E1 is parsed as hostname '127%2e0%2e0%2e1'
+        (not as IP 127.0.0.1). This is safe because HTTP clients will
+        attempt DNS resolution on the literal string, which won't resolve.
+        """
+        result = validate_url('http://127%2E0%2E0%2E1/api')
+        self.assertEqual(result, 'http://127%2E0%2E0%2E1/api')
+
 
 class TestIntegrationCreateSerializerSsrf(TestCase):
     """Story 48.1: SSRF validation applied to base_url and token_url in IntegrationCreateSerializer."""
@@ -166,6 +245,45 @@ class TestIntegrationUpdateSerializerSsrf(TestCase):
     def test_token_url_link_local_rejected(self):
         """AC6 (code-review fix): token_url with link-local (metadata service) is rejected."""
         data = {'token_url': 'http://169.254.169.254/token'}
+        s = IntegrationUpdateSerializer(data=data)
+        self.assertFalse(s.is_valid())
+        self.assertIn('token_url', s.errors)
+
+
+class TestIntegrationCreateSerializerSsrfStory541(TestCase):
+    """Story 54.1: IPv4-mapped IPv6 SSRF validation on create serializer."""
+
+    def test_base_url_ipv4_mapped_ipv6_rejected(self):
+        """AC-8: base_url with IPv4-mapped IPv6 private IP is rejected on create."""
+        data = {'type': 'aap', 'name': 'Test', 'base_url': 'http://[::ffff:10.0.0.1]/api'}
+        s = IntegrationCreateSerializer(data=data)
+        self.assertFalse(s.is_valid())
+        self.assertIn('base_url', s.errors)
+
+    def test_token_url_ipv4_mapped_ipv6_rejected(self):
+        """AC-8: token_url with IPv4-mapped IPv6 loopback is rejected on create."""
+        data = {
+            'type': 'aap', 'name': 'Test', 'base_url': 'https://api.example.com',
+            'token_url': 'http://[::ffff:127.0.0.1]/token',
+        }
+        s = IntegrationCreateSerializer(data=data)
+        self.assertFalse(s.is_valid())
+        self.assertIn('token_url', s.errors)
+
+
+class TestIntegrationUpdateSerializerSsrfStory541(TestCase):
+    """Story 54.1: IPv4-mapped IPv6 SSRF validation on update serializer."""
+
+    def test_base_url_ipv4_mapped_ipv6_rejected(self):
+        """AC-8: base_url with IPv4-mapped IPv6 private IP is rejected on update."""
+        data = {'base_url': 'http://[::ffff:192.168.1.1]/api'}
+        s = IntegrationUpdateSerializer(data=data)
+        self.assertFalse(s.is_valid())
+        self.assertIn('base_url', s.errors)
+
+    def test_token_url_ipv4_mapped_ipv6_rejected(self):
+        """AC-8: token_url with IPv4-mapped IPv6 metadata is rejected on update."""
+        data = {'token_url': 'http://[::ffff:169.254.169.254]/token'}
         s = IntegrationUpdateSerializer(data=data)
         self.assertFalse(s.is_valid())
         self.assertIn('token_url', s.errors)
