@@ -247,12 +247,20 @@ class ExecutionTarget(models.Model):
 
 
 class ExecutionStepType(models.TextChoices):
-    """Execution step type enum matching Oracle CHECK constraint."""
+    """Execution step type enum matching Oracle CHECK constraint (V025, V099).
+
+    Original values (5): vault, servicenow, platform, prerequisite, verification.
+    ADR-007 values (4): service_call, http_request, evaluation, gate.
+    """
     VAULT = 'vault', 'Vault'
     SERVICENOW = 'servicenow', 'ServiceNow'
     PLATFORM = 'platform', 'Platform'
     PREREQUISITE = 'prerequisite', 'Prerequisite'
     VERIFICATION = 'verification', 'Verification'
+    SERVICE_CALL = 'service_call', 'Service Call'
+    HTTP_REQUEST = 'http_request', 'HTTP Request'
+    EVALUATION = 'evaluation', 'Evaluation'
+    GATE = 'gate', 'Gate'
 
 
 class ExecutionStepStatus(models.TextChoices):
@@ -269,6 +277,9 @@ class ExecutionStep(models.Model):
     """
     ExecutionStep model mapping to Oracle EXECUTION_STEPS table (V025).
     Represents a step within an execution.
+
+    Approval fields (V099, ADR-007): approved_by, approved_at, approval_comment
+    enable granular per-step approval (migration from Execution-level approval V030).
     """
     id = models.BigAutoField(primary_key=True, db_column='ID')
     execution = models.ForeignKey(
@@ -301,6 +312,22 @@ class ExecutionStep(models.Model):
     )
     error_message = models.TextField(null=True, blank=True, db_column='ERROR_MESSAGE')
     created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
+    # Approval fields (V099, ADR-007) — granular per-step approval
+    approved_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='approved_steps',
+        db_column='APPROVED_BY',
+    )
+    approved_at = models.DateTimeField(null=True, blank=True, db_column='APPROVED_AT')
+    approval_comment = models.CharField(
+        max_length=1000,
+        null=True,
+        blank=True,
+        db_column='APPROVAL_COMMENT',
+    )
 
     class Meta:
         db_table = 'EXECUTION_STEPS'

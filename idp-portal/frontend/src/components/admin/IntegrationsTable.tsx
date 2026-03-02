@@ -40,11 +40,6 @@ export interface IntegrationsTableProps {
   onRefresh?: () => void;
 }
 
-function truncateUrl(url: string, max = 40): string {
-  if (url.length <= max) return url;
-  return `${url.slice(0, max)}…`;
-}
-
 /** Render icon: uploaded icon (/static/...), URL (http...), or fallback (Story 4.9 AC3). */
 function renderIcon(record: IntegrationListItem) {
   const iconSrc = getIconUrl(record.icon);
@@ -125,12 +120,14 @@ export function IntegrationsTable({
       title: 'Nom',
       dataIndex: 'name',
       key: 'name',
+      width: 160,
       sorter: (a, b) => a.name.localeCompare(b.name),
     },
     {
       title: 'Type',
       dataIndex: 'type',
       key: 'type',
+      width: 120,
       render: (t: string) => <Tag>{t}</Tag>,
       sorter: (a, b) => a.type.localeCompare(b.type),
     },
@@ -138,7 +135,7 @@ export function IntegrationsTable({
       title: 'Statut',
       dataIndex: 'status',
       key: 'status',
-      width: '12%',
+      width: 100,
       filters: [
         { text: 'Valide', value: 'valid' },
         { text: 'Invalide', value: 'invalid' },
@@ -170,25 +167,39 @@ export function IntegrationsTable({
       title: 'Auth Flow',
       dataIndex: 'auth_flow',
       key: 'auth_flow',
-      width: 160,
-      ellipsis: true,
-      render: (flow: string | null) => (
-        flow ? <Tag color="blue">{AUTH_FLOW_LABELS[flow as keyof typeof AUTH_FLOW_LABELS] || flow}</Tag> : '—'
-      ),
+      width: 200,
+      ellipsis: { showTitle: false },
+      render: (flow: string | null) => {
+        const label = flow ? (AUTH_FLOW_LABELS[flow as keyof typeof AUTH_FLOW_LABELS] || flow) : null;
+        return label ? (
+          <Tooltip title={label}>
+            <Tag color="blue" style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {label}
+            </Tag>
+          </Tooltip>
+        ) : '—';
+      },
     },
     {
       title: 'URL',
       dataIndex: 'base_url',
       key: 'base_url',
-      width: 200,
-      ellipsis: true,
-      render: (url: string) => truncateUrl(url),
+      width: 240,
+      ellipsis: { showTitle: false },
+      render: (url: string) => (
+        <Tooltip title={url}>
+          <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {url}
+          </span>
+        </Tooltip>
+      ),
       sorter: (a, b) => a.base_url.localeCompare(b.base_url),
     },
     {
-      title: 'Date de création',
+      title: () => <span style={{ whiteSpace: 'nowrap' }}>Date de création</span>,
       dataIndex: 'created_at',
       key: 'created_at',
+      width: 130,
       render: (d: string) => formatLocalDate(d),
       sorter: (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
       defaultSortOrder: 'descend',
@@ -196,7 +207,7 @@ export function IntegrationsTable({
     {
       title: '',
       key: 'actions',
-      width: 300,
+      width: 320,
       render: (_: unknown, record: IntegrationListItem) => (
         <Space size="small" style={{ whiteSpace: 'nowrap' }}>
           <Tooltip title="Re-valider">
@@ -233,6 +244,7 @@ export function IntegrationsTable({
       dataSource={dataSource}
       rowKey="id"
       loading={loading}
+      scroll={{ x: 'max-content' }}
       pagination={{ pageSize: 10, showSizeChanger: true }}
       locale={{ emptyText: 'Aucune intégration' }}
       title={() => (

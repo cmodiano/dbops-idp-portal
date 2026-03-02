@@ -3,7 +3,7 @@ from django.test import TestCase
 from idp_auth.models import User
 from catalog.models import Action
 from executions.models import (
-    Execution, ExecutionStep, ScheduledExecution, RecurringPattern
+    Execution, ExecutionStep, ExecutionStepType, ScheduledExecution, RecurringPattern
 )
 
 
@@ -134,6 +134,124 @@ class ExecutionStepModelTest(TestCase):
                 step_name='Step 1 Duplicate',
                 step_type='vault'
             )
+
+    # --- Story 57.1 : Tests nouveaux types et champs d'approbation ---
+
+    def test_execution_step_type_all_nine_values(self):
+        """AC#2 : ExecutionStepType doit avoir exactement 9 valeurs."""
+        expected_values = {
+            'vault', 'servicenow', 'platform', 'prerequisite', 'verification',
+            'service_call', 'http_request', 'evaluation', 'gate',
+        }
+        actual_values = {choice[0] for choice in ExecutionStepType.choices}
+        self.assertEqual(actual_values, expected_values)
+
+    def test_execution_step_type_new_values(self):
+        """AC#2 : Les 4 nouvelles valeurs ADR-007 sont présentes dans l'enum."""
+        self.assertEqual(ExecutionStepType.SERVICE_CALL, 'service_call')
+        self.assertEqual(ExecutionStepType.HTTP_REQUEST, 'http_request')
+        self.assertEqual(ExecutionStepType.EVALUATION, 'evaluation')
+        self.assertEqual(ExecutionStepType.GATE, 'gate')
+
+    def test_execution_step_type_existing_values_preserved(self):
+        """AC#2 : Les 5 valeurs existantes sont conservées."""
+        self.assertEqual(ExecutionStepType.VAULT, 'vault')
+        self.assertEqual(ExecutionStepType.SERVICENOW, 'servicenow')
+        self.assertEqual(ExecutionStepType.PLATFORM, 'platform')
+        self.assertEqual(ExecutionStepType.PREREQUISITE, 'prerequisite')
+        self.assertEqual(ExecutionStepType.VERIFICATION, 'verification')
+
+    def test_create_execution_step_with_new_types(self):
+        """AC#2 : Création d'un step avec chaque nouveau type ADR-007."""
+        new_types = [
+            ('service_call', 2),
+            ('http_request', 3),
+            ('evaluation', 4),
+            ('gate', 5),
+        ]
+        for step_type, order in new_types:
+            step = ExecutionStep.objects.create(
+                execution=self.execution,
+                step_order=order,
+                step_name=f'Step {step_type}',
+                step_type=step_type,
+            )
+            self.assertEqual(step.step_type, step_type)
+
+    def test_create_execution_step_with_approval_fields(self):
+        """AC#1 : Création d'un step avec les champs d'approbation renseignés."""
+        from django.utils import timezone
+        approver = User.objects.create(username='approver57', profile='DBA')
+        now = timezone.now()
+        step = ExecutionStep.objects.create(
+            execution=self.execution,
+            step_order=10,
+            step_name='Gate Step',
+            step_type='gate',
+            approved_by=approver,
+            approved_at=now,
+            approval_comment='Approuvé pour production',
+        )
+        self.assertEqual(step.approved_by, approver)
+        self.assertEqual(step.approved_at, now)
+        self.assertEqual(step.approval_comment, 'Approuvé pour production')
+
+    def test_execution_step_approval_fields_nullable(self):
+        """AC#1 : Les champs d'approbation sont null=True / blank=True."""
+        step = ExecutionStep.objects.create(
+            execution=self.execution,
+            step_order=11,
+            step_name='Step sans approbation',
+            step_type='vault',
+        )
+        self.assertIsNone(step.approved_by)
+        self.assertIsNone(step.approved_at)
+        self.assertIsNone(step.approval_comment)
+
+    def test_execution_step_approval_comment_max_length(self):
+        """AC#1 : Le champ approval_comment supporte jusqu'à 1000 caractères mais pas 1001."""
+        from django.core.exceptions import ValidationError
+        long_comment = 'x' * 1000
+        step = ExecutionStep.objects.create(
+            execution=self.execution,
+            step_order=12,
+            step_name='Step long comment',
+            step_type='evaluation',
+            approval_comment=long_comment,
+        )
+        self.assertEqual(len(step.approval_comment), 1000)
+        # Vérifier que 1001 chars échoue la validation Django (full_clean enforce max_length)
+        step.approval_comment = 'x' * 1001
+        with self.assertRaises(ValidationError):
+            step.full_clean()
+
+    def test_execution_step_approved_by_related_name(self):
+        """AC#1 : Le related_name 'approved_steps' est distinct de 'approved_executions'."""
+        approver = User.objects.create(username='approver_steps', profile='DBA')
+        step = ExecutionStep.objects.create(
+            execution=self.execution,
+            step_order=13,
+            step_name='Step avec approver',
+            step_type='gate',
+            approved_by=approver,
+        )
+        # Le reverse relation via related_name='approved_steps' doit fonctionner
+        self.assertIn(step, approver.approved_steps.all())
+
+    def test_execution_step_approved_by_set_null_on_user_delete(self):
+        """AC#1 : La suppression d'un approbateur met approved_by à NULL (on_delete=SET_NULL)."""
+        approver = User.objects.create(username='approver_to_delete', profile='DBA')
+        step = ExecutionStep.objects.create(
+            execution=self.execution,
+            step_order=14,
+            step_name='Step with deletable approver',
+            step_type='gate',
+            approved_by=approver,
+        )
+        self.assertEqual(step.approved_by, approver)
+        approver.delete()
+        step.refresh_from_db()
+        self.assertIsNone(step.approved_by)
 
 
 @pytest.mark.django_db
