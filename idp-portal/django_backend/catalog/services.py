@@ -690,11 +690,12 @@ class CatalogService:
 
         if connection.vendor == 'oracle':
             # Precise DB-side filter: JSON_EXISTS on CLOB (Oracle 12c R2+, stable on Oracle 19c)
-            # int() guards against any non-int value — action_id is typed as int.
             # extra() is used because Django ORM has no JSON_EXISTS expression and RawSQL()
             # cannot be embedded as a WHERE predicate on a CLOB JSONField without extra().
+            # params=[action_id] uses proper parameterization (no SQL injection).
             candidates = base_qs.extra(
-                where=[f"JSON_EXISTS(EXECUTION_STEPS, '$[*]?(@.referenced_action_id == {int(action_id)})')"]
+                where=["JSON_EXISTS(EXECUTION_STEPS, '$[*]?(@.referenced_action_id == %s)')"],
+                params=[action_id],
             )
         else:
             # Non-Oracle fallback (SQLite in tests): text substring pre-filter

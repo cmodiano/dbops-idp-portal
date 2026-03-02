@@ -163,7 +163,7 @@ class TestFindWorkflowsReferencingActionOptimized:
     @patch("catalog.services.connection")
     @patch("catalog.services.Action.objects")
     def test_uses_json_exists_on_oracle(self, mock_objects, mock_conn):
-        """Vérifie que JSON_EXISTS est utilisé sur Oracle."""
+        """Vérifie que JSON_EXISTS est utilisé sur Oracle avec paramétrage (B610)."""
         mock_conn.vendor = 'oracle'
         mock_base_qs = MagicMock()
         mock_qs = MagicMock()
@@ -174,10 +174,12 @@ class TestFindWorkflowsReferencingActionOptimized:
         self.service._find_workflows_referencing_action(42)
 
         mock_base_qs.extra.assert_called_once()
-        where_clause = mock_base_qs.extra.call_args[1]['where'][0]
+        call_kwargs = mock_base_qs.extra.call_args[1]
+        where_clause = call_kwargs['where'][0]
         assert 'JSON_EXISTS' in where_clause
-        # Verify the precise JSON path syntax including the filter expression
-        assert "$[*]?(@.referenced_action_id == 42)" in where_clause
+        # Parameterized form (no SQL injection): %s placeholder + params
+        assert "$[*]?(@.referenced_action_id == %s)" in where_clause
+        assert call_kwargs.get('params') == [42]
 
     @patch("catalog.services.connection")
     @patch("catalog.services.Action.objects")
