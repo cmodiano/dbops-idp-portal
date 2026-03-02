@@ -182,6 +182,28 @@ describe('useRemediationContext', () => {
     expect(result.current.error?.message).toBe('Erreur inconnue');
   });
 
+  it('handles 404 error with no-remediation context', async () => {
+    const err = { status: 404, message: 'Not found' };
+    mockFetchRemediationContext.mockRejectedValue(err);
+
+    const { result } = renderHook(() => useRemediationContext(123, 'FAILED'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.context?.has_remediation).toBe(false);
+    expect(result.current.error).toBeNull();
+  });
+
+  it('handles 403 error with access denied error', async () => {
+    const err = { status: 403, message: 'Forbidden' };
+    mockFetchRemediationContext.mockRejectedValue(err);
+
+    const { result } = renderHook(() => useRemediationContext(123, 'FAILED'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.error?.message).toBe('Accès refusé');
+    expect(result.current.context).toBeNull();
+  });
+
   it('returns context with no remediation when API returns empty', async () => {
     mockFetchRemediationContext.mockResolvedValue(mockContextNoRemediation);
 

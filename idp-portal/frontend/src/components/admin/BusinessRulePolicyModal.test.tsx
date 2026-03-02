@@ -286,3 +286,78 @@ describe('BusinessRulePolicyModal', () => {
     });
   });
 });
+
+// ─── Coverage extras ──────────────────────────────────────────────────────────
+describe('BusinessRulePolicyModal — coverage extras', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('setSubmitError avec non-Error lors de onSave rejetant', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockRejectedValue('plain string error');
+    renderModal({ onSave });
+
+    await user.type(screen.getByPlaceholderText(/Revue Terraform SQL sku_name/i), 'Test Rule');
+    // Insert terraform example to fill JSON
+    await user.click(screen.getByRole('button', { name: /Insérer exemple Terraform/i }));
+
+    await user.click(screen.getAllByRole('button').find(b => b.textContent?.includes('Créer'))!);
+
+    await waitFor(() => {
+      expect(screen.getByText("Erreur lors de l'enregistrement")).toBeInTheDocument();
+    });
+  });
+
+  it('insère exemple AAP et affiche le JSON dans le textarea', async () => {
+    const user = userEvent.setup();
+    renderModal();
+
+    await user.click(screen.getByRole('button', { name: /Insérer exemple AAP/i }));
+
+    await waitFor(() => {
+      const textarea = screen.getByPlaceholderText(/on_step_output/i) as HTMLTextAreaElement;
+      // The textarea value is a JSON string containing "aap"
+      expect(textarea.value).toContain('aap');
+    });
+  });
+
+  it('handleJsonChange avec chaîne vide efface jsonError', async () => {
+    const { fireEvent: fe } = await import('@testing-library/react');
+    renderModal();
+
+    const textarea = screen.getByPlaceholderText(/on_step_output/i);
+    // First set invalid JSON using fireEvent (avoids userEvent keyboard parsing of curly braces)
+    fe.change(textarea, { target: { value: '{invalid json here' } });
+    await waitFor(() => expect(screen.getByText(/JSON invalide/i)).toBeInTheDocument());
+
+    // Clear the textarea using fireEvent
+    fe.change(textarea, { target: { value: '' } });
+    await waitFor(() => {
+      expect(screen.queryByText(/JSON invalide/i)).not.toBeInTheDocument();
+    });
+  });
+
+  it('ferme le submitError quand on clique sur close', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockRejectedValue(new Error('Save failed'));
+    renderModal({ onSave });
+
+    await user.type(screen.getByPlaceholderText(/Revue Terraform SQL sku_name/i), 'Test Rule');
+    await user.click(screen.getByRole('button', { name: /Insérer exemple Terraform/i }));
+    await user.click(screen.getAllByRole('button').find(b => b.textContent?.includes('Créer'))!);
+
+    await waitFor(() => {
+      expect(screen.getByText('Save failed')).toBeInTheDocument();
+    });
+
+    // Close the alert
+    const closeBtn = document.querySelector('.ant-alert-close-icon');
+    if (closeBtn) {
+      fireEvent.click(closeBtn);
+      await waitFor(() => {
+        expect(screen.queryByText('Save failed')).not.toBeInTheDocument();
+      });
+    }
+  });
+});

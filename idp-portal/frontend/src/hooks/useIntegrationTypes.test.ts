@@ -162,6 +162,16 @@ describe('useIntegrationTypes', () => {
     expect(mockGetIntegrationTypes).toHaveBeenCalledTimes(1);
   });
 
+  it('handles empty data array from API (does not cache)', async () => {
+    mockGetIntegrationTypes.mockResolvedValue([]);
+    const { result } = renderHook(() => useIntegrationTypes());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.types).toEqual([]);
+    expect(result.current.isFallback).toBe(false);
+    // Empty array not stored in cache
+    expect(sessionStorage.getItem('integration_types_cache')).toBeNull();
+  });
+
   it('stores fetched types in sessionStorage cache', async () => {
     mockGetIntegrationTypes.mockResolvedValue(mockTypes);
 

@@ -1484,3 +1484,128 @@ describe('ExecutionWizard', () => {
     }, 15000);
   });
 });
+
+// ─── Coverage extras ──────────────────────────────────────────────────────────
+describe('ExecutionWizard — coverage extras', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns null when action is null and activeExecutionId is null/undefined', () => {
+    render(
+      <App>
+        <ExecutionWizard
+          open={true}
+          action={null}
+          allowedEnvironments={[]}
+          onCancel={vi.fn()}
+        />
+      </App>
+    );
+    // Should render nothing — no modal, no wizard content
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Executer:/)).not.toBeInTheDocument();
+  });
+
+  it('renders activeExecutionId modal with "Retour au catalogue" button when activeExecutionId is provided', async () => {
+    // Mock the lazy ExecutionTimeline import
+    vi.doMock('../execution', () => ({
+      ExecutionTimeline: ({ executionId }: { executionId: number }) => (
+        <div data-testid="mock-timeline">Timeline for {executionId}</div>
+      ),
+    }));
+
+    render(
+      <App>
+        <ExecutionWizard
+          open={true}
+          action={null}
+          allowedEnvironments={[]}
+          activeExecutionId={456}
+          onCancel={vi.fn()}
+          onBackToCatalog={vi.fn()}
+        />
+      </App>
+    );
+
+    // Modal with "Execution en cours" title should be rendered
+    await waitFor(() => {
+      expect(screen.getByText('Execution en cours')).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole('button', { name: /Retour au catalogue/i })).toBeInTheDocument();
+  });
+
+  it('activeExecutionId modal uses onCancel as fallback when onBackToCatalog is not provided', async () => {
+    const onCancel = vi.fn();
+
+    render(
+      <App>
+        <ExecutionWizard
+          open={true}
+          action={null}
+          allowedEnvironments={[]}
+          activeExecutionId={789}
+          onCancel={onCancel}
+        />
+      </App>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Execution en cours')).toBeInTheDocument();
+    });
+
+    // Click the "Retour au catalogue" button — should call onCancel (the fallback)
+    const btn = screen.getByRole('button', { name: /Retour au catalogue/i });
+    fireEvent.click(btn);
+    expect(onCancel).toHaveBeenCalled();
+  });
+
+  it('renders business profile step labels when isBusinessProfile=true', () => {
+    vi.mocked(useAuth).mockReturnValue({
+      isAuthenticated: true,
+      isBusinessProfile: true,
+      isLoading: false,
+      user: null,
+      accessToken: null,
+      login: vi.fn(),
+      logout: vi.fn(),
+      refreshToken: vi.fn().mockResolvedValue(null),
+      hasTab: vi.fn().mockReturnValue(true),
+    });
+
+    const mockActionForBusiness = {
+      id: 1,
+      name: 'Deploy App',
+      description: 'Deploys the application',
+      engine: 'Oracle',
+      platform: 'AAP',
+      parameters_schema: null,
+      impact_rules: null,
+      impact_level: null,
+      default_impact_level: null,
+      status: 'published',
+      created_at: '2026-01-01T00:00:00Z',
+      tags: [],
+      change_type_config: null,
+      execution_count: 0,
+      requires_target: false,
+    } as unknown as CatalogActionDetail;
+
+    render(
+      <App>
+        <ExecutionWizard
+          open={true}
+          action={mockActionForBusiness}
+          allowedEnvironments={['dev']}
+          onCancel={vi.fn()}
+        />
+      </App>
+    );
+
+    // Business profile uses simplified step labels
+    expect(screen.getByText('Ou executer?')).toBeInTheDocument();
+    expect(screen.getByText('Informations requises')).toBeInTheDocument();
+    expect(screen.getByText('Verifier et lancer')).toBeInTheDocument();
+  });
+});

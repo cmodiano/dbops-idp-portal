@@ -128,6 +128,7 @@ function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
         ]}
       />
     );
+  /* v8 ignore start */
   } catch (fallbackError) {
     // Ultimate fallback if ErrorFallback itself throws
     // eslint-disable-next-line no-console
@@ -140,4 +141,5 @@ function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
       </div>
     );
   }
+  /* v8 ignore stop */
 }

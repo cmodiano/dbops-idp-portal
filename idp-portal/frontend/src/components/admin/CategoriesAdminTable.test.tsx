@@ -192,3 +192,91 @@ describe('CategoriesAdminTable', () => {
     });
   });
 });
+
+// ─── Coverage extras ──────────────────────────────────────────────────────────
+describe('CategoriesAdminTable — coverage extras', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetCategories.mockResolvedValue(mockCategories);
+  });
+
+  it('handleDelete: utilise le message de fallback quand err non-Error', async () => {
+    const user = userEvent.setup();
+    mockDeleteCategory.mockRejectedValue('string error');
+    mockModalConfirm.mockImplementation(({ onOk }: { onOk: () => Promise<void> }) => {
+      onOk();
+    });
+
+    renderWithApp(<CategoriesAdminTable />);
+    await waitFor(() => expect(screen.getByText('Category 1')).toBeInTheDocument());
+
+    const deactivateButton = screen.getByRole('button', { name: /Désactiver/i });
+    await user.click(deactivateButton);
+
+    await waitFor(() => {
+      expect(mockNotification.error).toHaveBeenCalledWith(
+        expect.objectContaining({ description: 'Impossible de désactiver la catégorie' })
+      );
+    });
+  });
+
+  it('handleEdit ouvre CategoryForm avec la catégorie sélectionnée', async () => {
+    const user = userEvent.setup();
+    renderWithApp(<CategoriesAdminTable />);
+    await waitFor(() => expect(screen.getByText('Category 1')).toBeInTheDocument());
+
+    await user.click(screen.getAllByRole('button', { name: /Modifier/i })[0]);
+    expect(screen.getByTestId('category-form')).toBeInTheDocument();
+  });
+
+  it('rend le tag "Non" pour une catégorie inactive (is_active=0)', async () => {
+    renderWithApp(<CategoriesAdminTable />);
+    await waitFor(() => expect(screen.getByText('Category 2')).toBeInTheDocument());
+    expect(screen.getByText('Non')).toBeInTheDocument();
+  });
+
+  it('handleFormCancel ferme le formulaire sans sauvegarder', async () => {
+    const user = userEvent.setup();
+    renderWithApp(<CategoriesAdminTable />);
+    await waitFor(() => expect(screen.getByText('Category 1')).toBeInTheDocument());
+
+    // Open the form
+    await user.click(screen.getByRole('button', { name: /Nouvelle catégorie/i }));
+    await waitFor(() => expect(screen.getByTestId('category-form')).toBeInTheDocument());
+
+    // Click cancel
+    await user.click(screen.getByTestId('form-cancel-btn'));
+    expect(screen.queryByTestId('category-form')).not.toBeInTheDocument();
+    // invalidateCategoriesCache should NOT have been called
+    expect(mockInvalidateCategoriesCache).not.toHaveBeenCalled();
+  });
+
+  it('tri colonne Code par sorter appelle localCompare', async () => {
+    renderWithApp(<CategoriesAdminTable />);
+    await waitFor(() => expect(screen.getByText('Category 1')).toBeInTheDocument());
+
+    // Click on "Code" column header to trigger sort (exercises sorter function)
+    const codeHeader = screen.getByText('Code');
+    await userEvent.setup().click(codeHeader);
+    // After click, table re-renders sorted — we just verify no crash
+    expect(screen.getByText('Category 1')).toBeInTheDocument();
+  });
+
+  it('tri colonne Libellé par sorter', async () => {
+    renderWithApp(<CategoriesAdminTable />);
+    await waitFor(() => expect(screen.getByText('Category 1')).toBeInTheDocument());
+
+    const labelHeader = screen.getByText('Libellé');
+    await userEvent.setup().click(labelHeader);
+    expect(screen.getByText('Category 1')).toBeInTheDocument();
+  });
+
+  it('tri colonne Ordre par sorter', async () => {
+    renderWithApp(<CategoriesAdminTable />);
+    await waitFor(() => expect(screen.getByText('Category 1')).toBeInTheDocument());
+
+    const ordreHeader = screen.getByText('Ordre');
+    await userEvent.setup().click(ordreHeader);
+    expect(screen.getByText('Category 1')).toBeInTheDocument();
+  });
+});

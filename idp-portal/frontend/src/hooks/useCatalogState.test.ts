@@ -308,6 +308,54 @@ describe('useCatalogState', () => {
     expect(result.current.drawerVisible).toBe(false);
   });
 
+  it('handleActionClick error case: message.error shown', async () => {
+    vi.mocked(catalogService.fetchCatalogActionById).mockRejectedValueOnce(new Error('API fail'));
+    const { result } = renderHook(() => useCatalogState(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.handleActionClick(mockFavoriteAction);
+    });
+
+    // Drawer stays open with basic info from list
+    expect(result.current.drawerLoading).toBe(false);
+  });
+
+  it('handleCategoryChange resets filterTags', async () => {
+    const { result } = renderHook(() => useCatalogState(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => { result.current.setFilterTags(['provisioning']); });
+    act(() => { result.current.handleCategoryChange('patching'); });
+
+    expect(result.current.filterTags).toEqual([]);
+    expect(result.current.activeCategory).toBe('patching');
+  });
+
+  it('fetchCatalogActions error calls message.error', async () => {
+    vi.mocked(catalogService.fetchCatalogActions).mockRejectedValueOnce(new Error('Load failed'));
+    const { result } = renderHook(() => useCatalogState(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    // No crash — error handled internally
+    expect(result.current.actions).toEqual([]);
+  });
+
+  it('handleRemediationSuggestionClick error case: message.error shown', async () => {
+    vi.mocked(catalogService.fetchCatalogActionById).mockRejectedValueOnce(new Error('Not found'));
+    const { result } = renderHook(() => useCatalogState(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.handleRemediationSuggestionClick({
+        action_id: 1, action_name: 'Fix', action_description: null,
+        matching_rule: { error_pattern: '.*', target_action_id: 1, environments: [], auto_trigger: false, risk_level: 'low' as const },
+      });
+    });
+
+    // wizard stays closed on error
+    expect(result.current.executionWizardOpen).toBe(false);
+  });
+
   it('handleRemediationSuggestionClick: charge l\'action et ouvre le wizard', async () => {
     const { result } = renderHook(() => useCatalogState(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));

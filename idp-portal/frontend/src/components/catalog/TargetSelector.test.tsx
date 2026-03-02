@@ -341,6 +341,35 @@ describe('TargetSelector', () => {
       expect(groupTexts).toEqual(['Développement', 'Production', 'Lab', 'Qa']);
     });
 
+    it('shows Empty component when targets list is empty after loading', async () => {
+      mockApiFetchRaw.mockResolvedValue({
+        items: [],
+        total: 0,
+        page: 1,
+        page_size: 100,
+        total_pages: 0,
+      });
+
+      const onChange = vi.fn();
+      render(
+        <TestWrapper>
+          <TargetSelector value={[]} onChange={onChange} />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(mockApiFetchRaw).toHaveBeenCalled();
+      });
+
+      // Open dropdown to see notFoundContent
+      const select = screen.getByRole('combobox');
+      fireEvent.mouseDown(select);
+
+      await waitFor(() => {
+        expect(screen.getByText('Aucune cible disponible')).toBeInTheDocument();
+      });
+    });
+
     it('uses default badge color for non-standard environments', async () => {
       const targetsWithLab: Target[] = [
         { name: 'srv-lab-01', environment: 'lab', target_type: 'server', metadata: null },
@@ -377,5 +406,115 @@ describe('TargetSelector', () => {
       const badgeDot = document.querySelector('.ant-badge-status-default');
       expect(badgeDot).toBeInTheDocument();
     });
+  });
+});
+
+// ─── Coverage extras ──────────────────────────────────────────────────────────
+describe('TargetSelector — coverage extras', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockApiFetchRaw.mockResolvedValue(mockTargetsResponse);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('handles multiple selection mode (multiple=true)', async () => {
+    const onChange = vi.fn();
+    render(
+      <TestWrapper>
+        <TargetSelector value={[]} onChange={onChange} multiple={true} />
+      </TestWrapper>
+    );
+    await waitFor(() => {
+      expect(mockApiFetchRaw).toHaveBeenCalled();
+    });
+    const select = screen.getByRole('combobox');
+    expect(select).toBeInTheDocument();
+  });
+
+  it('calls onChange with target from value when target not in fetched list', async () => {
+    const extraTarget: Target = { name: 'extra-server', environment: 'dev', target_type: 'server', metadata: null };
+    const onChange = vi.fn();
+    render(
+      <TestWrapper>
+        <TargetSelector value={[extraTarget]} onChange={onChange} />
+      </TestWrapper>
+    );
+    await waitFor(() => expect(mockApiFetchRaw).toHaveBeenCalled());
+    // Select is rendered with the extra server as the current value
+    expect(screen.getByRole('combobox')).toBeInTheDocument();
+  });
+
+  it('renders error message for fetch failure without message property', async () => {
+    mockApiFetchRaw.mockRejectedValue({ statusCode: 500 });
+    const onChange = vi.fn();
+    render(
+      <TestWrapper>
+        <TargetSelector value={[]} onChange={onChange} />
+      </TestWrapper>
+    );
+    await waitFor(() => {
+      expect(screen.getByText('Erreur')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Erreur lors du chargement des cibles')).toBeInTheDocument();
+  });
+
+  it('refetches when search text changes', async () => {
+    const onChange = vi.fn();
+    render(
+      <TestWrapper>
+        <TargetSelector value={[]} onChange={onChange} />
+      </TestWrapper>
+    );
+    await waitFor(() => expect(mockApiFetchRaw).toHaveBeenCalledTimes(1));
+
+    // Simulate search text change (sets searchValue which triggers debouncedSearch)
+    const select = screen.getByRole('combobox');
+    fireEvent.mouseDown(select);
+    fireEvent.change(select, { target: { value: 'srv-dev' } });
+
+    // Wait for debounce (300ms) + second fetch
+    await waitFor(() => {
+      expect(mockApiFetchRaw).toHaveBeenCalledTimes(2);
+    }, { timeout: 1000 });
+    expect(mockApiFetchRaw).toHaveBeenLastCalledWith(expect.stringContaining('search=srv-dev'));
+  });
+
+  it('uses custom placeholder prop', async () => {
+    const onChange = vi.fn();
+    render(
+      <TestWrapper>
+        <TargetSelector value={[]} onChange={onChange} placeholder="Custom placeholder" />
+      </TestWrapper>
+    );
+    await waitFor(() => expect(mockApiFetchRaw).toHaveBeenCalled());
+    expect(screen.getByText('Custom placeholder')).toBeInTheDocument();
+  });
+
+  it('handleChange is invoked when option selected from dropdown (covers lines 161-171)', async () => {
+    const onChange = vi.fn();
+    render(
+      <TestWrapper>
+        <TargetSelector value={[]} onChange={onChange} />
+      </TestWrapper>
+    );
+
+    await waitFor(() => expect(mockApiFetchRaw).toHaveBeenCalled());
+
+    // Open dropdown via mouseDown (confirmed working in other tests in this file)
+    const select = screen.getByRole('combobox');
+    fireEvent.mouseDown(select);
+
+    // Wait for options to render in the dropdown
+    await waitFor(() => {
+      expect(screen.getAllByRole('option').length).toBeGreaterThan(0);
+    });
+
+    // Use keyboard navigation: ArrowDown highlights first option, Enter selects it
+    fireEvent.keyDown(select, { key: 'ArrowDown', keyCode: 40 });
+    fireEvent.keyDown(select, { key: 'Enter', keyCode: 13 });
+    expect(onChange).toHaveBeenCalled();
   });
 });

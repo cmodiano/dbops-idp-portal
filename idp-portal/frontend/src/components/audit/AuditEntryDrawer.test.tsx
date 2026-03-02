@@ -156,3 +156,96 @@ describe('AuditEntryDrawer', () => {
     expect(screen.queryByText('Nom de l\'action')).not.toBeInTheDocument();
   });
 });
+
+// ─── Coverage extras ──────────────────────────────────────────────────────────
+describe('AuditEntryDrawer — coverage extras', () => {
+  it('shows skeleton when loading=true', () => {
+    render(<AuditEntryDrawer {...defaultProps} loading={true} />);
+    expect(document.querySelector('.ant-skeleton')).toBeInTheDocument();
+  });
+
+  it('shows error alert when error is set', () => {
+    render(<AuditEntryDrawer {...defaultProps} loading={false} error="Fetch failed" />);
+    expect(screen.getByText('Fetch failed')).toBeInTheDocument();
+    expect(screen.getByText('Erreur de chargement')).toBeInTheDocument();
+  });
+
+  it('renders null when entry is null and not loading and no error', () => {
+    render(<AuditEntryDrawer {...defaultProps} entry={null} />);
+    // The Drawer is open, but its inner content is null — no detail text visible
+    expect(screen.queryByText('Qui')).not.toBeInTheDocument();
+  });
+
+  it('ne affiche pas la section Détails quand details est vide pour non-execution', () => {
+    const emptyDetailsEntry: AuditExecutionEntry = {
+      ...actionEntry,
+      details: {},
+    };
+    render(<AuditEntryDrawer {...defaultProps} entry={emptyDetailsEntry} />);
+    expect(screen.queryByText('Détails')).not.toBeInTheDocument();
+  });
+
+  it('affiche les valeurs de type objet dans la section Détails avec JSON.stringify', () => {
+    const entryWithObjectDetail: AuditExecutionEntry = {
+      ...actionEntry,
+      details: { action_name: 'Deploy', nested_obj: { key: 'value' } },
+    };
+    render(<AuditEntryDrawer {...defaultProps} entry={entryWithObjectDetail} />);
+    // Object value should be rendered with JSON.stringify inside <pre>
+    expect(screen.getByText(/"key"/)).toBeInTheDocument();
+  });
+
+  it('utilise user_id comme fallback dans la section Approbation quand user_name est null', () => {
+    const entryNoName: AuditExecutionEntry = {
+      ...mockApprovedEntry,
+      user_name: undefined,
+      user_id: 'uid-99',
+    };
+    render(<AuditEntryDrawer {...defaultProps} entry={entryNoName} />);
+    // user_id should appear as "Approuvé par" value
+    const uidElements = screen.getAllByText('uid-99');
+    expect(uidElements.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('affiche le timeline quand execution et steps sont fournis', () => {
+    const step: ExecutionStepResponse = {
+      id: 1,
+      execution_id: 123,
+      step_order: 0,
+      step_name: 'Step 1',
+      step_type: 'platform',
+      status: 'COMPLETED',
+      started_at: '2025-01-15T10:00:00Z',
+      completed_at: '2025-01-15T10:05:00Z',
+      output: null,
+      platform_job_id: null,
+      error_message: null,
+    };
+    render(
+      <AuditEntryDrawer
+        {...defaultProps}
+        entry={executionEntry}
+        execution={mockExecution}
+        steps={[step]}
+      />
+    );
+    expect(screen.getByTestId('execution-timeline')).toBeInTheDocument();
+  });
+
+  it('affiche le servicenow_change_id quand présent pour une entrée execution', () => {
+    const entryWithSNow: AuditExecutionEntry = {
+      ...executionEntry,
+      details: {
+        ...executionEntry.details,
+        servicenow_change_id: 'CHG0001234',
+      },
+    };
+    render(<AuditEntryDrawer {...defaultProps} entry={entryWithSNow} />);
+    expect(screen.getByText('CHG0001234')).toBeInTheDocument();
+  });
+
+  it('affiche le titre "Détail d\'audit" quand entry est null', () => {
+    render(<AuditEntryDrawer {...defaultProps} entry={null} />);
+    expect(screen.getByText("Détail d'audit")).toBeInTheDocument();
+  });
+});

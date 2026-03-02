@@ -97,6 +97,50 @@ describe('useApiKeys', () => {
     expect(result.current.lastCreatedRawKey).toBeNull();
   });
 
+  it('load failure sets error state', async () => {
+    mockListApiKeys.mockRejectedValue(new Error('Load error'));
+
+    const { result } = renderHook(() => useApiKeys());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.error).toBe('Load error');
+    expect(result.current.keys).toEqual([]);
+  });
+
+  it('revoke failure sets error and re-throws', async () => {
+    mockListApiKeys.mockResolvedValue([]);
+    mockRevokeApiKey.mockRejectedValue(new Error('Revoke error'));
+
+    const { result } = renderHook(() => useApiKeys());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      try {
+        await result.current.revoke(1);
+      } catch {
+        // Expected
+      }
+    });
+
+    expect(result.current.error).toBe('Revoke error');
+  });
+
+  it('clearRawKey clears lastCreatedRawKey', async () => {
+    mockListApiKeys.mockResolvedValue([]);
+    mockCreateApiKey.mockResolvedValue({
+      id: 5, name: 'Test Key', scope: 'full', created_at: '2026-01-01', raw_key: 'secret-key',
+    });
+    mockListApiKeys.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+
+    const { result } = renderHook(() => useApiKeys());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => { await result.current.create('Test Key', 'full'); });
+    expect(result.current.lastCreatedRawKey).toBe('secret-key');
+
+    act(() => { result.current.clearRawKey(); });
+    expect(result.current.lastCreatedRawKey).toBeNull();
+  });
+
   it('revokes key then refreshes list', async () => {
     mockListApiKeys
       .mockResolvedValueOnce([

@@ -547,3 +547,60 @@ describe('TopNav', () => {
     });
   });
 });
+
+// ─── Coverage extras ──────────────────────────────────────────────────────────
+describe('TopNav — coverage extras', () => {
+  beforeEach(() => {
+    vi.mocked(executionService.getPendingApprovalsCount).mockResolvedValue(0);
+  });
+
+  it('logo onKeyDown Space key navigates to /catalog', async () => {
+    const user = userEvent.setup();
+    mockAuthSession('dba_applicatif', ['catalog', 'executions']);
+    renderTopNav('/executions');
+
+    await waitFor(() => expect(screen.getByText('Catalogue')).toBeInTheDocument());
+
+    const logo = screen.getByRole('link', { name: /Accueil/i });
+    logo.focus();
+    await user.keyboard(' ');
+
+    // Navigation happened — Catalogue button should now be active
+    await waitFor(() => {
+      const catalogBtn = screen.getByText('Catalogue').closest('button');
+      expect(catalogBtn).toHaveClass('nav-pill-active');
+    });
+  });
+
+  it('logo onKeyDown Enter key navigates to /catalog', async () => {
+    const user = userEvent.setup();
+    mockAuthSession('dba_applicatif', ['catalog', 'executions']);
+    renderTopNav('/executions');
+
+    await waitFor(() => expect(screen.getByText('Catalogue')).toBeInTheDocument());
+
+    const logo = screen.getByRole('link', { name: /Accueil/i });
+    logo.focus();
+    await user.keyboard('{Enter}');
+
+    await waitFor(() => {
+      const catalogBtn = screen.getByText('Catalogue').closest('button');
+      expect(catalogBtn).toHaveClass('nav-pill-active');
+    });
+  });
+
+  it('renders profile menu item "Mes clés API"', async () => {
+    const user = userEvent.setup();
+    mockAuthSession('dba_applicatif', ['catalog']);
+    renderTopNav();
+
+    await waitFor(() => expect(screen.getByText('Catalogue')).toBeInTheDocument());
+
+    const profileBtn = screen.getByRole('button', { name: /Menu profil/i });
+    await user.click(profileBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Mes clés API')).toBeInTheDocument();
+    });
+  });
+});
