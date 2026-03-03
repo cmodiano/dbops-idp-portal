@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   getEnvironmentLabel,
   getEnvironmentColor,
+  getEnvironmentHexColor,
   sortEnvironments,
   isProductionEnvironment,
 } from './environmentHelpers';
@@ -49,6 +50,27 @@ describe('environmentHelpers', () => {
     it('handles uppercase input', () => {
       expect(getEnvironmentColor('DEV')).toBe('success');
       expect(getEnvironmentColor('PROD')).toBe('error');
+    });
+  });
+
+  describe('getEnvironmentHexColor', () => {
+    it('returns hex for standard and inventory env values', () => {
+      expect(getEnvironmentHexColor('dev')).toBe('#3B82F6');
+      expect(getEnvironmentHexColor('developpement')).toBe('#3B82F6');
+      expect(getEnvironmentHexColor('staging')).toBe('#F97316');
+      expect(getEnvironmentHexColor('certification')).toBe('#F97316');
+      expect(getEnvironmentHexColor('prod')).toBe('#EF4444');
+      expect(getEnvironmentHexColor('production')).toBe('#EF4444');
+    });
+
+    it('returns gray for unknown environments', () => {
+      expect(getEnvironmentHexColor('unknown')).toBe('#6B7280');
+      expect(getEnvironmentHexColor('custom-env')).toBe('#6B7280');
+    });
+
+    it('handles uppercase input', () => {
+      expect(getEnvironmentHexColor('DEV')).toBe('#3B82F6');
+      expect(getEnvironmentHexColor('PRODUCTION')).toBe('#EF4444');
     });
   });
 

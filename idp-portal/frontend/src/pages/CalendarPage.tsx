@@ -21,7 +21,10 @@ import { useCalendarState } from '../hooks/useCalendarState';
 import { useCancelExecution } from '../hooks/useCancelExecution';
 import { useEditExecution } from '../hooks/useEditExecution';
 import { useScheduledExecutions } from '../hooks/useScheduledExecutions';
-import { ENV_COLORS, ENV_LABELS, mapToCalendarEvent } from '../utils/calendarEventUtils';
+import { useEnvironments } from '../hooks/useEnvironments';
+import { useAuth } from '../contexts/AuthContext';
+import { mapToCalendarEvent } from '../utils/calendarEventUtils';
+import { getEnvironmentHexColor } from '../utils/environmentHelpers';
 import type { CalendarEvent } from '../utils/calendarEventUtils';
 import type { ScheduledExecutionFilters } from '../types/api';
 import './CalendarPage.css';
@@ -31,7 +34,9 @@ const { Title, Text } = Typography;
 export function CalendarPage() {
   const { notification } = App.useApp();
   const { token } = theme.useToken();
+  const { user } = useAuth();
   const { filters, applyFilters, resetFilters, activeFilterCount } = useCalendarFilters();
+  const { environmentOptions } = useEnvironments({ enabled: !!user });
 
   const {
     calendarRef,
@@ -139,10 +144,14 @@ export function CalendarPage() {
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <Space size="middle" wrap data-testid="calendar-legend">
           <Text type="secondary">Environnement :</Text>
-          {(['dev', 'staging', 'prod'] as const).map((env) => (
-            <Space key={env} size={8}>
-              <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, backgroundColor: ENV_COLORS[env] }} aria-hidden />
-              <span>{ENV_LABELS[env]}</span>
+          {(environmentOptions.length > 0 ? environmentOptions : [
+            { value: 'dev', label: 'Développement' },
+            { value: 'staging', label: 'Staging' },
+            { value: 'prod', label: 'Production' },
+          ]).map((opt) => (
+            <Space key={opt.value} size={8}>
+              <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, backgroundColor: getEnvironmentHexColor(opt.value) }} aria-hidden />
+              <span>{opt.label}</span>
             </Space>
           ))}
         </Space>

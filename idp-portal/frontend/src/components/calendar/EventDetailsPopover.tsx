@@ -9,7 +9,8 @@ import { Typography, Tag, Space, Descriptions, Button, Switch } from 'antd';
 import { SyncOutlined, ClockCircleOutlined, LinkOutlined } from '@ant-design/icons';
 
 import { useAuth } from '../../contexts/AuthContext';
-import { ENV_COLORS, ENV_LABELS, getDisplayParameters, describePatternType } from '../../utils/calendarEventUtils';
+import { getDisplayParameters, describePatternType } from '../../utils/calendarEventUtils';
+import { getEnvironmentHexColor, getEnvironmentLabel } from '../../utils/environmentHelpers';
 import { formatUtcToLocal } from '../../utils/dateFormat';
 import type { ScheduledExecutionListItem } from '../../types/api';
 
@@ -70,8 +71,8 @@ export function EventDetailsPopover({
           )}
         </Descriptions.Item>
         <Descriptions.Item label="Environnement">
-          <Tag color={ENV_COLORS[execution.environment]}>
-            {ENV_LABELS[execution.environment] ?? execution.environment}
+          <Tag color={getEnvironmentHexColor(execution.environment ?? '')}>
+            {getEnvironmentLabel(execution.environment ?? '')}
           </Tag>
         </Descriptions.Item>
         {hasTargets && (
