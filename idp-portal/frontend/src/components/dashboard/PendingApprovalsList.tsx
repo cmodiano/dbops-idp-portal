@@ -123,7 +123,7 @@ export function PendingApprovalsList({
           {record.targets && record.targets.length > 0 ? (
             <div>
               {record.targets.map(t => (
-                <Tag key={t.target_id} style={{ marginBottom: 2 }}>{t.target_name || t.target_id}</Tag>
+                <Tag key={`${t.target_type ?? 'target'}-${t.target_id}`} style={{ marginBottom: 2 }}>{t.target_name || t.target_id}</Tag>
               ))}
             </div>
           ) : null}
@@ -222,7 +222,7 @@ export function PendingApprovalsList({
               <div style={{ marginBottom: 8 }}>
                 <Text strong style={{ fontSize: 12 }}>Targets :</Text>{' '}
                 {selectedExecution.targets.map(t => (
-                  <Tag key={t.target_id}>{t.target_name || t.target_id}</Tag>
+                  <Tag key={`${t.target_type ?? 'target'}-${t.target_id}`}>{t.target_name || t.target_id}</Tag>
                 ))}
               </div>
             )}
@@ -276,7 +276,7 @@ export function PendingApprovalsList({
               <div style={{ marginBottom: 8 }}>
                 <Text strong style={{ fontSize: 12 }}>Targets :</Text>{' '}
                 {selectedExecution.targets.map(t => (
-                  <Tag key={t.target_id}>{t.target_name || t.target_id}</Tag>
+                  <Tag key={`${t.target_type ?? 'target'}-${t.target_id}`}>{t.target_name || t.target_id}</Tag>
                 ))}
               </div>
             )}

@@ -19,6 +19,19 @@ logger = structlog.get_logger(__name__)
 _ADMIN_PROFILES = {'dbops', 'dba', 'dba_applicatif', 'dba_infrastructure'}
 
 
+def _normalize_profile_names(raw: Any) -> set[str]:
+    """Normalise une valeur brute (str ou iterable) en set de noms de profils.
+
+    Si raw est une chaîne, la split sur virgules et trim. Sinon itère sur raw.
+    Retourne un set de chaînes normalisées (strip + lower).
+    """
+    if isinstance(raw, str):
+        raw_items = [s.strip() for s in raw.split(',') if s.strip()]
+    else:
+        raw_items = [str(item).strip() for item in raw if str(item).strip()]
+    return {item.lower() for item in raw_items}
+
+
 def _get_admin_profile_names() -> set[str]:
     """Résout le set de noms de profils admin depuis settings (configurable).
 
@@ -29,7 +42,7 @@ def _get_admin_profile_names() -> set[str]:
     regardless of mixed-case or padded values in configuration.
     """
     raw = getattr(settings, 'ADMIN_PROFILE_NAMES', _ADMIN_PROFILES)
-    return {str(item).strip().lower() for item in raw if str(item).strip()}
+    return _normalize_profile_names(raw)
 
 
 def _get_dbops_profile_names() -> set[str]:
@@ -40,7 +53,7 @@ def _get_dbops_profile_names() -> set[str]:
     peut y accéder. Utilisé par AdminProfilePermission pour le chemin SAML string.
     """
     raw = getattr(settings, 'DBOPS_PROFILE_NAMES', {'dbops'})
-    return {str(item).strip().lower() for item in raw if str(item).strip()}
+    return _normalize_profile_names(raw)
 
 
 def is_admin_user(user: Any) -> bool:

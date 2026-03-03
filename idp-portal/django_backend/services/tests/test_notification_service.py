@@ -525,6 +525,40 @@ class TestNotifyExecutionEvent:
             body = mock_send.call_args.kwargs["body"]
             assert "approbation requise" in body.lower() or "approbation" in body.lower()
 
+    def test_on_approval_required_params_list_does_not_raise(self) -> None:
+        """Robustness: get_parameters() returning a list must not raise."""
+        config = {
+            "channels": [
+                {"type": "email", "enabled": True, "conditions": ["on_approval_required"], "recipient": "dba@corp.com"},
+            ],
+        }
+        execution = self._make_approval_execution(params={}, targets=[])
+        execution.get_parameters.return_value = ["item1", "item2"]
+        action = self._make_action(notification_config=config)
+
+        with patch.object(self.service, "send_email") as mock_send:
+            self.service.notify_execution_event(execution, action, "on_approval_required")
+            mock_send.assert_called_once()
+            body = mock_send.call_args.kwargs["body"]
+            assert "approbation requise" in body.lower() or "approbation" in body.lower()
+
+    def test_on_approval_required_params_string_does_not_raise(self) -> None:
+        """Robustness: get_parameters() returning a string must not raise."""
+        config = {
+            "channels": [
+                {"type": "email", "enabled": True, "conditions": ["on_approval_required"], "recipient": "dba@corp.com"},
+            ],
+        }
+        execution = self._make_approval_execution(params={}, targets=[])
+        execution.get_parameters.return_value = "raw_string"
+        action = self._make_action(notification_config=config)
+
+        with patch.object(self.service, "send_email") as mock_send:
+            self.service.notify_execution_event(execution, action, "on_approval_required")
+            mock_send.assert_called_once()
+            body = mock_send.call_args.kwargs["body"]
+            assert "approbation requise" in body.lower() or "approbation" in body.lower()
+
     def test_on_approval_required_teams_includes_parameters(self) -> None:
         """Story 58.2 AC6: Teams pour on_approval_required inclut les paramètres."""
         config = {

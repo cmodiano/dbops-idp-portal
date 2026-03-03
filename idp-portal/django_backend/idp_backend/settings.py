@@ -578,8 +578,19 @@ ALLOW_SUPERUSER_FALLBACK = os.getenv('ALLOW_SUPERUSER_FALLBACK', 'false').lower(
 # DBOPS_PROFILE_NAMES : profils autorisés sur les endpoints admin (profiles, integrations,
 # actions, analytics, feature flags). DBA est explicitement exclu — seul DBOPS (ou équivalent)
 # peut gérer ces ressources. Modifier pour ajouter des profils sans changer le code.
-ADMIN_PROFILE_NAMES = {'dbops', 'dba', 'dba_applicatif', 'dba_infrastructure'}
-DBOPS_PROFILE_NAMES = {'dbops'}  # Admin endpoints only — DBA denied (Story 15.2 AC2)
+# Env vars: ADMIN_PROFILE_NAMES, DBOPS_PROFILE_NAMES (comma-separated, e.g. "dbops,dba")
+def _parse_profile_names_env(env_key: str, default: set[str]) -> set[str]:
+    raw = os.getenv(env_key, "")
+    if not raw:
+        return default
+    return {s.strip().lower() for s in raw.split(",") if s.strip()}
+
+
+ADMIN_PROFILE_NAMES = _parse_profile_names_env(
+    "ADMIN_PROFILE_NAMES",
+    {"dbops", "dba", "dba_applicatif", "dba_infrastructure"},
+)
+DBOPS_PROFILE_NAMES = _parse_profile_names_env("DBOPS_PROFILE_NAMES", {"dbops"})
 
 # Application environment
 APP_ENV = os.getenv('APP_ENV', 'development')

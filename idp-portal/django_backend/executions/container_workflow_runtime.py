@@ -667,7 +667,9 @@ class ContainerWorkflowRuntime:
             parent_step.status = ExecutionStepStatus.FAILED
             parent_step.completed_at = timezone.now()
             parent_step.save()
-            raise  # Re-raise so caller can handle (Story 57.3 AC: step FAILED + exception propagates)
+            # Do not re-raise: return FAILED so _execute_workflow_steps can finalize
+            # (mark parent FAILED, audit, return terminal status) instead of bypassing
+            return ExecutionStatus.FAILED
 
         # Protocole WAITING pour gate steps (story 57.7)
         # DOIT précéder l'output_mapping ET le fail-closed :
@@ -680,6 +682,11 @@ class ContainerWorkflowRuntime:
             parent_step.status = ExecutionStepStatus.WAITING
             # NE PAS SET completed_at — step est en attente
             parent_step.save()
+
+            # Story 58.3: broadcast step_update pour que la vue d'exécution s'actualise en temps réel
+            from executions.utils.websocket_broadcast import broadcast_step_update  # noqa: PLC0415
+            broadcast_step_update(self.execution.id, parent_step)
+
             logger.info(
                 "container_workflow_gate_step_waiting",
                 step_name=step_name,

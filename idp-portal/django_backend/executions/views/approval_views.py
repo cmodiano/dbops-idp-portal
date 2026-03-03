@@ -486,7 +486,9 @@ class RejectExecutionView(APIView):
                     user_id=user_id,
                     correlation_id=correlation_id,
                 )
-                return Response({"data": ExecutionStepSerializer(step).data})
+                execution = step.execution
+                execution.refresh_from_db()
+                return Response({"data": ExecutionSerializer(execution).data})
             raise  # Re-raise original BadRequestError si aucun step WAITING trouvé
 
         rejection_reason = (request.data or {}).get("rejection_reason", "")

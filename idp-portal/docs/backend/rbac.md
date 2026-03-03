@@ -104,25 +104,27 @@ Liste des environnements autorisés pour l'exécution:
 
 > **Note :** `DBOPSProfilePermission` est un alias maintenu pour la rétrocompatibilité. Utiliser désormais `AdminProfilePermission` (nom canonique depuis story 56.4).
 
+`AdminProfilePermission` (dans `core/permissions.py`) restreint l'accès aux endpoints admin (profiles, integrations, actions, analytics) aux seuls profils DBOPS. Le chemin SAML string utilise `DBOPS_PROFILE_NAMES` et `_get_dbops_profile_names()` — configurez `settings.DBOPS_PROFILE_NAMES` pour les noms de profils autorisés sur ces endpoints.
+
 ```python
 class AdminProfilePermission(permissions.BasePermission):
     """
-    Permission class that requires an admin profile (is_admin=1 ou ADMIN_PROFILE_NAMES).
+    Permission class that requires a DBOPS profile for admin endpoints (DBA denied).
 
-    Story 56.4: Renommé depuis DBOPSProfilePermission. Utilise Profile.is_admin_bool
-    au lieu de la comparaison hardcodée par nom de profil, permettant des profils admin
-    avec d'autres noms (AUTOMATION, OPERATOR, etc.). Nom configurable via
-    settings.ADMIN_PROFILE_NAMES (défaut: {'dbops', 'dba', ...}).
+    Story 15.2 AC2: DBA est refusé sur les endpoints admin. Seul DBOPS (ou profils
+    dans DBOPS_PROFILE_NAMES) peut y accéder. Le chemin SAML string compare
+    request.user.profile (str) à _get_dbops_profile_names() (DBOPS_PROFILE_NAMES).
+    Les chemins M2M et ad_groups utilisent Profile.is_admin_bool.
     """
 
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
 
-        # Chemin 1 : SAML string → ADMIN_PROFILE_NAMES configurable (settings.py)
+        # Chemin 1 : SAML string → DBOPS_PROFILE_NAMES via _get_dbops_profile_names()
         if hasattr(request.user, 'profile'):
             profile = request.user.profile
-            if isinstance(profile, str) and profile.lower() in _get_admin_profile_names():
+            if isinstance(profile, str) and profile.strip().lower() in _get_dbops_profile_names():
                 return True
             elif hasattr(profile, 'is_admin_bool') and profile.is_admin_bool:
                 return True

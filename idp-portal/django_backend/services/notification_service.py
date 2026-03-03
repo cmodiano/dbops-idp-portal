@@ -16,21 +16,50 @@ from django.core.mail import send_mail
 
 logger = structlog.get_logger(__name__)
 
+# Keys whose values must be masked in notifications (Story 58.2)
+_SENSITIVE_PARAM_KEYS = frozenset(
+    k.lower() for k in ("password", "token", "secret", "api_key", "apikey")
+)
+_MAX_PARAM_VALUE_LEN = 64
+
 
 def _format_params_for_notification(execution: Any) -> str:
     """Story 58.2: Formate parameters et targets pour inclusion dans notifications on_approval_required."""
     parts = []
     params = execution.get_parameters() if hasattr(execution, "get_parameters") else getattr(execution, "parameters", None)
-    if params:
-        params_str = ", ".join(f"{k}={v}" for k, v in params.items())
-        parts.append(f"Paramètres: {params_str}")
+    if params is not None:
+        if isinstance(params, dict):
+            safe_pairs = []
+            for k, v in params.items():
+                key_lower = str(k).lower()
+                if key_lower in _SENSITIVE_PARAM_KEYS:
+                    safe_pairs.append(f"{k}=***")
+                else:
+                    if isinstance(v, (dict, list)):
+                        raw = f"[{type(v).__name__}]"
+                    else:
+                        raw = str(v) if v is not None else ""
+                        if len(raw) > _MAX_PARAM_VALUE_LEN:
+                            raw = raw[:_MAX_PARAM_VALUE_LEN] + "..."
+                    safe_pairs.append(f"{k}={raw}")
+            if safe_pairs:
+                parts.append(f"Paramètres: {', '.join(safe_pairs)}")
+        else:
+            # Non-dict (list, string, etc.): safe summary only
+            tname = type(params).__name__
+            length = len(params) if hasattr(params, "__len__") else "?"
+            parts.append(f"Paramètres: [{tname}, len={length}]")
     try:
         targets = list(execution.targets.all())
         if targets:
             target_names = ", ".join(t.target_name or t.target_id for t in targets)
             parts.append(f"Targets: {target_names}")
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as e:  # noqa: BLE001 — best-effort: target access must not break notification
+        logger.warning(
+            "notification_target_access_failed",
+            error_type=type(e).__name__,
+            error=str(e),
+        )
     return " | ".join(parts) if parts else ""
 
 
