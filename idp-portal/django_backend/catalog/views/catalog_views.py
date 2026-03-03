@@ -32,7 +32,10 @@ from core.middleware import get_correlation_id
         parameters=[
             OpenApiParameter('tags', str, description='Filtrage par tags (séparés par virgules)'),
             OpenApiParameter('category', str, description='Filtrage par catégorie'),
-            OpenApiParameter('search', str, description='Recherche par nom ou description'),
+            OpenApiParameter('q', str, description='Recherche par nom ou description'),
+            OpenApiParameter('engine', str, description='Filtrage par technologie'),
+            OpenApiParameter('environment', str, description='Filtrage par environnement'),
+            OpenApiParameter('impact', str, description='Filtrage par niveau d\'impact'),
             OpenApiParameter('favorites_only', bool, description='Afficher uniquement les favoris'),
         ],
     ),

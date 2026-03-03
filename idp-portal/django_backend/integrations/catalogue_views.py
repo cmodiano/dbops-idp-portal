@@ -7,7 +7,7 @@ from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
-from drf_spectacular.utils import extend_schema, extend_schema_view
+from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
 from rest_framework import serializers as drf_serializers
 
 from integrations.catalogue_service import IntegrationCatalogueService
@@ -25,13 +25,16 @@ class ErrorResponseSerializer(drf_serializers.Serializer):
 
 @extend_schema_view(
     list=extend_schema(
-        tags=['integration-catalogue'],
+        tags=['integrations'],
         summary='Lister les types d\'intégration',
         description='Retourne tous les types d\'intégration actifs avec leurs actions supportées.',
+        parameters=[
+            OpenApiParameter('role', str, description='Filtre par rôle: platform ou service'),
+        ],
         responses={200: IntegrationTypeWithActionsSerializer(many=True)},
     ),
     retrieve=extend_schema(
-        tags=['integration-catalogue'],
+        tags=['integrations'],
         summary='Détail d\'un type d\'intégration',
         description='Retourne un type d\'intégration spécifique avec ses actions.',
         responses={
@@ -76,7 +79,7 @@ class IntegrationTypeCatalogueViewSet(viewsets.ViewSet):
         return Response({'data': serializer.data})
 
     @extend_schema(
-        tags=['integration-catalogue'],
+        tags=['integrations'],
         summary='Lister les actions d\'un type d\'intégration',
         description='Retourne les actions supportées par un type d\'intégration.',
         responses={

@@ -344,6 +344,7 @@ class ScheduledExecutionUpdateView(APIView):
 
         raise BadRequestError(code="INVALID_STATUS", message="Statut invalide", details={"status": new_status})
 
+    @extend_schema(tags=['scheduling'], summary='Modifier une exécution planifiée (PUT)', responses={200: ScheduledExecutionSerializer})
     def put(self, request: Request, scheduled_execution_id: int) -> Response:
         """PUT /scheduled-executions/{id} - update pending scheduled execution (Story 13.8, AC4)."""
         try:
@@ -502,6 +503,7 @@ class ScheduledExecutionRecurringPatternView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(tags=['scheduling'], summary='Activer/désactiver le pattern récurrent', responses={200: RecurringPatternSerializer})
     def patch(self, request: Request, scheduled_execution_id: int) -> Response:
         try:
             se = ScheduledExecution.objects.select_related("user").select_related("recurringpattern").get(
@@ -553,6 +555,11 @@ class ScheduledExecutionValidateCronView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        tags=['scheduling'],
+        summary='Valider une expression cron',
+        parameters=[OpenApiParameter('expression', str, description='Expression cron (minute hour day month day_of_week)')],
+    )
     def get(self, request: Request) -> Response:
         expr = (request.query_params.get("expression") or "").strip()
         if not expr:
@@ -586,6 +593,14 @@ class ScheduledExecutionCronNextExecutionsView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        tags=['scheduling'],
+        summary='Prochaines dates d\'exécution pour une expression cron',
+        parameters=[
+            OpenApiParameter('expression', str, description='Expression cron'),
+            OpenApiParameter('count', int, description='Nombre de dates à retourner (1-10, défaut: 5)'),
+        ],
+    )
     def get(self, request: Request) -> Response:
         expr = (request.query_params.get("expression") or "").strip()
         count = parse_int(request.query_params.get("count"), 5, name="count")

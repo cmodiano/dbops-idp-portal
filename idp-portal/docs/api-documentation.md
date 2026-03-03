@@ -11,12 +11,13 @@
 ### Swagger UI — API publique
 - **URL** : `http://localhost:8000/api/schema/swagger-ui-public/`
 - Sous-ensemble d'endpoints destinés aux consommateurs externes
+- Section **Schemas** (components) masquée pour une doc plus légère
 - Inclut : catalog, auth, executions, reference, integrations/types
 - Exclut : admin, audit, dashboard, inventory, profiles, help
 
 ### ReDoc
 - **URL** : `http://localhost:8000/api/schema/redoc/` (complet)
-- **URL** : `http://localhost:8000/api/schema/redoc-public/` (public)
+- **URL** : `http://localhost:8000/api/schema/redoc-public/` (public, section Schemas masquée)
 - Documentation statique organisée par tags/domaines
 
 ### Schéma OpenAPI brut

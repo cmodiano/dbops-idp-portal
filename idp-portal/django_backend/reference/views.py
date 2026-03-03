@@ -13,6 +13,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
+from drf_spectacular.utils import extend_schema, OpenApiParameter
 from reference.models import RefEngine, RefCategory
 from reference.serializers import (
     RefEngineSerializer, RefEngineWriteSerializer,
@@ -26,6 +27,13 @@ from core.permissions import DBOPSProfilePermission
 logger = structlog.get_logger(__name__)
 
 
+@extend_schema(
+    tags=['reference'],
+    summary='Lister les moteurs',
+    parameters=[
+        OpenApiParameter('active_only', bool, description='Si true (défaut), uniquement les moteurs actifs'),
+    ],
+)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def list_engines(request: Request) -> Response:
@@ -59,6 +67,13 @@ def list_engines(request: Request) -> Response:
     return Response({"data": serializer.data})
 
 
+@extend_schema(
+    tags=['reference'],
+    summary='Lister les plateformes',
+    parameters=[
+        OpenApiParameter('active_only', bool, description='Si true (défaut), uniquement les plateformes actives'),
+    ],
+)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def list_platforms(request: Request) -> Response:
@@ -127,6 +142,13 @@ def update_engine(request: Request, pk: int) -> Response:
 # ─── Story 2.30: Category endpoints ────────────────────────────────────────
 
 
+@extend_schema(
+    tags=['reference'],
+    summary='Lister les catégories',
+    parameters=[
+        OpenApiParameter('active_only', bool, description='Si true (défaut), uniquement les catégories actives'),
+    ],
+)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def list_categories(request: Request) -> Response:

@@ -405,6 +405,11 @@ curl -X POST http://localhost:8000/api/v1/auth/token \\
         {'name': 'dashboard', 'description': "Dashboard et analytics"},
         {'name': 'scheduling', 'description': "Planification et exécutions programmées"},
     ],
+    # Schéma public : supprime les tags sans opération (sections vides)
+    'POSTPROCESSING_HOOKS': [
+        'drf_spectacular.hooks.postprocess_schema_enums',
+        'idp_backend.spectacular_hooks.postprocess_filter_empty_tags',
+    ],
 }
 
 # ============================================================================

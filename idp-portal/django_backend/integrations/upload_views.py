@@ -14,6 +14,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser
+from drf_spectacular.utils import extend_schema
 from core.permissions import DBOPSProfilePermission
 from core.exceptions import BadRequestError, InvalidStateError
 
@@ -119,6 +120,7 @@ class UploadIconView(APIView):
     parser_classes = [MultiPartParser]
     permission_classes = [IsAuthenticated, DBOPSProfilePermission]
 
+    @extend_schema(tags=['integrations'], summary='Uploader une icône d\'intégration')
     def post(self, request):
         """
         Upload integration icon file.

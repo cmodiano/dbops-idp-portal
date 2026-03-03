@@ -18,6 +18,8 @@ from django.conf import settings
 from django.contrib import admin
 from django.urls import path, include
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
+
+from idp_backend.spectacular_views import SpectacularSwaggerPublicView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import SessionAuthentication
 from executions.views.github_webhooks import github_webhook_workflow_run as _github_webhook_workflow_run
@@ -70,7 +72,7 @@ urlpatterns = [
     ),
     path(
         'api/schema/swagger-ui-public/',
-        SpectacularSwaggerView.as_view(url_name='schema-public'),
+        SpectacularSwaggerPublicView.as_view(url_name='schema-public'),
         name='swagger-ui-public',
     ),
     path(
