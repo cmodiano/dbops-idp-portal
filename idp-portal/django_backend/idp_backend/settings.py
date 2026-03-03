@@ -704,3 +704,13 @@ SERVICENOW_VERIFY_TLS = os.getenv('SERVICENOW_VERIFY_TLS', 'true').lower() == 't
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'idp-portal@example.com')
 PAGE_INDIVIDUAL_API_URL = os.getenv('PAGE_INDIVIDUAL_API_URL', '')
 PAGE_DBA_API_URL = os.getenv('PAGE_DBA_API_URL', '')
+
+# Story 57.5 — ADR-007 http_request SSRF allowlist
+# Comma-separated list of allowed hostnames for http_request workflow steps.
+# Empty = no allowlist restriction (private IPs still blocked by default).
+# Example: ALLOWED_HTTP_REQUEST_HOSTS=inventory.corp,cmdb.internal
+_allowed_http_hosts_env = os.getenv('ALLOWED_HTTP_REQUEST_HOSTS', '')
+ALLOWED_HTTP_REQUEST_HOSTS: list[str] = [
+    h.strip().lower() for h in _allowed_http_hosts_env.split(',') if h.strip()
+]
+del _allowed_http_hosts_env
