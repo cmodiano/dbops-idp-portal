@@ -4,7 +4,7 @@
  */
 
 import { Form, Input, Modal, Alert, Select, Avatar, Space, Button, Upload, App, Tag, Tooltip } from 'antd';
-import { UploadOutlined, ApiOutlined, InfoCircleOutlined, ExclamationCircleOutlined, WarningOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { UploadOutlined, ApiOutlined, InfoCircleOutlined, ExclamationCircleOutlined, WarningOutlined, ThunderboltOutlined, FileTextOutlined } from '@ant-design/icons';
 import type { AuthFlow, IntegrationCreate, IntegrationUpdate, IntegrationResponse, TestConnectionResponse } from '../../types/api';
 import { AUTH_FLOW_LABELS } from '../../types/api';
 import { getIconUrl } from '../../utils/iconUrl';
@@ -36,6 +36,51 @@ export interface IntegrationFormProps {
 
 /** URL pattern: must start with http(s):// and have a valid hostname. */
 const URL_PATTERN = /^https?:\/\/[a-zA-Z0-9][-a-zA-Z0-9.]*[a-zA-Z0-9]/;
+
+/** Exemple multi-tables (servers, instances, databases) — docs/inventory-mapping-guide.md */
+const INVENTORY_CONFIG_ENTITIES = `{
+  "entities": {
+    "servers": {
+      "table": "DBOPS_SERVERS",
+      "id_column": "SERVER_ID",
+      "columns": {
+        "name": "HOSTNAME",
+        "environment": "ENV",
+        "engine_type": "ENGINE"
+      }
+    },
+    "instances": {
+      "table": "DBOPS_INSTANCES",
+      "id_column": "INSTANCE_ID",
+      "columns": {
+        "name": "INSTANCE_NAME",
+        "environment": "ENV",
+        "server_ref": "SERVER_ID",
+        "db_ref": "DB_ID"
+      }
+    },
+    "databases": {
+      "table": "DBOPS_DATABASES",
+      "id_column": "DB_ID",
+      "columns": {
+        "name": "DB_NAME",
+        "environment": "ENV"
+      }
+    }
+  }
+}`;
+
+/** Exemple une seule table — docs/inventory-mapping-guide.md */
+const INVENTORY_CONFIG_FLAT = `{
+  "flat_table": {
+    "table": "DBOPS_INVENTORY",
+    "columns": {
+      "name": "NAME",
+      "environment": "ENVIRONMENT",
+      "type": "TYPE"
+    }
+  }
+}`;
 
 export function IntegrationForm({
   open, onCancel, onSubmit, loading, error, editIntegration, onSuccess, onHealthChecked,
@@ -171,8 +216,38 @@ export function IntegrationForm({
           <Form.Item name="table" label="Table ou vue" tooltip="Nom de la table ou vue avec colonnes NAME, ENVIRONMENT, TYPE. Vide = défaut backend." rules={[{ pattern: /^$|^[A-Za-z_][A-Za-z0-9_]*$/, message: 'Alphanumérique et underscore uniquement' }]}>
             <Input placeholder="ex: INVENTORY_TARGETS" aria-label="Table ou vue" />
           </Form.Item>
-          <Form.Item name="config_advanced" label="Config JSON (avancé)" tooltip="Optionnel. Pour plusieurs tables : servers, instances (table de jointure avec server_id et db_id), databases. Les concepts server_ref et db_ref dans instances mappent vers vos colonnes (ex. SERVER_ID, DB_ID). Si rempli, remplace Schéma BD / Table ou vue. Voir docs/inventory-mapping-guide.md.">
-            <Input.TextArea placeholder={`{\n  "entities": {\n    "servers": { ... },\n    "instances": { ... },\n    "databases": { ... }\n  }\n}`} rows={8} aria-label="Config JSON avancé" style={{ fontFamily: 'monospace', fontSize: 12 }} />
+          <Form.Item
+            name="config_advanced"
+            label={
+              <Space wrap>
+                <span>Config JSON (avancé)</span>
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<FileTextOutlined />}
+                  onClick={() => form.setFieldsValue({ config_advanced: INVENTORY_CONFIG_ENTITIES })}
+                  style={{ padding: 0, height: 'auto' }}
+                >
+                  Exemple multi-tables
+                </Button>
+                <Button
+                  type="link"
+                  size="small"
+                  onClick={() => form.setFieldsValue({ config_advanced: INVENTORY_CONFIG_FLAT })}
+                  style={{ padding: 0, height: 'auto' }}
+                >
+                  Exemple une table
+                </Button>
+              </Space>
+            }
+            tooltip="Optionnel. Multi-tables : entities.servers, entities.instances (server_ref, db_ref), entities.databases. Une table : flat_table. Si rempli, remplace Schéma BD / Table ou vue. Guide : docs/inventory-mapping-guide.md"
+          >
+            <Input.TextArea
+              placeholder="Cliquez sur « Insérer un exemple » pour charger un modèle, puis adaptez les noms de tables/colonnes."
+              rows={10}
+              aria-label="Config JSON avancé"
+              style={{ fontFamily: 'monospace', fontSize: 12 }}
+            />
           </Form.Item>
         </>)}
         <Form.Item name="base_url" label="URL de base" rules={[{ required: true, validator: (_, v) => { const s = (v ?? '').toString().trim(); if (!s) return Promise.reject(new Error("L'URL de base est requise")); if (!URL_PATTERN.test(s)) return Promise.reject(new Error("L'URL doit être valide (commencer par http:// ou https://)")); return Promise.resolve(); } }]}>

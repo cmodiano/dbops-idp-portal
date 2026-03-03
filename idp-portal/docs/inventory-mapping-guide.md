@@ -99,7 +99,26 @@ La colonne `ENGINE` de la table source `DBOPS_SERVERS` sera exposée comme `engi
 
 **Table de jointure `instances` :** la table des instances fait le lien entre serveurs et bases. Elle contient typiquement `SERVER_ID` et `DB_ID` (ou des colonnes de type nom). Les concepts `server_ref` et `db_ref` dans la config mappent vers ces colonnes ; le portail les utilise pour les jointures et pour filtrer (ex. toutes les instances d’un serveur donné).
 
-### 3.2 Requête SQL générée
+### 3.2 Mode une seule table (flat_table)
+
+Si votre inventaire est dans une seule table avec colonnes `NAME`, `ENVIRONMENT`, `TYPE` :
+
+```json
+{
+  "flat_table": {
+    "table": "DBOPS_INVENTORY",
+    "columns": {
+      "name": "NAME",
+      "environment": "ENVIRONMENT",
+      "type": "TYPE"
+    }
+  }
+}
+```
+
+Adaptez les noms de table et colonnes à votre schéma. Le formulaire « Nouvelle intégration » propose des boutons « Exemple multi-tables » et « Exemple une table » pour insérer ces modèles.
+
+### 3.3 Requête SQL générée
 
 Avec la configuration ci-dessus, `InventoryMapper.build_select_clause('servers')` produit :
 
@@ -108,7 +127,7 @@ SELECT SERVER_ID AS id, HOSTNAME AS name, ENV AS environment, ENGINE AS engine_t
 FROM DBOPS_SERVERS
 ```
 
-### 3.3 Responsabilité de la normalisation
+### 3.4 Responsabilité de la normalisation
 
 Les valeurs `engine_type` retournées dépendent **directement** du contenu de la colonne source (`ENGINE` dans l'exemple). La normalisation est la **responsabilité de l'administrateur d'intégration** lors de la configuration :
 
@@ -116,7 +135,7 @@ Les valeurs `engine_type` retournées dépendent **directement** du contenu de l
 - **Option B** — Créer une vue SQL qui normalise les valeurs avant exposition.
 - **Option C** — Accepter les valeurs telles quelles (le matching case-insensitive absorbe les différences de casse).
 
-### 3.4 Exemple : vue SQL de normalisation
+### 3.5 Exemple : vue SQL de normalisation
 
 Si la source utilise des formats différents (ex. `MSSQL`, `ORA`, `MS SQL Server`), l'administrateur peut créer une vue :
 
