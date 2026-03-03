@@ -5,6 +5,7 @@ Story 27.9: ServiceNow is classified as a Service (consumed by the portal for
 change management), not a Platform adapter (does not execute jobs).
 
 Story 31.6: create_change() implemented — creates a change request via REST API.
+Story 57.9: close_change() and cancel_change() implemented (ADR-007 Phase 3).
 """
 from __future__ import annotations
 
@@ -161,12 +162,156 @@ class ServiceNowService(IHealthCheckable):
             "See integration-type-catalogue.md for specification."
         )
 
-    def close_change(self, change_id: str, **kwargs: object) -> None:
-        """Close a ServiceNow change request (not yet implemented)."""
-        raise NotImplementedError(
-            "ServiceNowService.close_change() is not yet implemented. "
-            "See integration-type-catalogue.md for specification."
-        )
+    def close_change(
+        self,
+        change_id: str,
+        close_code: str = "successful",
+        close_notes: str = "",
+        **kwargs: object,
+    ) -> dict:
+        """
+        Close a ServiceNow change request (Story 57.9, ADR-007 Phase 3).
+
+        Args:
+            change_id: sys_id or change number of the change request
+            close_code: Close code (default: "successful")
+            close_notes: Closure notes
+            **kwargs: Additional fields to include in the PATCH payload
+
+        Returns:
+            dict with keys 'closed' (True) and 'sys_id' (str)
+
+        Raises:
+            ServiceUnavailableError: If the API is unavailable or returns an error
+        """
+        url = f"{self.base_url}/api/now/table/change_request/{change_id}"
+        payload: dict[str, str] = {
+            "state": "3",
+            "close_code": close_code,
+            "close_notes": close_notes,
+        }
+        for k, v in kwargs.items():
+            if v is None:
+                continue
+            payload[k] = str(v) if not isinstance(v, str) else v
+
+        timeout = getattr(settings, 'SERVICENOW_TIMEOUT', 30)
+        verify_tls = self._get_verify_tls()
+
+        try:
+            with httpx.Client(headers=self.auth_headers, timeout=timeout, verify=verify_tls) as client:
+                resp = client.patch(url, json=payload)
+                resp.raise_for_status()
+                try:
+                    json_body = resp.json()
+                except (json.JSONDecodeError, ValueError):
+                    json_body = {}
+                result = json_body.get('result', {}) if isinstance(json_body, dict) else {}
+                sys_id = result.get('sys_id', '')
+                logger.info(
+                    "servicenow_close_change_success",
+                    change_id=change_id,
+                    sys_id=sys_id,
+                    base_url=self.base_url,
+                )
+                return {"closed": True, "sys_id": str(sys_id)}
+        except httpx.TimeoutException as exc:
+            logger.error("servicenow_close_change_timeout", change_id=change_id, base_url=self.base_url, error=str(exc))
+            raise ServiceUnavailableError(
+                code="SERVICENOW_TIMEOUT",
+                message="ServiceNow close_change timeout",
+            ) from exc
+        except httpx.HTTPStatusError as exc:
+            logger.error(
+                "servicenow_close_change_http_error",
+                change_id=change_id,
+                status=exc.response.status_code,
+                error=str(exc),
+            )
+            raise ServiceUnavailableError(
+                code="SERVICENOW_HTTP_ERROR",
+                message=f"ServiceNow close_change erreur {exc.response.status_code}",
+            ) from exc
+        except httpx.RequestError as exc:
+            logger.error("servicenow_close_change_request_error", change_id=change_id, base_url=self.base_url, error=str(exc))
+            raise ServiceUnavailableError(
+                code="SERVICENOW_UNAVAILABLE",
+                message=f"ServiceNow indisponible: {exc}",
+            ) from exc
+
+    def cancel_change(
+        self,
+        change_id: str,
+        reason: str = "",
+        **kwargs: object,
+    ) -> dict:
+        """
+        Cancel a ServiceNow change request (Story 57.9, ADR-007 Phase 3).
+
+        Args:
+            change_id: sys_id or change number of the change request
+            reason: Cancellation reason
+            **kwargs: Additional fields to include in the PATCH payload
+
+        Returns:
+            dict with keys 'cancelled' (True) and 'sys_id' (str)
+
+        Raises:
+            ServiceUnavailableError: If the API is unavailable or returns an error
+        """
+        url = f"{self.base_url}/api/now/table/change_request/{change_id}"
+        payload: dict[str, str] = {
+            "state": "4",
+            "cancel_reason": reason,
+        }
+        for k, v in kwargs.items():
+            if v is None:
+                continue
+            payload[k] = str(v) if not isinstance(v, str) else v
+
+        timeout = getattr(settings, 'SERVICENOW_TIMEOUT', 30)
+        verify_tls = self._get_verify_tls()
+
+        try:
+            with httpx.Client(headers=self.auth_headers, timeout=timeout, verify=verify_tls) as client:
+                resp = client.patch(url, json=payload)
+                resp.raise_for_status()
+                try:
+                    json_body = resp.json()
+                except (json.JSONDecodeError, ValueError):
+                    json_body = {}
+                result = json_body.get('result', {}) if isinstance(json_body, dict) else {}
+                sys_id = result.get('sys_id', '')
+                logger.info(
+                    "servicenow_cancel_change_success",
+                    change_id=change_id,
+                    sys_id=sys_id,
+                    base_url=self.base_url,
+                )
+                return {"cancelled": True, "sys_id": str(sys_id)}
+        except httpx.TimeoutException as exc:
+            logger.error("servicenow_cancel_change_timeout", change_id=change_id, base_url=self.base_url, error=str(exc))
+            raise ServiceUnavailableError(
+                code="SERVICENOW_TIMEOUT",
+                message="ServiceNow cancel_change timeout",
+            ) from exc
+        except httpx.HTTPStatusError as exc:
+            logger.error(
+                "servicenow_cancel_change_http_error",
+                change_id=change_id,
+                status=exc.response.status_code,
+                error=str(exc),
+            )
+            raise ServiceUnavailableError(
+                code="SERVICENOW_HTTP_ERROR",
+                message=f"ServiceNow cancel_change erreur {exc.response.status_code}",
+            ) from exc
+        except httpx.RequestError as exc:
+            logger.error("servicenow_cancel_change_request_error", change_id=change_id, base_url=self.base_url, error=str(exc))
+            raise ServiceUnavailableError(
+                code="SERVICENOW_UNAVAILABLE",
+                message=f"ServiceNow indisponible: {exc}",
+            ) from exc
 
     # ------------------------------------------------------------------
     # Health check — Story 51.1

@@ -532,7 +532,7 @@ class ContainerWorkflowRuntime:
             parent_step.status = ExecutionStepStatus.FAILED
             parent_step.completed_at = timezone.now()
             parent_step.save()
-            raise
+            return ExecutionStatus.FAILED
 
         # Protocole WAITING pour gate steps (story 57.7)
         # DOIT précéder l'output_mapping ET le fail-closed :
