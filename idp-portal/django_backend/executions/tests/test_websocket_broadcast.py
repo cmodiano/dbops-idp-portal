@@ -95,8 +95,8 @@ class TestBroadcastStepUpdate(TransactionTestCase):
             # Ne doit pas lever d'exception (ImportError est catchée)
             try:
                 broadcast_step_update(execution_id=1, step=step)
-            except Exception:
-                pytest.fail("broadcast_step_update ne devrait pas lever d'exception")
+            except Exception as e:
+                pytest.fail(f"broadcast_step_update ne devrait pas lever d'exception: {e}")
 
     def test_broadcast_noop_on_exception(self):
         """broadcast_step_update absorbe les exceptions de transport sans interrompre le flux."""

@@ -60,8 +60,9 @@ class TestApproveStepView(TestCase):
         )
         self.step = _make_approval_step(self.execution)
 
+    @patch('executions.views.approval_views._check_approver_permission', return_value=True)
     @patch('executions.views.approval_views.resume_container_workflow_from_gate')
-    def test_approve_step_success_with_successor(self, mock_resume):
+    def test_approve_step_success_with_successor(self, mock_resume, mock_perm):
         """AC#1 : approve → COMPLETED + resume vers on_success_step_id."""
         with self.captureOnCommitCallbacks(execute=True):
             response = self.client.post(
@@ -90,8 +91,9 @@ class TestApproveStepView(TestCase):
             args=[self.execution.id, "execute-action"]
         )
 
+    @patch('executions.views.approval_views._check_approver_permission', return_value=True)
     @patch('executions.views.approval_views.resume_container_workflow_from_gate')
-    def test_approve_step_success_last_step_completes_execution(self, mock_resume):
+    def test_approve_step_success_last_step_completes_execution(self, mock_resume, mock_perm):
         """AC#1 : approve sans on_success_step_id → execution COMPLETED, aucun resume."""
         self.action.execution_steps = [{
             "step_id": "request-approval",
@@ -153,8 +155,8 @@ class TestApproveStepView(TestCase):
         )
         self.assertEqual(response.status_code, 404)
 
-    def test_approve_step_requires_dba_dbops(self):
-        """Utilisateur sans permission → 403."""
+    def test_approve_step_non_approver_is_forbidden(self):
+        """Story 58.4 : utilisateur sans profil is_approver → 403 Forbidden."""
         non_admin = UserFactory(username="regular_user_57_8", profile="READ_ONLY")
         self.client.force_authenticate(user=non_admin)
         response = self.client.post(
@@ -191,8 +193,9 @@ class TestRejectStepView(TestCase):
         )
         self.step = _make_approval_step(self.execution)
 
+    @patch('executions.views.approval_views._check_approver_permission', return_value=True)
     @patch('executions.views.approval_views.resume_container_workflow_from_gate')
-    def test_reject_step_success_with_error_path(self, mock_resume):
+    def test_reject_step_success_with_error_path(self, mock_resume, mock_perm):
         """AC#2 : reject avec on_error_step_id → step FAILED, resume appelée."""
         with self.captureOnCommitCallbacks(execute=True):
             response = self.client.post(
@@ -216,8 +219,9 @@ class TestRejectStepView(TestCase):
             args=[self.execution.id, "notify-rejected"]
         )
 
+    @patch('executions.views.approval_views._check_approver_permission', return_value=True)
     @patch('executions.views.approval_views.resume_container_workflow_from_gate')
-    def test_reject_step_no_error_path_fails_execution(self, mock_resume):
+    def test_reject_step_no_error_path_fails_execution(self, mock_resume, mock_perm):
         """AC#2 : reject sans on_error_step_id → execution FAILED, aucun resume."""
         self.action.execution_steps = [{
             "step_id": "request-approval",
@@ -289,8 +293,9 @@ class TestApproveExecutionBackwardCompat(TestCase):
         execution.refresh_from_db()
         self.assertEqual(execution.status, ExecutionStatus.RUNNING)
 
+    @patch('executions.views.approval_views._check_approver_permission', return_value=True)
     @patch('executions.views.approval_views.resume_container_workflow_from_gate')
-    def test_backward_compat_finds_first_waiting_approval_step(self, mock_resume):
+    def test_backward_compat_finds_first_waiting_approval_step(self, mock_resume, mock_perm):
         """AC#4 : exécution RUNNING avec step WAITING approval_granted → approuve le step."""
         execution = ExecutionFactory(
             action=self.action,
@@ -323,6 +328,40 @@ class TestApproveExecutionBackwardCompat(TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
+    def test_pending_approval_non_admin_is_forbidden(self):
+        """Story 58.4 AC5 : PENDING_APPROVAL + user non-admin → 403 Forbidden."""
+        non_admin = UserFactory(username="non_admin_approve_58_4", profile="READ_ONLY")
+        self.client.force_authenticate(user=non_admin)
+        execution = ExecutionFactory(
+            action=self.action,
+            user=non_admin,
+            status=ExecutionStatus.PENDING_APPROVAL,
+        )
+        with patch('executions.views.approval_views.ExecutionService.launch_workflow'):
+            response = self.client.post(
+                f"/api/v1/executions/{execution.id}/approve/",
+                format='json',
+            )
+        self.assertEqual(response.status_code, 403)
+
+    def test_step_gate_non_approver_is_forbidden(self):
+        """Story 58.4 AC3 : RUNNING + step gate + user non-approbateur → 403 Forbidden."""
+        non_approver = UserFactory(username="non_approver_step_gate_58_4", profile="READ_ONLY")
+        self.client.force_authenticate(user=non_approver)
+        execution = ExecutionFactory(
+            action=self.action,
+            user=non_approver,
+            status=ExecutionStatus.RUNNING,
+        )
+        _make_approval_step(execution)
+
+        with patch('executions.views.approval_views._check_approver_permission', return_value=False):
+            response = self.client.post(
+                f"/api/v1/executions/{execution.id}/approve/",
+                format='json',
+            )
+        self.assertEqual(response.status_code, 403)
+
 
 @pytest.mark.django_db
 class TestRejectExecutionBackwardCompat(TestCase):
@@ -346,8 +385,9 @@ class TestRejectExecutionBackwardCompat(TestCase):
             }]
         )
 
+    @patch('executions.views.approval_views._check_approver_permission', return_value=True)
     @patch('executions.views.approval_views.resume_container_workflow_from_gate')
-    def test_running_execution_with_waiting_step_reject_with_error_path(self, mock_resume):
+    def test_running_execution_with_waiting_step_reject_with_error_path(self, mock_resume, mock_perm):
         """AC#1 : RUNNING + step WAITING + on_error_step_id → step FAILED, resume appelée."""
         execution = ExecutionFactory(
             action=self.action,
@@ -371,15 +411,17 @@ class TestRejectExecutionBackwardCompat(TestCase):
 
         data = response.json()
         self.assertIn("data", data)
-        self.assertEqual(data["data"]["status"], ExecutionStepStatus.FAILED)
+        # Avec on_error_step_id, l'exécution reste RUNNING (reprise vers le step d'erreur)
+        self.assertEqual(data["data"]["status"], ExecutionStatus.RUNNING)
 
         # Vérifie que la tâche Celery de resume est déclenchée avec le chemin d'erreur
         mock_resume.apply_async.assert_called_once_with(
             args=[execution.id, "notify-rejected"]
         )
 
+    @patch('executions.views.approval_views._check_approver_permission', return_value=True)
     @patch('executions.views.approval_views.resume_container_workflow_from_gate')
-    def test_running_execution_with_waiting_step_reject_no_error_path(self, mock_resume):
+    def test_running_execution_with_waiting_step_reject_no_error_path(self, mock_resume, mock_perm):
         """AC#1 : RUNNING + step WAITING sans on_error_step_id → step FAILED, execution FAILED."""
         self.action.execution_steps = [{
             "step_id": "request-approval",
@@ -449,8 +491,9 @@ class TestRejectExecutionBackwardCompat(TestCase):
             execution.executionstep_set.filter(status=ExecutionStepStatus.FAILED).exists()
         )
 
+    @patch('executions.views.approval_views._check_approver_permission', return_value=True)
     @patch('executions.views.approval_views.resume_container_workflow_from_gate')
-    def test_rejection_reason_captured_in_approval_comment(self, mock_resume):
+    def test_rejection_reason_captured_in_approval_comment(self, mock_resume, mock_perm):
         """AC#1 : rejection_reason est capturé dans approval_comment du step."""
         execution = ExecutionFactory(
             action=self.action,
@@ -469,3 +512,36 @@ class TestRejectExecutionBackwardCompat(TestCase):
 
         step.refresh_from_db()
         self.assertEqual(step.approval_comment, "Audit requis")
+
+    def test_pending_approval_non_admin_is_forbidden_reject(self):
+        """Story 58.4 AC5 : PENDING_APPROVAL + user non-admin → 403 Forbidden (reject)."""
+        non_admin = UserFactory(username="non_admin_reject_58_4", profile="READ_ONLY")
+        self.client.force_authenticate(user=non_admin)
+        execution = ExecutionFactory(
+            action=self.action,
+            user=non_admin,
+            status=ExecutionStatus.PENDING_APPROVAL,
+        )
+        response = self.client.post(
+            f"/api/v1/executions/{execution.id}/reject/",
+            format='json',
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_step_gate_non_approver_is_forbidden_reject(self):
+        """Story 58.4 AC3 : RUNNING + step gate + user non-approbateur → 403 Forbidden (reject)."""
+        non_approver = UserFactory(username="non_approver_step_gate_reject_58_4", profile="READ_ONLY")
+        self.client.force_authenticate(user=non_approver)
+        execution = ExecutionFactory(
+            action=self.action,
+            user=non_approver,
+            status=ExecutionStatus.RUNNING,
+        )
+        _make_approval_step(execution)
+
+        with patch('executions.views.approval_views._check_approver_permission', return_value=False):
+            response = self.client.post(
+                f"/api/v1/executions/{execution.id}/reject/",
+                format='json',
+            )
+        self.assertEqual(response.status_code, 403)

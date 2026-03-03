@@ -311,7 +311,7 @@ class TestStepDispatcher:
     @patch('executions.step_handlers.service_call_handler.ServiceCallHandler.execute',
            side_effect=NotImplementedError("Not implemented"))
     def test_handler_exception_marks_step_failed_and_reraises(self, mock_execute, mock_audit):
-        """Exception dans handler → ExecutionStep FAILED + exception re-levée."""
+        """Exception dans handler → ExecutionStep FAILED, runtime retourne FAILED (pas de re-raise)."""
         step = {
             'order': 1,
             'name': 'SVC Call',
@@ -321,8 +321,8 @@ class TestStepDispatcher:
         execution = self._create_workflow_execution([step])
         runtime = ContainerWorkflowRuntime(execution)
 
-        with pytest.raises(NotImplementedError):
-            runtime._execute_step(step)
+        result = runtime._execute_step(step)
+        assert result == ExecutionStatus.FAILED
 
         exec_step = ExecutionStep.objects.get(execution=execution, step_name='SVC Call')
         assert exec_step.status == ExecutionStepStatus.FAILED
