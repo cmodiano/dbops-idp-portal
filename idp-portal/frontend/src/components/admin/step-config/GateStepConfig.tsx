@@ -17,8 +17,10 @@ export interface GateStepConfigProps {
   data: WorkflowStepNodeData;
   onUpdate: (updates: Partial<WorkflowStepNodeData>) => void;
   disabled?: boolean;
-  /** Step IDs disponibles dans le workflow courant (pour context_from) */
+  /** Step IDs disponibles dans le workflow courant (pour context_from) — fallback si availableStepOptions non fourni */
   availableStepIds?: string[];
+  /** Story 57.19: Pre-computed step options with readable labels (for context_from) */
+  availableStepOptions?: { value: string; label: string }[];
 }
 
 const GATE_TYPE_OPTIONS = [
@@ -36,7 +38,10 @@ export const GateStepConfig: React.FC<GateStepConfigProps> = ({
   onUpdate,
   disabled = false,
   availableStepIds = [],
+  availableStepOptions,
 }) => {
+  // Story 57.19: Use pre-computed options with labels if available, fallback to raw IDs
+  const stepOptions = availableStepOptions ?? availableStepIds.map((id) => ({ value: id, label: id }));
   const { approverProfileOptions, loading: approverProfilesLoading } = useApproverProfiles(data.gate_type === 'approval');
 
   return (
@@ -104,7 +109,7 @@ export const GateStepConfig: React.FC<GateStepConfigProps> = ({
             placeholder="Sélectionner des étapes"
             disabled={disabled}
             aria-label="Contexte pour l'approbateur"
-            options={availableStepIds.map((id) => ({ value: id, label: id }))}
+            options={stepOptions}
           />
           <Text type="secondary" style={{ fontSize: 11, marginTop: 4, display: 'block' }}>
             Step IDs dont le résultat sera visible par l'approbateur

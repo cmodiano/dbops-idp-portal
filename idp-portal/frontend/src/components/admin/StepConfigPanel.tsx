@@ -21,6 +21,7 @@ import { GateStepConfig } from './step-config/GateStepConfig';
 import { HttpRequestStepConfig } from './step-config/HttpRequestStepConfig';
 import { ScheduleStepConfig } from './step-config/ScheduleStepConfig';
 import type { WorkflowStepType } from '../../types/api';
+import { getStepLabel } from '../../utils/workflowStepLabels';
 
 const { Text, Title } = Typography;
 
@@ -33,6 +34,8 @@ export interface StepConfigPanelProps {
   disabled?: boolean;
   /** Story 57.13: Step IDs disponibles dans le workflow (pour gate context_from) */
   availableStepIds?: string[];
+  /** Story 57.19: Pre-computed step options with readable labels */
+  availableStepOptions?: { value: string; label: string }[];
 }
 
 export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({
@@ -43,6 +46,7 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({
   onNodeDelete,
   disabled = false,
   availableStepIds = [],
+  availableStepOptions,
 }) => {
   const data = node?.data as unknown as WorkflowStepNodeData | undefined;
 
@@ -119,12 +123,15 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({
           />
         </div>
 
-        {/* Step ID */}
+        {/* Step ID — Story 57.19: display label + UUID */}
         <div>
           <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
             ID d'étape (step_id)
           </Text>
-          <Input value={node.id} disabled aria-label="step_id" />
+          <Text strong style={{ fontSize: 13, display: 'block', marginBottom: 2 }}>
+            {getStepLabel(data)}
+          </Text>
+          <Input value={node.id} disabled aria-label="step_id" style={{ fontSize: 11, fontFamily: 'monospace' }} />
         </div>
 
         <Divider style={{ margin: '8px 0' }} />
@@ -269,6 +276,7 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({
             onUpdate={handleUpdate}
             disabled={disabled}
             availableStepIds={availableStepIds}
+            availableStepOptions={availableStepOptions}
           />
         )}
 

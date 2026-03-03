@@ -475,3 +475,54 @@ describe('StepConfigPanel — coverage extras', () => {
     expect(onNodeUpdate).toHaveBeenCalled();
   });
 });
+
+// ─── Story 57.19: step_id label display ──────────────────────────────────────
+describe('StepConfigPanel — step_id with label (Story 57.19)', () => {
+  it('displays generated label for platform step with action_name', () => {
+    render(
+      <StepConfigPanel
+        node={makeNode({ action_name: 'Create PDB', step_type: 'platform', order: 1 })}
+        open={true}
+        onClose={vi.fn()}
+        onNodeUpdate={vi.fn()}
+        onNodeDelete={vi.fn()}
+      />,
+    );
+
+    // getStepLabel should produce "Étape 1 — Create PDB" for a platform step with order=1 and action_name
+    expect(screen.getByText('Étape 1 — Create PDB')).toBeInTheDocument();
+    // The step_id input should still exist
+    expect(screen.getByLabelText('step_id')).toBeInTheDocument();
+  });
+
+  it('displays custom name as label when name is set', () => {
+    render(
+      <StepConfigPanel
+        node={makeNode({ name: 'Mon étape custom', action_name: 'Create PDB', step_type: 'platform' })}
+        open={true}
+        onClose={vi.fn()}
+        onNodeUpdate={vi.fn()}
+        onNodeDelete={vi.fn()}
+      />,
+    );
+
+    // The label from getStepLabel should prioritize name
+    expect(screen.getByText('Mon étape custom')).toBeInTheDocument();
+  });
+
+  it('displays step_id in monospace input', () => {
+    render(
+      <StepConfigPanel
+        node={makeNode()}
+        open={true}
+        onClose={vi.fn()}
+        onNodeUpdate={vi.fn()}
+        onNodeDelete={vi.fn()}
+      />,
+    );
+
+    const stepIdInput = screen.getByLabelText('step_id');
+    expect(stepIdInput).toHaveValue('step-1');
+    expect(stepIdInput).toBeDisabled();
+  });
+});

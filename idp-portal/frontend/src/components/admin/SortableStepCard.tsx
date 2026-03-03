@@ -28,6 +28,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { WorkflowStepEditable } from './WorkflowStepsEditor';
 import type { ActionListItem } from '../../types/api';
+import { getStepLabel } from '../../utils/workflowStepLabels';
 
 const { Text } = Typography;
 
@@ -97,17 +98,16 @@ export const SortableStepCard: React.FC<SortableStepCardProps> = ({
     : '';
 
   const stepIdValue = step.step_id ?? '';
-  /** Build branch options: step_id → display label (action name + order) */
+  /** Build branch options: step_id → display label — Story 57.19: uses centralized getStepLabel */
   const getBranchOptions = (excludeStepId: string | null | undefined) => {
     const ids = stepIdsFromEditor.filter((sid) => sid && sid !== excludeStepId);
     return ids.map((sid) => {
       const s = allSteps.find((st) => (st.step_id ?? st._tempId) === sid);
-      const action = s ? eligibleActions.find((a) => a.id === s.referenced_action_id) : undefined;
-      const actionName = s?.action_name ?? action?.name;
-      const engine = action?.engine;
-      const label = actionName
-        ? `Étape ${s?.order ?? '?'} — ${actionName}${engine ? ` (${engine})` : ''}`
-        : sid;
+      if (!s) return { value: sid, label: sid };
+      // Build label input: prefer resolved action_name from allSteps or from eligibleActions
+      const action = eligibleActions.find((a) => a.id === s.referenced_action_id);
+      const actionName = s.action_name ?? action?.name ?? undefined;
+      const label = getStepLabel({ ...s, action_name: actionName });
       return { value: sid, label };
     });
   };

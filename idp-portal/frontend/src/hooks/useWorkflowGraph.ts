@@ -31,6 +31,7 @@ import {
   reactFlowToWorkflowSteps,
   workflowStepsToReactFlow,
 } from '../utils/workflowConversion';
+import { getStepLabel } from '../utils/workflowStepLabels';
 import { validateWorkflowGraph, type ValidationResult } from '../utils/workflowValidation';
 
 export interface UseWorkflowGraphProps {
@@ -71,6 +72,8 @@ export interface UseWorkflowGraphReturn {
   handleAddSpecialStep: (stepType: WorkflowStepType) => void;
   /** Story 57.13: IDs of workflow step nodes (for gate context_from) */
   workflowStepIds: string[];
+  /** Story 57.19: Pre-computed step options with readable labels (for gate context_from, step_id display) */
+  workflowStepOptions: { value: string; label: string }[];
 }
 
 /**
@@ -310,6 +313,18 @@ export function useWorkflowGraph({
     [nodes]
   );
 
+  // Story 57.19: Pre-computed step options with readable labels (order derived from array index)
+  const workflowStepOptions = useMemo(
+    () => {
+      const stepNodes = nodes.filter((n) => n.id !== START_NODE_ID && n.id !== END_NODE_ID);
+      return stepNodes.map((n, index) => ({
+        value: n.id,
+        label: getStepLabel({ ...(n.data as unknown as WorkflowStepNodeData), order: index + 1 }),
+      }));
+    },
+    [nodes]
+  );
+
   // Story 57.13: Add a special (non-platform) step and open config panel
   const handleAddSpecialStep = useCallback(
     (stepType: WorkflowStepType) => {
@@ -479,5 +494,6 @@ export function useWorkflowGraph({
     goToNode,
     handleAddSpecialStep,
     workflowStepIds,
+    workflowStepOptions,
   };
 }

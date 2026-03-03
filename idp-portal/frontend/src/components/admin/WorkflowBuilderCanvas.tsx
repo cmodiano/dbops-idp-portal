@@ -152,6 +152,7 @@ function WorkflowBuilderCanvasInner({
         onNodeDelete={graph.handleNodeDelete}
         disabled={disabled}
         availableStepIds={graph.workflowStepIds}
+        availableStepOptions={graph.workflowStepOptions}
       />
 
       <ValidationReportPanel

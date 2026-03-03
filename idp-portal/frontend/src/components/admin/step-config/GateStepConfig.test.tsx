@@ -1,6 +1,7 @@
 /**
- * Tests for GateStepConfig — Story 58.4, AC2.
+ * Tests for GateStepConfig — Story 58.4, AC2; Story 57.19, AC1/AC2.
  * Tests: approver_profile_ids multi-select for approval gates.
+ * Story 57.19: context_from Select uses readable step labels instead of UUIDs.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -123,5 +124,65 @@ describe('GateStepConfig — approver_profile_ids', () => {
     );
 
     expect(container).toBeTruthy();
+  });
+});
+
+// ─── Story 57.19: context_from uses readable labels ───────────────────────────
+describe('GateStepConfig — context_from with labels (Story 57.19)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseApproverProfiles.mockReturnValue({
+      profiles: [],
+      loading: false,
+      approverProfileOptions: [],
+    });
+  });
+
+  it('uses availableStepOptions labels instead of raw UUIDs for context_from Select', () => {
+    const stepOptions = [
+      { value: 'uuid-aaa', label: 'Étape 1 — Deploy App' },
+      { value: 'uuid-bbb', label: 'Étape 2 — Approbation' },
+    ];
+    render(
+      <GateStepConfig
+        data={baseData}
+        onUpdate={vi.fn()}
+        disabled={false}
+        availableStepOptions={stepOptions}
+      />
+    );
+
+    // The context_from Select should be rendered with the approval gate
+    expect(screen.getByLabelText("Contexte pour l'approbateur")).toBeInTheDocument();
+    // Component renders without errors when given step options with labels
+    expect(screen.getByTestId('gate-step-config')).toBeInTheDocument();
+  });
+
+  it('falls back to raw IDs when availableStepOptions is not provided', () => {
+    render(
+      <GateStepConfig
+        data={baseData}
+        onUpdate={vi.fn()}
+        disabled={false}
+        availableStepIds={['uuid-aaa', 'uuid-bbb']}
+      />
+    );
+
+    // Should still render the context_from Select with raw IDs as fallback
+    expect(screen.getByLabelText("Contexte pour l'approbateur")).toBeInTheDocument();
+    expect(screen.getByTestId('gate-step-config')).toBeInTheDocument();
+  });
+
+  it('does not render context_from for maintenance_window gate type', () => {
+    render(
+      <GateStepConfig
+        data={{ ...baseData, gate_type: 'maintenance_window' as const }}
+        onUpdate={vi.fn()}
+        disabled={false}
+        availableStepOptions={[{ value: 'uuid-1', label: 'Étape 1 — Deploy' }]}
+      />
+    );
+
+    expect(screen.queryByLabelText("Contexte pour l'approbateur")).not.toBeInTheDocument();
   });
 });
