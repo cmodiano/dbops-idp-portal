@@ -177,8 +177,9 @@ class TestFindWorkflowsReferencingActionOptimized:
         call_kwargs = mock_base_qs.extra.call_args[1]
         where_clause = call_kwargs['where'][0]
         assert 'JSON_EXISTS' in where_clause
-        # Parameterized form (no SQL injection): %s placeholder + params
-        assert "$[*]?(@.referenced_action_id == %s)" in where_clause
+        # Oracle PASSING clause: path uses $a, value bound via PASSING (no literal in path)
+        assert "$[*]?(@.referenced_action_id == $a)" in where_clause
+        assert 'PASSING %s AS "a"' in where_clause
         assert call_kwargs.get('params') == [42]
 
     @patch("catalog.services.connection")

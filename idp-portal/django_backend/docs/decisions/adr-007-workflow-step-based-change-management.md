@@ -1,8 +1,8 @@
 # ADR-007 : Architecture Steps Unifiee — Change Management, Gates, Evaluations et Approbations comme Steps de Workflow
 
 **Date :** 2026-03-02
-**Statut :** Propose
-**Decideurs :** Equipe IDP Portal
+**Statut :** Proposé
+**Décideurs :** Équipe IDP Portal
 
 ## Contexte
 
@@ -498,7 +498,7 @@ La source de verite passe de l'Execution au `ExecutionStep`. Cela permet :
 
 ### Flux d'execution — Terraform en production (plan non conforme)
 
-```
+```text
 tf-plan ──► check-plan ──► request-approval ──► create-change ──► tf-apply ──► close-change
 (platform)  (evaluation)   (gate/approval)      (service_call)    (platform)   (service_call)
  COMPLETED   ERROR          WAITING...           COMPLETED         COMPLETED    COMPLETED
@@ -508,7 +508,7 @@ tf-plan ──► check-plan ──► request-approval ──► create-change 
 
 ### Flux d'execution — Terraform en staging (plan conforme)
 
-```
+```text
 tf-plan ──► check-plan ──► [create-change SKIPPED] ──► tf-apply ──► [close-change SKIPPED]
 (platform)  (evaluation)   (condition non remplie)      (platform)   (condition non remplie)
  COMPLETED   SUCCESS
@@ -846,7 +846,7 @@ Le `GateEvaluator` existant (`executions/gate_evaluator.py`) et la tache Celery 
 
 Nouveau endpoint en complement de l'existant :
 
-```
+```text
 POST /executions/{execution_id}/steps/{step_id}/approve/
 POST /executions/{execution_id}/steps/{step_id}/reject/
 ```
@@ -911,7 +911,7 @@ Pour les actions **simples** (pas workflow, un seul step plateforme) qui ont un
 `change_type_config` avec `required: true`, le runtime genere automatiquement un
 wrapper workflow implicite :
 
-```
+```text
 [create-change] → [execute-action] → [close-change]
 ```
 
@@ -1012,7 +1012,7 @@ services (`IntegrationRole.SERVICE`).
 
 ### 10. Structure de fichiers — nouveaux modules
 
-```
+```text
 executions/
 ├── step_handlers/                    # NOUVEAU: un handler par step_type
 │   ├── __init__.py

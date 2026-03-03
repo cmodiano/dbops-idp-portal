@@ -692,9 +692,10 @@ class CatalogService:
             # Precise DB-side filter: JSON_EXISTS on CLOB (Oracle 12c R2+, stable on Oracle 19c)
             # extra() is used because Django ORM has no JSON_EXISTS expression and RawSQL()
             # cannot be embedded as a WHERE predicate on a CLOB JSONField without extra().
-            # params=[action_id] uses proper parameterization (no SQL injection).
+            # Use PASSING clause to bind action_id: Oracle treats %s inside the path as literal
+            # text; the path variable $a receives the value via PASSING.
             candidates = base_qs.extra(
-                where=["JSON_EXISTS(EXECUTION_STEPS, '$[*]?(@.referenced_action_id == %s)')"],
+                where=["JSON_EXISTS(EXECUTION_STEPS, '$[*]?(@.referenced_action_id == $a)' PASSING %s AS \"a\")"],
                 params=[action_id],
             )
         else:

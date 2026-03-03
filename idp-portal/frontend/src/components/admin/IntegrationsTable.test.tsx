@@ -489,7 +489,8 @@ describe('IntegrationsTable - Extended coverage 55.6', () => {
     });
   });
 
-  it('URL — longue URL affichée avec tooltip au survol', () => {
+  it('URL — longue URL affichée avec tooltip au survol', async () => {
+    const user = userEvent.setup();
     const longUrl = 'https://very-long-url-that-exceeds-forty-characters.example.com/api/v1';
     const longUrlItem: IntegrationListItem[] = [
       {
@@ -500,6 +501,13 @@ describe('IntegrationsTable - Extended coverage 55.6', () => {
     renderWithApp(<IntegrationsTable {...defaultProps} dataSource={longUrlItem} />);
     // L'URL complète est affichée dans la cellule (avec ellipsis CSS si overflow)
     expect(document.body.textContent).toContain(longUrl);
+    // Vérifier que le tooltip affiche l'URL complète au survol
+    const urlCell = screen.getByText(longUrl);
+    await user.hover(urlCell);
+    await waitFor(() => {
+      const tooltip = screen.getByRole('tooltip');
+      expect(tooltip).toHaveTextContent(longUrl);
+    }, { timeout: 3000 });
   });
 
   it('auth_flow — affiche le label de flow quand renseigné', () => {
