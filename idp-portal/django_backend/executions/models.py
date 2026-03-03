@@ -277,10 +277,11 @@ class ExecutionTarget(models.Model):
 
 
 class ExecutionStepType(models.TextChoices):
-    """Execution step type enum matching Oracle CHECK constraint (V025, V099).
+    """Execution step type enum matching Oracle CHECK constraint (V025, V099, V107).
 
     Original values (5): vault, servicenow, platform, prerequisite, verification.
     ADR-007 values (4): service_call, http_request, evaluation, gate.
+    Story 57.15 (1): schedule_execution.
     """
     VAULT = 'vault', 'Vault'
     SERVICENOW = 'servicenow', 'ServiceNow'
@@ -291,6 +292,7 @@ class ExecutionStepType(models.TextChoices):
     HTTP_REQUEST = 'http_request', 'HTTP Request'
     EVALUATION = 'evaluation', 'Evaluation'
     GATE = 'gate', 'Gate'
+    SCHEDULE_EXECUTION = 'schedule_execution', 'Schedule Execution'
 
 
 class ExecutionStepStatus(models.TextChoices):
@@ -457,7 +459,9 @@ class ScheduledExecution(models.Model):
     # Story 11.6/11.10: optional tracing + effective execution link
     correlation_id = models.CharField(max_length=64, null=True, blank=True, db_column='CORRELATION_ID')
     execution_id = models.BigIntegerField(null=True, blank=True, db_column='EXECUTION_ID')
-    
+    # Story 57.17: ID of the source Execution that triggered creation via a schedule_execution step
+    source_execution_id = models.BigIntegerField(null=True, blank=True, db_column='SOURCE_EXECUTION_ID')
+
     # Custom manager
     objects = ScheduledExecutionManager()
 

@@ -95,6 +95,7 @@ class ScheduledExecutionsView(APIView):
         engine_filter = request.query_params.get("engine")
         platform_filter = request.query_params.get("platform")
 
+        # Story 57.17: source_execution_id est un champ DB direct sur ScheduledExecution
         qs = ScheduledExecution.objects.select_related("action", "user").select_related("recurringpattern")
         # Story 26.12 — View-level permission: admins see all, non-admins see only allowed actions
         # Note: This uses has_permission() (view-level), not has_object_permission() (object-level)

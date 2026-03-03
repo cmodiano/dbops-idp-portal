@@ -23,7 +23,7 @@ import structlog
 from threading import Thread
 from typing import Dict, Any, List, Union, cast
 
-from django.db import close_old_connections
+from django.db import close_old_connections, transaction
 from django.utils import timezone
 
 from catalog.models import Action, ActionStatus
@@ -277,6 +277,49 @@ class ContainerWorkflowRuntime:
                     child_execution_id=child.id,
                     correlation_id=self.correlation_id,
                 )
+
+    def _has_approval_notification_configured(self) -> bool:
+        """Vérifie si au moins un canal a on_approval_required dans ses conditions."""
+        config = self.action.notification_config or {}
+        for ch in config.get("channels", []):
+            if ch.get("enabled") and "on_approval_required" in (ch.get("conditions") or []):
+                return True
+        return False
+
+    def _schedule_approval_notification(self) -> None:
+        """Story 57.8: Envoie notification on_approval_required via on_commit."""
+        try:
+            from services.notification_service import NotificationService
+
+            _execution = self.execution
+            _action = self.action
+            _correlation_id = self.correlation_id
+
+            def _send() -> None:
+                try:
+                    notif = NotificationService()
+                    notif.notify_execution_event(
+                        execution=_execution,
+                        action=_action,
+                        event="on_approval_required",
+                        correlation_id=_correlation_id,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.error(
+                        "approval_notification_failed",
+                        execution_id=_execution.id,
+                        error=str(exc),
+                        correlation_id=_correlation_id,
+                    )
+
+            transaction.on_commit(_send)
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "approval_notification_setup_failed",
+                execution_id=self.execution.id,
+                error=str(exc),
+                correlation_id=self.correlation_id,
+            )
 
     def _execute_step(self, step: Dict[str, Any]) -> ExecutionStatus:
         """
@@ -632,6 +675,7 @@ class ContainerWorkflowRuntime:
         # - évite que le dict gate {'waiting', 'gate_conditions', ...} pollue _step_outputs
         if isinstance(result, dict) and result.get('waiting'):
             gate_output = result.get('gate_output', {})
+            gate_conditions = gate_output.get('gate_conditions', [])
             parent_step.set_output(gate_output)
             parent_step.status = ExecutionStepStatus.WAITING
             # NE PAS SET completed_at — step est en attente
@@ -643,6 +687,13 @@ class ContainerWorkflowRuntime:
                 execution_id=self.execution.id,
                 correlation_id=self.correlation_id,
             )
+            # Story 57.8: Notification approbation requise (on_approval_required)
+            is_approval_gate = any(
+                isinstance(c, dict) and c.get('type') == 'approval_granted'
+                for c in gate_conditions
+            )
+            if is_approval_gate and self._has_approval_notification_configured():
+                self._schedule_approval_notification()
             return ExecutionStatus.RUNNING  # Sentinel : boucle doit s'arrêter
 
         # Extraction output_mapping pour les handlers non-gate (même pattern que platform)

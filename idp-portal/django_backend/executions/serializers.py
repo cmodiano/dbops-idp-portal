@@ -229,6 +229,8 @@ class ScheduledExecutionListItemSerializer(serializers.Serializer):
             "parameters": obj.get_parameters(),
             "correlation_id": getattr(obj, "correlation_id", None),
             "execution_id": getattr(obj, "execution_id", None),
+            # Story 57.17: ID de l'exécution source ayant créé cette planification via un step workflow
+            "source_execution_id": getattr(obj, 'source_execution_id', None),
             # Story 13.6 AC3: Plateforme et Technologie pour le popover détail
             "engine": getattr(action, "engine", None) if action else None,
             "platform": getattr(action, "platform", None) if action else None,

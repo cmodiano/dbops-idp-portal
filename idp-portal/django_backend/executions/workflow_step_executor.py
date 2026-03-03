@@ -5,6 +5,7 @@ import structlog
 from dataclasses import asdict
 from typing import TYPE_CHECKING, Optional, Any, Dict
 
+from django.db import transaction
 from django.utils import timezone
 
 from executions.models import ExecutionStep, ExecutionStepStatus
@@ -120,6 +121,14 @@ class StepExecutor:
                 },
                 correlation_id=self.correlation_id,
             )
+
+            # Story 57.8: Notification approbation requise (on_approval_required)
+            is_approval_gate = any(
+                isinstance(c, dict) and c.get('type') == 'approval_granted'
+                for c in gate_conditions
+            )
+            if is_approval_gate:
+                self._send_approval_notification_if_configured()
 
             return StepResult(
                 outcome=StepOutcome.WAITING,
@@ -597,7 +606,8 @@ class StepExecutor:
                 correlation_id=self.correlation_id,
             )
 
-            # MED-7 FIX: Removed redundant logging (PolicyEvaluator already logs decision)
+            # Story 57.8: Notification approbation requise
+            self._send_approval_notification_if_configured()
 
             return StepResult(
                 outcome=StepOutcome.WAITING,
@@ -634,6 +644,63 @@ class StepExecutor:
                     'policy_decision': decision_dict,
                     'auto_approved': True,
                 },
+            )
+
+    # -------------------------------------------------------------------------
+    # Story 57.8 — approval notification helper
+    # -------------------------------------------------------------------------
+
+    def _send_approval_notification_if_configured(self) -> None:
+        """
+        Story 57.8: Envoie notification on_approval_required si configurée sur l'action.
+
+        Charge l'action depuis l'exécution, vérifie la notification_config,
+        et envoie via NotificationService en on_commit.
+        """
+        try:
+            from catalog.models import Action  # noqa: PLC0415
+
+            action = Action.objects.filter(id=self.execution.action_id).first()
+            if not action:
+                return
+
+            config = action.notification_config or {}
+            has_approval_notif = any(
+                ch.get("enabled") and "on_approval_required" in (ch.get("conditions") or [])
+                for ch in config.get("channels", [])
+            )
+            if not has_approval_notif:
+                return
+
+            _execution = self.execution
+            _action = action
+            _correlation_id = self.correlation_id
+
+            def _send() -> None:
+                try:
+                    from services.notification_service import NotificationService  # noqa: PLC0415
+                    notif = NotificationService()
+                    notif.notify_execution_event(
+                        execution=_execution,
+                        action=_action,
+                        event="on_approval_required",
+                        correlation_id=_correlation_id,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.error(
+                        "approval_notification_failed",
+                        execution_id=_execution.id,
+                        error=str(exc),
+                        correlation_id=_correlation_id,
+                    )
+
+            transaction.on_commit(_send)
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "approval_notification_setup_failed",
+                execution_id=self.execution.id,
+                error=str(exc),
+                correlation_id=self.correlation_id,
             )
 
     # -------------------------------------------------------------------------
@@ -706,12 +773,23 @@ class StepExecutor:
                 recurring_pattern_data=recurring_pattern_data,
             )
 
-            # Store correlation_id on the created ScheduledExecution
+            # Store correlation_id and source_execution_id on the created ScheduledExecution
             scheduled_execution.correlation_id = self.correlation_id
+            # Story 57.17: stocker l'ID de l'exécution source pour la traçabilité UI
+            scheduled_execution.source_execution_id = self.execution.id
             scheduled_execution.save()
 
             # Mark step COMPLETED with output
-            step_output = {'scheduled_execution_id': scheduled_execution.id}
+            # Story 57.17: enrichir pour la traçabilité UI
+            step_output = {
+                'scheduled_execution_id': scheduled_execution.id,
+                'action_name': target_action.name,
+                'scheduled_at': (
+                    scheduled_execution.scheduled_at.isoformat()
+                    if scheduled_execution.scheduled_at
+                    else None
+                ),
+            }
             execution_step.status = ExecutionStepStatus.COMPLETED
             execution_step.completed_at = timezone.now()
             execution_step.set_output(step_output)

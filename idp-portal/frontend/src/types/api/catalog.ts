@@ -101,7 +101,7 @@ export interface GateConfig {
 export interface NotificationChannel {
   type: 'email' | 'teams' | 'page_dba';
   enabled: boolean;
-  conditions: ('on_failure' | 'on_success' | 'always')[];
+  conditions: ('on_failure' | 'on_success' | 'always' | 'on_approval_required')[];
   /** Email only: "requester" or direct email address. */
   recipient?: string;
   /** Teams only: webhook URL or Vault reference. */

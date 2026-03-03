@@ -223,8 +223,9 @@ def validate_gate_config(gate_config: dict | None) -> None:
 
 
 # Story 31.8: Valid notification channel types and conditions
+# Story 57.8: on_approval_required — when a workflow step is waiting for approval
 VALID_CHANNEL_TYPES = ('email', 'teams', 'page_dba')
-VALID_CONDITIONS = ('on_failure', 'on_success', 'always')
+VALID_CONDITIONS = ('on_failure', 'on_success', 'always', 'on_approval_required')
 
 
 def validate_notification_config(notification_config: dict | None) -> None:

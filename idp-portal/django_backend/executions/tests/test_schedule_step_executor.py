@@ -31,6 +31,8 @@ def _make_mock_scheduled_execution(exec_id=42):
     se = MagicMock()
     se.id = exec_id
     se.correlation_id = None
+    # Story 57.17: scheduled_at doit être un datetime réel (pas un MagicMock) pour la sérialisation JSON
+    se.scheduled_at = timezone.now()
     return se
 
 
@@ -685,3 +687,163 @@ class TestScheduleStepRouting(TransactionTestCase):
 
         mock_handler.assert_called_once_with(step, 1, {})
         assert result.outcome == StepOutcome.SUCCESS
+
+
+# ---------------------------------------------------------------------------
+# Story 57.17 — Enrichissement step_output (action_name + scheduled_at)
+# ---------------------------------------------------------------------------
+
+class TestScheduleStepOutputEnrichment(TransactionTestCase):
+    """Story 57.17 — step_output contient action_name et scheduled_at."""
+
+    def setUp(self):
+        self.user = UserFactory()
+        self.action = ActionFactory(item_type='workflow')
+        self.execution = _make_execution(self.user, self.action)
+        self.executor = StepExecutor(self.execution, 'test-corr-enrichment')
+
+    @patch('executions.workflow_step_executor.AuditService.create_entry')
+    def test_step_output_contains_action_name(self, mock_audit):
+        """Story 57.17 — step_output contient action_name de l'action cible."""
+        target_action = ActionFactory(status='published', name='Patch Oracle mensuel')
+        mock_se = MagicMock()
+        mock_se.id = 789
+        mock_se.correlation_id = None
+        mock_se.scheduled_at = timezone.now().replace(microsecond=0)
+
+        step = {
+            'step_id': 'sched-enrich',
+            'name': 'Enrichment Step',
+            'order': 1,
+            'step_type': 'schedule_execution',
+            'referenced_action_id': target_action.id,
+            'schedule_config': {
+                'schedule_source': 'parameter',
+                'schedule_parameter_name': 'scheduled_at',
+            },
+        }
+
+        with patch('catalog.models.Action.objects') as mock_qs, \
+             patch('executions.scheduling_service.SchedulingService.create_scheduled_execution',
+                   return_value=mock_se):
+            mock_qs.get.return_value = target_action
+
+            result = self.executor.execute(
+                step, step_order=1,
+                step_parameters={'scheduled_at': '2026-06-01T10:00:00'}
+            )
+
+        from executions.workflow_runtime import StepOutcome
+        assert result.outcome == StepOutcome.SUCCESS
+        assert result.output.get('action_name') == 'Patch Oracle mensuel'
+
+    @patch('executions.workflow_step_executor.AuditService.create_entry')
+    def test_step_output_contains_scheduled_at(self, mock_audit):
+        """Story 57.17 — step_output contient scheduled_at en ISO."""
+        from datetime import datetime, timezone as dt_tz
+        target_action = ActionFactory(status='published')
+        mock_se = MagicMock()
+        mock_se.id = 790
+        mock_se.correlation_id = None
+        fixed_dt = datetime(2026, 3, 15, 2, 0, 0, tzinfo=dt_tz.utc)
+        mock_se.scheduled_at = fixed_dt
+
+        step = {
+            'step_id': 'sched-enrich-dt',
+            'name': 'Enrichment DT Step',
+            'order': 1,
+            'step_type': 'schedule_execution',
+            'referenced_action_id': target_action.id,
+            'schedule_config': {
+                'schedule_source': 'parameter',
+                'schedule_parameter_name': 'scheduled_at',
+            },
+        }
+
+        with patch('catalog.models.Action.objects') as mock_qs, \
+             patch('executions.scheduling_service.SchedulingService.create_scheduled_execution',
+                   return_value=mock_se):
+            mock_qs.get.return_value = target_action
+
+            result = self.executor.execute(
+                step, step_order=1,
+                step_parameters={'scheduled_at': '2026-03-15T02:00:00'}
+            )
+
+        from executions.workflow_runtime import StepOutcome
+        assert result.outcome == StepOutcome.SUCCESS
+        assert result.output.get('scheduled_at') == fixed_dt.isoformat()
+
+    @patch('executions.workflow_step_executor.AuditService.create_entry')
+    def test_step_output_scheduled_at_none_when_recurring(self, mock_audit):
+        """Story 57.17 — scheduled_at=None dans output si pas de date (récurrent)."""
+        target_action = ActionFactory(status='published')
+        mock_se = MagicMock()
+        mock_se.id = 791
+        mock_se.correlation_id = None
+        mock_se.scheduled_at = None
+
+        step = {
+            'step_id': 'sched-enrich-none',
+            'name': 'Enrichment None Step',
+            'order': 1,
+            'step_type': 'schedule_execution',
+            'referenced_action_id': target_action.id,
+            'schedule_config': {
+                'schedule_source': 'recurring',
+                'recurring_pattern': {
+                    'pattern_type': 'daily',
+                    'pattern_config': {'hour': 9, 'minute': 0},
+                },
+            },
+        }
+
+        mock_next_date = timezone.now() + timedelta(days=1)
+
+        with patch('catalog.models.Action.objects') as mock_qs, \
+             patch('executions.scheduling_service.SchedulingService.create_scheduled_execution',
+                   return_value=mock_se), \
+             patch('executions.utils.calculate_next_execution_date', return_value=mock_next_date):
+            mock_qs.get.return_value = target_action
+
+            result = self.executor.execute(step, step_order=1, step_parameters={})
+
+        from executions.workflow_runtime import StepOutcome
+        assert result.outcome == StepOutcome.SUCCESS
+        assert result.output.get('scheduled_at') is None
+
+    @patch('executions.workflow_step_executor.AuditService.create_entry')
+    def test_source_execution_id_stored_on_scheduled_execution(self, mock_audit):
+        """Story 57.17 — source_execution_id stocké sur ScheduledExecution."""
+        target_action = ActionFactory(status='published')
+        mock_se = MagicMock()
+        mock_se.id = 792
+        mock_se.correlation_id = None
+        mock_se.scheduled_at = timezone.now()
+
+        step = {
+            'step_id': 'sched-source-exec',
+            'name': 'Source Exec Step',
+            'order': 1,
+            'step_type': 'schedule_execution',
+            'referenced_action_id': target_action.id,
+            'schedule_config': {
+                'schedule_source': 'parameter',
+                'schedule_parameter_name': 'scheduled_at',
+            },
+        }
+
+        with patch('catalog.models.Action.objects') as mock_qs, \
+             patch('executions.scheduling_service.SchedulingService.create_scheduled_execution',
+                   return_value=mock_se):
+            mock_qs.get.return_value = target_action
+
+            result = self.executor.execute(
+                step, step_order=1,
+                step_parameters={'scheduled_at': '2026-06-01T10:00:00'}
+            )
+
+        from executions.workflow_runtime import StepOutcome
+        assert result.outcome == StepOutcome.SUCCESS
+        # Story 57.17: source_execution_id doit être stocké sur la ScheduledExecution
+        assert mock_se.source_execution_id == self.execution.id

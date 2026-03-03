@@ -149,4 +149,29 @@ describe('EventDetailsPopover', () => {
     await user.click(screen.getByTestId('edit-execution-btn'));
     expect(onEdit).toHaveBeenCalledWith(expect.objectContaining({ scheduled_execution_id: 42 }));
   });
+
+  // Story 57.17: section Origine
+  it('shows origin link when source_execution_id is present', () => {
+    const exec = makeExec({ source_execution_id: 100 });
+    renderPopover(exec);
+    expect(screen.getByTestId('link-to-source-execution')).toBeTruthy();
+  });
+
+  it('does not show origin link when source_execution_id is absent', () => {
+    renderPopover(makeExec());
+    expect(screen.queryByTestId('link-to-source-execution')).toBeFalsy();
+  });
+
+  it('does not show origin link when source_execution_id is null', () => {
+    const exec = makeExec({ source_execution_id: null });
+    renderPopover(exec);
+    expect(screen.queryByTestId('link-to-source-execution')).toBeFalsy();
+  });
+
+  it('origin link navigates to correct execution URL', () => {
+    const exec = makeExec({ source_execution_id: 42 });
+    renderPopover(exec);
+    const link = screen.getByTestId('link-to-source-execution');
+    expect(link.getAttribute('href')).toBe('/executions/42');
+  });
 });

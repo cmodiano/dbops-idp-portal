@@ -188,7 +188,7 @@ class NotificationService:
         self,
         execution: Any,
         action: Any,
-        event: str,  # "on_success" | "on_failure"
+        event: str,  # "on_success" | "on_failure" | "on_approval_required" (Story 57.8)
         page_me: bool = False,
         page_me_user_id: str | None = None,
         page_me_user_name: str | None = None,
@@ -209,6 +209,16 @@ class NotificationService:
         is_critical = level == "critical"
         can_page = is_prod and is_critical
 
+        # Story 57.8: Labels pour on_approval_required
+        event_labels = {
+            "on_success": "Succès",
+            "on_failure": "Échec",
+            "on_approval_required": "Approbation requise",
+        }
+        event_colors = {"on_success": "00FF00", "on_failure": "FF0000", "on_approval_required": "FFA500"}
+        event_label = event_labels.get(event, event.replace("_", " "))
+        event_color = event_colors.get(event, "808080")
+
         for channel in channels:
             if not channel.get("enabled", False):
                 continue
@@ -224,7 +234,7 @@ class NotificationService:
                 if recipient:
                     self.send_email(
                         recipient_email=recipient,
-                        subject=f"[IDP Portal] {action.name} — {event}",
+                        subject=f"[IDP Portal] {action.name} — {event_label}",
                         body=(
                             f"Exécution {execution.id} pour l'action '{action.name}' "
                             f"dans l'environnement '{env}' : {event.replace('_', ' ')}."
@@ -236,8 +246,6 @@ class NotificationService:
                 webhook_url = channel.get("webhook_url_ref", "")
                 # Vault resolution hors scope (v1 : URLs directes uniquement)
                 if webhook_url and not webhook_url.startswith("vault:"):
-                    color = "00FF00" if event == "on_success" else "FF0000"
-                    event_label = "Succès" if event == "on_success" else "Échec"
                     self.send_teams(
                         webhook_url=webhook_url,
                         title=f"[IDP Portal] {action.name} — {event_label}",
@@ -245,18 +253,23 @@ class NotificationService:
                             f"Action '{action.name}' [{env}] : "
                             f"{event.replace('_', ' ')} (exécution {execution.id})"
                         ),
-                        color=color,
+                        color=event_color,
                         correlation_id=correlation_id,
                     )
 
             elif ch_type == "page_dba" and can_page:
                 api_url = channel.get("api_url", "")
-                event_label = "a réussi" if event == "on_success" else "a échoué"
+                page_event_labels = {
+                    "on_success": "a réussi",
+                    "on_failure": "a échoué",
+                    "on_approval_required": "attend une approbation",
+                }
+                page_event_label = page_event_labels.get(event, event.replace("_", " "))
                 self.send_page_dba(
                     api_url=api_url,
                     message=(
                         f"Action critique '{action.name}' [{env}] "
-                        f"{event_label} (exécution {execution.id})"
+                        f"{page_event_label} (exécution {execution.id})"
                     ),
                     action_name=action.name,
                     execution_id=execution.id,
@@ -266,7 +279,12 @@ class NotificationService:
 
         # Page individuel — option à l'exécution
         if page_me and page_individual_enabled and can_page and page_me_user_id:
-            page_me_event_label = "a réussi" if event == "on_success" else "a échoué"
+            page_event_labels = {
+                "on_success": "a réussi",
+                "on_failure": "a échoué",
+                "on_approval_required": "attend une approbation",
+            }
+            page_me_event_label = page_event_labels.get(event, event.replace("_", " "))
             self.send_page_individual(
                 user_id=page_me_user_id,
                 user_name=page_me_user_name or page_me_user_id,

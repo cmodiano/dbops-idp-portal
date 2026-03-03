@@ -705,6 +705,15 @@ class TestValidateNotificationConfig:
             "page_individual_enabled": False
         })
 
+    def test_on_approval_required_condition_passes(self):
+        """Story 57.8: on_approval_required est une condition valide."""
+        validate_notification_config({
+            "channels": [
+                {"type": "email", "enabled": True, "conditions": ["on_approval_required"]},
+            ],
+            "page_individual_enabled": False
+        })
+
     def test_no_channels_key_passes(self):
         """Dict sans 'channels' → channels=[]) → pas d'erreur."""
         validate_notification_config({})

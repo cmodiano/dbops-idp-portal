@@ -45,6 +45,8 @@ export function EventDetailsPopover({
   const showExecutionLink =
     execution.status === 'executed' &&
     execution.execution_id != null;
+  // Story 57.17: lien vers l'exécution source (créée via schedule_execution step)
+  const showOriginLink = execution.source_execution_id != null;
   const isDbops = user?.profile?.toLowerCase() === 'dbops';
   const canCancel =
     execution.status === 'pending' &&
@@ -137,6 +139,16 @@ export function EventDetailsPopover({
           <Descriptions.Item label="Exécution">
             <Link to={`/executions/${execution.execution_id}`} data-testid="link-to-execution">
               <LinkOutlined /> Voir l'exécution
+            </Link>
+          </Descriptions.Item>
+        )}
+        {showOriginLink && (
+          <Descriptions.Item label="Origine">
+            <Link
+              to={`/executions/${execution.source_execution_id}`}
+              data-testid="link-to-source-execution"
+            >
+              <LinkOutlined /> Voir l'exécution source
             </Link>
           </Descriptions.Item>
         )}

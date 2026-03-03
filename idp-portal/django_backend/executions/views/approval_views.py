@@ -9,7 +9,8 @@ from typing import cast
 
 import structlog
 
-from django.db import transaction
+from django.db import connection, transaction
+from django.db.models import Q, Subquery
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -195,10 +196,36 @@ class PendingApprovalsView(APIView):
     )
     def get(self, request: Request) -> Response:
         # AC2: Story 26.8 — Permission vérifiée par DRF via permission_classes
+        # Story 57.12: Inclure aussi les exécutions RUNNING avec step WAITING approval_granted
+        # Pattern catalog/services._find_workflows_referencing_action: Oracle CLOB ne supporte
+        # pas __contains dans JOIN/DISTINCT (ORA-22848). Sous-requête Exists + extra() pour Oracle.
         count_only = (request.query_params.get("count_only") or "").lower() == "true"
+        if connection.vendor == "oracle":
+            # Sous-requête IN (pas EXISTS) pour éviter ORA-22848 : le CLOB reste dans
+            # la sous-requête qui retourne uniquement execution_id (scalaire).
+            approval_exec_ids = (
+                ExecutionStep.objects.filter(status=ExecutionStepStatus.WAITING)
+                .extra(
+                    where=[
+                        "JSON_EXISTS(OUTPUT, '$.gate_conditions[*]?(@.type == \"approval_granted\")')"
+                    ]
+                )
+                .values_list("execution_id", flat=True)
+            )
+            run_filter = Q(status=ExecutionStatus.RUNNING) & Q(
+                pk__in=Subquery(approval_exec_ids)
+            )
+        else:
+            run_filter = Q(
+                status=ExecutionStatus.RUNNING,
+                executionstep__status=ExecutionStepStatus.WAITING,
+                executionstep__output__contains="approval_granted",
+            )
+        # Pas de .distinct() : Oracle ORA-22848 avec CLOB (Action.execution_steps, etc.)
+        # Le filtre pk__in=Subquery ne produit pas de doublons.
         qs = (
             Execution.objects.select_related("action", "user", "action__integration")
-            .filter(status=ExecutionStatus.PENDING_APPROVAL)
+            .filter(Q(status=ExecutionStatus.PENDING_APPROVAL) | run_filter)
             .order_by("-created_at")
         )
 

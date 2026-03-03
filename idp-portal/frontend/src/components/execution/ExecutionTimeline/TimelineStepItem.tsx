@@ -13,8 +13,10 @@ import {
   MinusOutlined,
   ClockCircleOutlined,
 } from '@ant-design/icons';
+import { Link } from 'react-router';
 import { STEP_STATUS_COLOR as STATUS_COLOR } from '../../../utils/execution-status';
 import { formatDuration } from './utils';
+import { formatUtcToLocal } from '../../../utils/dateFormat';
 import type { ExecutionStepResponse } from '../../../types/api';
 
 const { Text } = Typography;
@@ -40,6 +42,11 @@ export function TimelineStepItem({
   const outputStatus = output?.status as string | undefined;
   const isServiceNow = step.step_type === 'servicenow';
   const showChangeBadge = isServiceNow && changeNumber;
+  // Story 57.17: schedule_execution traceability
+  const isScheduleExecution = step.step_type === 'schedule_execution';
+  const scheduledExecutionId = output?.scheduled_execution_id as number | undefined;
+  const scheduledActionName = output?.action_name as string | undefined;
+  const scheduledAt = output?.scheduled_at as string | undefined;
 
   return (
     <div
@@ -125,6 +132,21 @@ export function TimelineStepItem({
               <a href={changeId} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12 }}>
                 Voir dans ServiceNow
               </a>
+            )}
+            {/* Story 57.17: Lien vers la planification créée */}
+            {isScheduleExecution && scheduledExecutionId != null && step.status === 'COMPLETED' && (
+              <div style={{ marginTop: 8 }} data-testid="schedule-execution-badge">
+                <span style={{ fontSize: 12, color: '#4f46e5' }}>
+                  Exécution planifiée #{scheduledExecutionId}
+                  {scheduledActionName && ` — ${scheduledActionName}`}
+                  {scheduledAt && ` — ${formatUtcToLocal(scheduledAt)}`}
+                </span>
+                <div style={{ marginTop: 4 }}>
+                  <Link to="/calendar" style={{ fontSize: 12 }} data-testid="link-to-calendar">
+                    Voir dans les planifications →
+                  </Link>
+                </div>
+              </div>
             )}
             <div style={{ marginTop: 8 }}>
               <Button type="link" size="small" onClick={onOpenLogs} style={{ padding: 0 }}>

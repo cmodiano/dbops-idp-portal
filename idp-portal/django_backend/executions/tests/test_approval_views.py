@@ -13,7 +13,12 @@ import pytest
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from executions.models import ExecutionStatus
+from executions.models import (
+    ExecutionStatus,
+    ExecutionStep,
+    ExecutionStepStatus,
+    ExecutionStepType,
+)
 from executions.services import ExecutionService
 from executions.views.approval_views import ApproveExecutionView, RejectExecutionView
 from tests.factories import ActionFactory, ExecutionFactory, IntegrationFactory, UserFactory
@@ -80,6 +85,40 @@ class TestPendingApprovalsViewExtra(TestCase):
         client.force_authenticate(user=business)
         response = client.get("/api/v1/executions/pending-approvals/")
         self.assertEqual(response.status_code, 403)
+
+    # Story 57.12: RUNNING + step WAITING approval_granted → apparaît dans la liste
+    def test_list_includes_running_with_waiting_approval_step(self):
+        """Exécution RUNNING avec step WAITING approval_granted doit apparaître."""
+        execution = ExecutionFactory(
+            action=self.action,
+            user=self.admin,
+            status=ExecutionStatus.RUNNING,
+        )
+        step = ExecutionStep.objects.create(
+            execution=execution,
+            step_order=1,
+            step_name="request-approval",
+            step_type=ExecutionStepType.GATE,
+            status=ExecutionStepStatus.WAITING,
+        )
+        step.set_output({
+            "gate_conditions": [{"type": "approval_granted", "timeout_hours": 72}],
+            "context_from": ["tf-plan"],
+        })
+        step.save()
+
+        response = self.client.get("/api/v1/executions/pending-approvals/")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertIn("data", body)
+        self.assertEqual(len(body["data"]), 1)
+        self.assertEqual(body["data"][0]["id"], execution.id)
+        self.assertEqual(body["data"][0]["status"], ExecutionStatus.RUNNING)
+
+        # count_only doit inclure aussi
+        count_resp = self.client.get("/api/v1/executions/pending-approvals/?count_only=true")
+        self.assertEqual(count_resp.status_code, 200)
+        self.assertEqual(count_resp.json()["count"], 1)
 
 
 # ---------------------------------------------------------------------------
