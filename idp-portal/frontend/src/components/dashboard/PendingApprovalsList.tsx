@@ -107,6 +107,30 @@ export function PendingApprovalsList({
       ),
     },
     {
+      title: 'Contexte',
+      key: 'context',
+      render: (_: unknown, record: ExecutionResponse) => (
+        <Space orientation="vertical" size={2} style={{ fontSize: 12 }}>
+          {record.parameters && Object.keys(record.parameters).length > 0 ? (
+            <div>
+              {Object.entries(record.parameters).map(([k, v]) => (
+                <div key={k}><Text type="secondary">{k}:</Text> {typeof v === 'object' && v !== null ? JSON.stringify(v) : String(v)}</div>
+              ))}
+            </div>
+          ) : (
+            <Text type="secondary" style={{ fontStyle: 'italic' }}>Aucun paramètre</Text>
+          )}
+          {record.targets && record.targets.length > 0 ? (
+            <div>
+              {record.targets.map(t => (
+                <Tag key={t.target_id} style={{ marginBottom: 2 }}>{t.target_name || t.target_id}</Tag>
+              ))}
+            </div>
+          ) : null}
+        </Space>
+      ),
+    },
+    {
       title: 'Date de soumission',
       dataIndex: 'created_at',
       key: 'created_at',
@@ -184,6 +208,24 @@ export function PendingApprovalsList({
             <p style={{ color: '#666', fontSize: 13 }}>
               L'exécution sera lancée immédiatement après approbation.
             </p>
+            {selectedExecution.parameters && Object.keys(selectedExecution.parameters).length > 0 && (
+              <div style={{ marginBottom: 8, padding: 8, background: '#f5f5f5', borderRadius: 4 }}>
+                <Text strong style={{ fontSize: 12 }}>Paramètres :</Text>
+                {Object.entries(selectedExecution.parameters).map(([k, v]) => (
+                  <div key={k} style={{ fontSize: 12 }}>
+                    <Text type="secondary">{k}:</Text> {typeof v === 'object' && v !== null ? JSON.stringify(v) : String(v)}
+                  </div>
+                ))}
+              </div>
+            )}
+            {selectedExecution.targets && selectedExecution.targets.length > 0 && (
+              <div style={{ marginBottom: 8 }}>
+                <Text strong style={{ fontSize: 12 }}>Targets :</Text>{' '}
+                {selectedExecution.targets.map(t => (
+                  <Tag key={t.target_id}>{t.target_name || t.target_id}</Tag>
+                ))}
+              </div>
+            )}
           </div>
         )}
         <TextArea
@@ -220,6 +262,24 @@ export function PendingApprovalsList({
             <p style={{ color: '#666', fontSize: 13 }}>
               Le demandeur sera notifié du refus.
             </p>
+            {selectedExecution.parameters && Object.keys(selectedExecution.parameters).length > 0 && (
+              <div style={{ marginBottom: 8, padding: 8, background: '#f5f5f5', borderRadius: 4 }}>
+                <Text strong style={{ fontSize: 12 }}>Paramètres :</Text>
+                {Object.entries(selectedExecution.parameters).map(([k, v]) => (
+                  <div key={k} style={{ fontSize: 12 }}>
+                    <Text type="secondary">{k}:</Text> {typeof v === 'object' && v !== null ? JSON.stringify(v) : String(v)}
+                  </div>
+                ))}
+              </div>
+            )}
+            {selectedExecution.targets && selectedExecution.targets.length > 0 && (
+              <div style={{ marginBottom: 8 }}>
+                <Text strong style={{ fontSize: 12 }}>Targets :</Text>{' '}
+                {selectedExecution.targets.map(t => (
+                  <Tag key={t.target_id}>{t.target_name || t.target_id}</Tag>
+                ))}
+              </div>
+            )}
           </div>
         )}
         <TextArea

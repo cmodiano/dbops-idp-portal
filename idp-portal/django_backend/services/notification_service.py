@@ -17,6 +17,23 @@ from django.core.mail import send_mail
 logger = structlog.get_logger(__name__)
 
 
+def _format_params_for_notification(execution: Any) -> str:
+    """Story 58.2: Formate parameters et targets pour inclusion dans notifications on_approval_required."""
+    parts = []
+    params = execution.get_parameters() if hasattr(execution, "get_parameters") else getattr(execution, "parameters", None)
+    if params:
+        params_str = ", ".join(f"{k}={v}" for k, v in params.items())
+        parts.append(f"Paramètres: {params_str}")
+    try:
+        targets = list(execution.targets.all())
+        if targets:
+            target_names = ", ".join(t.target_name or t.target_id for t in targets)
+            parts.append(f"Targets: {target_names}")
+    except Exception:  # noqa: BLE001
+        pass
+    return " | ".join(parts) if parts else ""
+
+
 class NotificationService:
     """Service de notification multi-destinations (email, Teams, page)."""
 
@@ -240,13 +257,22 @@ class NotificationService:
                 if recipient == "requester":
                     recipient = getattr(execution.user, "email", "") or ""
                 if recipient:
+                    if event == "on_approval_required":
+                        context_str = _format_params_for_notification(execution)
+                        body = (
+                            f"Approbation requise pour l'action '{action.name}' "
+                            f"dans l'environnement '{env}' (exécution {execution.id})."
+                            + (f"\n{context_str}" if context_str else "")
+                        )
+                    else:
+                        body = (
+                            f"Exécution {execution.id} pour l'action '{action.name}' "
+                            f"dans l'environnement '{env}' : {event.replace('_', ' ')}."
+                        )
                     self.send_email(
                         recipient_email=recipient,
                         subject=f"[IDP Portal] {action.name} — {event_label}",
-                        body=(
-                            f"Exécution {execution.id} pour l'action '{action.name}' "
-                            f"dans l'environnement '{env}' : {event.replace('_', ' ')}."
-                        ),
+                        body=body,
                         correlation_id=correlation_id,
                     )
 
@@ -254,13 +280,21 @@ class NotificationService:
                 webhook_url = channel.get("webhook_url_ref", "")
                 # Vault resolution hors scope (v1 : URLs directes uniquement)
                 if webhook_url and not webhook_url.startswith("vault:"):
+                    if event == "on_approval_required":
+                        context_str = _format_params_for_notification(execution)
+                        message = (
+                            f"Action '{action.name}' [{env}] : approbation requise (exécution {execution.id})"
+                            + (f"\n{context_str}" if context_str else "")
+                        )
+                    else:
+                        message = (
+                            f"Action '{action.name}' [{env}] : "
+                            f"{event.replace('_', ' ')} (exécution {execution.id})"
+                        )
                     self.send_teams(
                         webhook_url=webhook_url,
                         title=f"[IDP Portal] {action.name} — {event_label}",
-                        message=(
-                            f"Action '{action.name}' [{env}] : "
-                            f"{event.replace('_', ' ')} (exécution {execution.id})"
-                        ),
+                        message=message,
                         color=event_color,
                         correlation_id=correlation_id,
                     )

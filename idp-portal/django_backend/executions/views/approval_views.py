@@ -227,6 +227,7 @@ class PendingApprovalsView(APIView):
         # Le filtre pk__in=Subquery ne produit pas de doublons.
         qs = (
             Execution.objects.select_related("action", "user", "action__integration")
+            .prefetch_related("targets")  # Story 58.2: évite N+1 pour ExecutionTargetSerializer
             .filter(Q(status=ExecutionStatus.PENDING_APPROVAL) | run_filter)
             .order_by("-created_at")
         )

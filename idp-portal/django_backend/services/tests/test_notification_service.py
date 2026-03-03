@@ -465,6 +465,117 @@ class TestNotifyExecutionEvent:
             mock_email.assert_called_once()
             assert mock_email.call_args.kwargs["recipient_email"] == "requester@example.com"
 
+    # ─── Story 58.2: on_approval_required enrichment ──────────────────────────
+
+    def _make_approval_execution(self, params: dict | None = None, targets: list | None = None) -> MagicMock:
+        """Exécution mock avec parameters et targets pour on_approval_required."""
+        execution = self._make_execution(env="prod")
+        execution.get_parameters.return_value = params or {}
+        mock_targets = [MagicMock(target_name=t["target_name"], target_id=t["target_id"]) for t in (targets or [])]
+        execution.targets.all.return_value = mock_targets
+        return execution
+
+    def test_on_approval_required_email_includes_parameters(self) -> None:
+        """Story 58.2 AC6: email pour on_approval_required inclut les paramètres."""
+        config = {
+            "channels": [
+                {"type": "email", "enabled": True, "conditions": ["on_approval_required"], "recipient": "dba@corp.com"},
+            ],
+        }
+        execution = self._make_approval_execution(params={"pdb_name": "TESTDB"})
+        action = self._make_action(notification_config=config)
+
+        with patch.object(self.service, "send_email") as mock_send:
+            self.service.notify_execution_event(execution, action, "on_approval_required")
+            mock_send.assert_called_once()
+            body = mock_send.call_args.kwargs["body"]
+            assert "pdb_name=TESTDB" in body
+
+    def test_on_approval_required_email_includes_targets(self) -> None:
+        """Story 58.2 AC6: email pour on_approval_required inclut les targets."""
+        config = {
+            "channels": [
+                {"type": "email", "enabled": True, "conditions": ["on_approval_required"], "recipient": "dba@corp.com"},
+            ],
+        }
+        execution = self._make_approval_execution(
+            params={},
+            targets=[{"target_name": "oracle-prod-01", "target_id": "srv-01"}],
+        )
+        action = self._make_action(notification_config=config)
+
+        with patch.object(self.service, "send_email") as mock_send:
+            self.service.notify_execution_event(execution, action, "on_approval_required")
+            body = mock_send.call_args.kwargs["body"]
+            assert "oracle-prod-01" in body
+
+    def test_on_approval_required_email_no_params_no_context(self) -> None:
+        """Story 58.2 AC3/AC6: email sans paramètres ni targets — pas de crash."""
+        config = {
+            "channels": [
+                {"type": "email", "enabled": True, "conditions": ["on_approval_required"], "recipient": "dba@corp.com"},
+            ],
+        }
+        execution = self._make_approval_execution(params={}, targets=[])
+        action = self._make_action(notification_config=config)
+
+        with patch.object(self.service, "send_email") as mock_send:
+            self.service.notify_execution_event(execution, action, "on_approval_required")
+            mock_send.assert_called_once()
+            body = mock_send.call_args.kwargs["body"]
+            assert "approbation requise" in body.lower() or "approbation" in body.lower()
+
+    def test_on_approval_required_teams_includes_parameters(self) -> None:
+        """Story 58.2 AC6: Teams pour on_approval_required inclut les paramètres."""
+        config = {
+            "channels": [
+                {"type": "teams", "enabled": True, "conditions": ["on_approval_required"],
+                 "webhook_url_ref": "http://teams.webhook/hook"},
+            ],
+        }
+        execution = self._make_approval_execution(params={"pdb_name": "TESTDB"})
+        action = self._make_action(notification_config=config)
+
+        with patch.object(self.service, "send_teams") as mock_teams:
+            self.service.notify_execution_event(execution, action, "on_approval_required")
+            mock_teams.assert_called_once()
+            message = mock_teams.call_args.kwargs["message"]
+            assert "pdb_name" in message or "TESTDB" in message
+
+    def test_on_approval_required_teams_includes_targets(self) -> None:
+        """Story 58.2 AC6: Teams pour on_approval_required inclut les targets."""
+        config = {
+            "channels": [
+                {"type": "teams", "enabled": True, "conditions": ["on_approval_required"],
+                 "webhook_url_ref": "http://teams.webhook/hook"},
+            ],
+        }
+        execution = self._make_approval_execution(
+            targets=[{"target_name": "oracle-prod-01", "target_id": "srv-01"}],
+        )
+        action = self._make_action(notification_config=config)
+
+        with patch.object(self.service, "send_teams") as mock_teams:
+            self.service.notify_execution_event(execution, action, "on_approval_required")
+            message = mock_teams.call_args.kwargs["message"]
+            assert "oracle-prod-01" in message
+
+    def test_on_success_email_body_not_modified(self) -> None:
+        """Story 58.2: le corps email pour on_success n'est PAS enrichi avec params/targets."""
+        config = {
+            "channels": [
+                {"type": "email", "enabled": True, "conditions": ["on_success"], "recipient": "dba@corp.com"},
+            ],
+        }
+        execution = self._make_approval_execution(params={"pdb_name": "TESTDB"})
+        action = self._make_action(notification_config=config)
+
+        with patch.object(self.service, "send_email") as mock_send:
+            self.service.notify_execution_event(execution, action, "on_success")
+            body = mock_send.call_args.kwargs["body"]
+            # Body ne contient pas le format enrichi avec "approbation requise"
+            assert "approbation requise" not in body.lower()
+
 
 class TestNotify:
     """Tests pour la méthode dispatch notify()."""

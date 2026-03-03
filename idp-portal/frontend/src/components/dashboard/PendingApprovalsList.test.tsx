@@ -405,6 +405,119 @@ describe('PendingApprovalsList', () => {
   // is already covered by other tests.
 });
 
+// ─── Story 58.2: paramètres et targets ────────────────────────────────────────
+describe('PendingApprovalsList — Story 58.2: paramètres et targets', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const mockExecutionWithContext: ExecutionResponse = {
+    ...mockExecutions[0],
+    parameters: { pdb_name: 'TESTDB', env_type: 'prod' },
+    targets: [
+      { target_type: 'server', target_id: 'srv-01', target_name: 'oracle-prod-01', target_metadata: null },
+      { target_type: 'server', target_id: 'srv-02', target_name: 'oracle-prod-02', target_metadata: null },
+    ],
+  };
+
+  it('AC1: affiche les paramètres dans le tableau', () => {
+    render(
+      <PendingApprovalsList executions={[mockExecutionWithContext]} loading={false} onActionComplete={vi.fn()} />
+    );
+    expect(screen.getByText(/pdb_name/)).toBeInTheDocument();
+    expect(screen.getByText(/TESTDB/)).toBeInTheDocument();
+  });
+
+  it('AC1: affiche les targets dans le tableau', () => {
+    render(
+      <PendingApprovalsList executions={[mockExecutionWithContext]} loading={false} onActionComplete={vi.fn()} />
+    );
+    expect(screen.getByText('oracle-prod-01')).toBeInTheDocument();
+    expect(screen.getByText('oracle-prod-02')).toBeInTheDocument();
+  });
+
+  it('AC3: gère les paramètres null sans erreur', () => {
+    const execWithNullParams: ExecutionResponse = { ...mockExecutions[0], parameters: null, targets: [] };
+    render(
+      <PendingApprovalsList executions={[execWithNullParams]} loading={false} onActionComplete={vi.fn()} />
+    );
+    expect(screen.getByText('Create PDB')).toBeInTheDocument();
+    expect(screen.getByText(/Aucun paramètre/)).toBeInTheDocument();
+  });
+
+  it('AC3: gère les paramètres vides sans erreur', () => {
+    const execWithEmptyParams: ExecutionResponse = { ...mockExecutions[0], parameters: {}, targets: [] };
+    render(
+      <PendingApprovalsList executions={[execWithEmptyParams]} loading={false} onActionComplete={vi.fn()} />
+    );
+    expect(screen.getByText('Create PDB')).toBeInTheDocument();
+    expect(screen.getByText(/Aucun paramètre/)).toBeInTheDocument();
+  });
+
+  it('AC4: gère les targets absents sans erreur', () => {
+    const execWithNoTargets: ExecutionResponse = { ...mockExecutions[0], parameters: null, targets: undefined };
+    render(
+      <PendingApprovalsList executions={[execWithNoTargets]} loading={false} onActionComplete={vi.fn()} />
+    );
+    expect(screen.getByText('Create PDB')).toBeInTheDocument();
+  });
+
+  it('AC2: affiche les paramètres dans la modal d\'approbation', async () => {
+    const user = userEvent.setup();
+    render(
+      <PendingApprovalsList executions={[mockExecutionWithContext]} loading={false} onActionComplete={vi.fn()} />
+    );
+
+    const approveButtons = screen.getAllByRole('button', { name: /Approuver/ });
+    await user.click(approveButtons[0]);
+
+    const modal = screen.getByRole('dialog');
+    expect(modal).toBeInTheDocument();
+    expect(modal.textContent).toMatch(/pdb_name/);
+    expect(modal.textContent).toMatch(/TESTDB/);
+  });
+
+  it('AC2: affiche les targets dans la modal d\'approbation', async () => {
+    const user = userEvent.setup();
+    render(
+      <PendingApprovalsList executions={[mockExecutionWithContext]} loading={false} onActionComplete={vi.fn()} />
+    );
+
+    const approveButtons = screen.getAllByRole('button', { name: /Approuver/ });
+    await user.click(approveButtons[0]);
+
+    const modal = screen.getByRole('dialog');
+    expect(modal.textContent).toMatch(/oracle-prod-01/);
+  });
+
+  it('AC2: affiche les paramètres dans la modal de refus', async () => {
+    const user = userEvent.setup();
+    render(
+      <PendingApprovalsList executions={[mockExecutionWithContext]} loading={false} onActionComplete={vi.fn()} />
+    );
+
+    const rejectButtons = screen.getAllByRole('button', { name: /Refuser/ });
+    await user.click(rejectButtons[0]);
+
+    const modal = screen.getByRole('dialog');
+    expect(modal.textContent).toMatch(/pdb_name/);
+    expect(modal.textContent).toMatch(/TESTDB/);
+  });
+
+  it('AC2: affiche les targets dans la modal de refus', async () => {
+    const user = userEvent.setup();
+    render(
+      <PendingApprovalsList executions={[mockExecutionWithContext]} loading={false} onActionComplete={vi.fn()} />
+    );
+
+    const rejectButtons = screen.getAllByRole('button', { name: /Refuser/ });
+    await user.click(rejectButtons[0]);
+
+    const modal = screen.getByRole('dialog');
+    expect(modal.textContent).toMatch(/oracle-prod-01/);
+  });
+});
+
 // ─── Coverage extras ──────────────────────────────────────────────────────────
 describe('PendingApprovalsList — coverage extras', () => {
   beforeEach(() => {
