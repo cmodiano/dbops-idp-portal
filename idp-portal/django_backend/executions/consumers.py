@@ -7,7 +7,7 @@ Story 27.1: Enhanced with channel layer group messaging for AAP job monitoring.
 import json
 
 import structlog
-from channels.exceptions import StopConsumer  # type: ignore[import-untyped]
+from channels.exceptions import StopConsumer
 
 from core.consumers import AuthenticatedWebSocketConsumer
 

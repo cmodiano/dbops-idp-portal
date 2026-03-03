@@ -91,6 +91,7 @@ export interface WorkflowStepNodeData {
   gate_type?: 'maintenance_window' | 'approval' | null;
   on_timeout?: 'FAIL' | 'SKIP' | null;
   context_from?: string[] | null;
+  approver_profile_ids?: number[] | null;
   timeout?: string | null;
   url?: string | null;
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | null;

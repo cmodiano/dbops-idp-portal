@@ -94,6 +94,13 @@ class ProfileService:
         """
         return Profile.objects.list_with_permissions_count()
 
+    def list_approvers(self) -> QuerySet[Profile]:
+        """Liste uniquement les profils éligibles approbateurs (is_approver=1).
+
+        Story 58.4 AC4.
+        """
+        return Profile.objects.filter(is_approver=1).order_by('name')
+
     def get_by_id(self, profile_id: int) -> Profile | None:
         """
         Get profile by ID with prefetched permissions.

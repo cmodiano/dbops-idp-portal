@@ -106,9 +106,13 @@ class ProfileViewSet(viewsets.ViewSet):
         return ProfileSerializer
 
     def list(self, request: Request) -> Response:
-        """GET /admin/profiles - List all profiles."""
+        """GET /admin/profiles - List all profiles. Supports ?is_approver=true filter (Story 58.4 AC4)."""
         service = self.get_profile_service()
-        profiles = service.list_all()
+        is_approver_param = request.query_params.get('is_approver', '').lower()
+        if is_approver_param == 'true':
+            profiles = service.list_approvers()
+        else:
+            profiles = service.list_all()
         serializer = ProfileListSerializer(profiles, many=True)
         return Response({"data": serializer.data})
 

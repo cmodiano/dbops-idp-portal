@@ -245,7 +245,7 @@ def _broadcast_webhook_update(
 ) -> None:
     """Broadcast webhook status update to execution's WebSocket group."""
     try:
-        from channels.layers import get_channel_layer  # type: ignore[import-untyped]
+        from channels.layers import get_channel_layer
         from asgiref.sync import async_to_sync
 
         channel_layer = get_channel_layer()

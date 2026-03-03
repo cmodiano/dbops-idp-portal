@@ -7,7 +7,7 @@ Sequence: accept() → receive {type:"auth", token} → validate → send {type:
 
 import json
 
-from channels.generic.websocket import AsyncWebsocketConsumer  # type: ignore[import-untyped]
+from channels.generic.websocket import AsyncWebsocketConsumer
 
 import structlog
 

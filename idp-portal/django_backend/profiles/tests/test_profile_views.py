@@ -269,3 +269,53 @@ class TestProfileViewSet(TestCase):
         # Verify persisted in DB
         self.profile.refresh_from_db()
         self.assertEqual(self.profile.is_approver, 1)
+
+
+@pytest.mark.django_db
+class TestProfileIsApproverFilter(TestCase):
+    """Tests for GET /admin/profiles?is_approver=true filter — Story 58.4 AC4."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.dbops_user = User.objects.create(
+            username='dbops_user_approver_filter',
+            profile='dbops',
+        )
+        self.client.force_authenticate(user=self.dbops_user)
+
+        # Profile approbateur
+        self.approver_profile = Profile.objects.create(
+            name='Approver Profile 58_4',
+            ad_group='GRP-APPROVER',
+            is_admin=0,
+            is_approver=1,
+        )
+        # Profile non-approbateur
+        self.non_approver_profile = Profile.objects.create(
+            name='Non-Approver Profile 58_4',
+            ad_group='GRP-REGULAR',
+            is_admin=0,
+            is_approver=0,
+        )
+
+    def test_filter_is_approver_true_returns_only_approvers(self):
+        """GET ?is_approver=true retourne uniquement les profils is_approver=1."""
+        response = self.client.get('/api/v1/admin/profiles/?is_approver=true')
+
+        self.assertEqual(response.status_code, 200)
+        data = response.data['data']
+        names = [p['name'] for p in data]
+        self.assertIn('Approver Profile 58_4', names)
+        self.assertNotIn('Non-Approver Profile 58_4', names)
+        for p in data:
+            self.assertTrue(p['is_approver'])
+
+    def test_filter_is_approver_false_returns_all_profiles(self):
+        """GET sans paramètre retourne tous les profils (comportement inchangé)."""
+        response = self.client.get('/api/v1/admin/profiles/')
+
+        self.assertEqual(response.status_code, 200)
+        data = response.data['data']
+        names = [p['name'] for p in data]
+        self.assertIn('Approver Profile 58_4', names)
+        self.assertIn('Non-Approver Profile 58_4', names)

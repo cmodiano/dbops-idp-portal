@@ -200,6 +200,8 @@ export interface WorkflowStep {
   on_timeout?: 'FAIL' | 'SKIP' | null;
   /** Story 57.13: Step IDs to show to approver (gate type=approval only). */
   context_from?: string[] | null;
+  /** Story 58.4: Profile IDs allowed to approve (gate type=approval only). Empty/null = all is_approver profiles eligible. */
+  approver_profile_ids?: number[] | null;
   /** Story 57.13: Timeout duration string e.g. '24h', '30m'. */
   timeout?: string | null;
   // === http_request ===
