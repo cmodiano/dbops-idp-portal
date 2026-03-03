@@ -122,3 +122,41 @@ describe('TimelineStepItem — Story 57.17: schedule_execution badge', () => {
     expect(badge.textContent).not.toContain('formatted:');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Story 58.3 — WAITING step display
+// ---------------------------------------------------------------------------
+
+describe('TimelineStepItem — Story 58.3: WAITING gate display', () => {
+  function makeWaitingStep(overrides: Partial<ExecutionStepResponse> = {}): ExecutionStepResponse {
+    return {
+      id: 10,
+      execution_id: 1,
+      step_order: 1,
+      step_name: 'Approbation initiale',
+      step_type: 'platform',
+      status: 'WAITING',
+      started_at: null,
+      completed_at: null,
+      output: null,
+      platform_job_id: null,
+      error_message: null,
+      ...overrides,
+    };
+  }
+
+  it('shows "En attente d\'approbation" badge for WAITING step', () => {
+    renderStep(makeWaitingStep());
+    expect(screen.getByText("En attente d'approbation")).toBeTruthy();
+  });
+
+  it('does not show "En cours" badge for WAITING step', () => {
+    renderStep(makeWaitingStep());
+    expect(screen.queryByText('En cours')).toBeFalsy();
+  });
+
+  it('renders step name for WAITING step', () => {
+    renderStep(makeWaitingStep());
+    expect(screen.getByText('Approbation initiale')).toBeTruthy();
+  });
+});

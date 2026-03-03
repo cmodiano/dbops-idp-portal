@@ -575,6 +575,81 @@ describe('WorkflowExecutionGraph', () => {
       expect(screen.getByTestId('step-detail-drawer')).toBeInTheDocument();
     });
 
+  // Story 58.3 — WAITING step rendering
+  describe('Story 58.3: WAITING step display', () => {
+    it('AC4: renders legend entry for WAITING status', async () => {
+      const { useExecutionPolling } = await import('../../hooks/useExecutionPolling');
+      vi.mocked(useExecutionPolling).mockReturnValue({
+        execution: mockExecution,
+        steps: [],
+        isPolling: false,
+        error: null,
+      });
+
+      render(
+        <WorkflowExecutionGraph
+          executionId={1}
+          workflowSteps={mockWorkflowSteps}
+          execution={mockExecution}
+        />,
+        { wrapper: Wrapper },
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("En attente d'approbation")).toBeInTheDocument();
+      });
+    });
+
+    it('AC4: useWebSocket provides WAITING step to graph (integration mock)', async () => {
+      const { useWebSocket } = await import('../../hooks/useWebSocket');
+      const waitingStep: ExecutionStepResponse = {
+        id: 5,
+        execution_id: 1,
+        step_order: 1,
+        step_name: 'Build App',
+        step_type: 'platform',
+        status: 'WAITING',
+        started_at: null,
+        completed_at: null,
+        output: null,
+        platform_job_id: null,
+        error_message: null,
+      };
+      vi.mocked(useWebSocket).mockReturnValue({
+        steps: [waitingStep],
+        execution: mockExecution,
+        loading: false,
+        error: null,
+        lastMessage: null,
+        isAuthenticated: true,
+      });
+
+      const { useExecutionPolling } = await import('../../hooks/useExecutionPolling');
+      vi.mocked(useExecutionPolling).mockReturnValue({
+        execution: null,
+        steps: [],
+        isPolling: false,
+        error: null,
+      });
+
+      render(
+        <WorkflowExecutionGraph
+          executionId={1}
+          workflowSteps={mockWorkflowSteps}
+          execution={mockExecution}
+        />,
+        { wrapper: Wrapper },
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('workflow-execution-graph')).toBeInTheDocument();
+      });
+
+      // Graph renders with WAITING step data available
+      expect(screen.getByText('Build App')).toBeInTheDocument();
+    });
+  });
+
     it('AC7: highlights selected node with golden border', async () => {
       const { useExecutionPolling } = await import('../../hooks/useExecutionPolling');
       vi.mocked(useExecutionPolling).mockReturnValue({

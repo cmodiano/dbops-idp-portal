@@ -12,6 +12,7 @@ import {
   LoadingOutlined,
   MinusOutlined,
   ClockCircleOutlined,
+  HourglassOutlined,
 } from '@ant-design/icons';
 import { Link } from 'react-router';
 import { STEP_STATUS_COLOR as STATUS_COLOR } from '../../../utils/execution-status';
@@ -72,6 +73,7 @@ export function TimelineStepItem({
           {step.status === 'SKIPPED' && <MinusOutlined style={{ color: '#fff', fontSize: 14 }} />}
           {step.status === 'RUNNING' && <LoadingOutlined spin style={{ color: '#fff', fontSize: 14 }} />}
           {step.status === 'PENDING' && <ClockCircleOutlined style={{ color: '#fff', fontSize: 14 }} />}
+          {step.status === 'WAITING' && <HourglassOutlined style={{ color: '#fff', fontSize: 14 }} />}
         </div>
         {!isLast && (
           <div
@@ -90,6 +92,8 @@ export function TimelineStepItem({
             <Text strong>{step.step_name}</Text>
             {/* Story 19.1, AC3: "En cours" badge for RUNNING step */}
             {step.status === 'RUNNING' && <Badge status="processing" text="En cours" />}
+            {/* Story 58.3, AC4: badge distinct pour WAITING gate */}
+            {step.status === 'WAITING' && <Badge status="warning" text="En attente d'approbation" />}
             <Text type="secondary" style={{ fontSize: 12 }}>
               {formatDuration(step.started_at, step.completed_at)}
             </Text>

@@ -87,8 +87,8 @@ export interface ExecutionResponse {
   targets?: ExecutionTarget[];
 }
 
-/** Execution step status (Story 4.6). */
-export type ExecutionStepStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'SKIPPED';
+/** Execution step status (Story 4.6, Story 58.3: WAITING ajouté). */
+export type ExecutionStepStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'SKIPPED' | 'WAITING';
 
 /** Execution step type (Story 4.6). */
 export type ExecutionStepTypeApi = 'vault' | 'servicenow' | 'platform' | 'prerequisite' | 'verification' | 'schedule_execution';

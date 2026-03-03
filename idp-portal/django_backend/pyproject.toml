@@ -171,5 +171,7 @@ module = [
     "onelogin.*",
     "jose.*",
     "croniter.*",
+    "channels.*",
+    "asgiref.*",
 ]
 ignore_missing_imports = true

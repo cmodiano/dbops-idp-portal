@@ -89,13 +89,17 @@ class StepExecutor:
                 execution=self.execution,
                 step_order=step_order,
                 step_name=step_name,
-                step_type='platform',
+                step_type=step_type_routing,  # Story 58.3 fix: utiliser le type réel du step (ex. 'gate') plutôt que 'platform' hardcodé
                 status=ExecutionStepStatus.WAITING,
             )
 
             waiting_context = build_waiting_context(execution_step, gate_conditions)
             execution_step.set_output(waiting_context)
             execution_step.save()
+
+            # Story 58.3: broadcast step_update pour que la vue d'exécution s'actualise en temps réel
+            from executions.utils.websocket_broadcast import broadcast_step_update  # noqa: PLC0415
+            broadcast_step_update(self.execution.id, execution_step)
 
             logger.info(
                 "workflow_step_waiting",
@@ -582,6 +586,10 @@ class StepExecutor:
             # Require approval — WAITING
             execution_step.status = ExecutionStepStatus.WAITING
             execution_step.save()
+
+            # Story 58.3: broadcast step_update (cohérence avec gate_conditions path)
+            from executions.utils.websocket_broadcast import broadcast_step_update  # noqa: PLC0415
+            broadcast_step_update(self.execution.id, execution_step)
 
             # Add gate_condition for manual approval
             existing_output = execution_step.get_output() or {}
