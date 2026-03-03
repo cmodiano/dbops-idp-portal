@@ -513,7 +513,7 @@ class ContainerWorkflowRuntime:
                 step=step,
                 correlation_id=self.correlation_id,
             )
-        except Exception:
+        except Exception as _e:
             parent_step.status = ExecutionStepStatus.FAILED
             parent_step.completed_at = timezone.now()
             parent_step.save()
@@ -743,12 +743,13 @@ class ContainerWorkflowRuntime:
 
         auth_headers = build_auth_headers(integration, get_correlation_id())
         svc = ServiceNowService(base_url=integration.base_url, auth_headers=auth_headers)
-        change_number = svc.create_change(
+        change_result = svc.create_change(
             change_model_code=env_config.get('change_model_code') or env_config.get('template_id'),
             change_type=env_config.get('change_type'),
             short_description=f"IDP Portal — {self.action.name}",
             description=f"Exécution automatisée {self.execution.id} (env: {environment})",
         )
+        change_number = change_result["number"]
 
         # Store change number
         self.execution.servicenow_change_id = change_number
