@@ -63,7 +63,7 @@ class ServiceNowService(IHealthCheckable):
         short_description: str = "",
         description: str = "",
         **kwargs: object,
-    ) -> str:
+    ) -> dict:
         """
         Create a ServiceNow change request via REST API (Story 31.6, AC#9).
 
@@ -74,7 +74,7 @@ class ServiceNowService(IHealthCheckable):
             description: Full description
 
         Returns:
-            Change number (e.g. "CHG0001234")
+            dict with keys 'number' (str) and 'sys_id' (str)
 
         Raises:
             ServiceUnavailableError: If the API is unavailable or returns an error
@@ -97,12 +97,13 @@ class ServiceNowService(IHealthCheckable):
                 resp.raise_for_status()
                 result = resp.json().get('result', {})
                 change_number = result.get('number') or result.get('sys_id', '')
+                sys_id = result.get('sys_id', '')
                 logger.info(
                     "servicenow_create_change_success",
                     change_number=change_number,
                     base_url=self.base_url,
                 )
-                return str(change_number)
+                return {"number": str(change_number), "sys_id": str(sys_id)}
         except httpx.TimeoutException as exc:
             logger.error("servicenow_create_change_timeout", base_url=self.base_url, error=str(exc))
             raise ServiceUnavailableError(

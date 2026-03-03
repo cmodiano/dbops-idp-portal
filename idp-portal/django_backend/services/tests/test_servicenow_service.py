@@ -47,7 +47,7 @@ class TestServiceNowCreateChange:
             description="Test description",
         )
 
-        assert result == "CHG0001234"
+        assert result == {"number": "CHG0001234", "sys_id": "abc123"}
         mock_client.post.assert_called_once()
         call_args = mock_client.post.call_args
         assert call_args[0][0] == "https://snow.example.com/api/now/table/change_request"
@@ -108,7 +108,7 @@ class TestServiceNowCreateChange:
 
         result = self.service.create_change()
 
-        assert result == "CHG0005678"
+        assert result == {"number": "CHG0005678", "sys_id": ""}
         payload = mock_client.post.call_args[1]["json"]
         assert payload["type"] == "normal"
         assert "chg_model" not in payload  # Not set when change_model_code is None
