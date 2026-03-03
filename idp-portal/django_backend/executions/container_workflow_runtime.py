@@ -529,7 +529,11 @@ class ContainerWorkflowRuntime:
         if step_id is not None:
             output_mapping = step.get('output_mapping', {})
             extractor = OutputExtractor()
-            raw_output = result if isinstance(result, dict) else {}
+            # Handlers peuvent retourner envelope {raw_output: ...} ou dict brut
+            if isinstance(result, dict) and 'raw_output' in result:
+                raw_output = result.get('raw_output', {}) or {}
+            else:
+                raw_output = result if isinstance(result, dict) else {}
             extracted = extractor.extract(raw_output, output_mapping)
             self._step_outputs[step_id] = extracted
 

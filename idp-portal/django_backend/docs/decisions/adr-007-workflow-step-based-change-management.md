@@ -1,4 +1,4 @@
-# ADR-007 : Architecture Steps Unifiee — Change Management, Gates, Evaluations et Approbations comme Steps de Workflow
+# ADR-007 : Architecture Steps Unifiée — Change Management, Gates, Evaluations et Approbations comme Steps de Workflow
 
 **Date :** 2026-03-02
 **Statut :** Proposé
@@ -6,22 +6,22 @@
 
 ## Contexte
 
-### Le probleme metier
+### Le problème métier
 
-Le portail IDP doit orchestrer des workflows complexes impliquant plusieurs systemes :
-inventaire (API), ServiceNow (change management), plateformes d'execution (AAP, Terraform,
-GitHub Actions), et des decisions humaines (approbations). Aujourd'hui, AAP orchestre
-lui-meme une partie de ce cycle (interroger l'inventaire, creer le change ServiceNow,
-executer le patching, fermer le change). Le portail ne fait que declencher un job AAP
-et ne controle pas le flux.
+Le portail IDP doit orchestrer des workflows complexes impliquant plusieurs systèmes :
+inventaire (API), ServiceNow (change management), plateformes d'exécution (AAP, Terraform,
+GitHub Actions), et des décisions humaines (approbations). Aujourd'hui, AAP orchestre
+lui-même une partie de ce cycle (interroger l'inventaire, créer le change ServiceNow,
+exécuter le patching, fermer le change). Le portail ne fait que déclencher un job AAP
+et ne contrôle pas le flux.
 
-**L'objectif est que le portail devienne le plan de controle central** : il orchestre,
-les plateformes executent. Comme un workflow GitHub Actions ou un playbook Ansible
-avec `register`, chaque etape produit des donnees consommables par les etapes suivantes.
+**L'objectif est que le portail devienne le plan de contrôle central** : il orchestre,
+les plateformes exécutent. Comme un workflow GitHub Actions ou un playbook Ansible
+avec `register`, chaque étape produit des données consommables par les étapes suivantes.
 
 ### Les limitations de l'architecture actuelle
 
-L'architecture actuelle repose sur des **hooks et mecanismes caches** plutot que
+L'architecture actuelle repose sur des **hooks et mécanismes cachés** plutôt que
 sur des steps explicites dans le workflow :
 
 #### 1. Le changement ServiceNow est un pre-hook, pas un step
@@ -33,12 +33,12 @@ def _create_servicenow_change_if_required(self, environment: str) -> None:
     # ...
     change_number = svc.create_change(
         short_description=f"IDP Portal — {self.action.name}",         # statique
-        description=f"Execution automatisee {self.execution.id}...",   # statique
+        description=f"Exécution automatisée {self.execution.id}...",   # statique
     )
 ```
 
-Le changement est cree **avant tout step** (`run()` ligne 361), avec des donnees statiques
-(nom de l'action, ID d'execution). Il ne peut pas utiliser des donnees dynamiques qui
+Le changement est créé **avant tout step** (`run()` ligne 361), avec des données statiques
+(nom de l'action, ID d'exécution). Il ne peut pas utiliser des données dynamiques qui
 seraient produites par un step precedent (ex: liste de bases impactees, numero de patch).
 Il n'apparait pas dans la timeline des steps dans l'UI.
 
@@ -49,7 +49,7 @@ Il n'apparait pas dans la timeline des steps dans l'UI.
 Les gates (`maintenance_window`, `approval_granted`) mettent un step en statut WAITING.
 Le Celery Beat task (`executions/tasks/gates.py`) evalue periodiquement. Quand toutes
 les conditions sont satisfaites, le step reprend. Mais les gates ne peuvent pas **router
-vers des chemins differents** selon le resultat.
+vers des chemins différents** selon le résultat.
 
 ```python
 # gate_evaluator.py:135-143
@@ -58,7 +58,7 @@ case 'approval_granted':
         satisfied = True
     else:
         satisfied = False
-        context = {'reason': "mecanisme d'approbation non implemente"}
+        context = {'reason': "mécanisme d'approbation non implémenté"}
 ```
 
 L'approbation est un placeholder (`"non implemente"`).
@@ -69,7 +69,7 @@ L'approbation est un placeholder (`"non implemente"`).
 
 Le `RuleEngine` (`executions/rule_engine.py`) analyse l'output d'un step via des
 `OutputInterpreters` (Terraform plan, AAP) et evalue des business rules. Mais le
-resultat ne peut que **bloquer** (WAITING pour approval) ou **laisser passer**.
+résultat ne peut que **bloquer** (WAITING pour approval) ou **laisser passer**.
 Il ne peut pas brancher vers un chemin different.
 
 ```python
@@ -83,15 +83,15 @@ if policy_decision.require_approval:
 **Fichier :** `executions/models.py:116-143`
 
 ```python
-status = PENDING_APPROVAL         # statut global de l'execution
+status = PENDING_APPROVAL         # statut global de l'exécution
 approved_by = ForeignKey(User)    # qui
 approved_at = DateTimeField()     # quand
 approval_comment = CharField()    # commentaire
 ```
 
-L'execution entiere passe en `PENDING_APPROVAL`. L'approbateur ne sait pas **ce qu'il
+L'exécution entière passe en `PENDING_APPROVAL`. L'approbateur ne sait pas **ce qu'il
 approuve** (un plan Terraform ? un patching ? le workflow entier ?). Il n'a pas de
-contexte sur les etapes precedentes.
+contexte sur les étapes précédentes.
 
 Fichiers impactes : `executions/views/approval_views.py` (lignes 33-217),
 `executions/views/execution_views.py` (ligne 186-188).
@@ -109,8 +109,8 @@ def _get_step_parameters(self, step):
     return merged
 ```
 
-Les parametres d'un step viennent du payload initial (`workflow_step_parameters`) ou
-des parametres globaux. **Aucun mecanisme ne permet d'utiliser l'output d'un step
+Les paramètres d'un step viennent du payload initial (`workflow_step_parameters`) ou
+des paramètres globaux. **Aucun mécanisme ne permet d'utiliser l'output d'un step
 precedent comme input du step suivant.**
 
 L'output est stocke dans `ExecutionStep.output` (CLOB JSON, `models.py:295`) via
@@ -130,7 +130,7 @@ class ExecutionStepType(models.TextChoices):
     VERIFICATION = 'verification', 'Verification'
 ```
 
-Le type `SERVICENOW` existe deja dans l'enum mais n'est jamais utilise par les runtimes.
+Le type `SERVICENOW` existe déjà dans l'enum mais n'est jamais utilise par les runtimes.
 Dans `container_workflow_runtime.py:214` et `workflow_step_executor.py:86,138`, tout
 est code en dur `step_type='platform'` ou `ExecutionStepType.PLATFORM`.
 
@@ -147,7 +147,7 @@ def _resolve_next_step(self, current_step, outcome):
 ```
 
 Le branchement conditionnel (`on_success_step_id` / `on_error_step_id`) existe dans
-`WorkflowRuntime` mais il est base sur le resultat du step **plateforme** (job AAP
+`WorkflowRuntime` mais il est base sur le résultat du step **plateforme** (job AAP
 reussi/echoue), pas sur l'evaluation d'un output.
 
 ### Resume du diagnostic
@@ -159,10 +159,10 @@ reussi/echoue), pas sur l'evaluation d'un output.
 | Gate approval | Placeholder (`gate_evaluator.py:135`) | Non implemente |
 | Evaluation policies | Post-step hook (`workflow_step_executor.py:491`) | Bloque mais ne branche pas |
 | Approbation | Statut global (`Execution.PENDING_APPROVAL`) | Pas de contexte, pas granulaire |
-| Output forwarding | Inexistant | Steps isoles, pas de chainage de donnees |
+| Output forwarding | Inexistant | Steps isoles, pas de chainage de données |
 | Branching | Existe (`workflow_runtime.py:241`) | Deconnecte des evaluations et gates |
 
-**Ces mecanismes fonctionnent individuellement mais ne forment pas un systeme integre.**
+**Ces mécanismes fonctionnent individuellement mais ne forment pas un systeme integre.**
 
 ---
 
@@ -170,12 +170,12 @@ reussi/echoue), pas sur l'evaluation d'un output.
 
 ### Tout devient un step. Le branching est unifie.
 
-Transformer tous les mecanismes caches (change management, gates, evaluations,
+Transformer tous les mécanismes caches (change management, gates, evaluations,
 approbations) en steps explicites du workflow. Chaque step produit un output
 consommable par les steps suivants via un contexte partage `steps.*`.
 
-Le branchement (`on_success_step_id` / `on_error_step_id`) deja present dans
-`WorkflowRuntime` devient le mecanisme de routage unifie pour tous les types de steps.
+Le branchement (`on_success_step_id` / `on_error_step_id`) déjà present dans
+`WorkflowRuntime` devient le mécanisme de routage unifie pour tous les types de steps.
 
 ### Types de steps
 
@@ -199,16 +199,16 @@ Cinq types de steps, classes en deux categories alignees sur `IntegrationRole`
 
 ### Pourquoi `service_call` generique et non `servicenow_change`
 
-L'architecture d'integrations distingue deja les roles (`integrations/models.py:75-78`) :
+L'architecture d'integrations distingue déjà les roles (`integrations/models.py:75-78`) :
 
 ```python
 class IntegrationRole(models.TextChoices):
-    PLATFORM = 'platform', "Plateforme d'execution"
+    PLATFORM = 'platform', "Plateforme d'exécution"
     SERVICE = 'service', 'Service consomme'
 ```
 
 Les types d'integration (`IntegrationType`, lignes 58-72) incluent : `servicenow`,
-`vault`, `jira`, `inventory`, etc. Creer un type de step par service (`servicenow_change`,
+`vault`, `jira`, `inventory`, etc. Créer un type de step par service (`servicenow_change`,
 `servicenow_close`, `vault_read`, `jira_create`) couplerait le moteur de workflow a des
 services specifiques et violerait OCP.
 
@@ -223,7 +223,7 @@ qui determine le comportement :
 }
 ```
 
-L'ajout d'un nouveau service (ex: PagerDuty) ne necessite aucune modification du runtime :
+L'ajout d'un nouveau service (ex: PagerDuty) ne nécessite aucune modification du runtime :
 il suffit d'enregistrer le type d'integration et d'implementer la classe de service.
 
 ### Output forwarding entre steps
@@ -232,12 +232,12 @@ Chaque step produit un output stocke dans `ExecutionStep.output` (CLOB JSON exis
 Le runtime maintient un contexte partage `_step_outputs: dict[str, dict]` clef par
 `step_id`.
 
-Deux mecanismes de mapping :
+Deux mécanismes de mapping :
 
 - **`output_mapping`** : Extrait des valeurs de l'output brut du step via JSONPath
   et les expose dans `_step_outputs[step_id]`.
 - **`input_mapping`** : Resout des references `{{ steps.<step_id>.<path> }}` dans les
-  parametres d'un step a partir de `_step_outputs`.
+  paramètres d'un step a partir de `_step_outputs`.
 
 Analogie directe :
 - GitHub Actions : `${{ steps.<id>.outputs.<name> }}`
@@ -258,10 +258,11 @@ migre vers une `condition` sur chaque step :
 ```
 
 Si la condition n'est pas remplie, le step passe en statut `SKIPPED`
-(`ExecutionStepStatus.SKIPPED`, deja defini dans `models.py:265`).
+(`ExecutionStepStatus.SKIPPED`, déjà defini dans `models.py:265`).
 
-Les steps suivants qui referencent l'output d'un step SKIPPED recoivent `null` —
-le template `{{ steps.create-change.change_number }}` resout a `null`.
+Les steps suivants qui référencent l'output d'un step SKIPPED reçoivent une chaîne
+vide : `_step_outputs[step_id] = {}` et le template `{{ steps.create-change.change_number }}`
+résout à `''` (Jinja2 finalize convertit None en chaîne vide).
 
 ### Approbation comme step gate
 
@@ -269,14 +270,14 @@ Les champs d'approbation sur `Execution` (`approved_by`, `approved_at`,
 `approval_comment` — `models.py:129-143`) et le statut `PENDING_APPROVAL`
 (`models.py:21`) sont remplaces par un step `gate` de type `approval`.
 
-La source de verite passe de l'Execution au `ExecutionStep`. Cela permet :
+La source de vérité passe de l'Execution au `ExecutionStep`. Cela permet :
 - Plusieurs approbations dans un meme workflow (une apres le plan, une avant le deploy)
 - Un contexte pour l'approbateur (output des steps precedents)
 - Un branchement si rejet (vers un chemin de rollback/abort)
 
 ---
 
-## Schema de la definition d'un workflow
+## Schéma de la définition d'un workflow
 
 ### Exemple complet : Patching Oracle
 
@@ -496,7 +497,7 @@ La source de verite passe de l'Execution au `ExecutionStep`. Cela permet :
 }
 ```
 
-### Flux d'execution — Terraform en production (plan non conforme)
+### Flux d'exécution — Terraform en production (plan non conforme)
 
 ```text
 tf-plan ──► check-plan ──► request-approval ──► create-change ──► tf-apply ──► close-change
@@ -506,7 +507,7 @@ tf-plan ──► check-plan ──► request-approval ──► create-change 
               detected"     on_success ─┘
 ```
 
-### Flux d'execution — Terraform en staging (plan conforme)
+### Flux d'exécution — Terraform en staging (plan conforme)
 
 ```text
 tf-plan ──► check-plan ──► [create-change SKIPPED] ──► tf-apply ──► [close-change SKIPPED]
@@ -548,9 +549,9 @@ class ExecutionStep(models.Model):
 
 **Note :** Les champs `approved_by`, `approved_at`, `approval_comment` sur le modele
 `Execution` (`models.py:129-143`) sont conserves temporairement pour backward
-compatibility mais ne sont plus la source de verite. Le statut `PENDING_APPROVAL` sur
+compatibility mais ne sont plus la source de vérité. Le statut `PENDING_APPROVAL` sur
 `Execution` est derive : si au moins un step est en WAITING avec `gate_type: approval`,
-l'execution est en attente d'approbation.
+l'exécution est en attente d'approbation.
 
 ### 2. Enum ExecutionStepType — nouveaux types
 
@@ -586,7 +587,7 @@ class ContainerWorkflowRuntime:
         self._step_outputs: dict[str, dict] = {}  # NOUVEAU: contexte partage
 ```
 
-#### 3b. Resolution des input_mapping
+#### 3b. Résolution des input_mapping
 
 Nouveau module : `executions/template_resolver.py`
 
@@ -606,7 +607,7 @@ class StepTemplateResolver:
 
 Le `SandboxedEnvironment` de Jinja2 est recommande pour :
 - Support des filtres (`| join(', ')`, `| length`, `| first`)
-- Securite (sandboxed, pas d'acces aux attributs Python)
+- Sécurité (sandboxed, pas d'acces aux attributs Python)
 - Familiarite (meme syntaxe que Ansible et les templates Django)
 
 #### 3c. Extraction des output_mapping
@@ -620,14 +621,14 @@ class OutputExtractor:
     def extract(self, raw_output: dict, output_mapping: dict) -> dict:
         """Applique le mapping JSONPath et retourne un dict de valeurs nommees."""
         # Ex: {"databases": "$.data.databases"} → {"databases": ["DB1", "DB2"]}
-        # Utilise jsonpath-ng ou une implementation simple basee sur les cles
+        # Utilise jsonpath-ng ou une implémentation simple basee sur les cles
         ...
 ```
 
 Pour le JSONPath, deux options :
-- **Simple :** Resolution par cles (`$.data.databases` → `output["data"]["databases"]`)
+- **Simple :** Résolution par cles (`$.data.databases` → `output["data"]["databases"]`)
   suffisante pour 90% des cas. Zero dependance externe.
-- **Complet :** Bibliotheque `jsonpath-ng` pour les expressions avancees
+- **Complet :** Bibliothèque `jsonpath-ng` pour les expressions avancees
   (`$.data.databases[*].name`). Dependance additionnelle.
 
 **Recommandation :** Commencer par la resolution simple (dot-notation), ajouter
@@ -638,13 +639,13 @@ Pour le JSONPath, deux options :
 **Fichier :** `executions/container_workflow_runtime.py:173-339`
 
 La methode `_execute_step()` actuelle ne gere que les steps `platform`. Elle doit
-dispatcher selon le `step_type` de la definition du workflow :
+dispatcher selon le `step_type` de la définition du workflow :
 
 ```python
 def _execute_step(self, step):
     step_type = step.get('step_type', 'platform')
 
-    # Resoudre les input_mapping depuis _step_outputs
+    # Résoudre les input_mapping depuis _step_outputs
     resolver = StepTemplateResolver(self._step_outputs)
     input_mapping = step.get('input_mapping', {})
     resolved_params = resolver.resolve(input_mapping) if input_mapping else {}
@@ -673,13 +674,15 @@ def _execute_step(self, step):
     if step_id:
         extractor = OutputExtractor()
         output_mapping = step.get('output_mapping', {})
-        extracted = extractor.extract(result.get('raw_output', {}), output_mapping)
+        # Handlers : envelope {raw_output: ...} ou dict brut
+        raw = result.get('raw_output', result) if isinstance(result, dict) else {}
+        extracted = extractor.extract(raw, output_mapping)
         self._step_outputs[step_id] = extracted
 
     return result
 ```
 
-### 4. Step handlers — implementation de chaque type
+### 4. Step handlers — implémentation de chaque type
 
 #### 4a. `platform` — existant, a refactorer
 
@@ -699,15 +702,15 @@ class ServiceCallHandler:
 
     def execute(self, step_config, resolved_params, execution, correlation_id):
         """
-        1. Resoudre l'integration par integration_type ou integration_id
+        1. Résoudre l'integration par integration_type ou integration_id
         2. Instancier le service (ServiceNowService, VaultService, etc.)
         3. Appeler l'operation (create_change, close_change, read_secret, etc.)
-        4. Retourner le resultat brut
+        4. Retourner le résultat brut
         """
         integration_type = step_config.get('integration_type')
         operation = step_config.get('operation')
 
-        # Resolution de l'integration (meme logique que _create_servicenow_change_if_required)
+        # Résolution de l'integration (meme logique que _create_servicenow_change_if_required)
         integration = self._resolve_integration(step_config)
 
         # Instanciation du service via registry
@@ -757,8 +760,8 @@ class HttpRequestHandler:
             return resp.json()
 ```
 
-**Securite :** Le `http_request` handler doit valider l'URL contre une allowlist
-configurable (pas d'appels vers des URLs arbitraires). Voir la section Securite.
+**Sécurité :** Le `http_request` handler doit valider l'URL contre une allowlist
+configurable (pas d'appels vers des URLs arbitraires). Voir la section Sécurité.
 
 #### 4d. `evaluation` — reutilise le RuleEngine existant
 
@@ -811,7 +814,7 @@ class GateHandler:
 
     def execute(self, step_config, resolved_params, execution, correlation_id):
         """
-        1. Creer le ExecutionStep en WAITING
+        1. Créer le ExecutionStep en WAITING
         2. Stocker gate_conditions dans step.output
         3. Retourner un statut WAITING (le runtime ne passe pas au step suivant)
         """
@@ -866,7 +869,7 @@ L'endpoint :
 
 L'endpoint existant `POST /executions/{id}/approve/` (execution-level) est conserve
 pour backward compatibility. Il approuve le premier step en WAITING de type approval
-dans l'execution.
+dans l'exécution.
 
 ### 6. Condition per-environment
 
@@ -881,7 +884,7 @@ class StepConditionEvaluator:
         if not condition:
             return True
 
-        # environment_in: verifie si l'environment de l'execution est dans la liste
+        # environment_in: verifie si l'environment de l'exécution est dans la liste
         env_list = condition.get('environment_in')
         if env_list and execution.environment not in env_list:
             return False
@@ -905,7 +908,7 @@ Quand un step est SKIPPED :
 La methode `_create_servicenow_change_if_required()` est **supprimee**. Les appels
 dans `run()` (ligne 361) et `run_sync()` (ligne 433) sont supprimes.
 
-Le change management est desormais un step `service_call` dans la definition du workflow.
+Le change management est desormais un step `service_call` dans la définition du workflow.
 
 Pour les actions **simples** (pas workflow, un seul step plateforme) qui ont un
 `change_type_config` avec `required: true`, le runtime genere automatiquement un
@@ -918,7 +921,7 @@ wrapper workflow implicite :
 Ceci assure la backward compatibility pour les actions existantes qui ne sont pas
 encore migrees vers le format workflow avec steps explicites.
 
-### 8. ServiceNowService — implementation des operations manquantes
+### 8. ServiceNowService — implémentation des operations manquantes
 
 **Fichier :** `services/servicenow_service.py`
 
@@ -952,7 +955,7 @@ def create_change(
     }
 ```
 
-#### 8b. `close_change()` — implementation
+#### 8b. `close_change()` — implémentation
 
 ```python
 def close_change(self, change_id: str, close_code: str = "successful", **kwargs) -> dict:
@@ -1031,7 +1034,7 @@ services/
 
 ---
 
-## Securite
+## Sécurité
 
 ### http_request — validation d'URL
 
@@ -1042,12 +1045,12 @@ attaques SSRF (Server-Side Request Forgery) :
   Seuls les hotes dans la liste sont autorises.
 - **Blocklist de reseaux** : Les IPs privees (10.x, 172.16.x, 192.168.x, 127.x)
   sont bloquees par defaut sauf si explicitement autorisees.
-- **Schema HTTPS obligatoire** en production (`DEBUG=False`).
+- **Schéma HTTPS obligatoire** en production (`DEBUG=False`).
 
 ### template_resolver — sandboxing
 
 Le resolver de templates `{{ steps.X.Y }}` utilise `jinja2.sandbox.SandboxedEnvironment`
-pour prevenir l'execution de code arbitraire. Seuls les filtres explicitement
+pour prevenir l'exécution de code arbitraire. Seuls les filtres explicitement
 autorises sont disponibles (`join`, `length`, `first`, `last`, `default`).
 
 ### service_call — validation d'operation
@@ -1083,7 +1086,7 @@ appelables.
   sur des child executions" a "dispatcher multi-type avec output forwarding".
   Mitigation : extraction dans des handlers separes (SRP).
 - **Dependance Jinja2** : le template resolver ajoute une dependance sur Jinja2
-  (ou `string.Template` si on limite la syntaxe). Jinja2 est deja une dependance
+  (ou `string.Template` si on limite la syntaxe). Jinja2 est déjà une dependance
   transitive de Django mais pas utilisee directement.
 - **Migration des workflows existants** : les actions existantes avec `change_type_config`
   doivent etre migrees vers le format step-based. Mitigation : wrapper automatique
@@ -1099,17 +1102,17 @@ appelables.
   deprecies mais conserves pour backward compatibility.
 - Le statut `PENDING_APPROVAL` sur `Execution` devient un statut derive.
 - Les champs `change_type_config` et `gate_config` sur `Action` sont deprecies au
-  profit de la definition dans `execution_steps`.
+  profit de la définition dans `execution_steps`.
 
 ---
 
 ## Alternatives Considerees
 
-### Alternative 1 : API externe avec parametres pre-resolus
+### Alternative 1 : API externe avec paramètres pre-resolus
 
 - **Description :** L'orchestration reste dans AAP. AAP interroge l'inventaire,
-  recupere les donnees, puis appelle `POST /api/v1/executions/` avec tous les parametres
-  (y compris les champs ServiceNow) deja resolus. Le portail ne fait que relayer.
+  recupere les données, puis appelle `POST /api/v1/executions/` avec tous les paramètres
+  (y compris les champs ServiceNow) déjà resolus. Le portail ne fait que relayer.
 - **Raison du rejet :** Le portail reste un proxy passif. Pas de tracabilite des etapes
   intermediaires. Les plateformes continuent de parler entre elles directement
   (AAP → ServiceNow) au lieu de passer par le portail.
@@ -1118,23 +1121,23 @@ appelables.
 
 - **Description :** Chaque operation de chaque service a son propre type de step dans
   le runtime (`servicenow_change`, `servicenow_close`, `vault_read`, `jira_create`).
-- **Raison du rejet :** Viole OCP. L'ajout d'un nouveau service necessite de modifier
+- **Raison du rejet :** Viole OCP. L'ajout d'un nouveau service nécessite de modifier
   le runtime. Le nombre de types de steps explose. Un type generique `service_call`
   avec `integration_type` + `operation` est plus extensible.
 
-### Alternative 3 : Garder les hooks et ajouter un mecanisme d'enrichissement
+### Alternative 3 : Garder les hooks et ajouter un mécanisme d'enrichissement
 
 - **Description :** Conserver le pre-hook ServiceNow et les post-step policies, mais
-  ajouter un mecanisme de template dans `change_type_config` pour resoudre des
-  parametres depuis l'execution.
-- **Raison du rejet :** Ne resout pas le probleme fondamental : les hooks s'executent
+  ajouter un mécanisme de template dans `change_type_config` pour resoudre des
+  paramètres depuis l'exécution.
+- **Raison du rejet :** Ne resout pas le problème fondamental : les hooks s'executent
   avant ou apres les steps, pas entre eux. L'output forwarding est impossible sans
   transformer les hooks en steps. Le branchement conditionnel post-evaluation est
   impossible.
 
 ---
 
-## Plan d'implementation
+## Plan d'implémentation
 
 ### Phase 1 : Fondations (prerequis pour tout le reste)
 
