@@ -236,4 +236,86 @@ describe('validateWorkflowGraph — Story 57.13 AC8 — validation per step_type
     const typeErrors = result.errors.filter((e) => e.nodeId === 'h-1' && e.type === 'error');
     expect(typeErrors).toHaveLength(0);
   });
+
+  // Story 57.16: schedule_execution validation
+  it('schedule_execution sans action_id → erreur', () => {
+    const node = makeNodeWithData('s-1', {
+      step_type: 'schedule_execution',
+      schedule_config: { schedule_source: 'parameter', schedule_parameter_name: 'date' },
+    });
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('s-1'));
+    const errors = result.errors.filter((e) => e.nodeId === 's-1' && e.type === 'error');
+    expect(errors.some((e) => e.message.includes('Action cible'))).toBe(true);
+  });
+
+  it('schedule_execution sans schedule_config → erreur', () => {
+    const node = makeNodeWithData('s-1', {
+      step_type: 'schedule_execution',
+      action_id: 56,
+    });
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('s-1'));
+    const errors = result.errors.filter((e) => e.nodeId === 's-1' && e.type === 'error');
+    expect(errors.some((e) => e.message.includes('Configuration de planification'))).toBe(true);
+  });
+
+  it('schedule_execution source=parameter sans schedule_parameter_name → erreur', () => {
+    const node = makeNodeWithData('s-1', {
+      step_type: 'schedule_execution',
+      action_id: 56,
+      schedule_config: { schedule_source: 'parameter' },
+    });
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('s-1'));
+    const errors = result.errors.filter((e) => e.nodeId === 's-1' && e.type === 'error');
+    expect(errors.some((e) => e.message.includes('schedule_parameter_name'))).toBe(true);
+  });
+
+  it('schedule_execution source=fixed_offset sans fixed_offset → erreur', () => {
+    const node = makeNodeWithData('s-1', {
+      step_type: 'schedule_execution',
+      action_id: 56,
+      schedule_config: { schedule_source: 'fixed_offset' },
+    });
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('s-1'));
+    const errors = result.errors.filter((e) => e.nodeId === 's-1' && e.type === 'error');
+    expect(errors.some((e) => e.message.includes('Offset fixe'))).toBe(true);
+  });
+
+  it('schedule_execution source=recurring sans pattern_type → erreur', () => {
+    const node = makeNodeWithData('s-1', {
+      step_type: 'schedule_execution',
+      action_id: 56,
+      schedule_config: { schedule_source: 'recurring' },
+    });
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('s-1'));
+    const errors = result.errors.filter((e) => e.nodeId === 's-1' && e.type === 'error');
+    expect(errors.some((e) => e.message.includes('pattern récurrent'))).toBe(true);
+  });
+
+  it('schedule_execution complet avec parameter source → pas d\'erreur de type', () => {
+    const node = makeNodeWithData('s-1', {
+      step_type: 'schedule_execution',
+      action_id: 56,
+      schedule_config: {
+        schedule_source: 'parameter',
+        schedule_parameter_name: 'maintenance_at',
+      },
+    });
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('s-1'));
+    const typeErrors = result.errors.filter((e) => e.nodeId === 's-1' && e.type === 'error');
+    expect(typeErrors).toHaveLength(0);
+  });
+
+  it('schedule_execution complet avec fixed_offset source → pas d\'erreur de type', () => {
+    const node = makeNodeWithData('s-1', {
+      step_type: 'schedule_execution',
+      action_id: 56,
+      schedule_config: {
+        schedule_source: 'fixed_offset',
+        fixed_offset: '+3d',
+      },
+    });
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('s-1'));
+    const typeErrors = result.errors.filter((e) => e.nodeId === 's-1' && e.type === 'error');
+    expect(typeErrors).toHaveLength(0);
+  });
 });

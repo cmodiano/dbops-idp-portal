@@ -1143,7 +1143,7 @@ class TestGetWorkflowStepsPartialFields(TestCase):
         self.assertNotIn('on_success_step_id', steps[0])
 
     def test_workflow_steps_step_not_dict_or_no_ref_id(self):
-        """Branche 430→429 — step non-dict ou sans referenced_action_id ignoré."""
+        """Step non-dict ignoré ; step sans referenced_action_id inclus (Story 57.13 gate/etc)."""
         wf = Action.objects.create(
             name='Workflow Bad Steps',
             status=ActionStatus.PUBLISHED,
@@ -1151,13 +1151,15 @@ class TestGetWorkflowStepsPartialFields(TestCase):
             created_by=self.user,
             execution_steps=[
                 'not_a_dict',
-                {'order': 1, 'name': 'No ref id'},  # dict sans referenced_action_id
+                {'order': 1, 'name': 'No ref id', 'step_type': 'platform'},  # platform sans ref
             ],
         )
         s = ActionSerializer(wf)
         steps = s.data['workflow_steps']
-        # Tous les steps invalides ignorés → None
-        self.assertIsNone(steps)
+        # not_a_dict ignoré ; platform sans ref_id inclus (validation au save)
+        self.assertIsNotNone(steps)
+        self.assertEqual(len(steps), 1)
+        self.assertEqual(steps[0]['name'], 'No ref id')
 
     def test_workflow_steps_with_no_action_ids_batch(self):
         """Branche 421→428 — execution_steps sans referenced_action_id → action_ids vide."""
@@ -1171,6 +1173,49 @@ class TestGetWorkflowStepsPartialFields(TestCase):
         s = ActionSerializer(wf)
         # execution_steps vide → retourne None
         self.assertIsNone(s.data['workflow_steps'])
+
+    def test_workflow_steps_includes_gate_step(self):
+        """Story 57.13: Gate steps (approval) are included in workflow_steps."""
+        ref_action = Action.objects.create(
+            name='Ref Action',
+            engine='Oracle',
+            platform='AAP',
+            status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.ACTION,
+            created_by=self.user,
+        )
+        wf = Action.objects.create(
+            name='Workflow With Gate',
+            status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.WORKFLOW,
+            created_by=self.user,
+            execution_steps=[
+                {
+                    'order': 1,
+                    'step_id': 'gate-1',
+                    'name': 'Approbation',
+                    'step_type': 'gate',
+                    'gate_type': 'approval',
+                    'on_success_step_id': 'platform-1',
+                },
+                {
+                    'order': 2,
+                    'step_id': 'platform-1',
+                    'name': 'Execute',
+                    'step_type': 'platform',
+                    'referenced_action_id': ref_action.id,
+                    'on_success_step_id': None,
+                },
+            ],
+        )
+        s = ActionSerializer(wf)
+        steps = s.data['workflow_steps']
+        self.assertIsNotNone(steps)
+        self.assertEqual(len(steps), 2)
+        gate_step = next(s for s in steps if s.get('step_type') == 'gate')
+        self.assertEqual(gate_step['gate_type'], 'approval')
+        self.assertEqual(gate_step['name'], 'Approbation')
+        self.assertIsNone(gate_step['referenced_action_id'])
 
 
 # ─── Tests get_tags — chemin sans prefetch (lignes 469, 615) ─────────────────

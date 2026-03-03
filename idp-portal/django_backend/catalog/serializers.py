@@ -414,11 +414,13 @@ class ActionSerializer(ActionFieldValidationMixin, serializers.ModelSerializer):
         if not execution_steps:
             return None
 
-        # Story 18.3: Batch-fetch action names to avoid N+1 queries
+        # Story 18.3: Batch-fetch action names for platform steps
+        # Story 57.13: Include gate, service_call, evaluation, http_request (no referenced_action_id)
         action_ids = {
             step['referenced_action_id']
             for step in execution_steps
-            if isinstance(step, dict) and 'referenced_action_id' in step
+            if isinstance(step, dict)
+            and step.get('referenced_action_id') is not None
         }
         action_names = {}
         if action_ids:
@@ -428,38 +430,66 @@ class ActionSerializer(ActionFieldValidationMixin, serializers.ModelSerializer):
 
         # Convert execution_steps to workflow_steps format
         # Story 16.2: Include step_id, branches (on_success/on_error), and retry config
+        # Story 57.13: Include all step types (platform, gate, service_call, evaluation, http_request)
         workflow_steps = []
         for step in execution_steps:
-            if isinstance(step, dict) and 'referenced_action_id' in step:
-                ref_id = step['referenced_action_id']
-                workflow_step = {
-                    'order': step.get('order', 0),
-                    'name': step.get('name'),
-                    'referenced_action_id': ref_id,
-                    'action_name': action_names.get(ref_id),
-                }
+            if not isinstance(step, dict):
+                continue
+            step_type = step.get('step_type') or 'platform'
+            ref_id = step.get('referenced_action_id')
+            workflow_step = {
+                'order': step.get('order', 0),
+                'name': step.get('name'),
+                'step_type': step_type,
+                'referenced_action_id': ref_id,
+                'action_name': action_names.get(ref_id) if ref_id else None,
+            }
 
-                # Story 57.15: Expose step_type and schedule_config
-                workflow_step['step_type'] = step.get('step_type', 'platform')
-                workflow_step['schedule_config'] = step.get('schedule_config')
+            # Story 57.15: Expose schedule_config for platform
+            if 'schedule_config' in step:
+                workflow_step['schedule_config'] = step['schedule_config']
 
-                # Story 16.2: Add optional branch and retry fields
-                if 'step_id' in step:
-                    workflow_step['step_id'] = step['step_id']
-                if 'on_success_step_id' in step:
-                    workflow_step['on_success_step_id'] = step['on_success_step_id']
-                if 'on_error_step_id' in step:
-                    workflow_step['on_error_step_id'] = step['on_error_step_id']
-                if 'retry_enabled' in step:
-                    workflow_step['retry_enabled'] = step['retry_enabled']
-                if 'retry_max_attempts' in step:
-                    workflow_step['retry_max_attempts'] = step['retry_max_attempts']
-                if 'retry_interval_seconds' in step:
-                    workflow_step['retry_interval_seconds'] = step['retry_interval_seconds']
-                if 'retry_backoff_multiplier' in step:
-                    workflow_step['retry_backoff_multiplier'] = step['retry_backoff_multiplier']
+            # Story 57.13: Type-specific fields
+            if step_type == 'gate':
+                workflow_step['gate_type'] = step.get('gate_type')
+                workflow_step['on_timeout'] = step.get('on_timeout')
+                workflow_step['context_from'] = step.get('context_from')
+                workflow_step['timeout'] = step.get('timeout')
+            elif step_type == 'service_call':
+                workflow_step['integration_type'] = step.get('integration_type')
+                workflow_step['operation'] = step.get('operation')
+                workflow_step['input_mapping'] = step.get('input_mapping')
+                workflow_step['output_mapping'] = step.get('output_mapping')
+            elif step_type == 'evaluation':
+                workflow_step['policy_id'] = step.get('policy_id')
+                workflow_step['input_mapping'] = step.get('input_mapping')
+            elif step_type == 'http_request':
+                workflow_step['url'] = step.get('url')
+                workflow_step['method'] = step.get('method')
+                workflow_step['headers'] = step.get('headers')
+                workflow_step['request_timeout'] = step.get('request_timeout')
+                workflow_step['input_mapping'] = step.get('input_mapping')
+                workflow_step['output_mapping'] = step.get('output_mapping')
+            if step.get('condition'):
+                workflow_step['condition'] = step['condition']
 
-                workflow_steps.append(workflow_step)
+            # Story 16.2: Branch and retry fields
+            if 'step_id' in step:
+                workflow_step['step_id'] = step['step_id']
+            if 'on_success_step_id' in step:
+                workflow_step['on_success_step_id'] = step['on_success_step_id']
+            if 'on_error_step_id' in step:
+                workflow_step['on_error_step_id'] = step['on_error_step_id']
+            if 'retry_enabled' in step:
+                workflow_step['retry_enabled'] = step['retry_enabled']
+            if 'retry_max_attempts' in step:
+                workflow_step['retry_max_attempts'] = step['retry_max_attempts']
+            if 'retry_interval_seconds' in step:
+                workflow_step['retry_interval_seconds'] = step['retry_interval_seconds']
+            if 'retry_backoff_multiplier' in step:
+                workflow_step['retry_backoff_multiplier'] = step['retry_backoff_multiplier']
+
+            workflow_steps.append(workflow_step)
 
         # Sort by order to ensure consistent ordering
         workflow_steps.sort(key=lambda x: x['order'])

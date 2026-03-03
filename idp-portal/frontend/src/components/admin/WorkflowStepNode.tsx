@@ -6,29 +6,32 @@
  * (bottom-left, green), error output (bottom-right, red).
  *
  * Story 57.13: Added step_type badge with color per type (platform, service_call, evaluation, gate, http_request).
+ * Story 57.16: Added schedule_execution step type with schedule_source badge display.
  */
 
 import React, { memo, useMemo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Badge, Divider, Tag, Tooltip, theme } from 'antd';
 import { CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined, MinusCircleOutlined } from '@ant-design/icons';
-import type { WorkflowStepType } from '../../types/api';
+import type { WorkflowStepType, ScheduleStepConfig } from '../../types/api';
 
 // Story 57.13: Color codes and labels per step type
 const STEP_TYPE_COLORS: Record<WorkflowStepType, string> = {
-  platform:     '#1677ff',  // bleu Ant Design Primary
-  service_call: '#fa8c16',  // orange
-  evaluation:   '#722ed1',  // violet
-  gate:         '#faad14',  // ambre/jaune
-  http_request: '#13c2c2',  // cyan
+  platform:           '#1677ff',  // bleu Ant Design Primary
+  service_call:       '#fa8c16',  // orange
+  evaluation:         '#722ed1',  // violet
+  gate:               '#faad14',  // ambre/jaune
+  http_request:       '#13c2c2',  // cyan
+  schedule_execution: '#4f46e5',  // indigo (Story 57.16)
 };
 
 const STEP_TYPE_LABELS: Record<WorkflowStepType, string> = {
-  platform:     'Exécuter',
-  service_call: 'Service',
-  evaluation:   'Évaluer',
-  gate:         'Attendre',
-  http_request: 'HTTP',
+  platform:           'Exécuter',
+  service_call:       'Service',
+  evaluation:         'Évaluer',
+  gate:               'Attendre',
+  http_request:       'HTTP',
+  schedule_execution: 'Planifier', // Story 57.16
 };
 
 const INTEGRATION_LABELS: Record<string, string> = {
@@ -96,6 +99,9 @@ export interface WorkflowStepNodeData {
   condition?: { environment_in?: string[] } | null;
   input_mapping?: Record<string, unknown> | null;
   output_mapping?: Record<string, string> | null;
+  // === schedule_execution ===
+  /** Story 57.16: Configuration du step de planification. */
+  schedule_config?: ScheduleStepConfig | null;
 }
 
 const WorkflowStepNode: React.FC<NodeProps> = ({ data, selected }) => {
@@ -129,6 +135,9 @@ const WorkflowStepNode: React.FC<NodeProps> = ({ data, selected }) => {
     if (stepType === 'http_request') {
       const url = nodeData.url ? nodeData.url.substring(0, 30) : '?';
       return nodeData.name ?? `${nodeData.method ?? '?'} ${url}${(nodeData.url?.length ?? 0) > 30 ? '…' : ''}`;
+    }
+    if (stepType === 'schedule_execution') {
+      return nodeData.name ?? nodeData.action_name ?? 'Planifier une exécution';
     }
     return nodeData.name ?? '';
   }, [stepType, nodeData]);
@@ -254,6 +263,14 @@ const WorkflowStepNode: React.FC<NodeProps> = ({ data, selected }) => {
         <div style={{ fontWeight: 600, marginBottom: 4, fontSize: 13, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {primaryTitle}
         </div>
+        {/* Story 57.16: Badge schedule_source pour schedule_execution */}
+        {stepType === 'schedule_execution' && nodeData.schedule_config?.schedule_source && (
+          <div style={{ fontSize: 11, color: '#4f46e5', marginTop: 2 }}>
+            {nodeData.schedule_config.schedule_source === 'parameter' && 'Paramètre utilisateur'}
+            {nodeData.schedule_config.schedule_source === 'fixed_offset' && `Offset: ${nodeData.schedule_config.fixed_offset ?? '?'}`}
+            {nodeData.schedule_config.schedule_source === 'recurring' && 'Récurrent'}
+          </div>
+        )}
         {/* Secondary info for platform steps */}
         {stepType === 'platform' && nodeData.name && nodeData.name !== nodeData.action_name && (
           <div style={{ fontSize: 11, color: token.colorTextSecondary, marginBottom: 2, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

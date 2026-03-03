@@ -147,4 +147,18 @@ describe('ActionPalette', () => {
     const searchInput = screen.getByLabelText('Rechercher une action');
     expect(searchInput).toBeDisabled();
   });
+
+  // Story 57.16: schedule_execution bouton
+  it('affiche le bouton "Planifier une exécution" (schedule_execution) dans les steps spéciaux', () => {
+    render(<ActionPalette />);
+    expect(screen.getByText('Planifier une exécution')).toBeInTheDocument();
+  });
+
+  it('le bouton schedule_execution appelle onAddSpecialStep avec le bon type', () => {
+    const onAddSpecialStep = vi.fn();
+    render(<ActionPalette onAddSpecialStep={onAddSpecialStep} />);
+    const btn = screen.getByTestId('add-special-step-schedule_execution');
+    fireEvent.click(btn);
+    expect(onAddSpecialStep).toHaveBeenCalledWith('schedule_execution');
+  });
 });

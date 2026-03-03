@@ -19,6 +19,7 @@ import { ServiceCallStepConfig } from './step-config/ServiceCallStepConfig';
 import { EvaluationStepConfig } from './step-config/EvaluationStepConfig';
 import { GateStepConfig } from './step-config/GateStepConfig';
 import { HttpRequestStepConfig } from './step-config/HttpRequestStepConfig';
+import { ScheduleStepConfig } from './step-config/ScheduleStepConfig';
 import type { WorkflowStepType } from '../../types/api';
 
 const { Text, Title } = Typography;
@@ -91,6 +92,7 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({
     evaluation: 'Évaluation (Politique)',
     gate: 'Attente / Gate',
     http_request: 'Requête HTTP',
+    schedule_execution: 'Planifier une exécution', // Story 57.16
   };
 
   return (
@@ -273,6 +275,11 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({
         {/* http_request */}
         {stepType === 'http_request' && (
           <HttpRequestStepConfig data={data} onUpdate={handleUpdate} disabled={disabled} />
+        )}
+
+        {/* schedule_execution — Story 57.16 */}
+        {stepType === 'schedule_execution' && (
+          <ScheduleStepConfig data={data} onUpdate={handleUpdate} disabled={disabled} />
         )}
 
         <Divider style={{ margin: '8px 0' }} />

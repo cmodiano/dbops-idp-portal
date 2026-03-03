@@ -63,6 +63,31 @@ function getStepTypeErrors(nodeId: string, data: WorkflowStepNodeData): Validati
         errors.push({ nodeId, type: 'error', message: 'Méthode HTTP requise' });
       }
       break;
+    case 'schedule_execution': {
+      // referenced_action_id requis
+      if (!data.action_id) {
+        errors.push({ nodeId, type: 'error', message: 'Action cible requise pour le step de planification' });
+      }
+      const config = data.schedule_config;
+      if (!config) {
+        errors.push({ nodeId, type: 'error', message: 'Configuration de planification requise' });
+        break;
+      }
+      if (!config.schedule_source) {
+        errors.push({ nodeId, type: 'error', message: 'Source de date requise (schedule_source)' });
+        break;
+      }
+      if (config.schedule_source === 'parameter' && !config.schedule_parameter_name) {
+        errors.push({ nodeId, type: 'error', message: "Nom du paramètre de date requis (schedule_parameter_name)" });
+      }
+      if (config.schedule_source === 'fixed_offset' && !config.fixed_offset) {
+        errors.push({ nodeId, type: 'error', message: "Offset fixe requis (ex: +3d, +6h)" });
+      }
+      if (config.schedule_source === 'recurring' && !config.recurring_pattern?.pattern_type) {
+        errors.push({ nodeId, type: 'error', message: "Type de pattern récurrent requis" });
+      }
+      break;
+    }
   }
   return errors;
 }

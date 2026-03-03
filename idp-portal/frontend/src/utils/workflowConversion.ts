@@ -74,6 +74,8 @@ export function workflowStepsToReactFlow(
       condition: step.condition ?? null,
       input_mapping: step.input_mapping ?? null,
       output_mapping: step.output_mapping ?? null,
+      // Story 57.16: schedule_execution
+      schedule_config: step.schedule_config ?? null,
     } satisfies WorkflowStepNodeData,
   }));
 
@@ -268,6 +270,14 @@ export function reactFlowToWorkflowSteps(
         request_timeout: data.request_timeout ?? null,
         input_mapping: data.input_mapping ?? null,
         output_mapping: data.output_mapping ?? null,
+      };
+    }
+
+    if (stepType === 'schedule_execution') {
+      return {
+        ...baseStep,
+        referenced_action_id: data.action_id ?? null,
+        schedule_config: data.schedule_config ?? null,
       };
     }
 

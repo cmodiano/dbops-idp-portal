@@ -133,7 +133,32 @@ export interface ChangeTypeConfigEntry {
 }
 
 // ADR-007 Story 57.13 — Step types for step-based workflows
-export type WorkflowStepType = 'platform' | 'service_call' | 'http_request' | 'evaluation' | 'gate';
+// Story 57.16: Schedule step types
+/** Source for scheduling date in a schedule_execution step. */
+export type ScheduleSource = 'parameter' | 'fixed_offset' | 'recurring';
+
+/** Configuration for a schedule_execution workflow step. */
+export interface ScheduleStepConfig {
+  /** Source de la date de planification. */
+  schedule_source: ScheduleSource;
+  /** Nom du paramètre contenant la date ISO 8601 (quand source='parameter'). */
+  schedule_parameter_name?: string;
+  /** Offset relatif à now() (quand source='fixed_offset'). Format: +Nd, +Nh, +Nw, +Nm. */
+  fixed_offset?: string;
+  /** Pattern récurrent (quand source='recurring'). */
+  recurring_pattern?: {
+    pattern_type: 'daily' | 'weekly' | 'cron';
+    pattern_config: Record<string, unknown>;
+  };
+  /** Si true, hérite les paramètres de l'exécution courante (défaut: false). */
+  inherit_parameters?: boolean;
+  /** Si true, hérite les targets de l'exécution courante (défaut: false). */
+  inherit_targets?: boolean;
+  /** Mapping de paramètres additionnels. Clé = nom du param cible, Valeur = JSONPath ou valeur statique. */
+  parameter_mapping?: Record<string, string>;
+}
+
+export type WorkflowStepType = 'platform' | 'service_call' | 'http_request' | 'evaluation' | 'gate' | 'schedule_execution';
 
 /** Workflow step - reference to an existing action or special step type (Story 5.7, AC2; Story 16.2 branches & retry; Story 57.13 step types). */
 export interface WorkflowStep {
@@ -186,6 +211,9 @@ export interface WorkflowStep {
   headers?: Record<string, string> | null;
   /** Story 57.13: Request timeout in seconds for http_request steps. */
   request_timeout?: number | null;
+  // === schedule_execution ===
+  /** Story 57.16: Configuration pour les steps de planification. */
+  schedule_config?: ScheduleStepConfig | null;
   // === shared (service_call, evaluation, http_request) ===
   /** Story 57.13: Condition for environment filtering. */
   condition?: { environment_in?: string[] } | null;

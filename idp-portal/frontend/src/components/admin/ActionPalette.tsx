@@ -16,6 +16,7 @@ import {
   SafetyCertificateOutlined,
   ClockCircleOutlined,
   GlobalOutlined,
+  ScheduleOutlined,
 } from '@ant-design/icons';
 import type { ActionListItem } from '../../types/api';
 import type { WorkflowStepType } from '../../types/api';
@@ -34,6 +35,7 @@ const SPECIAL_STEP_TYPES: {
   { type: 'evaluation', label: 'Évaluer', color: '#722ed1', icon: <SafetyCertificateOutlined /> },
   { type: 'gate', label: 'Attendre', color: '#faad14', icon: <ClockCircleOutlined /> },
   { type: 'http_request', label: 'Requête HTTP', color: '#13c2c2', icon: <GlobalOutlined /> },
+  { type: 'schedule_execution', label: 'Planifier une exécution', color: '#4f46e5', icon: <ScheduleOutlined /> },
 ];
 
 export interface ActionPaletteProps {

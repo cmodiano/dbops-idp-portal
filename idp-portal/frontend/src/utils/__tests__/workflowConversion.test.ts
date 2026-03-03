@@ -419,3 +419,131 @@ describe('reactFlowToWorkflowSteps', () => {
     expect(roundTripped[1].on_success_step_id).toBeNull();
   });
 });
+
+// Story 57.16: schedule_execution tests
+describe('workflowStepsToReactFlow — Story 57.16 schedule_execution', () => {
+  it('préserve schedule_config dans le node data', () => {
+    const step: WorkflowStep = {
+      order: 1,
+      step_id: 'sched-1',
+      step_type: 'schedule_execution',
+      name: 'Planifier',
+      referenced_action_id: 56,
+      schedule_config: {
+        schedule_source: 'parameter',
+        schedule_parameter_name: 'maintenance_scheduled_at',
+        inherit_parameters: true,
+        inherit_targets: true,
+        parameter_mapping: { snapshot_id: '$.steps.prepare.output.snapshot_id' },
+      },
+    };
+    const { nodes } = workflowStepsToReactFlow([step]);
+    const nodeData = nodes.find((n) => n.id === 'sched-1')!.data;
+    expect(nodeData.step_type).toBe('schedule_execution');
+    expect(nodeData.schedule_config).toEqual(step.schedule_config);
+    expect(nodeData.action_id).toBe(56);
+  });
+
+  it('schedule_config null → null dans node data', () => {
+    const step: WorkflowStep = {
+      order: 1,
+      step_id: 'sched-2',
+      step_type: 'schedule_execution',
+      name: null,
+      schedule_config: null,
+    };
+    const { nodes } = workflowStepsToReactFlow([step]);
+    const nodeData = nodes.find((n) => n.id === 'sched-2')!.data;
+    expect(nodeData.schedule_config).toBeNull();
+  });
+});
+
+describe('reactFlowToWorkflowSteps — Story 57.16 round-trip schedule_execution', () => {
+  it('round-trip préserve schedule_config pour schedule_execution step', () => {
+    const step: WorkflowStep = {
+      order: 1,
+      step_id: 'sched-1',
+      step_type: 'schedule_execution',
+      name: 'Planifier l\'application',
+      referenced_action_id: 56,
+      schedule_config: {
+        schedule_source: 'parameter',
+        schedule_parameter_name: 'maintenance_scheduled_at',
+        inherit_parameters: true,
+        inherit_targets: true,
+      },
+    };
+    const { nodes, edges } = workflowStepsToReactFlow([step]);
+    const result = reactFlowToWorkflowSteps(nodes, edges);
+    expect(result[0].step_type).toBe('schedule_execution');
+    expect(result[0].referenced_action_id).toBe(56);
+    expect(result[0].schedule_config).toEqual(step.schedule_config);
+  });
+
+  it('round-trip schedule_execution avec fixed_offset', () => {
+    const step: WorkflowStep = {
+      order: 1,
+      step_id: 'sched-2',
+      step_type: 'schedule_execution',
+      name: null,
+      referenced_action_id: 10,
+      schedule_config: {
+        schedule_source: 'fixed_offset',
+        fixed_offset: '+3d',
+        inherit_parameters: false,
+        inherit_targets: false,
+      },
+    };
+    const { nodes, edges } = workflowStepsToReactFlow([step]);
+    const result = reactFlowToWorkflowSteps(nodes, edges);
+    expect(result[0].schedule_config?.schedule_source).toBe('fixed_offset');
+    expect(result[0].schedule_config?.fixed_offset).toBe('+3d');
+  });
+
+  it('round-trip schedule_execution avec recurring pattern', () => {
+    const step: WorkflowStep = {
+      order: 1,
+      step_id: 'sched-3',
+      step_type: 'schedule_execution',
+      name: null,
+      referenced_action_id: 10,
+      schedule_config: {
+        schedule_source: 'recurring',
+        recurring_pattern: { pattern_type: 'daily', pattern_config: {} },
+      },
+    };
+    const { nodes, edges } = workflowStepsToReactFlow([step]);
+    const result = reactFlowToWorkflowSteps(nodes, edges);
+    expect(result[0].schedule_config?.schedule_source).toBe('recurring');
+    expect(result[0].schedule_config?.recurring_pattern?.pattern_type).toBe('daily');
+  });
+
+  it('round-trip schedule_execution avec parameter_mapping complet', () => {
+    const step: WorkflowStep = {
+      order: 1,
+      step_id: 'sched-4',
+      step_type: 'schedule_execution',
+      name: 'Planifier l\'application',
+      referenced_action_id: 56,
+      schedule_config: {
+        schedule_source: 'parameter',
+        schedule_parameter_name: 'maintenance_scheduled_at',
+        inherit_parameters: true,
+        inherit_targets: true,
+        parameter_mapping: {
+          snapshot_id: '$.steps.prepare.output.snapshot_id',
+          env: 'PROD',
+        },
+      },
+    };
+    const { nodes, edges } = workflowStepsToReactFlow([step]);
+    const result = reactFlowToWorkflowSteps(nodes, edges);
+    expect(result[0].schedule_config?.parameter_mapping).toEqual({
+      snapshot_id: '$.steps.prepare.output.snapshot_id',
+      env: 'PROD',
+    });
+    expect(result[0].schedule_config?.inherit_parameters).toBe(true);
+    expect(result[0].schedule_config?.inherit_targets).toBe(true);
+    expect(result[0].referenced_action_id).toBe(56);
+  });
+});
