@@ -95,13 +95,15 @@ La configuration `InventoryMapper` permet de mapper la colonne source contenant 
 }
 ```
 
-La colonne mappée vers `engine_type` (ici `ENGINE` dans `DBOPS_SERVERS`) sera exposée dans l'API inventaire. En mode `flat_table`, le mappage peut provenir de `TYPE` ou d'une autre colonne selon la configuration.
+La colonne mappée vers `engine_type` (ici `ENGINE` dans `DBOPS_SERVERS`) sera exposée dans l'API inventaire. **Note :** Le filtrage par `engine_type` est pris en charge uniquement en mode multi-table. En mode `flat_table`, `_read_servers_flat_fallback()` ne filtre pas par `engine_type` ; les valeurs proviennent de la colonne mappée (ex. `TYPE`) mais le filtrage RBAC par engine_type ne s'applique qu'en mode multi-table.
 
 **Table de jointure `instances` :** la table des instances fait le lien entre serveurs et bases. Elle contient typiquement `SERVER_ID` et `DB_ID` (ou des colonnes de type nom). Les concepts `server_ref` et `db_ref` dans la config mappent vers ces colonnes ; le portail les utilise pour les jointures et pour filtrer (ex. toutes les instances d’un serveur donné).
 
 ### 3.2 Mode une seule table (flat_table)
 
 Si votre inventaire est dans une seule table avec colonnes `NAME`, `ENVIRONMENT`, `TYPE` :
+
+**Limitation :** Le filtrage par `engine_type` n'est pas supporté en mode `flat_table` ; il est uniquement disponible en mode multi-table (via `query_executor._read_entity_from_config` et `mapper.build_where_clause`).
 
 ```json
 {

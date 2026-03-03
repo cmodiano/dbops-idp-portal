@@ -523,10 +523,16 @@ class ContainerWorkflowRuntime:
                 correlation_id=self.correlation_id,
             )
         except Exception as _e:
+            logger.exception(
+                "container_workflow_handler_exception",
+                step_name=step_name,
+                execution_id=self.execution.id,
+                correlation_id=self.correlation_id,
+            )
             parent_step.status = ExecutionStepStatus.FAILED
             parent_step.completed_at = timezone.now()
             parent_step.save()
-            raise
+            return ExecutionStatus.FAILED
 
         # Extraction output_mapping (même pattern que platform)
         if step_id is not None:
@@ -551,7 +557,8 @@ class ContainerWorkflowRuntime:
 
         # Lire le statut retourné par le handler (ADR-007 §3d — contrat 57.4–57.7)
         # Les handlers retournent {'status': ExecutionStatus, 'raw_output': dict}
-        result_execution_status = ExecutionStatus.COMPLETED
+        # Fail-closed: missing/invalid handler_status → FAILED
+        result_execution_status = ExecutionStatus.FAILED
         if isinstance(result, dict):
             handler_status = result.get('status')
             if isinstance(handler_status, ExecutionStatus):

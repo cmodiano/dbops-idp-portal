@@ -150,14 +150,17 @@ class ServiceCallHandler:
             auth_headers=auth_headers,
         )
 
-        # Validation de l'opération (getattr avant appel)
-        if not hasattr(service, operation):
+        # Validation de l'opération : exiger une méthode callable publique
+        method = getattr(service, operation, None)
+        if not callable(method):
+            public_callables = [
+                m for m in dir(service)
+                if not m.startswith('_') and callable(getattr(service, m, None))
+            ]
             raise ValueError(
-                f"Operation '{operation}' does not exist on service '{integration_type}'. "
-                f"Available: {[m for m in dir(service) if not m.startswith('_')]}"
+                f"Operation '{operation}' does not exist or is not callable on service '{integration_type}'. "
+                f"Available: {public_callables if public_callables else 'none'}"
             )
-
-        method = getattr(service, operation)
 
         # Appel de l'opération
         try:

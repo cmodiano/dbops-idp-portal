@@ -128,18 +128,52 @@ export function IntegrationForm({
         if (hasAdvanced) {
           try {
             const parsed = JSON.parse(values.config_advanced!.trim()) as Record<string, unknown>;
-            if (typeof parsed === 'object' && parsed !== null && (parsed.entities != null || parsed.flat_table != null)) {
-              config = { ...parsed };
-            } else {
+            if (typeof parsed !== 'object' || parsed === null) {
               message.warning('Config JSON : utilisez "entities" (multi-table) ou "flat_table" (une table). Voir le guide de mapping inventaire.');
               return;
             }
+            let validEntities = false;
+            if (typeof parsed.entities === 'object' && parsed.entities !== null && Object.keys(parsed.entities as object).length > 0) {
+              const entities = parsed.entities as Record<string, Record<string, unknown>>;
+              validEntities = Object.entries(entities).every(
+                ([, entity]) =>
+                  typeof entity === 'object' &&
+                  entity !== null &&
+                  'table' in entity &&
+                  'columns' in entity &&
+                  typeof (entity as Record<string, unknown>).columns === 'object',
+              );
+              if (!validEntities) {
+                message.warning('Config JSON entities : chaque entité doit avoir "table" et "columns". Voir le guide de mapping inventaire.');
+                return;
+              }
+            }
+            let validFlatTable = false;
+            if (typeof parsed.flat_table === 'object' && parsed.flat_table !== null) {
+              const ft = parsed.flat_table as Record<string, unknown>;
+              validFlatTable =
+                typeof ft.table === 'string' &&
+                ft.table.trim().length > 0 &&
+                typeof ft.columns === 'object' &&
+                ft.columns !== null &&
+                Object.keys(ft.columns as object).length > 0;
+              if (!validFlatTable) {
+                message.warning('Config JSON flat_table : "table" et "columns" requis et non vides. Voir le guide de mapping inventaire.');
+                return;
+              }
+            }
+            if (!validEntities && !validFlatTable) {
+              message.warning('Config JSON : utilisez "entities" (multi-table) ou "flat_table" (une table). Voir le guide de mapping inventaire.');
+              return;
+            }
+            config = { ...parsed };
           } catch { message.error('Config JSON invalide. Vérifiez la syntaxe.'); return; }
         }
         if (!hasAdvanced) {
-          const schemaVal = values.schema?.trim() || null;
-          const tableVal = values.table?.trim() || null;
-          if (schemaVal != null || tableVal != null) { config.schema = schemaVal; config.table = tableVal; }
+          const schemaVal = (values.schema?.trim() || null) ?? null;
+          const tableVal = (values.table?.trim() || null) ?? null;
+          if (schemaVal != null && schemaVal !== '') config.schema = schemaVal;
+          if (tableVal != null && tableVal !== '') config.table = tableVal;
         }
         if (Object.keys(config).length > 0) (payload as IntegrationCreate).config = config;
       }

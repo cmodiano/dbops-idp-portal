@@ -87,6 +87,10 @@ class TestServiceCallHandler:
                 step=step_config,
                 correlation_id=None,
             )
+        # Unknown integration_type short-circuits before integration resolution
+        mock_is_class.assert_not_called()
+        mock_bah.assert_not_called()
+        mock_gsc.assert_not_called()
 
     @patch("executions.step_handlers.service_call_handler.IntegrationService")
     def test_no_integration_found_raises_service_unavailable(self, mock_is_class):

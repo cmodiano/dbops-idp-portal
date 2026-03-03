@@ -8,6 +8,7 @@ Story 31.6: create_change() implemented — creates a change request via REST AP
 """
 from __future__ import annotations
 
+import json
 import httpx
 import structlog
 from django.conf import settings
@@ -99,14 +100,18 @@ class ServiceNowService(IHealthCheckable):
             with httpx.Client(headers=self.auth_headers, timeout=timeout, verify=verify_tls) as client:
                 resp = client.post(url, json=payload)
                 resp.raise_for_status()
-                result = resp.json().get('result', {})
+                try:
+                    json_body = resp.json()
+                except (json.JSONDecodeError, ValueError):
+                    json_body = {}
+                result = json_body.get('result', {}) if isinstance(json_body, dict) else {}
                 change_number = result.get('number') or result.get('sys_id', '')
                 sys_id = result.get('sys_id', '')
                 if not change_number and not sys_id:
                     logger.error(
                         "servicenow_create_change_no_identifiers",
                         status_code=resp.status_code,
-                        resp_text=resp.text[:500] if resp.text else "",
+                        body_redacted="<non-json or empty result>",
                         base_url=self.base_url,
                     )
                     raise ServiceUnavailableError(

@@ -737,7 +737,7 @@ Le mapping `integration_type` → classe de service suit le meme pattern que
 
 | integration_type | Classe de service | Operations |
 |-----------------|-------------------|------------|
-| `servicenow` | `ServiceNowService` | `create_change`, `update_change`, `close_change`, `get_change_status` |
+| `servicenow` | `ServiceNowService` | `create_change`, `update_change`, `close_change`, `get_change_status`, `cancel_change` |
 | `vault` | `VaultService` | `read_secret`, `write_secret` |
 | `jira` | `JiraService` (futur) | `create_issue`, `update_issue` |
 
@@ -752,13 +752,18 @@ class HttpRequestHandler:
     def execute(self, step_config, resolved_params, execution, correlation_id):
         """
         1. Lire la config (url, method, headers, params)
-        2. Executer la requete HTTP via httpx
-        3. Retourner le corps JSON de la reponse
+        2. Valider l'URL contre l'allowlist (SSRF protection)
+        3. Executer la requete HTTP via httpx
+        4. Retourner le corps JSON de la reponse
         """
         config = step_config.get('config', {})
         url = config['url']
         method = config.get('method', 'GET').upper()
         headers = config.get('headers', {})
+
+        # Validation SSRF avant tout appel réseau (allowlist ALLOWED_HTTP_REQUEST_HOSTS,
+        # blocklist IPs privées, HTTPS obligatoire en production)
+        self._validate_url(url)  # raises ValueError if URL not allowed
 
         with httpx.Client(timeout=30) as client:
             if method == 'GET':
