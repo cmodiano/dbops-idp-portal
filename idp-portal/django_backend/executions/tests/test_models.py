@@ -139,10 +139,10 @@ class ExecutionStepModelTest(TestCase):
     # --- Story 57.1 : Tests nouveaux types et champs d'approbation ---
 
     def test_execution_step_type_all_nine_values(self):
-        """AC#2 : ExecutionStepType doit avoir exactement 9 valeurs."""
+        """AC#2 + Story 57.15 : ExecutionStepType doit avoir exactement 10 valeurs."""
         expected_values = {
             'vault', 'servicenow', 'platform', 'prerequisite', 'verification',
-            'service_call', 'http_request', 'evaluation', 'gate',
+            'service_call', 'http_request', 'evaluation', 'gate', 'schedule_execution',
         }
         actual_values = {choice[0] for choice in ExecutionStepType.choices}
         self.assertEqual(actual_values, expected_values)
