@@ -721,3 +721,6 @@ ALLOWED_HTTP_REQUEST_HOSTS: list[str] = [
     h.strip().lower() for h in _allowed_http_hosts_env.split(',') if h.strip()
 ]
 del _allowed_http_hosts_env
+
+# Epic 56 — Décorrélation : schéma/synonyme Oracle fallback pour l'inventaire
+INVENTORY_FALLBACK_SCHEMA = 'DBOPS_INVENTORY'

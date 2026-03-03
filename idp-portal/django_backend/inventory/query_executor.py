@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 import structlog
+from django.conf import settings as django_settings
 from django.db import DatabaseError, InterfaceError
 
 from core.environment import EnvironmentHelper
@@ -243,9 +244,10 @@ class InventoryQueryExecutor:
 
     def _read_servers_flat_fallback(self, environment: str | None = None) -> list[dict]:
         """Fallback: read servers from flat table (TYPE=server filter). Story 23.1 AC6."""
+        fallback_schema = getattr(django_settings, 'INVENTORY_FALLBACK_SCHEMA', 'DBOPS_INVENTORY')
         logger.info("reading_servers_flat_fallback", correlation_id=get_correlation_id())
         targets, _ = self.read_oracle_inventory(
-            'DBOPS_INVENTORY', environment=environment,
+            fallback_schema, environment=environment,
             target_type='server', page=1, page_size=MAX_FLAT_TABLE_RESULTS,
         )
         return [{'id': t.get('name', ''), 'name': t.get('name', ''),
@@ -301,8 +303,10 @@ class InventoryQueryExecutor:
                 )
                 return self._exec_env_query(sql, correlation_id, "flat_table")
 
+            fallback_schema = getattr(django_settings, 'INVENTORY_FALLBACK_SCHEMA', 'DBOPS_INVENTORY')
+            self._validator.validate_table_name(fallback_schema)
             sql = (
-                "SELECT DISTINCT ENVIRONMENT FROM DBOPS_INVENTORY "
+                f"SELECT DISTINCT ENVIRONMENT FROM {fallback_schema} "  # nosec B608
                 "WHERE ENVIRONMENT IS NOT NULL ORDER BY ENVIRONMENT"
             )
             return self._exec_env_query(sql, correlation_id, "fallback")
