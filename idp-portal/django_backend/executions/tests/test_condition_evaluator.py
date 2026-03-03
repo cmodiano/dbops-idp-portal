@@ -86,3 +86,19 @@ class TestStepConditionEvaluator:
         """Clé connue remplie + clé inconnue → True."""
         step = {"condition": {"environment_in": ["production"], "when": "some_expression"}}
         assert self.evaluator.should_execute(step, self._make_execution("production")) is True
+
+    def test_environment_in_single_string_treated_as_list(self):
+        """environment_in as string (single value) → treated as single-element list."""
+        step = {"condition": {"environment_in": "production"}}
+        assert self.evaluator.should_execute(step, self._make_execution("production")) is True
+        assert self.evaluator.should_execute(step, self._make_execution("lab")) is False
+
+    def test_environment_in_invalid_type_returns_true(self):
+        """environment_in not list/tuple/set (e.g. int) → invalid type, execute step (no-op)."""
+        step = {"condition": {"environment_in": 42}}
+        assert self.evaluator.should_execute(step, self._make_execution("lab")) is True
+
+    def test_environment_in_dict_returns_true(self):
+        """environment_in as dict → invalid type → execute step."""
+        step = {"condition": {"environment_in": {"env": "prod"}}}
+        assert self.evaluator.should_execute(step, self._make_execution("lab")) is True

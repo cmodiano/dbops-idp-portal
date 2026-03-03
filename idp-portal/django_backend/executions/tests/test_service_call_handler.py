@@ -140,6 +140,30 @@ class TestServiceCallHandler:
     @patch("executions.step_handlers.service_call_handler.get_service_client")
     @patch("executions.step_handlers.service_call_handler.build_auth_headers")
     @patch("executions.step_handlers.service_call_handler.IntegrationService")
+    def test_operation_not_callable_raises_value_error(self, mock_is_class, mock_bah, mock_gsc):
+        """Operation in allowlist but not callable on service → ValueError with public callables."""
+        integration = self._make_integration()
+        mock_is_class.return_value.get_by_type.return_value = integration
+        mock_bah.return_value = {}
+
+        mock_service = MagicMock()
+        mock_service.create_change = "not_a_method"  # attribute exists but not callable
+        mock_service.get_change_status = lambda **kw: {}  # callable
+        mock_gsc.return_value = mock_service
+
+        step_config = {"integration_type": "servicenow", "operation": "create_change"}
+        with pytest.raises(ValueError, match="not callable"):
+            self.handler.execute(
+                step_config=step_config,
+                resolved_params={},
+                execution=self._make_execution(),
+                step=step_config,
+                correlation_id=None,
+            )
+
+    @patch("executions.step_handlers.service_call_handler.get_service_client")
+    @patch("executions.step_handlers.service_call_handler.build_auth_headers")
+    @patch("executions.step_handlers.service_call_handler.IntegrationService")
     def test_service_exception_propagates(self, mock_is_class, mock_bah, mock_gsc):
         """AC#7 : exception du service propagée vers _execute_handler_step."""
         from core.exceptions import ServiceUnavailableError

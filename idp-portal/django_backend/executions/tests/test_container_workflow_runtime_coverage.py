@@ -8,7 +8,7 @@ from unittest.mock import patch, MagicMock
 from django.test import TestCase
 
 from executions.container_workflow_runtime import ContainerWorkflowRuntime, MAX_STEP_TRANSITIONS
-from executions.models import Execution, ExecutionStatus
+from executions.models import Execution, ExecutionStep, ExecutionStatus, ExecutionStepStatus
 from catalog.models import ActionStatus, ActionItemType
 from core.exceptions import ServiceUnavailableError
 from tests.factories import UserFactory, ActionFactory
@@ -839,3 +839,114 @@ class TestRunWorkflowLoopFinally(TestCase):
 
         # close_old_connections doit être appelé (au moins une fois dans finally)
         self.assertGreaterEqual(mock_close.call_count, 1)
+
+
+# ─── Tests _execute_handler_step — exception, output_mapping, status ─────────
+
+@pytest.mark.django_db
+class TestExecuteHandlerStepCoverage(TestCase):
+    """Lignes 517-575 — _execute_handler_step: exception, output_mapping, result status."""
+
+    def setUp(self):
+        self.user = UserFactory(username='handler_step_user', profile='DBA')
+        self.wf = ActionFactory(
+            status=ActionStatus.PUBLISHED, item_type=ActionItemType.WORKFLOW,
+            execution_steps=[{
+                'order': 1, 'name': 'Handler Step', 'step_id': 'hs1', 'step_type': 'service_call',
+                'integration_type': 'servicenow', 'operation': 'get_change_status',
+            }],
+            created_by=self.user,
+        )
+
+    def _create_execution(self):
+        return Execution.objects.create(
+            action=self.wf, user=self.user, environment=TEST_ENV, status=ExecutionStatus.RUNNING,
+        )
+
+    @patch('executions.container_workflow_runtime.AuditService')
+    @patch('executions.step_handlers.service_call_handler.ServiceCallHandler.execute')
+    def test_handler_exception_returns_failed(self, mock_execute, mock_audit):
+        """Lignes 525-534 — handler.execute raises → return FAILED, step saved FAILED."""
+        mock_execute.side_effect = RuntimeError("handler failed")
+        execution = self._create_execution()
+        runtime = ContainerWorkflowRuntime(execution)
+        step = self.wf.execution_steps[0]
+
+        result = runtime._execute_step(step)
+
+        self.assertEqual(result, ExecutionStatus.FAILED)
+        parent_step = ExecutionStep.objects.filter(execution=execution).first()
+        self.assertIsNotNone(parent_step)
+        self.assertEqual(parent_step.status, ExecutionStepStatus.FAILED)
+
+    @patch('executions.container_workflow_runtime.AuditService')
+    @patch('executions.step_handlers.service_call_handler.ServiceCallHandler.execute')
+    def test_handler_returns_dict_with_status_completed(self, mock_execute, mock_audit):
+        """Lignes 562-565 — handler returns status=COMPLETED → result COMPLETED."""
+        mock_execute.return_value = {'status': ExecutionStatus.COMPLETED, 'raw_output': {}}
+        execution = self._create_execution()
+        runtime = ContainerWorkflowRuntime(execution)
+        step = self.wf.execution_steps[0]
+
+        result = runtime._execute_step(step)
+
+        self.assertEqual(result, ExecutionStatus.COMPLETED)
+
+    @patch('executions.container_workflow_runtime.AuditService')
+    @patch('executions.step_handlers.service_call_handler.ServiceCallHandler.execute')
+    def test_handler_returns_dict_without_status_fail_closed(self, mock_execute, mock_audit):
+        """Lignes 560-565 — handler returns dict sans status → fail-closed FAILED."""
+        mock_execute.return_value = {'data': 'value'}  # no 'status' key
+        execution = self._create_execution()
+        runtime = ContainerWorkflowRuntime(execution)
+        step = self.wf.execution_steps[0]
+
+        result = runtime._execute_step(step)
+
+        self.assertEqual(result, ExecutionStatus.FAILED)
+
+    @patch('executions.container_workflow_runtime.AuditService')
+    @patch('executions.step_handlers.service_call_handler.ServiceCallHandler.execute')
+    def test_handler_output_mapping_not_dict_warning(self, mock_execute, mock_audit):
+        """Lignes 538-546 — output_mapping not dict → warning, fallback to {}."""
+        mock_execute.return_value = {'status': ExecutionStatus.COMPLETED, 'raw_output': {'x': 1}}
+        execution = self._create_execution()
+        runtime = ContainerWorkflowRuntime(execution)
+        step = {**self.wf.execution_steps[0], 'output_mapping': ['invalid']}  # list, not dict
+
+        result = runtime._execute_step(step)
+
+        self.assertEqual(result, ExecutionStatus.COMPLETED)
+
+    @patch('executions.container_workflow_runtime.AuditService')
+    @patch('executions.step_handlers.service_call_handler.ServiceCallHandler.execute')
+    def test_handler_raw_output_extraction(self, mock_execute, mock_audit):
+        """Lignes 550-555 — raw_output in result → extracted to _step_outputs."""
+        mock_execute.return_value = {
+            'status': ExecutionStatus.COMPLETED,
+            'raw_output': {'change_number': 'CHG001'},
+        }
+        execution = self._create_execution()
+        runtime = ContainerWorkflowRuntime(execution)
+        step = {
+            **self.wf.execution_steps[0],
+            'output_mapping': {'change': '$.change_number'},
+        }
+
+        result = runtime._execute_step(step)
+
+        self.assertEqual(result, ExecutionStatus.COMPLETED)
+        self.assertEqual(runtime._step_outputs.get('hs1', {}).get('change'), 'CHG001')
+
+    @patch('executions.container_workflow_runtime.AuditService')
+    @patch('executions.step_handlers.service_call_handler.ServiceCallHandler.execute')
+    def test_handler_non_dict_result_raw_output_empty(self, mock_execute, mock_audit):
+        """Lignes 550-553 — handler returns non-dict → raw_output = {}."""
+        mock_execute.return_value = "scalar"  # not a dict
+        execution = self._create_execution()
+        runtime = ContainerWorkflowRuntime(execution)
+        step = self.wf.execution_steps[0]
+
+        result = runtime._execute_step(step)
+
+        self.assertEqual(result, ExecutionStatus.FAILED)  # no status → fail-closed

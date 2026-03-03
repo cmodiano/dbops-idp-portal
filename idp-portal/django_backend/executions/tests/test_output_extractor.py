@@ -122,3 +122,17 @@ class TestOutputExtractor:
         # Chemin qui devient vide après strip : "$.." → clean="" → None
         result = extractor.extract(raw, {"val": "$."})
         assert result == {"val": None}
+
+    def test_extract_output_mapping_not_dict_returns_empty(self):
+        """output_mapping not dict (e.g. list) → return {}."""
+        extractor = OutputExtractor()
+        raw = {"key": "value"}
+        result = extractor.extract(raw, ["a", "b"])  # list, not dict
+        assert result == {}
+
+    def test_extract_non_str_path_returns_none_for_key(self):
+        """Path value not str (e.g. int) → result[key] = None."""
+        extractor = OutputExtractor()
+        raw = {"key": "value"}
+        result = extractor.extract(raw, {"k": 123})
+        assert result == {"k": None}

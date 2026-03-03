@@ -486,6 +486,22 @@ class TestHttpRequestHandler:
             )
 
     @patch('executions.step_handlers.http_request_handler.settings')
+    def test_unsupported_http_method_raises(self, mock_settings):
+        """Méthode HTTP non supportée (ex. HEAD) → ValueError."""
+        mock_settings.DEBUG = True
+        mock_settings.ALLOWED_HTTP_REQUEST_HOSTS = ['api.corp']
+
+        step_config = self._make_step_config(url='https://api.corp/data', method='HEAD')
+        with pytest.raises(ValueError, match="Unsupported HTTP method"):
+            self.handler.execute(
+                step_config=step_config,
+                resolved_params={},
+                execution=self._make_execution(),
+                step=step_config,
+                correlation_id=None,
+            )
+
+    @patch('executions.step_handlers.http_request_handler.settings')
     def test_allowlist_case_insensitive(self, mock_settings):
         """Allowlist insensible à la casse : 'API.CORP' dans env → match 'api.corp' dans URL."""
         mock_settings.DEBUG = True
