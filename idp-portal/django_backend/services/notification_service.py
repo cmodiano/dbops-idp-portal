@@ -128,7 +128,7 @@ class NotificationService:
                 correlation_id=correlation_id,
             )
 
-    def send_page_dba(
+    def send_page_oncall(
         self,
         api_url: str,
         message: str,
@@ -137,11 +137,15 @@ class NotificationService:
         level: str,
         correlation_id: str | None = None,
     ) -> None:
-        """Appelle l'API interne de page DBA on-call."""
-        effective_url = api_url or getattr(settings, "PAGE_DBA_API_URL", "")
+        """Appelle l'API interne de page on-call (agnostique). Epic 56."""
+        effective_url = (
+            api_url
+            or getattr(settings, "PAGE_ONCALL_API_URL", "")
+            or getattr(settings, "PAGE_DBA_API_URL", "")
+        )
         if not effective_url:
             logger.warning(
-                "page_dba_not_configured",
+                "page_oncall_not_configured",
                 correlation_id=correlation_id,
             )
             return
@@ -156,16 +160,19 @@ class NotificationService:
             response.raise_for_status()
             logger.info(
                 "notification_sent",
-                destination_type="page_dba",
+                destination_type="page_oncall",
                 correlation_id=correlation_id,
             )
-        except Exception as exc:  # noqa: BLE001 — best-effort-non-critical: page DBA notification failure must not break caller
+        except Exception as exc:  # noqa: BLE001 — best-effort-non-critical: page on-call notification failure must not break caller
             logger.error(
                 "notification_failed",
-                destination_type="page_dba",
+                destination_type="page_oncall",
                 error=type(exc).__name__,
                 correlation_id=correlation_id,
             )
+
+    # Backward compatibility alias — Epic 56
+    send_page_dba = send_page_oncall
 
     def notify(self, destination_type: str, **kwargs: Any) -> None:
         """Dispatch vers la méthode de destination appropriée."""
@@ -173,7 +180,8 @@ class NotificationService:
             "email": self.send_email,
             "teams": self.send_teams,
             "page_individual": self.send_page_individual,
-            "page_dba": self.send_page_dba,
+            "page_oncall": self.send_page_oncall,
+            "page_dba": self.send_page_oncall,  # Backward compat alias — Epic 56
         }
         handler = dispatch.get(destination_type)
         if handler is None:
@@ -257,7 +265,7 @@ class NotificationService:
                         correlation_id=correlation_id,
                     )
 
-            elif ch_type == "page_dba" and can_page:
+            elif ch_type in ("page_oncall", "page_dba") and can_page:
                 api_url = channel.get("api_url", "")
                 page_event_labels = {
                     "on_success": "a réussi",
@@ -265,7 +273,7 @@ class NotificationService:
                     "on_approval_required": "attend une approbation",
                 }
                 page_event_label = page_event_labels.get(event, event.replace("_", " "))
-                self.send_page_dba(
+                self.send_page_oncall(
                     api_url=api_url,
                     message=(
                         f"Action critique '{action.name}' [{env}] "

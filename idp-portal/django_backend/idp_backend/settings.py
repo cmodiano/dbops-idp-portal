@@ -710,7 +710,9 @@ SERVICENOW_VERIFY_TLS = os.getenv('SERVICENOW_VERIFY_TLS', 'true').lower() == 't
 # Story 31.8: Notification service configuration
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'idp-portal@example.com')
 PAGE_INDIVIDUAL_API_URL = os.getenv('PAGE_INDIVIDUAL_API_URL', '')
-PAGE_DBA_API_URL = os.getenv('PAGE_DBA_API_URL', '')
+# Epic 56 — Décorrélation : canal page on-call (agnostique)
+PAGE_ONCALL_API_URL = os.getenv('PAGE_ONCALL_API_URL', '')
+PAGE_DBA_API_URL = os.getenv('PAGE_DBA_API_URL', '')  # Backward compat — alias page_oncall
 
 # Story 57.5 — ADR-007 http_request SSRF allowlist
 # Comma-separated list of allowed hostnames for http_request workflow steps.
