@@ -1,80 +1,40 @@
 # Guide de migration — Workflows vers le format step-based
 
-**Version :** 1.0.0 — Story 57.12 (ADR-007, Phase 4.2)
-**Date :** 2026-03-02
-**Statut :** Actif
+**Version :** 2.0.0 — Story 57.18 (ADR-007, Phase finale)
+**Date :** 2026-03-03
+**Statut :** Migration terminée
 
 ---
 
-## Section 1 : Contexte ADR-007 — Pourquoi migrer
+## Section 1 : Contexte ADR-007
 
-L'ADR-007 (_Workflow Step-Based Change Management_) introduit un format de définition de workflows
+L'ADR-007 (_Workflow Step-Based Change Management_) a introduit un format de définition de workflows
 plus riche et plus flexible que le format historique basé sur `change_type_config` et `gate_config`.
 
-### Problèmes du format historique
+### Migration terminée (Story 57.18)
 
-| Problème | Impact |
-|----------|--------|
-| `change_type_config` couplé à ServiceNow | Impossible d'utiliser d'autres intégrations (Jira, PagerDuty) |
-| `gate_config` monolithique | Pas de gates conditionnels ni de timeout configurable |
-| Logique d'approbation sur `Execution` | Pas de traçabilité par étape (`Execution.approved_by/at`) |
-| Pas de branchement conditionnel | Impossible de gérer `on_success_step_id` / `on_error_step_id` |
+Les champs `change_type_config` et `gate_config` ont été **supprimés** du modèle `Action` (Story 57.18).
+Les workflows sont désormais définis uniquement via `execution_steps`.
 
-### Solution ADR-007
+| Phase | Story | Action | Statut |
+|-------|-------|--------|--------|
+| Phase 4.1 | 57.11 | Wrapper backward-compat pour `change_type_config` | Terminé |
+| Phase 4.2 | 57.12 | Annotations de dépréciation | Terminé |
+| Phase 5 | 57.13–57.17 | Fonctionnalités step-based complémentaires | Terminé |
+| **Phase finale** | **57.18** | **Suppression effective des champs et du wrapper** | **Terminé** |
+
+---
+
+## Section 2 : Format step-based
 
 Le champ `Action.execution_steps` (tableau JSON) permet de définir des workflows multi-étapes avec :
-- **Types de step :** `platform`, `service_call`, `http_request`, `evaluation`, `gate`, `vault`, `servicenow`, `prerequisite`, `verification`
+- **Types de step :** `platform`, `service_call`, `http_request`, `evaluation`, `gate`, `vault`, `servicenow`, `prerequisite`, `verification`, `schedule_execution`
 - **Branchement conditionnel :** `on_success_step_id`, `on_error_step_id`
 - **Conditions d'environnement :** `condition.environment_in`
 - **Gates configurables :** `maintenance_window`, `approval` avec timeout
 - **Output mapping :** interpolation Jinja2 entre steps (`{{ steps['create-change']['change_number'] }}`)
 
----
-
-## Section 2 : Champs dépréciés et leur équivalent step-based
-
-### Sur le modèle `Action`
-
-| Champ déprécié | Déprécié depuis | Équivalent step-based | Notes |
-|---|---|---|---|
-| `change_type_config` | ADR-007 / Story 57.12 | `execution_steps` avec step `service_call` ServiceNow | Wrapper auto Story 57.11 |
-| `gate_config` | ADR-007 / Story 57.12 | `execution_steps` avec step `gate` | Plus de `gate_config` dans le runtime |
-
-### Sur le modèle `Execution`
-
-| Champ déprécié | Déprécié depuis | Équivalent step-based | Notes |
-|---|---|---|---|
-| `approved_by` | ADR-007 / Story 57.1 | `ExecutionStep.approved_by` | Donnée historique conservée en DB |
-| `approved_at` | ADR-007 / Story 57.1 | `ExecutionStep.approved_at` | Donnée historique conservée en DB |
-| `approval_comment` | ADR-007 / Story 57.1 | `ExecutionStep.approval_comment` | Donnée historique conservée en DB |
-
-> **Note :** Les colonnes Oracle restent présentes dans la base de données. La dépréciation est
-> uniquement au niveau code Python. Ne plus écrire dans ces champs pour de nouveaux développements.
-
----
-
-## Section 3 : Migration d'une "action simple avec change_type_config"
-
-### Avant (format historique)
-
-Une action avec changement ServiceNow standard était définie avec `change_type_config` :
-
-```json
-{
-  "item_type": "action",
-  "change_type_config": {
-    "model": "standard",
-    "category": "database",
-    "assignment_group": "DBA-Team"
-  }
-}
-```
-
-La logique ServiceNow était gérée implicitement par le moteur d'exécution.
-
-### Après (format step-based)
-
-La même action est maintenant définie explicitement avec `execution_steps` :
+### Exemple : Action avec changement ServiceNow
 
 ```json
 {
@@ -122,15 +82,9 @@ La même action est maintenant définie explicitement avec `execution_steps` :
 }
 ```
 
-### Mécanisme transitoire (Story 57.11)
-
-> **Rétrocompatibilité :** Si une action possède encore `change_type_config` sans `execution_steps`,
-> le wrapper `_build_change_wrapper_steps()` dans `ContainerWorkflowRuntime` génère automatiquement
-> les steps ServiceNow équivalents. Ce mécanisme est temporaire et sera retiré post-Story 57.17.
-
 ---
 
-## Section 4 : Exemple complet — Oracle Patching
+## Section 3 : Exemple complet — Oracle Patching
 
 Cet exemple illustre un workflow de patching Oracle complet avec :
 - Discovery via HTTP
@@ -273,146 +227,8 @@ Cet exemple illustre un workflow de patching Oracle complet avec :
 
 ---
 
-## Section 5 : Exemple Terraform avec évaluation conditionnelle
-
-Cet exemple illustre un workflow Terraform avec :
-- Plan Terraform
-- Évaluation automatique du plan (Business Rule Policy)
-- Gate d'approbation DBA si l'évaluation échoue
-- Création changement ServiceNow (prod seulement)
-- Apply Terraform
-- Fermeture changement
-
-> Source : ADR-007 — `docs/decisions/adr-007-workflow-step-based-change-management.md`
-
-```json
-{
-  "item_type": "workflow",
-  "execution_steps": [
-    {
-      "step_id": "tf-plan",
-      "order": 1,
-      "name": "Terraform Plan",
-      "step_type": "platform",
-      "referenced_action_id": 300,
-      "output_mapping": {
-        "plan": "$.artifacts.plan_json",
-        "resource_count": "$.artifacts.resource_count"
-      }
-    },
-    {
-      "step_id": "check-plan",
-      "order": 2,
-      "name": "Analyze Plan",
-      "step_type": "evaluation",
-      "input_mapping": {
-        "artifact": "{{ steps['tf-plan']['plan'] }}"
-      },
-      "policy_id": 5,
-      "on_success_step_id": "create-change",
-      "on_error_step_id": "request-approval"
-    },
-    {
-      "step_id": "request-approval",
-      "order": 3,
-      "name": "DBA Approval Required",
-      "step_type": "gate",
-      "gate_type": "approval",
-      "timeout_hours": 48,
-      "on_timeout": "FAIL",
-      "context_from": ["tf-plan", "check-plan"],
-      "on_success_step_id": "create-change",
-      "on_error_step_id": null
-    },
-    {
-      "step_id": "create-change",
-      "order": 4,
-      "name": "Create ServiceNow Change",
-      "step_type": "service_call",
-      "integration_type": "servicenow",
-      "operation": "create_change",
-      "condition": {
-        "environment_in": ["production"]
-      },
-      "input_mapping": {
-        "short_description": "Terraform apply — {{ steps['tf-plan']['resource_count'] }} resources"
-      },
-      "output_mapping": {
-        "change_number": "$.number"
-      }
-    },
-    {
-      "step_id": "tf-apply",
-      "order": 5,
-      "name": "Terraform Apply",
-      "step_type": "platform",
-      "referenced_action_id": 301,
-      "input_mapping": {
-        "extra_vars": {
-          "change_id": "{{ steps['create-change']['change_number'] }}"
-        }
-      }
-    },
-    {
-      "step_id": "close-change",
-      "order": 6,
-      "name": "Close Change",
-      "step_type": "service_call",
-      "integration_type": "servicenow",
-      "operation": "close_change",
-      "condition": {
-        "environment_in": ["production"]
-      },
-      "input_mapping": {
-        "change_id": "{{ steps['create-change']['change_number'] }}"
-      }
-    }
-  ]
-}
-```
-
----
-
-## Section 6 : Calendrier prévisionnel de suppression
-
-| Phase | Story | Action | Horizon |
-|-------|-------|--------|---------|
-| Phase 4.1 | 57.11 | Wrapper backward-compat pour `change_type_config` | Terminé |
-| Phase 4.2 | **57.12** | **Annotations de dépréciation (cette story)** | **Terminé** |
-| Phase 5 | 57.13–57.16 | Fonctionnalités step-based complémentaires | À planifier |
-| Phase finale | 57.17+ | Suppression effective des champs dépréciés | Post-57.17 |
-
-### Prérequis avant suppression (post-57.17)
-
-Avant de pouvoir supprimer les champs dépréciés, les conditions suivantes doivent être remplies :
-
-1. **Toutes les actions** dans la base de données doivent avoir `execution_steps` défini
-   (aucune action ne doit avoir uniquement `change_type_config`)
-2. **Aucun client API** ne doit écrire dans `Execution.approved_by/at/approval_comment`
-3. **Migration de données** : traitement des `Execution` historiques avec `approved_by` non null
-4. **Retrait du wrapper 57.11** : `_build_change_wrapper_steps()` peut être supprimé
-
-### Vérification de l'état de migration
-
-Pour vérifier combien d'actions utilisent encore l'ancien format :
-
-```python
-from catalog.models import Action
-
-# Actions avec change_type_config mais sans execution_steps
-legacy_actions = Action.objects.filter(
-    change_type_config__isnull=False,
-    execution_steps__isnull=True
-)
-print(f"Actions legacy à migrer : {legacy_actions.count()}")
-```
-
----
-
 ## Références
 
 - [ADR-007](../decisions/adr-007-workflow-step-based-change-management.md) — Architecture Decision Record complet
-- [Story 57.11](../../_bmad-output/implementation-artifacts/57-11-wrapper-automatique-backward-compatibility.md) — Wrapper backward-compat
-- [Story 57.1](../../_bmad-output/implementation-artifacts/57-1-migration-champs-approbation-execution-step.md) — Migration champs approbation vers ExecutionStep (voir dossier implementation-artifacts si nom différent)
-- `executions/models.py` — Modèle `Execution` et propriété `is_pending_approval`
-- `executions/container_workflow_runtime.py` — `_build_change_wrapper_steps()`
+- `catalog/models.py` — Modèle `Action` avec `execution_steps`
+- `executions/container_workflow_runtime.py` — Runtime d'exécution step-based

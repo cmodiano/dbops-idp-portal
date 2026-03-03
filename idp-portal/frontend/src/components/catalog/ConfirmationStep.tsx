@@ -68,8 +68,21 @@ export const ConfirmationStep = memo(function ConfirmationStep({
     currentImpact,
     environmentsCache,
   } = useWizardExecutionContext();
-  const changeConfig = action?.change_type_config?.[derivedEnvironment?.toUpperCase() ?? ''] as { required?: boolean } | undefined;
-  const isChangeRequired = changeConfig?.required ?? false;
+  const isChangeRequired = action?.execution_steps?.some(
+    (step: unknown) => {
+      const s = step as Record<string, unknown>;
+      const condition = s.condition as { environment_in?: string[] } | null | undefined;
+      return (
+        s.step_type === 'service_call' &&
+        s.integration_type === 'servicenow' &&
+        s.operation === 'create_change' &&
+        (!condition?.environment_in ||
+          condition.environment_in.some(
+            (env) => env.toLowerCase() === derivedEnvironment?.toLowerCase(),
+          ))
+      );
+    },
+  ) ?? false;
 
   const environmentName = environmentsCache?.find((env) => env.id === derivedEnvironment)?.name
     ?? (derivedEnvironment ? getEnvironmentLabel(derivedEnvironment) : '');

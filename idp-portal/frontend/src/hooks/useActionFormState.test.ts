@@ -52,12 +52,10 @@ describe('useActionFormState', () => {
     expect(typeof result.current.setStepsError).toBe('function');
     expect(typeof result.current.setSaving).toBe('function');
     expect(typeof result.current.setExecutionSteps).toBe('function');
-    expect(typeof result.current.setChangeTypeConfig).toBe('function');
     expect(typeof result.current.setParameterList).toBe('function');
     expect(typeof result.current.setImpactRulesList).toEqual('function');
     expect(typeof result.current.setDefaultImpactLevel).toBe('function');
     expect(typeof result.current.setSelectedTags).toBe('function');
-    expect(typeof result.current.setGateConfig).toBe('function');
     expect(typeof result.current.setNotificationConfig).toBe('function');
   });
 
@@ -118,7 +116,6 @@ describe('useActionFormState', () => {
       updated_at: null,
       execution_steps: null,
       workflow_steps: null,
-      change_type_config: null,
       tags: ['oracle', 'prod'],
     };
 

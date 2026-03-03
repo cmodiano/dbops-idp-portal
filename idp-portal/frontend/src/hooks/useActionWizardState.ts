@@ -8,7 +8,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import type { ExecutionStep, ChangeTypeConfigEntry, WorkflowStep, ActionCreate } from '../types/api';
+import type { ExecutionStep, WorkflowStep, ActionCreate } from '../types/api';
 import {
   getTags,
   updateActionTags,
@@ -29,7 +29,7 @@ export interface UseActionWizardStateReturn {
   handleUpdateActionTags: (actionId: number, tagNames: string[]) => Promise<void>;
   handleUpdateActionSteps: (
     actionId: number,
-    payload: { steps: ExecutionStep[]; change_type_config: Record<string, ChangeTypeConfigEntry> | null }
+    payload: { steps: ExecutionStep[] }
   ) => Promise<void>;
   handleUpdateWorkflowSteps: (actionId: number, payload: { steps: WorkflowStep[] }) => Promise<void>;
   handleUpdateBusinessRulePolicies: (actionId: number, inlineRules: null) => Promise<void>;
@@ -63,7 +63,7 @@ export function useActionWizardState({ open }: UseActionWizardStateOptions): Use
 
   const handleUpdateActionSteps = useCallback(async (
     actionId: number,
-    payload: { steps: ExecutionStep[]; change_type_config: Record<string, ChangeTypeConfigEntry> | null }
+    payload: { steps: ExecutionStep[] }
   ): Promise<void> => {
     await updateActionSteps(actionId, payload);
   }, []);

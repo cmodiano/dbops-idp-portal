@@ -107,7 +107,6 @@ describe('WizardStep1General', () => {
         updated_at: null,
         execution_steps: null,
         workflow_steps: null,
-        change_type_config: null,
       },
     };
     renderWithForm(props);
@@ -257,7 +256,6 @@ describe('WizardStep1General — coverage extras', () => {
               updated_at: null,
               execution_steps: null,
               workflow_steps: null,
-              change_type_config: null,
             }}
           />
         </Form>

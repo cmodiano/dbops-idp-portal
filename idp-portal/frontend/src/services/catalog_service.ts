@@ -44,7 +44,6 @@ export interface CatalogTagWithCount {
 /** Full action detail from GET /catalog/actions/{id} (Story 3.2; Story 13.2: requires_target). */
 export interface CatalogActionDetail extends CatalogAction {
   execution_steps?: unknown[];
-  change_type_config?: Record<string, unknown>;
   /** Story 13.2, AC3: Whether action requires target selection (default true). */
   requires_target?: boolean;
   /** Story 5.7: item_type is required for workflow execution UX. */

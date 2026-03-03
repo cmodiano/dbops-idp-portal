@@ -173,32 +173,6 @@ class TestCreateActionCoverage(TestCase):
         )
         self.assertIsNone(action.parameters_schema)
 
-    def test_change_type_config_validated_on_create(self):
-        """Lignes 230-233 — change_type_config not None déclenche validate_change_type_config."""
-        action = self.service.create_action(
-            {
-                'name': 'CTC Action',
-                'engine': 'Oracle',
-                'platform': 'AAP',
-                'change_type_config': {'type': 'standard'},
-            },
-            self.user,
-        )
-        self.assertEqual(action.change_type_config['type'], 'standard')
-
-    def test_gate_config_validated_on_create(self):
-        """Lignes 235-239 — gate_config not None déclenche validate_gate_config."""
-        action = self.service.create_action(
-            {
-                'name': 'Gate Config Action',
-                'engine': 'Oracle',
-                'platform': 'AAP',
-                'gate_config': {'enabled': False},
-            },
-            self.user,
-        )
-        self.assertIsNotNone(action.gate_config)
-
     def test_create_workflow_published_with_steps_validates(self):
         """Ligne 245 — workflow published + execution_steps déclenche validation."""
         ref = Action.objects.create(
@@ -297,7 +271,6 @@ class TestUpdateActionCoverage(TestCase):
                 'integration_id': integration.id,
                 'impact_rules': {'DEV': {'level': 'low'}},
                 'remediation_rules': {'enabled': True},
-                'gate_config': {'enabled': False},
             },
             self.user,
         )
@@ -716,23 +689,6 @@ class TestUpdateExecutionStepsCoverage(TestCase):
         self.assertIsNotNone(updated)
         self.assertEqual(len(updated.execution_steps), 1)
 
-    def test_update_execution_steps_with_change_type_config(self):
-        """Lignes 845-848 — change_type_config not None déclenche validate_change_type_config."""
-        action = Action.objects.create(
-            name='Action CTC Steps',
-            status=ActionStatus.DRAFT,
-            item_type=ActionItemType.ACTION,
-            created_by=self.user,
-        )
-        updated = self.service.update_execution_steps(
-            action.id,
-            [],
-            change_type_config={'type': 'standard'},
-            user=self.user,
-        )
-        self.assertIsNotNone(updated)
-        self.assertEqual(updated.change_type_config['type'], 'standard')
-
     def test_update_execution_steps_with_user_creates_audit(self):
         """Lignes 853-860 — user provided → audit créé."""
         from core.models import AuditLog
@@ -779,7 +735,6 @@ class TestUpdateExecutionStepsCoverage(TestCase):
         updated = self.service.update_execution_steps(
             action.id,
             None,
-            change_type_config={'type': 'standard'},
             user=self.user,
         )
         self.assertIsNotNone(updated)
@@ -846,32 +801,6 @@ class TestCreateActionJsonFieldsCoverage(TestCase):
     def setUp(self):
         self.user = UserFactory(username='cajf_user', profile='DBA')
         self.service = CatalogService()
-
-    def test_create_action_change_type_config_none_via_json_value(self):
-        """Ligne 230->233 — change_type_config est vide string → _json_value retourne None → branche ctc is None."""
-        action = self.service.create_action(
-            {
-                'name': 'CTC None String',
-                'engine': 'TestEngine',
-                'platform': 'TestPlatform',
-                'change_type_config': '   ',  # whitespace → None via _json_value
-            },
-            self.user,
-        )
-        self.assertIsNone(action.change_type_config)
-
-    def test_create_action_gate_config_none_via_json_value(self):
-        """Ligne 236->239 — gate_config est vide string → _json_value retourne None → branche gc is None."""
-        action = self.service.create_action(
-            {
-                'name': 'GC None String',
-                'engine': 'TestEngine',
-                'platform': 'TestPlatform',
-                'gate_config': '   ',  # whitespace → None via _json_value
-            },
-            self.user,
-        )
-        self.assertIsNone(action.gate_config)
 
     def test_create_action_with_remediation_rules(self):
         """Ligne 241 — remediation_rules dans action_data."""

@@ -51,7 +51,6 @@ const mockAction = {
   default_impact_level: 'low' as ImpactLevel,
   status: 'published' as const,
   requires_target: false,
-  change_type_config: {},
   execution_count: 0,
   tags: [],
   is_favorite: false,

@@ -9,7 +9,6 @@ export type { ActionWizardProps } from './ActionWizard';
 export { ActionStatusBadge } from './ActionStatusBadge';
 export { AdminPreview } from './AdminPreview';
 export type { AdminPreviewProps } from './AdminPreview';
-export { ChangeTypeConfig } from './ChangeTypeConfig';
 export { StepsEditor } from './StepsEditor';
 export { ParametersEditor } from './ParametersEditor';
 export type { ParametersEditorProps } from './ParametersEditor';

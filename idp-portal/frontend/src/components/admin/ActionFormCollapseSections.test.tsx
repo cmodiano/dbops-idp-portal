@@ -33,10 +33,6 @@ vi.mock('../../services/admin_service', () => ({
 const defaultProps: ActionFormCollapseSectionsProps = {
   executionSteps: [],
   setExecutionSteps: vi.fn(),
-  changeTypeConfig: {},
-  setChangeTypeConfig: vi.fn(),
-  gateConfig: null,
-  setGateConfig: vi.fn(),
   remediationRules: [],
   setRemediationRules: vi.fn(),
   businessRulePolicyId: null,

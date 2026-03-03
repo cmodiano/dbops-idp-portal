@@ -4,9 +4,7 @@
  * réutilisables par useActionWizardValidation (AC6 — factorisation).
  */
 import type {
-  ChangeTypeConfigEntry,
   ExecutionStep,
-  GateConfig,
   ImpactRuleDefinition,
   ParameterDefinition,
 } from '../types/api';
@@ -53,33 +51,6 @@ export function validateImpactRulesList(impactRulesList: ImpactRuleDefinition[])
   return null;
 }
 
-/** Valide la configuration changeTypeConfig + gateConfig ServiceNow. Retourne un message d'erreur ou null. */
-export function validateChangeTypeConfig(
-  changeTypeConfig: Record<string, ChangeTypeConfigEntry>,
-  snIntegrationOptions: { value: number; label: string }[],
-  gateConfig: GateConfig | null
-): string | null {
-  const hasRequiredEnv = Object.values(changeTypeConfig).some((e) => e?.required);
-  if (hasRequiredEnv && snIntegrationOptions.length > 0 && !gateConfig?.servicenow_change?.integration_id) {
-    return "Une intégration ServiceNow doit être sélectionnée lorsque « Changement requis » est activé et que des intégrations ServiceNow sont configurées.";
-  }
-  for (const [env, entry] of Object.entries(changeTypeConfig)) {
-    if (entry?.required) {
-      const code = (entry.template_id ?? entry.change_model_code ?? '').trim();
-      if (!code) {
-        return `Le modèle / Template ID est obligatoire pour ${env} lorsque « Changement requis » est activé.`;
-      }
-      if (!/^[A-Za-z0-9_-]+$/.test(code)) {
-        return `Le modèle / Template ID pour ${env} doit être alphanumérique (tirets et underscores autorisés).`;
-      }
-      if (code.length > 50) {
-        return `Le modèle / Template ID pour ${env} ne peut pas dépasser 50 caractères.`;
-      }
-    }
-  }
-  return null;
-}
-
 // ─── Hook ────────────────────────────────────────────────────────────────────
 
 export interface ActionFormValidationParams {
@@ -87,15 +58,12 @@ export interface ActionFormValidationParams {
   executionSteps: ExecutionStep[];
   parameterList: ParameterDefinition[];
   impactRulesList: ImpactRuleDefinition[];
-  changeTypeConfig: Record<string, ChangeTypeConfigEntry>;
-  snIntegrationOptions: { value: number; label: string }[];
-  gateConfig: GateConfig | null;
 }
 
 /** Hook de validation pour ActionForm. Retourne validateForm(params) → string | null. */
 export function useActionFormValidation() {
   function validateForm(params: ActionFormValidationParams): string | null {
-    const { isEditMode, executionSteps, parameterList, impactRulesList, changeTypeConfig, snIntegrationOptions, gateConfig } = params;
+    const { isEditMode, executionSteps, parameterList, impactRulesList } = params;
 
     // Validation des étapes
     if (isEditMode && executionSteps.length === 0) {
@@ -120,10 +88,6 @@ export function useActionFormValidation() {
     // Validation des règles d'impact
     const impactError = validateImpactRulesList(impactRulesList);
     if (impactError) return impactError;
-
-    // Validation changeTypeConfig
-    const changeTypeError = validateChangeTypeConfig(changeTypeConfig, snIntegrationOptions, gateConfig);
-    if (changeTypeError) return changeTypeError;
 
     return null;
   }

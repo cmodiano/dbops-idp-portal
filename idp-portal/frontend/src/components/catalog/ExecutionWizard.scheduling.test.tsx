@@ -80,11 +80,6 @@ const mockAction: CatalogActionDetail = {
   created_at: '2026-01-29T00:00:00Z',
   tags: ['oracle', 'provisioning'],
   requires_target: false,
-  change_type_config: {
-    DEVELOPPEMENT: { required: false, change_model_code: null },
-    CERTIFICATION: { required: false, change_model_code: null },
-    PRODUCTION: { required: true, change_model_code: 'CHG001' },
-  },
   execution_count: 5,
 };
 

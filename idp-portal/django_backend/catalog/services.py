@@ -225,18 +225,6 @@ class CatalogService:
             action.impact_rules = _json_value(action_data['impact_rules'])
         if 'execution_steps' in action_data:
             action.execution_steps = _json_value(action_data['execution_steps'])
-        if 'change_type_config' in action_data:
-            ctc = _json_value(action_data['change_type_config'])
-            if ctc is not None:
-                from catalog.validators import validate_change_type_config
-                validate_change_type_config(ctc)
-            action.change_type_config = ctc
-        if 'gate_config' in action_data:
-            gc = _json_value(action_data['gate_config'])
-            if gc is not None:
-                from catalog.validators import validate_gate_config
-                validate_gate_config(gc)
-            action.gate_config = gc
         if 'remediation_rules' in action_data:
             action.remediation_rules = _json_value(action_data['remediation_rules'])
 
@@ -416,9 +404,6 @@ class CatalogService:
             action.impact_rules = action_update_data['impact_rules']
         if 'remediation_rules' in action_update_data:
             action.remediation_rules = action_update_data['remediation_rules']
-        # Story 31.6: gate_config (validated by serializer)
-        if 'gate_config' in action_update_data:
-            action.gate_config = action_update_data['gate_config']
 
         action.save()
         
@@ -796,11 +781,10 @@ class CatalogService:
         self,
         action_id: int,
         steps: list[dict[str, Any]],
-        change_type_config: dict[str, Any] | None = None,
         user: User | None = None
     ) -> Action | None:
         """
-        Update execution steps and change type config for an action.
+        Update execution steps for an action.
         Only allowed for actions in draft or disabled status.
 
         Story 16.2: Validates workflow steps with branches and retry configuration.
@@ -808,7 +792,6 @@ class CatalogService:
         Args:
             action_id: ID of the action
             steps: List of execution step dicts
-            change_type_config: Optional change type config dict
             user: User instance (for audit)
 
         Returns:
@@ -843,12 +826,6 @@ class CatalogService:
 
             action.execution_steps = steps
 
-        # Update change_type_config if provided (Story 25.4: validated)
-        if change_type_config is not None:
-            from catalog.validators import validate_change_type_config
-            validate_change_type_config(change_type_config)
-            action.change_type_config = change_type_config
-
         action.save()
 
         # Audit if user provided
@@ -858,7 +835,7 @@ class CatalogService:
                 action_type=AuditActionType.ACTION_UPDATED,
                 entity_type=AuditEntityType.ACTION,
                 entity_id=action.id,
-                details={'updated_fields': ['execution_steps', 'change_type_config']}
+                details={'updated_fields': ['execution_steps']}
             )
 
         return action  # type: ignore[no-any-return]

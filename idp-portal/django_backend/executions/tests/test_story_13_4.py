@@ -41,11 +41,7 @@ class ExecutionTargetRequiredTests(TestCase):
             status='published',
             requires_target=True
         )
-        # Set change_type_config and impact_rules
-        self.action_with_target.change_type_config = ({
-            'DEV': {'required': False, 'change_model_code': None},
-            'PROD': {'required': True, 'change_model_code': '1516B'}
-        })
+        # Set impact_rules
         self.action_with_target.impact_rules = ({
             'DEV': {'level': 'low'},
             'PROD': {'level': 'high'}
@@ -129,9 +125,10 @@ class ExecutionTargetRequiredTests(TestCase):
         execution = Execution.objects.get(id=response.data['data']['execution_id'])
         self.assertEqual(execution.environment, 'dev')
 
-    def test_change_type_config_per_environment(self):
+    def test_env_config_per_environment(self):
         """
-        Subtask 6.5: Config changement récupérée depuis target.environment.
+        Subtask 6.5: Env config retrieved from target.environment.
+        change_type_config removed (Story 57.18): change_required is always False.
         """
         allowed_targets = [
             {'name': 'srv-prod-01', 'environment': 'prod', 'target_type': 'server', 'metadata': None},
@@ -150,8 +147,8 @@ class ExecutionTargetRequiredTests(TestCase):
         execution = Execution.objects.get(id=response.data['data']['execution_id'])
         params = execution.get_parameters()
         self.assertIn('_env_config', params)
-        self.assertTrue(params['_env_config']['change_required'])
-        self.assertEqual(params['_env_config']['change_model_code'], '1516B')
+        self.assertFalse(params['_env_config']['change_required'])
+        self.assertIsNone(params['_env_config']['change_model_code'])
 
     def test_impact_rules_per_environment(self):
         """

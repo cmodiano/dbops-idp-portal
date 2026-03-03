@@ -9,7 +9,6 @@ import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ActionWizard } from './ActionWizard';
 import type { ActionDetail } from '../../types/api';
-import { updateActionSteps, updateWorkflowSteps } from '../../services/admin_service';
 
 vi.mock('../../services/admin_service', () => ({
   getTags: vi.fn().mockResolvedValue([]),
@@ -171,7 +170,6 @@ describe('ActionWizard', () => {
         updated_at: null,
         execution_steps: null,
         workflow_steps: null,
-        change_type_config: null,
         tags: [],
       };
       await act(async () => {
@@ -208,7 +206,6 @@ describe('ActionWizard', () => {
         updated_at: null,
         execution_steps: null,
         workflow_steps: null,
-        change_type_config: null,
         tags: [],
       };
       await act(async () => {
@@ -250,7 +247,6 @@ describe('ActionWizard', () => {
         updated_at: null,
         execution_steps: null,
         workflow_steps: null,
-        change_type_config: null,
         tags: [],
       };
       await act(async () => {
@@ -300,7 +296,6 @@ describe('ActionWizard', () => {
         updated_at: null,
         execution_steps: [],
         workflow_steps: null,
-        change_type_config: null,
         tags: [],
       };
       render(<ActionWizard {...defaultProps} editAction={editAction} />);
@@ -365,7 +360,6 @@ describe('ActionWizard', () => {
         updated_at: null,
         execution_steps: [],
         workflow_steps: null,
-        change_type_config: { PROD: { required: true, change_model_code: '1516B' } },
         tags: ['tag1'],
       };
 
@@ -395,7 +389,6 @@ describe('ActionWizard', () => {
         updated_at: null,
         execution_steps: null,
         workflow_steps: null,
-        change_type_config: null,
         tags: [],
       };
 
@@ -405,63 +398,6 @@ describe('ActionWizard', () => {
 
       expect(screen.getByText(/Modifier l'action/i)).toBeInTheDocument();
     });
-  });
-
-  describe('Story 2.24: change_type_config payload', () => {
-    it('calls updateActionSteps with single step and change_type_config when user submits at step 3', async () => {
-      const user = userEvent.setup({ delay: null });
-      const editAction: ActionDetail = {
-        id: 1,
-        name: 'Action existante',
-        description: 'Description',
-        item_type: 'action',
-        engine: 'Oracle',
-        platform: 'AAP',
-        integration_id: 1,
-        parameters_schema: null,
-        impact_rules: null,
-        default_impact_level: null,
-        status: 'draft',
-        created_by: 1,
-        created_at: '2025-01-01T00:00:00Z',
-        updated_at: null,
-        execution_steps: [],
-        workflow_steps: null,
-        change_type_config: null,
-        tags: [],
-      };
-      await act(async () => {
-        render(<ActionWizard {...defaultProps} editAction={editAction} />);
-      });
-      const next1 = await screen.findByRole('button', { name: /Suivant/i });
-      await user.click(next1);
-      await waitFor(() => expect(screen.getByLabelText('ID template AAP')).toBeInTheDocument(), { timeout: 8000 });
-      await user.type(screen.getByLabelText('ID template AAP'), '1');
-      const next2 = await screen.findByRole('button', { name: /Suivant/i });
-      await user.click(next2);
-      await waitFor(() => expect(screen.getByRole('button', { name: /Enregistrer/i })).toBeInTheDocument());
-      const prodSwitch = screen.getByLabelText(/Changement requis pour PROD/i);
-      await user.click(prodSwitch);
-      // Modèle / Template ID is required when "Changement requis" is enabled for PROD
-      const codeModeleProd = screen.getByLabelText(/Modèle \/ Template ID pour PROD/i);
-      await user.type(codeModeleProd, 'CHG001');
-      await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
-      await waitFor(() => {
-        expect(updateActionSteps).toHaveBeenCalledWith(
-          1,
-          expect.objectContaining({
-            steps: expect.any(Array),
-            change_type_config: expect.objectContaining({
-              PROD: expect.objectContaining({ required: true }),
-            }),
-          })
-        );
-      });
-      const callPayload = vi.mocked(updateActionSteps).mock.calls[0][1];
-      expect(callPayload.steps).toHaveLength(1);
-      expect(callPayload.change_type_config).toBeDefined();
-      expect(callPayload.change_type_config!.PROD.required).toBe(true);
-    }, 30000);
   });
 
   describe('Comportement modal', () => {
@@ -555,7 +491,6 @@ describe('ActionWizard', () => {
         updated_at: null,
         execution_steps: null,
         workflow_steps: [{ order: 1, name: 'Step 1', referenced_action_id: 100 }],
-        change_type_config: null,
         tags: [],
       };
       await act(async () => {
@@ -603,6 +538,7 @@ describe('ActionWizard', () => {
       // Save
       await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
       // Verify updateWorkflowSteps was called
+      const { updateWorkflowSteps } = await import('../../services/admin_service');
       await waitFor(
         () => {
           expect(mockOnSubmit).toHaveBeenCalledWith(
@@ -611,7 +547,7 @@ describe('ActionWizard', () => {
               item_type: 'workflow',
             })
           );
-          expect(updateWorkflowSteps).toHaveBeenCalledWith(
+          expect(vi.mocked(updateWorkflowSteps)).toHaveBeenCalledWith(
             1,
             expect.objectContaining({
               steps: expect.arrayContaining([
@@ -644,7 +580,6 @@ describe('ActionWizard', () => {
           { order: 1, name: 'Étape un', referenced_action_id: 100 },
           { order: 2, name: null, referenced_action_id: 101 },
         ],
-        change_type_config: null,
         tags: [],
       };
       const user = userEvent.setup();
@@ -724,7 +659,6 @@ describe('ActionWizard', () => {
         updated_at: null,
         execution_steps: null,
         workflow_steps: null,
-        change_type_config: null,
         tags: [],
       };
       await act(async () => {
@@ -811,7 +745,6 @@ describe('ActionWizard', () => {
         updated_at: null,
         execution_steps: [],
         workflow_steps: null,
-        change_type_config: null,
         tags: [],
       };
       await act(async () => {
@@ -866,7 +799,6 @@ describe('ActionWizard', () => {
         updated_at: null,
         execution_steps: null,
         workflow_steps: null,
-        change_type_config: null,
         tags: [],
       };
       await act(async () => {
@@ -975,7 +907,6 @@ describe('ActionWizard — additional coverage', () => {
     updated_at: null,
     execution_steps: [],
     workflow_steps: null,
-    change_type_config: null,
     tags: [],
     ...overrides,
   });

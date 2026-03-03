@@ -9,9 +9,6 @@ const baseParams: ActionWizardValidationParams = {
   isWorkflowSave: false,
   parameterList: [],
   impactRulesList: [],
-  changeTypeConfig: {},
-  snIntegrationOptions: [],
-  gateConfig: null,
   aapTemplateId: undefined,
   integrationId: undefined,
   getIntegrationById: vi.fn(() => undefined),
@@ -78,20 +75,6 @@ describe('useActionWizardValidation', () => {
     };
     const error = result.current.validateForSave(params);
     expect(error).toMatch(/Deux règles d'impact utilisent l'environnement "PROD"/);
-  });
-
-  it('retourne erreur si changeTypeConfig sans intégration SN', () => {
-    const { result } = renderHook(() =>
-      useActionWizardValidation({ validateWorkflowSteps: mockValidateWorkflowSteps })
-    );
-    const params = {
-      ...baseParams,
-      changeTypeConfig: { PROD: { required: true, template_id: 'CHG001' } },
-      snIntegrationOptions: [{ value: 1, label: 'SN-PROD' }],
-      gateConfig: null,
-    };
-    const error = result.current.validateForSave(params);
-    expect(error).toMatch(/intégration ServiceNow/);
   });
 
   it('retourne erreur si AAP sans template sélectionné', () => {

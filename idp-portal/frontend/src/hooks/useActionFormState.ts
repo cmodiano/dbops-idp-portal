@@ -10,9 +10,7 @@ import type {
   ActionPreviewData,
   ActionEngine,
   ActionPlatform,
-  ChangeTypeConfigEntry,
   ExecutionStep,
-  GateConfig,
   ImpactLevel,
   ImpactRuleDefinition,
   NotificationConfig,
@@ -39,7 +37,6 @@ export function useActionFormState({ open, editAction, form, getIntegrationById 
   const [stepsError, setStepsError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [executionSteps, setExecutionSteps] = useState<ExecutionStep[]>([]);
-  const [changeTypeConfig, setChangeTypeConfig] = useState<Record<string, ChangeTypeConfigEntry>>({});
   const [parameterList, setParameterList] = useState<ParameterDefinition[]>([]);
   const [impactRulesList, setImpactRulesList] = useState<ImpactRuleDefinition[]>([]);
   const [defaultImpactLevel, setDefaultImpactLevel] = useState<ImpactLevel | null>(null);
@@ -48,7 +45,6 @@ export function useActionFormState({ open, editAction, form, getIntegrationById 
   const [tagsOptions, setTagsOptions] = useState<{ value: string; label: string }[]>([]);
   const [remediationRules, setRemediationRules] = useState<RemediationRuleDefinition[]>([]);
   const [businessRulePolicyId, setBusinessRulePolicyId] = useState<number | null>(null);
-  const [gateConfig, setGateConfig] = useState<GateConfig | null>(null);
   const [notificationConfig, setNotificationConfig] = useState<NotificationConfig | null>(null);
 
   // Form.useWatch values pour previewData en temps réel
@@ -130,7 +126,6 @@ export function useActionFormState({ open, editAction, form, getIntegrationById 
         documentation_md: editAction.documentation_md,
       });
       setExecutionSteps(editAction.execution_steps || []);
-      setChangeTypeConfig(editAction.change_type_config ?? {});
       setParameterList(
         schemaToParameterList(editAction.parameters_schema ?? undefined).map((p, i) => ({
           ...p,
@@ -148,12 +143,10 @@ export function useActionFormState({ open, editAction, form, getIntegrationById 
         }))
       );
       setBusinessRulePolicyId(editAction.business_rule_policy_id ?? null);
-      setGateConfig(editAction.gate_config ?? null);
       setNotificationConfig(editAction.notification_config ?? null);
     } else if (!open) {
       form.resetFields();
       setExecutionSteps([]);
-      setChangeTypeConfig({});
       setParameterList([]);
       setImpactRulesList([]);
       setDefaultImpactLevel(null);
@@ -161,7 +154,6 @@ export function useActionFormState({ open, editAction, form, getIntegrationById 
       setSelectedTags([]);
       setRemediationRules([]);
       setBusinessRulePolicyId(null);
-      setGateConfig(null);
       setNotificationConfig(null);
       setStepsError(null);
       setSaving(false);
@@ -176,8 +168,6 @@ export function useActionFormState({ open, editAction, form, getIntegrationById 
     setSaving,
     executionSteps,
     setExecutionSteps,
-    changeTypeConfig,
-    setChangeTypeConfig,
     parameterList,
     setParameterList,
     impactRulesList,
@@ -193,8 +183,6 @@ export function useActionFormState({ open, editAction, form, getIntegrationById 
     setRemediationRules,
     businessRulePolicyId,
     setBusinessRulePolicyId,
-    gateConfig,
-    setGateConfig,
     notificationConfig,
     setNotificationConfig,
     watchedIntegrationId: watchedIntegrationId as number | undefined,

@@ -188,7 +188,7 @@ class ActionViewSet(viewsets.ModelViewSet):
             response_serializer = ActionSerializer(instance)
             return Response({"data": response_serializer.data})
 
-        # Handle other fields via ActionCreateSerializer (includes gate_config via Story 31.6)
+        # Handle other fields via ActionCreateSerializer
         serializer = ActionCreateSerializer(data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         update_data = serializer.validated_data
@@ -305,14 +305,12 @@ class ActionViewSet(viewsets.ModelViewSet):
         action = self.get_object()
 
         steps = request.data.get('steps')
-        change_type_config = request.data.get('change_type_config')
 
         svc = self.get_catalog_service()
         try:
             updated_action = svc.update_execution_steps(
                 action_id=action.id,
                 steps=steps,  # type: ignore[arg-type]
-                change_type_config=change_type_config,
                 user=self.request.user  # type: ignore[arg-type]
             )
         except ValueError as e:

@@ -43,9 +43,6 @@ class APIStandaloneExecutionTests(TestCase):
             status='published',
             requires_target=True
         )
-        self.action.change_type_config = ({
-            'DEV': {'required': False, 'change_model_code': None},
-        })
         self.action.impact_rules = ({
             'DEV': {'level': 'low'},
         })

@@ -19,11 +19,9 @@ import type {
   ParameterDefinition,
   ImpactRuleDefinition,
   ImpactLevel,
-  ChangeTypeConfigEntry,
   ExecutionStep,
   ItemType,
   WorkflowStep,
-  GateConfig,
   NotificationConfig,
 } from '../../types/api';
 import { schemaToParameterList, parameterListToSchema } from '../../utils/parametersSchema';
@@ -36,7 +34,6 @@ import { useActionWizardState } from '../../hooks/useActionWizardState';
 import { useEngines } from '../../hooks/useEngines';
 import { usePlatformIntegrations } from '../../hooks/usePlatformIntegrations';
 import { useCategories } from '../../hooks/useCategories';
-import { useServiceNowIntegrations } from '../../hooks/useServiceNowIntegrations';
 import { integrationTypeToPlatformCode, integrationToConnector } from '../../utils/integrationHelpers';
 import { useActionWizardValidation } from '../../hooks/useActionWizardValidation';
 import { WizardStep1General } from './WizardStep1General';
@@ -90,9 +87,6 @@ export function ActionWizard({
     handleUpdateBusinessRulePolicies,
     handlePatchAction,
   } = useActionWizardState({ open });
-  const [changeTypeConfig, setChangeTypeConfig] = useState<Record<string, ChangeTypeConfigEntry>>({});
-  // Story 31.6: Gate configuration (integration selection per gate type)
-  const [gateConfig, setGateConfig] = useState<GateConfig | null>(null);
   // Story 31.8: Notification configuration (email, teams, page)
   const [notificationConfig, setNotificationConfig] = useState<NotificationConfig | null>(null);
   /** Story 28.4: Predefined business rule policy ID (FK). Inline rules removed — only catalogue. */
@@ -117,8 +111,6 @@ export function ActionWizard({
   const { engineOptions, loading: enginesLoading } = useEngines();
   // Story 31.1: Load platform integrations (replaces usePlatforms)
   const { integrationOptions, loading: integrationsLoading, getIntegrationById } = usePlatformIntegrations();
-  // Story 31.6: Load ServiceNow integrations for gate config validation (AC #3)
-  const { integrationOptions: snIntegrationOptions } = useServiceNowIntegrations();
   // Story 2.30: Load categories from REF_CATEGORIES table
   const { categoryOptions, loading: categoriesLoading } = useCategories();
 
@@ -146,9 +138,6 @@ export function ActionWizard({
       setImpactRulesList(impactRulesToList(editAction.impact_rules ?? undefined));
       setDefaultImpactLevel(editAction.default_impact_level ?? null);
       setSelectedTags(editAction.tags ?? []);
-      setChangeTypeConfig(editAction.change_type_config ?? {});
-      // Story 31.6: Load gate configuration
-      setGateConfig(editAction.gate_config ?? null);
       // Story 31.8: Load notification configuration
       setNotificationConfig(editAction.notification_config ?? null);
       // Story 28.4: Load business rule policy (FK only; inline removed)
@@ -179,8 +168,6 @@ export function ActionWizard({
       setImpactRulesList([]);
       setDefaultImpactLevel(null);
       setSelectedTags([]);
-      setChangeTypeConfig({});
-      setGateConfig(null);
       setNotificationConfig(null);
       setBusinessRulePolicyId(null);
       setAapResourceType('job_template');
@@ -280,9 +267,6 @@ export function ActionWizard({
       isWorkflowSave,
       parameterList,
       impactRulesList,
-      changeTypeConfig,
-      snIntegrationOptions,
-      gateConfig,
       aapTemplateId,
       integrationId: values.integration_id,
       getIntegrationById,
@@ -302,8 +286,6 @@ export function ActionWizard({
         // impact_rules and default_impact_level apply to both actions and workflows
         impact_rules: listToImpactRules(impactRulesList),
         default_impact_level: defaultImpactLevel,
-        // Story 31.6: Gate configuration
-        gate_config: gateConfig,
         // Story 31.8: Notification configuration
         notification_config: notificationConfig,
         // category: both actions and workflows (workflows: optional, backend defaults to 'autres')
@@ -386,24 +368,7 @@ export function ActionWizard({
             });
           }
         } else {
-          // Save execution steps and change config for actions (only if draft or disabled)
-          const change_type_config = Object.keys(changeTypeConfig).length > 0
-            ? Object.fromEntries(
-                Object.entries(changeTypeConfig).map(([env, e]) => [
-                  env,
-                  {
-                    required: e?.required ?? false,
-                    change_model_code: e?.required ? (e.change_model_code?.trim() || null) : null,
-                    change_type: (e?.change_type ?? null) ? String(e.change_type).trim() || null : null,
-                    template_id: (e?.template_id ?? null) ? String(e.template_id).trim() || null : null,
-                    allowed: e?.allowed ?? true,
-                    requires_maintenance_window: e?.requires_maintenance_window ?? false,
-                    requires_approval: e?.requires_approval ?? false,
-                  },
-                ])
-              )
-            : null;
-          
+          // Save execution steps for actions (only if draft or disabled)
           if (canEditSteps) {
             // Story 31.1: Derive connector from integration type
             const connector = values.integration_id
@@ -424,7 +389,7 @@ export function ActionWizard({
               conditional_environments: null,
             };
             try {
-              await handleUpdateActionSteps(actionId, { steps: [singleStep], change_type_config });
+              await handleUpdateActionSteps(actionId, { steps: [singleStep] });
             } catch (stepsErr) {
               const errorMessage = stepsErr instanceof Error ? stepsErr.message : 'Erreur lors de la sauvegarde des étapes';
               if (errorMessage.includes('brouillon') || errorMessage.includes('draft') || errorMessage.includes('désactivée')) {
@@ -435,7 +400,7 @@ export function ActionWizard({
               setSaving(false);
               return;
             }
-          } else if (change_type_config !== null) {
+          } else {
             // Notify user that steps were not saved
             notification.info({
               message: 'Étapes non modifiées',
@@ -555,10 +520,6 @@ export function ActionWizard({
               setImpactRulesList={setImpactRulesList}
               defaultImpactLevel={defaultImpactLevel}
               setDefaultImpactLevel={setDefaultImpactLevel}
-              changeTypeConfig={changeTypeConfig}
-              setChangeTypeConfig={setChangeTypeConfig}
-              gateConfig={gateConfig}
-              setGateConfig={setGateConfig}
               businessRulePolicyId={businessRulePolicyId}
               setBusinessRulePolicyId={setBusinessRulePolicyId}
               notificationConfig={notificationConfig}

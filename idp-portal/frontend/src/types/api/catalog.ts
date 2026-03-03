@@ -40,11 +40,8 @@ export interface ActionCreate {
   impact_rules?: Record<string, { level: ImpactLevel; criteria?: string | null }> | null;
   /** Story 2.18 AC5: Default impact level when no rule matches the environment. */
   default_impact_level?: ImpactLevel | null;
-  /** Story 2.24: change_model_code removed; change_type_config is in ExecutionStepsUpdate only. */
   /** Story 3.4 FR12: Markdown documentation for contextual help. */
   documentation_md?: string | null;
-  /** Story 31.6: Gate configuration — integration selection per gate type. */
-  gate_config?: GateConfig | null;
   /** Story 31.8: Notification channels configuration. */
   notification_config?: NotificationConfig | null;
   /** Story 28.4: FK to predefined business rule policy. */
@@ -87,16 +84,6 @@ export interface ActionResponse {
   requires_target?: boolean;
 }
 
-/** Story 31.6: ServiceNow gate configuration. */
-export interface GateConfigServiceNow {
-  integration_id?: number | null;
-}
-
-/** Story 31.6: Gate configuration — integration selection per gate type. */
-export interface GateConfig {
-  servicenow_change?: GateConfigServiceNow;
-}
-
 /** Story 31.8: Notification channel configuration. */
 export interface NotificationChannel {
   type: 'email' | 'teams' | 'page_dba';
@@ -114,22 +101,6 @@ export interface NotificationChannel {
 export interface NotificationConfig {
   channels: NotificationChannel[];
   page_individual_enabled: boolean;
-}
-
-/** Per-environment change config (Story 2.24; Story 25.4: + requires_maintenance_window, requires_approval, allowed). */
-export interface ChangeTypeConfigEntry {
-  required: boolean;
-  change_model_code?: string | null;
-  /** Story 25.4 AC2: Optional ServiceNow change type (e.g. standard/normal/emergency). */
-  change_type?: string | null;
-  /** Story 25.4 AC2: Optional ServiceNow template ID (if applicable). */
-  template_id?: string | null;
-  /** Story 25.4: If false, execution refused for this env. Default true. */
-  allowed?: boolean;
-  /** Story 25.4: Require maintenance window gate. Default false. */
-  requires_maintenance_window?: boolean;
-  /** Story 25.4: Require approval before execution. Default false. */
-  requires_approval?: boolean;
 }
 
 // ADR-007 Story 57.13 — Step types for step-based workflows
@@ -255,8 +226,6 @@ export interface ExecutionStep {
 
 export interface ExecutionStepsUpdate {
   steps: ExecutionStep[];
-  /** Story 2.24: per-env { required, change_model_code }. */
-  change_type_config: Record<string, ChangeTypeConfigEntry> | null;
 }
 
 /** Story 28.1: Business rule policy criteria for review_if_modified. */
@@ -288,10 +257,6 @@ export interface ActionDetail extends ActionResponse {
   execution_steps: ExecutionStep[] | null;
   /** Story 5.7: workflow steps for workflows (action references). */
   workflow_steps: WorkflowStep[] | null;
-  /** Story 2.24: per-env { required, change_model_code }. */
-  change_type_config: Record<string, ChangeTypeConfigEntry> | null;
-  /** Story 31.6: Gate configuration — integration selection per gate type. */
-  gate_config?: GateConfig | null;
   /** Story 31.8: Notification channels configuration. */
   notification_config?: NotificationConfig | null;
   /* documentation_md is inherited from ActionResponse (Story 3.4) */

@@ -4,7 +4,6 @@
  * Features:
  * - Inline validation (AC #6)
  * - Execution steps editor (Story 2.2, AC #1, #2)
- * - Change type config (Story 2.2, AC #3)
  * - Real-time preview with split view layout (Story 2.5, AC #1, #3)
  * - Documentation Markdown editor (Story 3.4)
  * - Accessibility: aria-labels, focus management, aria-live preview
@@ -26,7 +25,6 @@ import { parameterListToSchema } from '../../utils/parametersSchema';
 import { listToImpactRules } from '../../utils/impactRulesSchema';
 import { useEngines } from '../../hooks/useEngines';
 import { usePlatformIntegrations } from '../../hooks/usePlatformIntegrations';
-import { useServiceNowIntegrations } from '../../hooks/useServiceNowIntegrations';
 import { integrationTypeToPlatformCode } from '../../utils/integrationHelpers';
 import { ParametersEditor } from './ParametersEditor';
 import { ImpactRulesEditor } from './ImpactRulesEditor';
@@ -71,8 +69,6 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
   const { engineOptions, loading: enginesLoading } = useEngines();
   // Story 31.1: Load platform integrations
   const { integrationOptions, loading: integrationsLoading, getIntegrationById } = usePlatformIntegrations();
-  // Story 31.6: Load ServiceNow integrations for gate config validation
-  const { integrationOptions: snIntegrationOptions } = useServiceNowIntegrations();
 
   const isEditMode = !!editAction;
   const isMin1280 = useMediaQuery(1280);
@@ -86,8 +82,6 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
     setSaving,
     executionSteps,
     setExecutionSteps,
-    changeTypeConfig,
-    setChangeTypeConfig,
     parameterList,
     setParameterList,
     impactRulesList,
@@ -103,8 +97,6 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
     setRemediationRules,
     businessRulePolicyId,
     setBusinessRulePolicyId,
-    gateConfig,
-    setGateConfig,
     notificationConfig,
     setNotificationConfig,
     watchedIntegrationId,
@@ -123,9 +115,6 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
         executionSteps,
         parameterList,
         impactRulesList,
-        changeTypeConfig,
-        snIntegrationOptions,
-        gateConfig,
       });
       if (validationError) {
         setStepsError(validationError);
@@ -153,40 +142,14 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
         impact_rules: listToImpactRules(impactRulesList),
         default_impact_level: defaultImpactLevel,
         documentation_md: values.documentation_md || null,
-        gate_config: gateConfig,
         notification_config: notificationConfig,
       };
 
       const result = await onSubmit(action);
       const actionId = editAction?.id ?? (result as ActionDetail | ActionResponse | undefined)?.id;
 
-      // Story 2.24: send change_type_config when we have steps OR when we have change config
-      const hasChangeTypeConfig = Object.keys(changeTypeConfig).length > 0;
-      const stepsToSend =
-        executionSteps.length > 0
-          ? executionSteps
-          : hasChangeTypeConfig
-            ? [{ order: 1, name: 'Étape à configurer', type: 'prerequisite' as const, connector_type: 'none' as const, conditional_environments: null }]
-            : [];
-      const change_type_config = hasChangeTypeConfig
-        ? Object.fromEntries(
-            Object.entries(changeTypeConfig).map(([env, e]) => [
-              env,
-              {
-                required: e?.required ?? false,
-                change_model_code: e?.required ? (e.change_model_code?.trim() || null) : null,
-                change_type: (e?.change_type ?? null) ? String(e.change_type).trim() || null : null,
-                template_id: (e?.template_id ?? null) ? String(e.template_id).trim() || null : null,
-                allowed: e?.allowed ?? true,
-                requires_maintenance_window: e?.requires_maintenance_window ?? false,
-                requires_approval: e?.requires_approval ?? false,
-              },
-            ])
-          )
-        : null;
-
-      if (actionId && (stepsToSend.length > 0 || change_type_config !== null)) {
-        await updateActionSteps(actionId, { steps: stepsToSend, change_type_config });
+      if (actionId && executionSteps.length > 0) {
+        await updateActionSteps(actionId, { steps: executionSteps });
       }
 
       if (actionId) {
@@ -457,10 +420,6 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
             <ActionFormCollapseSections
               executionSteps={executionSteps}
               setExecutionSteps={setExecutionSteps}
-              changeTypeConfig={changeTypeConfig}
-              setChangeTypeConfig={setChangeTypeConfig}
-              gateConfig={gateConfig}
-              setGateConfig={setGateConfig}
               remediationRules={remediationRules}
               setRemediationRules={setRemediationRules}
               businessRulePolicyId={businessRulePolicyId}

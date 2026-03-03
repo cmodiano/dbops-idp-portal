@@ -91,12 +91,6 @@ class ActionFactory(DjangoModelFactory):
         {"name": "Execute on platform", "type": "platform"}
     ])
 
-    change_type_config = factory.LazyFunction(lambda: {
-        "model": "standard",
-        "category": "database",
-        "assignment_group": "DBA-Team"
-    })
-
     documentation_md = factory.LazyAttribute(lambda o: f"# {o.name}\n\nThis action performs database operations.")
 
     remediation_rules = factory.LazyFunction(lambda: {
