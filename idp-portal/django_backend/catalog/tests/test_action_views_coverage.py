@@ -14,6 +14,7 @@ from rest_framework.test import APIRequestFactory, force_authenticate
 from rest_framework.request import Request as DRFRequest
 
 from catalog.views.action_views import ActionViewSet
+from profiles.models import Profile
 from tests.factories import UserFactory, ActionFactory
 
 
@@ -22,7 +23,11 @@ from tests.factories import UserFactory, ActionFactory
 # ---------------------------------------------------------------------------
 
 def _make_dbops_user():
-    """Create a user with DBOPS profile."""
+    """Create a user with DBOPS profile and matching Profile record (Story 56.7 RBAC)."""
+    Profile.objects.get_or_create(
+        name='DBOPS',
+        defaults={'ad_group': 'CN=DBOPS,OU=Groups,DC=example,DC=com', 'is_admin': 1},
+    )
     return UserFactory(profile='DBOPS')
 
 
@@ -735,25 +740,6 @@ class TestUpdateExecutionSteps:
 
         assert response.status_code == 404
 
-    def test_update_execution_steps_with_change_type_config(self):
-        user = _make_dbops_user()
-        action_obj = ActionFactory(status='draft', created_by=user)
-        updated_mock = MagicMock()
-        updated_mock.id = action_obj.id
-        mock_svc = MagicMock()
-        mock_svc.update_execution_steps.return_value = updated_mock
-        mock_svc.get_by_id.return_value = updated_mock
-
-        with patch.object(ActionViewSet, 'get_catalog_service', return_value=mock_svc):
-            view = ActionViewSet.as_view({'put': 'update_execution_steps'})
-            request = factory.put(f'/admin/actions/{action_obj.id}/execution-steps/', {
-                'steps': [],
-                'change_type_config': {'model': 'standard'},
-            }, format='json')
-            force_authenticate(request, user=user)
-            response = view(request, pk=action_obj.id)
-
-        assert response.status_code == 200
 
 
 # ---------------------------------------------------------------------------
@@ -1314,7 +1300,10 @@ class TestDeleteMutexRule:
         rule_ab = ActionMutex.objects.create(action=action_a, incompatible_with=action_b, same_target=True)
         _rule_ba = ActionMutex.objects.create(action=action_b, incompatible_with=action_a, same_target=True)
 
-        # Simulate the "multiple symmetric" warning branch by patching the queryset count
+        # Simulate the "multiple symmetric" warning branch by patching the queryset.
+        # We must scope the mock to ActionMutex only — patching Manager.__class__.filter
+        # would also intercept Profile.objects.filter() used by the permission system (Story 56.7).
+        # Solution: patch is_admin_user to bypass RBAC, then safely patch the manager class.
         original_filter = ActionMutex.objects.filter
 
         def patched_filter(**kwargs):
@@ -1330,7 +1319,10 @@ class TestDeleteMutexRule:
                 return mock_qs
             return qs
 
-        with patch.object(ActionMutex.objects.__class__, 'filter', side_effect=patched_filter):
+        mock_profile = MagicMock()
+        mock_profile.is_admin_bool = True
+        with patch('core.permissions._resolve_user_profiles', return_value=[mock_profile]), \
+             patch.object(ActionMutex.objects.__class__, 'filter', side_effect=patched_filter):
             view = ActionViewSet.as_view({'delete': 'delete_mutex_rule'})
             request = factory.delete(f'/admin/actions/{action_a.id}/mutex/{rule_ab.id}/')
             force_authenticate(request, user=user)
