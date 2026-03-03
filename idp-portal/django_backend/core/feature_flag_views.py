@@ -22,7 +22,7 @@ from drf_spectacular.utils import extend_schema, OpenApiParameter, inline_serial
 from core import feature_flags
 from core.middleware import get_correlation_id
 from core.models import AuditActionType, AuditEntityType, AuditLog, FeatureFlag
-from core.permissions import DBOPSProfilePermission
+from core.permissions import AdminProfilePermission
 from core.utils import ensure_utc_isoformat
 
 logger = structlog.get_logger(__name__)
@@ -34,7 +34,7 @@ class FeatureFlagListView(APIView):
     """
     GET /api/v1/feature-flags/ - List all feature flags (admin only).
     """
-    permission_classes = [IsAuthenticated, DBOPSProfilePermission]
+    permission_classes = [IsAuthenticated, AdminProfilePermission]
 
     def get(self, request: Any) -> Response:
         source = feature_flags._get_flags_source()
@@ -94,7 +94,7 @@ class FeatureFlagUpdateView(APIView):
     """
     PATCH /api/v1/feature-flags/<flag_key>/ - Update a feature flag (admin only).
     """
-    permission_classes = [IsAuthenticated, DBOPSProfilePermission]
+    permission_classes = [IsAuthenticated, AdminProfilePermission]
 
     @extend_schema(
         tags=['feature-flags'],

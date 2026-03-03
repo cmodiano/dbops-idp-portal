@@ -48,10 +48,10 @@ function AnalyticsGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-// Story 13.6 AC1: Calendar restricted to DBA and DBOPS profiles
+// Story 13.6 AC1: Calendar restricted to admin profiles (profiles with 'calendar' navigation tab)
 function CalendarGuard({ children }: { children: React.ReactNode }) {
   const { hasTab } = useAuth();
-  // Only DBA and DBOPS profiles have 'calendar' in their navigation_tabs
+  // Only admin profiles have 'calendar' in their navigation_tabs
   if (!hasTab('calendar')) {
     return <Navigate to="/catalog" replace />;
   }
@@ -109,7 +109,7 @@ function ThemedApp() {
                   <Route path="/catalog" element={<CatalogPage />} />
                   <Route path="/executions" element={<ExecutionsPage />} />
                   <Route path="/executions/:id" element={<ExecutionsPage />} />
-                  {/* Story 13.6: Calendar for DBA/DBOPS to view scheduled executions */}
+                  {/* Story 13.6: Calendar for admin profiles to view scheduled executions */}
                   <Route path="/calendar" element={<CalendarGuard><CalendarPage /></CalendarGuard>} />
                   {/* Story 9.10: Dashboard renamed to Analytics — Story 56.3: access restricted to users with 'dashboard' in navigation_tabs (hasTab) */}
                   <Route path="/analytics" element={<AnalyticsGuard><DashboardPage /></AnalyticsGuard>} />

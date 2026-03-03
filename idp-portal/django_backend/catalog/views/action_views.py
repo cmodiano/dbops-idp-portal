@@ -2,7 +2,7 @@
 ViewSet admin des actions du catalogue.
 
 Responsabilité unique : CRUD admin des actions (cycle de vie, tags, étapes d'exécution,
-mutex, règles métier inline). Permissions : [IsAuthenticated, DBOPSProfilePermission].
+mutex, règles métier inline). Permissions : [IsAuthenticated, AdminProfilePermission] (admin users only).
 """
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ from catalog.serializers import (
 from catalog.services import CatalogService, InvalidTransitionError
 from catalog.views._shared import _catalog_cache, _tags_cache, _annotate_execution_count
 from core.pagination import CustomPageNumberPagination
-from core.permissions import DBOPSProfilePermission
+from core.permissions import AdminProfilePermission
 from core.exceptions import NotFoundError, BadRequestError, InvalidStateError
 from core.middleware import get_correlation_id
 import structlog
@@ -69,7 +69,7 @@ class ActionViewSet(viewsets.ModelViewSet):
     def get_catalog_service(self) -> CatalogService:
         """Return a CatalogService instance (overridable in tests)."""
         return self._catalog_service_class()
-    permission_classes = [IsAuthenticated, DBOPSProfilePermission]
+    permission_classes = [IsAuthenticated, AdminProfilePermission]
     pagination_class = CustomPageNumberPagination
 
     def get_serializer_class(self) -> type[Serializer[Any]]:

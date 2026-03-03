@@ -16,7 +16,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework import serializers
 from rest_framework.parsers import MultiPartParser
 from drf_spectacular.utils import extend_schema, inline_serializer
-from core.permissions import DBOPSProfilePermission
+from core.permissions import AdminProfilePermission
 from core.exceptions import BadRequestError, InvalidStateError
 
 import puremagic
@@ -119,7 +119,7 @@ class UploadIconView(APIView):
     POST /admin/integrations/upload-icon - Upload integration icon.
     """
     parser_classes = [MultiPartParser]
-    permission_classes = [IsAuthenticated, DBOPSProfilePermission]
+    permission_classes = [IsAuthenticated, AdminProfilePermission]
 
     @extend_schema(
         tags=['integrations'],

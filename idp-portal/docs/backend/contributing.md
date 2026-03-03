@@ -224,7 +224,7 @@ class CatalogService:
 # catalog/views.py
 
 class MyViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated, DBOPSProfilePermission]
+    permission_classes = [IsAuthenticated, AdminProfilePermission]
 
     @action(detail=True, methods=['post'], url_path='my-action')
     def my_action(self, request, pk=None):

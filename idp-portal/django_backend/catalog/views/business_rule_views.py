@@ -2,7 +2,7 @@
 ViewSet admin des politiques de règles métier.
 
 Responsabilité unique : CRUD admin des BusinessRulePolicy prédéfinies.
-Permissions : [IsAuthenticated, DBOPSProfilePermission]. Aucun accès au cache.
+Permissions : [IsAuthenticated, AdminProfilePermission] (admin users only). Aucun accès au cache.
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from django.db.models import QuerySet
 from catalog.models import BusinessRulePolicy
 from catalog.serializers import BusinessRulePolicySerializer, BusinessRulePolicyListSerializer, _PLATFORM_ALIAS
 from core.pagination import CustomPageNumberPagination
-from core.permissions import DBOPSProfilePermission
+from core.permissions import AdminProfilePermission
 from core.middleware import get_correlation_id
 
 
@@ -45,7 +45,7 @@ class BusinessRulePolicyViewSet(viewsets.ModelViewSet):
     """
     queryset = BusinessRulePolicy.objects.all()
     serializer_class = BusinessRulePolicySerializer
-    permission_classes = [IsAuthenticated, DBOPSProfilePermission]
+    permission_classes = [IsAuthenticated, AdminProfilePermission]
     pagination_class = CustomPageNumberPagination
 
     def get_serializer_class(self) -> type[Serializer[Any]]:

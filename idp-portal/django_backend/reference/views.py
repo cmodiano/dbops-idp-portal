@@ -22,7 +22,7 @@ from reference.serializers import (
 )
 from integrations.models import IntegrationTypeCatalogue, IntegrationRole
 from core.middleware import get_correlation_id
-from core.permissions import DBOPSProfilePermission
+from core.permissions import AdminProfilePermission
 
 logger = structlog.get_logger(__name__)
 
@@ -116,12 +116,12 @@ def list_platforms(request: Request) -> Response:
     responses={200: RefEngineSerializer},
 )
 @api_view(['PATCH'])
-@permission_classes([IsAuthenticated, DBOPSProfilePermission])
+@permission_classes([IsAuthenticated, AdminProfilePermission])
 def update_engine(request: Request, pk: int) -> Response:
     """
     PATCH /api/v1/admin/engines/{pk}/
     Update engine fields (icon_url, label, display_order, is_active).
-    DBOPS only. Story 31.3, AC6.
+    admin only. Story 31.3, AC6.
     """
     correlation_id = get_correlation_id()
     logger.info("updating_engine", engine_id=pk, correlation_id=correlation_id)
@@ -186,9 +186,9 @@ def list_categories(request: Request) -> Response:
     responses={201: RefCategorySerializer},
 )
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, DBOPSProfilePermission])
+@permission_classes([IsAuthenticated, AdminProfilePermission])
 def create_category(request: Request) -> Response:
-    """Create a new category (DBOPS only). Story 2.30, AC5."""
+    """Create a new category (admin only). Story 2.30, AC5."""
     correlation_id = get_correlation_id()
     logger.info("creating_category", correlation_id=correlation_id)
 
@@ -207,9 +207,9 @@ def create_category(request: Request) -> Response:
     responses={200: RefCategorySerializer},
 )
 @api_view(['PATCH'])
-@permission_classes([IsAuthenticated, DBOPSProfilePermission])
+@permission_classes([IsAuthenticated, AdminProfilePermission])
 def update_category(request: Request, pk: Any) -> Response:
-    """Update an existing category (DBOPS only). Story 2.30, AC5."""
+    """Update an existing category (admin only). Story 2.30, AC5."""
     correlation_id = get_correlation_id()
     logger.info("updating_category", category_id=pk, correlation_id=correlation_id)
 
@@ -230,9 +230,9 @@ def update_category(request: Request, pk: Any) -> Response:
 
 
 @api_view(['DELETE'])
-@permission_classes([IsAuthenticated, DBOPSProfilePermission])
+@permission_classes([IsAuthenticated, AdminProfilePermission])
 def delete_category(request: Request, pk: Any) -> Response:
-    """Soft-delete a category (set is_active=0). DBOPS only. Story 2.30, AC5."""
+    """Soft-delete a category (set is_active=0). admin only. Story 2.30, AC5."""
     correlation_id = get_correlation_id()
     logger.info("deleting_category", category_id=pk, correlation_id=correlation_id)
 

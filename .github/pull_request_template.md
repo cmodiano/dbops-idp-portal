@@ -19,7 +19,7 @@
 
 - [ ] Validation des paramètres (serializer avec types, min/max, required)
 - [ ] Gestion des erreurs (NotFoundError, InvalidStateError, etc.)
-- [ ] RBAC vérifié (`permission_classes` avec `DBOPSProfilePermission` si admin)
+- [ ] RBAC vérifié (`permission_classes` avec `AdminProfilePermission` si admin)
 - [ ] Audit trail implémenté via `AuditService.create_entry()`
 - [ ] Tests unitaires couvrant : happy path, 401, 403, 404, 400
 - [ ] Format de réponse : `{"data": ...}` ou `{"error": {"code": ..., "message": ..., "details": ...}}`
