@@ -1,8 +1,7 @@
 -- ---------------------------------------------------------------------------
 -- V101: Align EXECUTIONS.APPROVED_AT to plain TIMESTAMP (UTC convention)
 -- Convention: all timestamps in UTC, plain TIMESTAMP (V048, V084).
--- EXECUTION_STEPS.APPROVED_AT (V099) uses TIMESTAMP WITH TIME ZONE; consider
--- aligning later if needed. Oracle ORA-01439: use add/copy/drop/rename pattern.
+-- EXECUTION_STEPS.APPROVED_AT aligned in V102. ORA-01439: add/copy/drop/rename.
 -- ---------------------------------------------------------------------------
 ALTER TABLE EXECUTIONS ADD (APPROVED_AT_NEW TIMESTAMP);
 UPDATE EXECUTIONS SET APPROVED_AT_NEW = APPROVED_AT;
