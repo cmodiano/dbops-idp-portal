@@ -14,6 +14,7 @@ import React, { useState } from 'react';
 import { Switch, Input, Select, Space, Typography, theme, Skeleton, Alert, Divider } from 'antd';
 import type { ChangeTypeConfigEntry, GateConfig } from '../../types/api';
 import { useEnvironments } from '../../hooks/useEnvironments';
+import { getEnvironmentLabel } from '../../utils/environmentHelpers';
 import { useServiceNowIntegrations } from '../../hooks/useServiceNowIntegrations';
 
 const { Text } = Typography;
@@ -146,7 +147,7 @@ export const ChangeTypeConfig: React.FC<ChangeTypeConfigProps> = ({
   ) : null;
 
   const getLabel = (env: string): string =>
-    environmentOptions.find((opt) => opt.value === env)?.label || env.toUpperCase();
+    environmentOptions.find((opt) => opt.value.toLowerCase() === env.toLowerCase())?.label || getEnvironmentLabel(env);
 
   const headerStyle: React.CSSProperties = {
     padding: '8px',

@@ -6,6 +6,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from datetime import timezone as dt_timezone
+from functools import reduce
+from operator import or_
 
 from django.db import transaction
 from django.db.models import Q
@@ -100,7 +102,9 @@ class ScheduledExecutionsView(APIView):
 
         if environment_filter:
             validate_environment_against_inventory(environment_filter, user_id=request.user.id)
-            qs = qs.filter(environment=EnvironmentHelper.normalize(environment_filter))
+            env_values = EnvironmentHelper.values_for_filter(environment_filter)
+            if env_values:
+                qs = qs.filter(reduce(or_, [Q(environment__iexact=v) for v in env_values]))
 
         if engine_filter:
             qs = qs.filter(action__engine__iexact=engine_filter)

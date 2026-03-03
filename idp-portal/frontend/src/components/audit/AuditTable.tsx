@@ -16,6 +16,7 @@ import type {
 import { ACTION_TYPE_LABELS } from '../../constants/auditActionTypes';
 import { AUDIT_STATUS_CONFIG as STATUS_CONFIG } from '../../utils/execution-status';
 import { ENTITY_TYPE_LABELS, formatDate, getEntityLabel } from './auditLabels';
+import { getEnvironmentLabel } from '../../utils/environmentHelpers';
 import { getOperationConfig } from './auditTableOperations';
 
 const { Text } = Typography;
@@ -131,7 +132,7 @@ export function AuditTable({
         record.entity_type !== 'execution' ? (
           <span>—</span>
         ) : (
-          <span>{record.details?.environment?.toUpperCase() || '—'}</span>
+          <span>{getEnvironmentLabel(record.details?.environment ?? '') || '—'}</span>
         ),
     },
     {

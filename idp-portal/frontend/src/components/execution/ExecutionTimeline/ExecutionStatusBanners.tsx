@@ -11,6 +11,7 @@ import { ReloadOutlined, LinkOutlined, ClockCircleOutlined, StopOutlined, Warnin
 import type { ExecutionResponse, ExecutionStepResponse } from '../../../types/api';
 import type { AutoRemediationState } from '../../../hooks/useAutoRemediationState';
 import { formatDuration } from './utils';
+import { getEnvironmentLabel } from '../../../utils/environmentHelpers';
 
 const { Text } = Typography;
 
@@ -73,7 +74,7 @@ export function ExecutionStatusBanners({
             <>
               Cette exécution nécessite l'approbation d'un DBA avant de pouvoir démarrer.
               <br />
-              <Tag color="orange" style={{ marginTop: 8 }}>Environnement : {execution.environment.toUpperCase()}</Tag>
+              <Tag color="orange" style={{ marginTop: 8 }}>Environnement : {getEnvironmentLabel(execution.environment ?? '')}</Tag>
             </>
           }
           style={{ marginBottom: 16 }}

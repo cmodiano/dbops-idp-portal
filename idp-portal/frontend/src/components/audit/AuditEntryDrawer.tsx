@@ -18,6 +18,7 @@ import type {
 import { AUDIT_STATUS_CONFIG as STATUS_CONFIG } from '../../utils/execution-status';
 import { ACTION_TYPE_LABELS } from '../../constants/auditActionTypes';
 import { ENTITY_TYPE_LABELS, formatDate, getEntityLabel } from './auditLabels';
+import { getEnvironmentLabel } from '../../utils/environmentHelpers';
 
 const { Text } = Typography;
 
@@ -87,7 +88,7 @@ export function AuditEntryDrawer({
             <Descriptions.Item label="Quand">{formatDate(entry.timestamp)}</Descriptions.Item>
             {entry.entity_type === 'execution' && (
               <Descriptions.Item label="Environnement">
-                {entry.details?.environment?.toUpperCase() || '—'}
+                {getEnvironmentLabel(entry.details?.environment ?? '') || '—'}
               </Descriptions.Item>
             )}
             {entry.entity_type === 'execution' && (() => {

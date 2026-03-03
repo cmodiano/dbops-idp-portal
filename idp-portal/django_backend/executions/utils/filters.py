@@ -7,15 +7,18 @@ avancés (scope, dates, action, moteur, tags, statut, environnement).
 from __future__ import annotations
 
 from datetime import datetime, timedelta, date
+from functools import reduce
+from operator import or_
 from datetime import timezone as dt_timezone
 from typing import Any
 
-from django.db.models import QuerySet
+from django.db.models import Q, QuerySet
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from rest_framework.request import Request
 
 from catalog.models import Action
+from core.environment import EnvironmentHelper
 from core.exceptions import BadRequestError
 from core.permissions import is_admin_user
 
@@ -173,6 +176,8 @@ def apply_execution_filters(qs: QuerySet, *, request: Request) -> tuple[QuerySet
 
     environment = request.query_params.get("environment")
     if environment:
-        qs = qs.filter(environment=environment)
+        env_values = EnvironmentHelper.values_for_filter(environment)
+        if env_values:
+            qs = qs.filter(reduce(or_, [Q(environment__iexact=v) for v in env_values]))
 
     return qs, start_d, end_d

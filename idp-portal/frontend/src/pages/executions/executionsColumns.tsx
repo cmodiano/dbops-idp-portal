@@ -14,6 +14,7 @@ import {
   renderEngineIcon,
   renderPlateformeIcon,
 } from '../../utils/executionRenderers';
+import { getEnvironmentLabel } from '../../utils/environmentHelpers';
 import type { IntegrationIconsMap } from '../../utils/executionRenderers';
 import type {
   ExecutionResponse,
@@ -153,7 +154,7 @@ export const getExecutionsColumns = (
       dataIndex: 'environment',
       key: 'environment',
       width: 120,
-      render: (env: string) => env?.toUpperCase() || '—',
+      render: (env: string) => getEnvironmentLabel(env || '') || '—',
     },
     {
       title: 'Date',

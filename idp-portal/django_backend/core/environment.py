@@ -10,6 +10,17 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+# Equivalences for filter matching (inventory vs legacy values).
+# When filtering by "developpement", also match "dev"; by "production", also match "prod".
+_ENV_FILTER_EQUIVALENTS: dict[str, list[str]] = {
+    "dev": ["dev", "developpement"],
+    "developpement": ["dev", "developpement"],
+    "prod": ["prod", "production"],
+    "production": ["prod", "production"],
+    "certification": ["certification", "certif"],
+    "certif": ["certification", "certif"],
+}
+
 
 class EnvironmentHelper:
     """
@@ -133,3 +144,18 @@ class EnvironmentHelper:
             if EnvironmentHelper.normalize(key) == normalized_env:
                 return cast("dict[Any, Any] | None", value)
         return None
+
+    @staticmethod
+    def values_for_filter(env: str | None) -> list[str]:
+        """
+        Return equivalent environment values for DB filtering.
+        Used when filter uses normalized label (e.g. "developpement") but DB
+        may store legacy value (e.g. "dev"). Case-insensitive matching is done
+        via __iexact in the caller.
+        """
+        if not env:
+            return []
+        n = EnvironmentHelper.normalize(env)
+        if not n:
+            return []
+        return _ENV_FILTER_EQUIVALENTS.get(n, [n])
