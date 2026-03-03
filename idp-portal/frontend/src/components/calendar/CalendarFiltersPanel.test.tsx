@@ -46,6 +46,7 @@ const defaultFilters: CalendarFilters = {
   platform: null,
   start_date: null,
   end_date: null,
+  status: 'pending',
 };
 
 const defaultAvailableActions = [
@@ -93,6 +94,7 @@ describe('CalendarFiltersPanel', () => {
       expect(screen.getByTestId('filter-environment')).toBeInTheDocument();
       expect(screen.getByTestId('filter-engine')).toBeInTheDocument();
       expect(screen.getByTestId('filter-platform')).toBeInTheDocument();
+      expect(screen.getByTestId('filter-status')).toBeInTheDocument();
       // RangePicker generates multiple elements; verify at least one exists
       expect(screen.queryAllByTestId('filter-date-range').length).toBeGreaterThan(0);
       expect(screen.getByTestId('filter-reset')).toBeInTheDocument();

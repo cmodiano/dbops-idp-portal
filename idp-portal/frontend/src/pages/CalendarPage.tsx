@@ -63,6 +63,7 @@ export function CalendarPage() {
     if (filters.environment) apiFilters.environment = filters.environment;
     if (filters.engine) apiFilters.engine = filters.engine;
     if (filters.platform) apiFilters.platform = filters.platform;
+    if (filters.status) apiFilters.status = filters.status;
     if (filters.start_date && filters.end_date) {
       apiFilters.scheduled_from = filters.start_date;
       apiFilters.scheduled_to = filters.end_date;
@@ -71,7 +72,7 @@ export function CalendarPage() {
       apiFilters.scheduled_to = dateRange.end;
     }
     fetchScheduled(apiFilters);
-  }, [filters.action_id, filters.environment, filters.engine, filters.platform, filters.start_date, filters.end_date, dateRange, fetchScheduled]);
+  }, [filters.action_id, filters.environment, filters.engine, filters.platform, filters.status, filters.start_date, filters.end_date, dateRange, fetchScheduled]);
 
   useEffect(() => {
     doFetch();
@@ -99,7 +100,6 @@ export function CalendarPage() {
 
   const calendarEvents: CalendarEvent[] = useMemo(() => {
     return executions
-      .filter((exec) => exec.status === 'pending')
       .filter((exec) => exec.recurring_pattern?.next_execution_date ?? exec.scheduled_at)
       .map(mapToCalendarEvent);
   }, [executions]);
