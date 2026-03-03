@@ -13,7 +13,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.serializers import Serializer
 from rest_framework.request import Request
-from drf_spectacular.utils import extend_schema, extend_schema_view
+from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
 from django.db.models import QuerySet
 
 from catalog.models import BusinessRulePolicy
@@ -24,7 +24,15 @@ from core.middleware import get_correlation_id
 
 
 @extend_schema_view(
-    list=extend_schema(tags=['catalog'], summary='Lister les règles métier'),
+    list=extend_schema(
+        tags=['catalog'],
+        summary='Lister les règles métier',
+        parameters=[
+            OpenApiParameter('is_active', bool, description='Filtrage par statut actif'),
+            OpenApiParameter('step_type', str, description='Filtrage par type d\'étape'),
+            OpenApiParameter('platform', str, description='Filtrage par plateforme (alias step_type)'),
+        ],
+    ),
     create=extend_schema(tags=['catalog'], summary='Créer une règle métier'),
     retrieve=extend_schema(tags=['catalog'], summary='Détail d\'une règle métier'),
     partial_update=extend_schema(tags=['catalog'], summary='Modifier une règle métier'),

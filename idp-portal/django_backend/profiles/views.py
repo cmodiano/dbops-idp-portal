@@ -11,8 +11,9 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
+from rest_framework import serializers
 from rest_framework.parsers import MultiPartParser
-from drf_spectacular.utils import extend_schema, extend_schema_view
+from drf_spectacular.utils import extend_schema, extend_schema_view, inline_serializer
 from profiles.models import Profile
 from profiles.serializers import (
     ProfileSerializer,
@@ -284,7 +285,18 @@ class ProfileImportView(APIView):
     permission_classes = [IsAuthenticated, DBOPSProfilePermission]
     parser_classes = [MultiPartParser]
 
-    @extend_schema(tags=['profiles'], summary='Importer des profils depuis un fichier YAML')
+    @extend_schema(
+        tags=['profiles'],
+        summary='Importer des profils depuis un fichier YAML',
+        request=inline_serializer(
+            name='ProfileImportRequest',
+            fields={
+                'file': serializers.FileField(
+                    help_text='Fichier YAML (.yaml ou .yml)',
+                ),
+            },
+        ),
+    )
     def post(self, request: Request) -> Response:
         """Import profiles from YAML file."""
         file = request.FILES.get('file')

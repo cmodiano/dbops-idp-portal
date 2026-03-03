@@ -37,6 +37,8 @@ from core.middleware import get_correlation_id
             OpenApiParameter('environment', str, description='Filtrage par environnement'),
             OpenApiParameter('impact', str, description='Filtrage par niveau d\'impact'),
             OpenApiParameter('favorites_only', bool, description='Afficher uniquement les favoris'),
+            OpenApiParameter('page', int, description='Numéro de page (pagination)'),
+            OpenApiParameter('limit', str, description='Taille de page (alias: page_size)'),
         ],
     ),
     retrieve=extend_schema(tags=['catalog'], summary='Détail d\'une action du catalogue'),

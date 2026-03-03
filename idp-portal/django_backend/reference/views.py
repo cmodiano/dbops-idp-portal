@@ -109,6 +109,12 @@ def list_platforms(request: Request) -> Response:
 # ─── Story 31.3: Engine admin endpoint ─────────────────────────────────────
 
 
+@extend_schema(
+    tags=['reference'],
+    summary='Modifier un moteur',
+    request=RefEngineWriteSerializer,
+    responses={200: RefEngineSerializer},
+)
 @api_view(['PATCH'])
 @permission_classes([IsAuthenticated, DBOPSProfilePermission])
 def update_engine(request: Request, pk: int) -> Response:
@@ -173,6 +179,12 @@ def list_categories(request: Request) -> Response:
     return Response({"data": serializer.data})
 
 
+@extend_schema(
+    tags=['reference'],
+    summary='Créer une catégorie',
+    request=RefCategoryWriteSerializer,
+    responses={201: RefCategorySerializer},
+)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, DBOPSProfilePermission])
 def create_category(request: Request) -> Response:
@@ -188,6 +200,12 @@ def create_category(request: Request) -> Response:
     return Response({"data": RefCategorySerializer(category).data}, status=status.HTTP_201_CREATED)
 
 
+@extend_schema(
+    tags=['reference'],
+    summary='Modifier une catégorie',
+    request=RefCategoryWriteSerializer,
+    responses={200: RefCategorySerializer},
+)
 @api_view(['PATCH'])
 @permission_classes([IsAuthenticated, DBOPSProfilePermission])
 def update_category(request: Request, pk: Any) -> Response:

@@ -34,7 +34,8 @@ from executions.tasks.gates import resume_container_workflow_from_gate
 from executions.utils import parse_int
 from idp_auth.models import User
 
-from drf_spectacular.utils import extend_schema
+from rest_framework import serializers
+from drf_spectacular.utils import extend_schema, OpenApiParameter, inline_serializer
 
 logger = structlog.get_logger(__name__)
 
@@ -185,6 +186,11 @@ class PendingApprovalsView(APIView):
     @extend_schema(
         tags=["executions"],
         summary="Approbations en attente",
+        parameters=[
+            OpenApiParameter('count_only', bool, description='Si true, retourne uniquement {count}'),
+            OpenApiParameter('limit', int, description='Résultats par page (défaut: 50)'),
+            OpenApiParameter('offset', int, description='Décalage pagination'),
+        ],
         responses={200: ExecutionSerializer(many=True)},
     )
     def get(self, request: Request) -> Response:
@@ -381,6 +387,16 @@ class RejectExecutionView(APIView):
     @extend_schema(
         tags=["executions"],
         summary="Rejeter une exécution en attente",
+        request=inline_serializer(
+            name='RejectExecutionRequest',
+            fields={
+                'rejection_reason': serializers.CharField(
+                    required=False,
+                    allow_blank=True,
+                    help_text='Motif du rejet',
+                ),
+            },
+        ),
         responses={200: ExecutionSerializer},
     )
     @transaction.atomic
@@ -451,6 +467,16 @@ class ApproveStepView(APIView):
     @extend_schema(
         tags=["executions"],
         summary="Approuver un step en attente",
+        request=inline_serializer(
+            name='ApproveStepRequest',
+            fields={
+                'comment': serializers.CharField(
+                    required=False,
+                    allow_blank=True,
+                    help_text='Commentaire optionnel',
+                ),
+            },
+        ),
         responses={200: ExecutionStepSerializer},
     )
     @transaction.atomic
@@ -522,6 +548,16 @@ class RejectStepView(APIView):
     @extend_schema(
         tags=["executions"],
         summary="Rejeter un step en attente",
+        request=inline_serializer(
+            name='RejectStepRequest',
+            fields={
+                'comment': serializers.CharField(
+                    required=False,
+                    allow_blank=True,
+                    help_text='Commentaire optionnel',
+                ),
+            },
+        ),
         responses={200: ExecutionStepSerializer},
     )
     @transaction.atomic

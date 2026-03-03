@@ -14,7 +14,8 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.serializers import ValidationError as DRFValidationError, Serializer
 from rest_framework.request import Request
-from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
+from rest_framework import serializers
+from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter, inline_serializer
 from django.db import IntegrityError
 from django.db.models import Q, QuerySet
 
@@ -22,6 +23,7 @@ from catalog.models import Action, Tag, ActionStatus, ActionItemType
 from catalog.serializers import (
     ActionSerializer, ActionCreateSerializer, ActionListSerializer,
     ActionTagsUpdateSerializer, StatusUpdateSerializer,
+    ActionMutexCreateSerializer,
 )
 from catalog.services import CatalogService, InvalidTransitionError
 from catalog.views._shared import _catalog_cache, _tags_cache, _annotate_execution_count
@@ -340,6 +342,14 @@ class ActionViewSet(viewsets.ModelViewSet):
 
         return Response({"data": response_serializer.data})
 
+    @extend_schema(
+        tags=['catalog'],
+        summary='Vérifier disponibilité du nom',
+        parameters=[
+            OpenApiParameter('name', str, description='Nom à vérifier'),
+            OpenApiParameter('exclude_id', int, description='ID à exclure (pour édition)'),
+        ],
+    )
     @action(detail=False, methods=['get'], url_path='name-available')
     def name_available(self, request: Request) -> Response:
         """GET /admin/actions/name-available/?name=...&exclude_id=... - Check if action name is available."""
@@ -366,6 +376,19 @@ class ActionViewSet(viewsets.ModelViewSet):
         serializer = ActionSerializer(queryset, many=True)
         return Response({"data": serializer.data})
 
+    @extend_schema(
+        tags=['catalog'],
+        summary='Mettre à jour les règles de remédiation',
+        request=inline_serializer(
+            name='RemediationRulesRequest',
+            fields={
+                'remediation_rules': serializers.ListField(
+                    child=serializers.DictField(),
+                    help_text='Liste des règles de remédiation',
+                ),
+            },
+        ),
+    )
     @action(detail=True, methods=['put'], url_path='remediation-rules')
     def update_remediation_rules(self, request: Request, pk: int | None = None) -> Response:
         """PUT /admin/actions/{id}/remediation-rules - Update remediation rules."""
@@ -405,6 +428,21 @@ class ActionViewSet(viewsets.ModelViewSet):
 
         return Response({"data": response_serializer.data})
 
+    @extend_schema(
+        tags=['catalog'],
+        summary='Définir les politiques de règles métier inline',
+        request=inline_serializer(
+            name='BusinessRulePoliciesRequest',
+            fields={
+                'business_rule_policies': serializers.ListField(
+                    child=serializers.DictField(),
+                    required=False,
+                    allow_null=True,
+                    help_text='Liste des politiques inline (null pour effacer)',
+                ),
+            },
+        ),
+    )
     @action(detail=True, methods=['put'], url_path='business-rule-policies')
     def update_business_rule_policies(self, request: Request, pk: int | None = None) -> Response:
         """PUT /admin/actions/{id}/business-rule-policies/ - Set inline business rule policies (Story 28.1)."""
@@ -447,6 +485,23 @@ class ActionViewSet(viewsets.ModelViewSet):
         _tags_cache.clear()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+    @extend_schema(
+        tags=['catalog'],
+        summary='Désactiver une action (soft-delete)',
+        parameters=[
+            OpenApiParameter('confirmed', bool, description='Confirmer la désactivation (requis si workflows impactés)'),
+        ],
+        request=inline_serializer(
+            name='DeactivateRequest',
+            fields={
+                'deletion_reason': serializers.CharField(
+                    required=False,
+                    allow_blank=True,
+                    help_text='Motif de la désactivation',
+                ),
+            },
+        ),
+    )
     @action(detail=True, methods=['put'], url_path='deactivate')
     def deactivate(self, request: Request, pk: int | None = None) -> Response:
         """PUT /admin/actions/{id}/deactivate — Soft delete with cascade. Story 18.1 AC2/AC3."""
@@ -505,6 +560,11 @@ class ActionViewSet(viewsets.ModelViewSet):
         serializer = ActionSerializer(reloaded)
         return Response({"data": serializer.data})
 
+    @extend_schema(
+        tags=['catalog'],
+        summary='Règles mutex (liste ou création)',
+        request=ActionMutexCreateSerializer,
+    )
     @action(detail=True, methods=['get', 'post'], url_path='mutex')
     def mutex_rules(self, request: Request, pk: int | None = None) -> Response:
         """

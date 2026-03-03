@@ -12,7 +12,7 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.request import Request
-from drf_spectacular.utils import extend_schema, extend_schema_view
+from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
 from django.db.models import Count
 
 from catalog.models import Action, Tag, ActionStatus
@@ -40,6 +40,13 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet):
         serializer = self.get_serializer(queryset, many=True)
         return Response({"data": serializer.data})
 
+    @extend_schema(
+        tags=['catalog'],
+        summary='Tags du catalogue avec compteur',
+        parameters=[
+            OpenApiParameter('category', str, description='Filtrage par catégorie'),
+        ],
+    )
     @action(detail=False, methods=['get'], url_path='catalog')
     def list_catalog_tags(self, request: Request) -> Response:
         """GET /catalog/tags - List tags with action_count and RBAC filtering."""

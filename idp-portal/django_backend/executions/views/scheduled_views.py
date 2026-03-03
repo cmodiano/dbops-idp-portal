@@ -263,7 +263,26 @@ class ScheduledExecutionUpdateView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    @extend_schema(tags=['scheduling'], summary='Annuler ou marquer exécutée une scheduled execution', responses={200: ScheduledExecutionSerializer})
+    @extend_schema(
+        tags=['scheduling'],
+        summary='Annuler ou marquer exécutée une scheduled execution',
+        request=inline_serializer(
+            name='ScheduledExecutionPatchRequest',
+            fields={
+                'status': serializers.ChoiceField(
+                    choices=['cancelled', 'executed'],
+                    required=False,
+                    default='cancelled',
+                    help_text='cancelled ou executed',
+                ),
+                'execution_id': serializers.IntegerField(
+                    required=False,
+                    help_text='Requis si status=executed',
+                ),
+            },
+        ),
+        responses={200: ScheduledExecutionSerializer},
+    )
     def patch(self, request: Request, scheduled_execution_id: int) -> Response:
         try:
             se = ScheduledExecution.objects.select_related("action", "user").select_related("recurringpattern").get(
@@ -344,7 +363,37 @@ class ScheduledExecutionUpdateView(APIView):
 
         raise BadRequestError(code="INVALID_STATUS", message="Statut invalide", details={"status": new_status})
 
-    @extend_schema(tags=['scheduling'], summary='Modifier une exécution planifiée (PUT)', responses={200: ScheduledExecutionSerializer})
+    @extend_schema(
+        tags=['scheduling'],
+        summary='Modifier une exécution planifiée (PUT)',
+        request=inline_serializer(
+            name='ScheduledExecutionPutRequest',
+            fields={
+                'scheduled_at': serializers.DateTimeField(
+                    required=False,
+                    help_text='Date/heure planifiée (ISO 8601)',
+                ),
+                'environment': serializers.CharField(
+                    required=False,
+                    help_text='Environnement cible',
+                ),
+                'target_names': serializers.ListField(
+                    child=serializers.CharField(),
+                    required=False,
+                    help_text='Liste de noms de targets',
+                ),
+                'parameters': serializers.DictField(
+                    required=False,
+                    help_text='Paramètres d\'exécution',
+                ),
+                'recurring_pattern': serializers.DictField(
+                    required=False,
+                    help_text='Pattern récurrent: {pattern_type, pattern_config}',
+                ),
+            },
+        ),
+        responses={200: ScheduledExecutionSerializer},
+    )
     def put(self, request: Request, scheduled_execution_id: int) -> Response:
         """PUT /scheduled-executions/{id} - update pending scheduled execution (Story 13.8, AC4)."""
         try:
@@ -503,7 +552,19 @@ class ScheduledExecutionRecurringPatternView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    @extend_schema(tags=['scheduling'], summary='Activer/désactiver le pattern récurrent', responses={200: RecurringPatternSerializer})
+    @extend_schema(
+        tags=['scheduling'],
+        summary='Activer/désactiver le pattern récurrent',
+        request=inline_serializer(
+            name='RecurringPatternPatchRequest',
+            fields={
+                'is_active': serializers.BooleanField(
+                    help_text='Activer (true) ou désactiver (false) le pattern',
+                ),
+            },
+        ),
+        responses={200: RecurringPatternSerializer},
+    )
     def patch(self, request: Request, scheduled_execution_id: int) -> Response:
         try:
             se = ScheduledExecution.objects.select_related("user").select_related("recurringpattern").get(

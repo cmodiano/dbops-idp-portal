@@ -49,8 +49,11 @@ class ExecutionsListView(APIView):
             OpenApiParameter('scope', str, description='Scope: mine (défaut) ou all'),
             OpenApiParameter('status', str, description='Filtrage par statut'),
             OpenApiParameter('action_id', int, description='Filtrage par action'),
-            OpenApiParameter('start_date', str, description='Date de début (ISO 8601)'),
-            OpenApiParameter('end_date', str, description='Date de fin (ISO 8601)'),
+            OpenApiParameter('start_date', str, description='Date de début (YYYY-MM-DD)'),
+            OpenApiParameter('end_date', str, description='Date de fin (YYYY-MM-DD)'),
+            OpenApiParameter('engine', str, description='Filtrage par technologie'),
+            OpenApiParameter('tags', str, description='Tags séparés par virgules (AND)'),
+            OpenApiParameter('environment', str, description='Filtrage par environnement'),
         ],
         responses={200: ExecutionSerializer(many=True)},
     )
