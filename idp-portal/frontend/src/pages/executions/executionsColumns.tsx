@@ -14,6 +14,7 @@ import {
   renderEngineIcon,
   renderPlateformeIcon,
 } from '../../utils/executionRenderers';
+import { formatUtcToLocal } from '../../utils/dateFormat';
 import { getEnvironmentLabel } from '../../utils/environmentHelpers';
 import type { IntegrationIconsMap } from '../../utils/executionRenderers';
 import type {
@@ -39,17 +40,9 @@ export function formatDuration(startedAt: string | null, completedAt: string | n
   return remaining ? `${minutes}m ${remaining}s` : `${minutes}m`;
 }
 
-/** Format date for display. */
+/** Format UTC date for display in local timezone (API dates are UTC with Z suffix). */
 export function formatDate(dateStr: string | null): string {
-  if (!dateStr) return '—';
-  const date = new Date(dateStr);
-  return date.toLocaleString('fr-FR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatUtcToLocal(dateStr, 'datetime');
 }
 
 /** Check if execution is in a running state (AC3). */

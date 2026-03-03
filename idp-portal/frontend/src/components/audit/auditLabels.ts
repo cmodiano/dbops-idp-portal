@@ -3,6 +3,7 @@
  * Extracted to satisfy react-refresh/only-export-components.
  */
 
+import { formatUtcToLocal } from '../../utils/dateFormat';
 import type { AuditExecutionEntry } from '../../types/api';
 
 export const ENTITY_TYPE_LABELS: Record<string, string> = {
@@ -19,18 +20,9 @@ export const ENTITY_TYPE_LABELS: Record<string, string> = {
   business_rule_policy: 'Politique',
 };
 
-/** Format date for display. */
+/** Format UTC date for display in local timezone (API dates are UTC with Z suffix). */
 export function formatDate(dateStr: string | null): string {
-  if (!dateStr) return '—';
-  const date = new Date(dateStr);
-  if (Number.isNaN(date.getTime())) return '—';
-  return date.toLocaleString('fr-FR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatUtcToLocal(dateStr, 'datetime');
 }
 
 /** Get entity label for the Entité column. Replaces getActionName. */

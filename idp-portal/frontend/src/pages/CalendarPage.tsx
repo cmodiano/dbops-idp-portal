@@ -104,6 +104,10 @@ export function CalendarPage() {
       .map(mapToCalendarEvent);
   }, [executions]);
 
+  const handleTodayClick = useCallback(() => {
+    calendarRef.current?.getApi().today();
+  }, []);
+
   const handleToggleRecurrence = useCallback(
     async (id: number, newState: boolean) => {
       const result = await toggleRecurrence(id, newState);
@@ -187,6 +191,12 @@ export function CalendarPage() {
             ref={calendarRef}
             plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
             initialView={calendarView}
+            customButtons={{
+              today: {
+                text: 'Aujourd\'hui',
+                click: handleTodayClick,
+              },
+            }}
             headerToolbar={{ left: 'prev,next today', center: 'title', right: '' }}
             locale={frLocale}
             height="auto"

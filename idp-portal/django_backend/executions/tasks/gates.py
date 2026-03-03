@@ -497,13 +497,23 @@ def resume_container_workflow_from_gate(self: Any, execution_id: int, on_success
             status=ExecutionStepStatus.COMPLETED,
         ).order_by('step_order')
 
+        # _step_outputs est keyed par step_id (step.get('step_id')), pas par step_name.
+        # ExecutionStep.step_name stocke step.get('name') (nom humain), pas le step_id.
+        # On construit le mapping name → step_id depuis la définition du workflow.
+        step_name_to_id = {
+            s.get('name'): s.get('step_id')
+            for s in all_steps
+            if isinstance(s, dict) and s.get('name') and s.get('step_id')
+        }
+
         # Reprendre le workflow depuis le step cible
         runtime = ContainerWorkflowRuntime(execution)
-        # Restaurer le contexte des outputs de steps déjà exécutés
+        # Restaurer le contexte des outputs de steps déjà exécutés (keyed par step_id)
         for db_step in completed_steps:
             step_output = db_step.get_output() or {}
-            if db_step.step_name:
-                runtime._step_outputs[db_step.step_name] = step_output
+            step_id_key = step_name_to_id.get(db_step.step_name) if db_step.step_name else None
+            if step_id_key:
+                runtime._step_outputs[step_id_key] = step_output
         runtime.workflow_steps = remaining_steps
         runtime._execute_workflow_steps()
 

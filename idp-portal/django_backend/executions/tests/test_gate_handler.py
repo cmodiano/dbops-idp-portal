@@ -313,3 +313,229 @@ class TestExecuteHandlerStepWaitingProtocol:
                     assert result == ExecutionStatus.RUNNING
                     # Le second step NE doit PAS avoir été exécuté (boucle arrêtée)
                     assert mock_execute.call_count == 1
+
+
+class TestResumeContainerWorkflowFromGate:
+    """
+    Tests unitaires pour resume_container_workflow_from_gate (story 57.7 — Task 4).
+    Couvre : cancellation, not_running, step_not_found, happy path, step_outputs reconstruction.
+
+    Note : is_cancelled est importé lazily dans la fonction → patch sur executions.cancellation_cache.
+    De même, Execution et ExecutionStep sont importés lazily → patch via patch.object sur leur manager.
+    """
+
+    @pytest.mark.django_db
+    def test_cancelled_execution_returns_cancelled(self):
+        """Si l'exécution est annulée → retourne {'outcome': 'cancelled'}."""
+        from executions.tasks.gates import resume_container_workflow_from_gate
+
+        with patch('executions.cancellation_cache.is_cancelled', return_value=True):
+            result = resume_container_workflow_from_gate.run(execution_id=1, on_success_step_id='step-1')
+
+        assert result == {'outcome': 'cancelled'}
+
+    @pytest.mark.django_db
+    def test_execution_not_found_returns_error(self):
+        """Si l'Execution n'existe pas → retourne {'outcome': 'error', 'error': ...}."""
+        from executions.tasks.gates import resume_container_workflow_from_gate
+        from executions.models import Execution
+
+        with patch('executions.cancellation_cache.is_cancelled', return_value=False):
+            with patch.object(Execution.objects, 'select_related') as mock_qs:
+                mock_qs.return_value.get.side_effect = Execution.DoesNotExist()
+                result = resume_container_workflow_from_gate.run(execution_id=9999, on_success_step_id='step-1')
+
+        assert result['outcome'] == 'error'
+        assert result['error'] == 'Execution not found'
+
+    @pytest.mark.django_db
+    def test_execution_not_running_returns_not_running(self):
+        """Si l'exécution n'est pas en RUNNING → retourne {'outcome': 'not_running'}."""
+        from executions.tasks.gates import resume_container_workflow_from_gate
+        from executions.models import Execution, ExecutionStatus
+
+        mock_execution = MagicMock()
+        mock_execution.status = ExecutionStatus.COMPLETED
+        mock_execution.action.execution_steps = []
+
+        with patch('executions.cancellation_cache.is_cancelled', return_value=False):
+            with patch.object(Execution.objects, 'select_related') as mock_qs:
+                mock_qs.return_value.get.return_value = mock_execution
+                result = resume_container_workflow_from_gate.run(execution_id=1, on_success_step_id='step-1')
+
+        assert result['outcome'] == 'not_running'
+
+    @pytest.mark.django_db
+    def test_step_not_found_returns_step_not_found(self):
+        """Si on_success_step_id absent de action.execution_steps → retourne step_not_found."""
+        from executions.tasks.gates import resume_container_workflow_from_gate
+        from executions.models import Execution, ExecutionStatus, ExecutionStep
+
+        mock_execution = MagicMock()
+        mock_execution.status = ExecutionStatus.RUNNING
+        mock_execution.action.execution_steps = [
+            {'step_id': 'other-step', 'name': 'Other', 'step_type': 'platform'},
+        ]
+
+        with patch('executions.cancellation_cache.is_cancelled', return_value=False):
+            with patch.object(Execution.objects, 'select_related') as mock_qs:
+                mock_qs.return_value.get.return_value = mock_execution
+                with patch.object(ExecutionStep.objects, 'filter') as mock_filter:
+                    mock_filter.return_value.order_by.return_value = []
+                    result = resume_container_workflow_from_gate.run(execution_id=1, on_success_step_id='missing-step')
+
+        assert result == {'outcome': 'step_not_found', 'step_id': 'missing-step'}
+
+    @pytest.mark.django_db
+    def test_step_outputs_keyed_by_step_id_not_step_name(self):
+        """
+        Fix HIGH-1 : _step_outputs doit être keyed par step_id, pas par step_name.
+        Vérifie que le mapping name→step_id est utilisé pour reconstruire _step_outputs.
+        """
+        from executions.tasks.gates import resume_container_workflow_from_gate
+        from executions.models import Execution, ExecutionStatus, ExecutionStep
+        from executions.container_workflow_runtime import ContainerWorkflowRuntime
+
+        mock_execution = MagicMock()
+        mock_execution.status = ExecutionStatus.RUNNING
+        mock_execution.action.execution_steps = [
+            {'step_id': 'tf-plan', 'name': 'Terraform Plan', 'step_type': 'platform'},
+            {'step_id': 'gate-step', 'name': 'Wait Approval', 'step_type': 'gate', 'gate_type': 'approval'},
+            {'step_id': 'tf-apply', 'name': 'Terraform Apply', 'step_type': 'platform'},
+        ]
+
+        # Step COMPLETED avant le gate (step_name = nom humain, pas step_id)
+        mock_db_step = MagicMock()
+        mock_db_step.step_name = 'Terraform Plan'
+        mock_db_step.get_output.return_value = {'plan_output': 'some value'}
+
+        captured_runtime = {}
+
+        def fake_runtime_init(self_r, execution):
+            self_r.execution = execution
+            self_r.correlation_id = 'test'
+            self_r._step_outputs = {}
+            self_r.workflow_steps = []
+            self_r._step_order_counter = 0
+            captured_runtime['instance'] = self_r
+
+        with patch('executions.cancellation_cache.is_cancelled', return_value=False):
+            with patch.object(Execution.objects, 'select_related') as mock_qs:
+                mock_qs.return_value.get.return_value = mock_execution
+                with patch.object(ExecutionStep.objects, 'filter') as mock_filter:
+                    mock_filter.return_value.order_by.return_value = [mock_db_step]
+                    with patch.object(ContainerWorkflowRuntime, '__init__', fake_runtime_init):
+                        with patch.object(ContainerWorkflowRuntime, '_execute_workflow_steps', return_value=None):
+                            resume_container_workflow_from_gate.run(
+                                execution_id=1, on_success_step_id='tf-apply'
+                            )
+
+        # Le step_output doit être keyed par 'tf-plan' (step_id), pas 'Terraform Plan' (step_name)
+        runtime_instance = captured_runtime.get('instance')
+        assert runtime_instance is not None
+        assert 'tf-plan' in runtime_instance._step_outputs
+        assert 'Terraform Plan' not in runtime_instance._step_outputs
+        assert runtime_instance._step_outputs['tf-plan'] == {'plan_output': 'some value'}
+
+
+class TestTransitionStepToRunningADR007:
+    """
+    Tests de la logique ADR-007 dans _transition_step_to_running (story 57.7 — Task 5).
+    Couvre : dispatch resume_container_workflow_from_gate, completion gate final, old-style fallback.
+    """
+
+    def _make_step(self, step_name='Wait Gate', execution_id=1, execution_steps=None):
+        """Crée un ExecutionStep mock avec les champs nécessaires."""
+        mock_step = MagicMock()
+        mock_step.id = 10
+        mock_step.step_name = step_name
+        mock_step.step_order = 1
+        mock_step.execution_id = execution_id
+        mock_exec = MagicMock()
+        mock_exec.id = execution_id
+        mock_exec.status.RUNNING = 'RUNNING'
+        action = MagicMock()
+        action.execution_steps = execution_steps or []
+        mock_exec.action = action
+        mock_step.execution = mock_exec
+        mock_step.created_at = MagicMock()
+        return mock_step
+
+    @pytest.mark.django_db
+    def test_adr007_step_with_on_success_calls_resume_task(self):
+        """AC#6 : step ADR-007 avec on_success_step_id → resume_container_workflow_from_gate.apply_async."""
+        from executions.tasks.gates import _transition_step_to_running, resume_container_workflow_from_gate
+        from executions.models import ExecutionStep
+
+        step_def = {
+            'name': 'Wait Gate',
+            'step_type': 'gate',
+            'gate_type': 'maintenance_window',
+            'on_success_step_id': 'next-step',
+        }
+        mock_step = self._make_step(step_name='Wait Gate', execution_steps=[step_def])
+        gate_status = {'satisfied': True, 'conditions': []}
+
+        with patch.object(ExecutionStep.objects, 'filter') as mock_filter:
+            mock_filter.return_value.update.return_value = 1
+            mock_step.refresh_from_db = MagicMock()
+
+            with patch('executions.tasks.gates.AuditService'):
+                with patch.object(resume_container_workflow_from_gate, 'apply_async') as mock_apply:
+                    _transition_step_to_running(mock_step, gate_status, 'corr-123')
+
+        mock_apply.assert_called_once_with(args=[mock_step.execution_id, 'next-step'])
+
+    @pytest.mark.django_db
+    def test_adr007_step_without_on_success_completes_execution(self):
+        """AC#6 : step ADR-007 sans on_success_step_id (gate final) → exécution COMPLETED."""
+        from executions.tasks.gates import _transition_step_to_running
+        from executions.models import ExecutionStep, ExecutionStatus
+
+        step_def = {
+            'name': 'Final Gate',
+            'step_type': 'gate',
+            'gate_type': 'maintenance_window',
+            # pas de on_success_step_id
+        }
+        mock_execution = MagicMock()
+        mock_execution.id = 1
+        mock_execution.status = ExecutionStatus.RUNNING
+        mock_execution.action.execution_steps = [step_def]  # requis pour la recherche step_def
+        mock_step = self._make_step(step_name='Final Gate', execution_steps=[step_def])
+        mock_step.execution = mock_execution
+        gate_status = {'satisfied': True, 'conditions': []}
+
+        with patch.object(ExecutionStep.objects, 'filter') as mock_filter:
+            mock_filter.return_value.update.return_value = 1
+            mock_step.refresh_from_db = MagicMock()
+
+            with patch('executions.tasks.gates.AuditService'):
+                _transition_step_to_running(mock_step, gate_status, 'corr-123')
+
+        assert mock_execution.status == ExecutionStatus.COMPLETED
+        mock_execution.save.assert_called()
+
+    @pytest.mark.django_db
+    def test_old_style_step_uses_retry_workflow_step(self):
+        """Step sans step_type → old-style → retry_workflow_step.apply_async."""
+        from executions.tasks.gates import _transition_step_to_running
+        from executions.models import ExecutionStep
+        import executions.tasks as _tasks
+
+        step_def = {
+            'name': 'Old Style Step',
+            # pas de step_type → old-style
+        }
+        mock_step = self._make_step(step_name='Old Style Step', execution_steps=[step_def])
+        gate_status = {'satisfied': True, 'conditions': []}
+
+        with patch.object(ExecutionStep.objects, 'filter') as mock_filter:
+            mock_filter.return_value.update.return_value = 1
+            mock_step.refresh_from_db = MagicMock()
+
+            with patch('executions.tasks.gates.AuditService'):
+                with patch.object(_tasks, 'retry_workflow_step') as mock_retry:
+                    _transition_step_to_running(mock_step, gate_status, 'corr-123')
+
+        mock_retry.apply_async.assert_called_once_with(args=[mock_step.execution_id, step_def, 1])
