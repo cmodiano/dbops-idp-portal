@@ -6,6 +6,7 @@
  */
 import type { Node, Edge } from '@xyflow/react';
 import { START_NODE_ID, END_NODE_ID } from './workflowConversion';
+import type { WorkflowStepNodeData } from '../components/admin/WorkflowStepNode';
 
 /** Validation error or warning for a specific node. */
 export interface ValidationError {
@@ -21,6 +22,52 @@ export interface ValidationResult {
 }
 
 /**
+ * Validate step configuration per type (Story 57.13, AC8).
+ * Checks required fields per step_type.
+ */
+function getStepTypeErrors(nodeId: string, data: WorkflowStepNodeData): ValidationError[] {
+  // Backward compat: if step_type is not explicitly set, skip per-type validation
+  if (!data.step_type) return [];
+  const stepType = data.step_type;
+  const errors: ValidationError[] = [];
+
+  switch (stepType) {
+    case 'platform':
+      if (!data.action_id) {
+        errors.push({ nodeId, type: 'error', message: 'Action requise pour un step de type Exécuter' });
+      }
+      break;
+    case 'service_call':
+      if (!data.integration_type) {
+        errors.push({ nodeId, type: 'error', message: "Type d'intégration requis" });
+      }
+      if (!data.operation) {
+        errors.push({ nodeId, type: 'error', message: 'Opération requise' });
+      }
+      break;
+    case 'evaluation':
+      if (!data.policy_id) {
+        errors.push({ nodeId, type: 'error', message: 'Politique de règles métier requise' });
+      }
+      break;
+    case 'gate':
+      if (!data.gate_type) {
+        errors.push({ nodeId, type: 'error', message: 'Type de gate requis (maintenance_window ou approval)' });
+      }
+      break;
+    case 'http_request':
+      if (!data.url) {
+        errors.push({ nodeId, type: 'error', message: 'URL requise' });
+      }
+      if (!data.method) {
+        errors.push({ nodeId, type: 'error', message: 'Méthode HTTP requise' });
+      }
+      break;
+  }
+  return errors;
+}
+
+/**
  * Validate workflow graph structure.
  *
  * Checks:
@@ -28,6 +75,7 @@ export interface ValidationResult {
  * 2. Every node has at least one output connection
  * 3. All nodes are reachable from start (no orphans)
  * 4. No infinite loops (cycle detection DFS)
+ * 5. Step configuration per type (Story 57.13, AC8)
  */
 export function validateWorkflowGraph(nodes: Node[], edges: Edge[]): ValidationResult {
   // Filter out start/end visual nodes for validation
@@ -140,6 +188,13 @@ export function validateWorkflowGraph(nodes: Node[], edges: Edge[]): ValidationR
       type: 'error',
       message: `Boucle infinie détectée`,
     });
+  });
+
+  // 4. Validate step configuration per type (Story 57.13, AC8)
+  workflowNodes.forEach((node) => {
+    const data = node.data as unknown as WorkflowStepNodeData;
+    const stepErrors = getStepTypeErrors(node.id, data);
+    errors.push(...stepErrors);
   });
 
   return {

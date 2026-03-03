@@ -41,7 +41,7 @@ import { SortableStepCard } from './SortableStepCard';
 
 /** Extended step type with optional temporary id for new steps. */
 export interface WorkflowStepEditable extends Omit<WorkflowStep, 'referenced_action_id'> {
-  referenced_action_id: number | undefined;
+  referenced_action_id?: number | null;
   /** Temporary unique ID for react key and dnd-kit. */
   _tempId?: string;
 }

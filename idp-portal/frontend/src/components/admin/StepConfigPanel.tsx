@@ -1,7 +1,12 @@
 /**
- * StepConfigPanel — Drawer for configuring a selected workflow step (Story 16.5, AC5; Story 16.6).
+ * StepConfigPanel — Drawer for configuring a selected workflow step (Story 16.5, AC5; Story 16.6; Story 57.13).
  *
- * Shows action details, retry config with timeline preview, branch info (read-only).
+ * Routes to type-specific sub-components based on step_type:
+ * - platform: retry config (existing behavior)
+ * - service_call: ServiceCallStepConfig
+ * - evaluation: EvaluationStepConfig
+ * - gate: GateStepConfig
+ * - http_request: HttpRequestStepConfig
  */
 
 import React, { useMemo } from 'react';
@@ -10,6 +15,11 @@ import { DeleteOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import type { Node } from '@xyflow/react';
 import type { WorkflowStepNodeData } from './WorkflowStepNode';
 import { calculateRetryTimeline, formatDuration } from '../../utils/retryTimeline';
+import { ServiceCallStepConfig } from './step-config/ServiceCallStepConfig';
+import { EvaluationStepConfig } from './step-config/EvaluationStepConfig';
+import { GateStepConfig } from './step-config/GateStepConfig';
+import { HttpRequestStepConfig } from './step-config/HttpRequestStepConfig';
+import type { WorkflowStepType } from '../../types/api';
 
 const { Text, Title } = Typography;
 
@@ -20,6 +30,8 @@ export interface StepConfigPanelProps {
   onNodeUpdate: (nodeId: string, data: Partial<WorkflowStepNodeData>) => void;
   onNodeDelete: (nodeId: string) => void;
   disabled?: boolean;
+  /** Story 57.13: Step IDs disponibles dans le workflow (pour gate context_from) */
+  availableStepIds?: string[];
 }
 
 export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({
@@ -29,8 +41,11 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({
   onNodeUpdate,
   onNodeDelete,
   disabled = false,
+  availableStepIds = [],
 }) => {
   const data = node?.data as unknown as WorkflowStepNodeData | undefined;
+
+  const stepType: WorkflowStepType = data?.step_type ?? 'platform';
 
   const retryEnabled = Boolean(data?.retry_enabled);
   const maxAttempts = data?.retry_max_attempts ?? 3;
@@ -44,11 +59,10 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({
 
   if (!node || !data) return null;
 
-  // Validation helpers
-  const maxAttemptsError = retryEnabled && (maxAttempts < 1 || maxAttempts > 10);
-  const intervalError = retryEnabled && intervalSeconds < 1;
-  const backoffError = retryEnabled && (backoffMultiplier < 1.0 || backoffMultiplier > 10.0);
-
+  // Validation helpers (platform only)
+  const maxAttemptsError = stepType === 'platform' && retryEnabled && (maxAttempts < 1 || maxAttempts > 10);
+  const intervalError = stepType === 'platform' && retryEnabled && intervalSeconds < 1;
+  const backoffError = stepType === 'platform' && retryEnabled && (backoffMultiplier < 1.0 || backoffMultiplier > 10.0);
   const hasValidationErrors = maxAttemptsError || intervalError || backoffError;
 
   const handleFieldChange = (field: keyof WorkflowStepNodeData, value: unknown) => {
@@ -65,9 +79,23 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({
     onNodeUpdate(node.id, updates);
   };
 
+  const handleUpdate = (updates: Partial<WorkflowStepNodeData>) => {
+    if (disabled) return;
+    onNodeUpdate(node.id, updates);
+  };
+
+  // Step type titles
+  const STEP_TYPE_TITLES: Record<WorkflowStepType, string> = {
+    platform: 'Action (Exécuter)',
+    service_call: 'Appel de service',
+    evaluation: 'Évaluation (Politique)',
+    gate: 'Attente / Gate',
+    http_request: 'Requête HTTP',
+  };
+
   return (
     <Drawer
-      title="Configuration de l'étape"
+      title={`Configuration — ${STEP_TYPE_TITLES[stepType]}`}
       open={open}
       onClose={onClose}
       size="default"
@@ -75,20 +103,7 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({
       aria-label="Panneau de configuration de l'étape"
     >
       <Space orientation="vertical" style={{ width: '100%' }} size="middle">
-        {/* Action details */}
-        <div>
-          <Title level={5} style={{ margin: 0 }}>
-            {data.action_name}
-          </Title>
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            {data.action_engine}
-            {data.action_platform ? ` / ${data.action_platform}` : ''}
-          </Text>
-        </div>
-
-        <Divider style={{ margin: '8px 0' }} />
-
-        {/* Display name */}
+        {/* Common: Display name */}
         <div>
           <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
             Nom d'affichage
@@ -112,110 +127,153 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({
 
         <Divider style={{ margin: '8px 0' }} />
 
-        {/* Retry config — Story 16.6 */}
-        <div>
-          <Text strong style={{ fontSize: 13, display: 'block', marginBottom: 8 }}>
-            Options de retry
-          </Text>
-          <Space orientation="vertical" style={{ width: '100%' }} size="small">
-            <Space align="center">
-              <Text type="secondary" style={{ fontSize: 12 }}>Activer le retry automatique</Text>
-              <Switch
-                checked={retryEnabled}
-                onChange={(checked) => handleFieldChange('retry_enabled', checked)}
-                disabled={disabled}
-                aria-label="Activer le retry automatique"
-              />
-            </Space>
-
+        {/* Platform: action info + retry config */}
+        {stepType === 'platform' && (
+          <>
+            {/* Action details */}
             <div>
-              <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
-                Nombre maximum de tentatives
+              <Title level={5} style={{ margin: 0 }}>
+                {data.action_name}
+              </Title>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                {data.action_engine}
+                {data.action_platform ? ` / ${data.action_platform}` : ''}
               </Text>
-              <InputNumber
-                style={{ width: '100%' }}
-                min={1}
-                max={10}
-                value={data.retry_max_attempts ?? null}
-                onChange={(v) => handleFieldChange('retry_max_attempts', v ?? null)}
-                disabled={disabled || !retryEnabled}
-                aria-label="Nombre maximum de tentatives"
-                status={maxAttemptsError ? 'error' : undefined}
-              />
-              {maxAttemptsError && (
-                <Text type="danger" style={{ fontSize: 11, display: 'block' }} role="alert">
-                  Doit être entre 1 et 10
-                </Text>
-              )}
             </div>
 
+            <Divider style={{ margin: '8px 0' }} />
+
+            {/* Retry config — Story 16.6 */}
             <div>
-              <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
-                Intervalle entre tentatives (secondes)
+              <Text strong style={{ fontSize: 13, display: 'block', marginBottom: 8 }}>
+                Options de retry
               </Text>
-              <InputNumber
-                style={{ width: '100%' }}
-                min={1}
-                value={data.retry_interval_seconds ?? null}
-                onChange={(v) => handleFieldChange('retry_interval_seconds', v ?? null)}
-                disabled={disabled || !retryEnabled}
-                aria-label="Intervalle entre tentatives"
-                status={intervalError ? 'error' : undefined}
-              />
-              {intervalError && (
-                <Text type="danger" style={{ fontSize: 11, display: 'block' }} role="alert">
-                  Doit être au moins 1 seconde
-                </Text>
-              )}
+              <Space orientation="vertical" style={{ width: '100%' }} size="small">
+                <Space align="center">
+                  <Text type="secondary" style={{ fontSize: 12 }}>Activer le retry automatique</Text>
+                  <Switch
+                    checked={retryEnabled}
+                    onChange={(checked) => handleFieldChange('retry_enabled', checked)}
+                    disabled={disabled}
+                    aria-label="Activer le retry automatique"
+                  />
+                </Space>
+
+                <div>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
+                    Nombre maximum de tentatives
+                  </Text>
+                  <InputNumber
+                    style={{ width: '100%' }}
+                    min={1}
+                    max={10}
+                    value={data.retry_max_attempts ?? null}
+                    onChange={(v) => handleFieldChange('retry_max_attempts', v ?? null)}
+                    disabled={disabled || !retryEnabled}
+                    aria-label="Nombre maximum de tentatives"
+                    status={maxAttemptsError ? 'error' : undefined}
+                  />
+                  {maxAttemptsError && (
+                    <Text type="danger" style={{ fontSize: 11, display: 'block' }} role="alert">
+                      Doit être entre 1 et 10
+                    </Text>
+                  )}
+                </div>
+
+                <div>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
+                    Intervalle entre tentatives (secondes)
+                  </Text>
+                  <InputNumber
+                    style={{ width: '100%' }}
+                    min={1}
+                    value={data.retry_interval_seconds ?? null}
+                    onChange={(v) => handleFieldChange('retry_interval_seconds', v ?? null)}
+                    disabled={disabled || !retryEnabled}
+                    aria-label="Intervalle entre tentatives"
+                    status={intervalError ? 'error' : undefined}
+                  />
+                  {intervalError && (
+                    <Text type="danger" style={{ fontSize: 11, display: 'block' }} role="alert">
+                      Doit être au moins 1 seconde
+                    </Text>
+                  )}
+                </div>
+
+                <div>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
+                    Multiplicateur de backoff
+                  </Text>
+                  <InputNumber
+                    style={{ width: '100%' }}
+                    min={1.0}
+                    max={10.0}
+                    step={0.1}
+                    value={data.retry_backoff_multiplier ?? null}
+                    onChange={(v) => handleFieldChange('retry_backoff_multiplier', v ?? null)}
+                    disabled={disabled || !retryEnabled}
+                    aria-label="Multiplicateur de backoff"
+                    status={backoffError ? 'error' : undefined}
+                  />
+                  {backoffError && (
+                    <Text type="danger" style={{ fontSize: 11, display: 'block' }} role="alert">
+                      Doit être entre 1.0 et 10.0
+                    </Text>
+                  )}
+                </div>
+
+                <Alert
+                  type="info"
+                  showIcon
+                  icon={<InfoCircleOutlined />}
+                  title="L'intervalle sera multiplié par ce facteur à chaque tentative (backoff exponentiel)"
+                  style={{ marginTop: 4 }}
+                />
+
+                {/* Timeline preview — Story 16.6, AC4 */}
+                {retryEnabled && retryTimeline.length > 0 && (
+                  <div data-testid="retry-timeline-preview" style={{ marginTop: 8 }}>
+                    <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
+                      Prévisualisation de la timeline
+                    </Text>
+                    <ul style={{ paddingLeft: 20, margin: 0, fontSize: 12 }}>
+                      {retryTimeline.map(({ attempt, delay }) => (
+                        <li key={attempt}>
+                          Tentative {attempt} : {delay === 0 ? 'immédiate' : `${formatDuration(delay)}`}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </Space>
             </div>
+          </>
+        )}
 
-            <div>
-              <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
-                Multiplicateur de backoff
-              </Text>
-              <InputNumber
-                style={{ width: '100%' }}
-                min={1.0}
-                max={10.0}
-                step={0.1}
-                value={data.retry_backoff_multiplier ?? null}
-                onChange={(v) => handleFieldChange('retry_backoff_multiplier', v ?? null)}
-                disabled={disabled || !retryEnabled}
-                aria-label="Multiplicateur de backoff"
-                status={backoffError ? 'error' : undefined}
-              />
-              {backoffError && (
-                <Text type="danger" style={{ fontSize: 11, display: 'block' }} role="alert">
-                  Doit être entre 1.0 et 10.0
-                </Text>
-              )}
-            </div>
+        {/* service_call */}
+        {stepType === 'service_call' && (
+          <ServiceCallStepConfig data={data} onUpdate={handleUpdate} disabled={disabled} />
+        )}
 
-            <Alert
-              type="info"
-              showIcon
-              icon={<InfoCircleOutlined />}
-              title="L'intervalle sera multiplié par ce facteur à chaque tentative (backoff exponentiel)"
-              style={{ marginTop: 4 }}
-            />
+        {/* evaluation */}
+        {stepType === 'evaluation' && (
+          <EvaluationStepConfig data={data} onUpdate={handleUpdate} disabled={disabled} />
+        )}
 
-            {/* Timeline preview — Story 16.6, AC4 */}
-            {retryEnabled && retryTimeline.length > 0 && (
-              <div data-testid="retry-timeline-preview" style={{ marginTop: 8 }}>
-                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
-                  Prévisualisation de la timeline
-                </Text>
-                <ul style={{ paddingLeft: 20, margin: 0, fontSize: 12 }}>
-                  {retryTimeline.map(({ attempt, delay }) => (
-                    <li key={attempt}>
-                      Tentative {attempt} : {delay === 0 ? 'immédiate' : `${formatDuration(delay)}`}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </Space>
-        </div>
+        {/* gate */}
+        {stepType === 'gate' && (
+          <GateStepConfig
+            data={data}
+            onUpdate={handleUpdate}
+            disabled={disabled}
+            availableStepIds={availableStepIds}
+          />
+        )}
+
+        {/* http_request */}
+        {stepType === 'http_request' && (
+          <HttpRequestStepConfig data={data} onUpdate={handleUpdate} disabled={disabled} />
+        )}
 
         <Divider style={{ margin: '8px 0' }} />
 
@@ -229,9 +287,7 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({
           </Text>
         </div>
 
-        <Divider style={{ margin: '8px 0' }} />
-
-        {/* Validation warning */}
+        {/* Validation warning (platform only) */}
         {hasValidationErrors && (
           <Alert
             type="warning"
@@ -241,6 +297,8 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({
             style={{ marginBottom: 8 }}
           />
         )}
+
+        <Divider style={{ margin: '8px 0' }} />
 
         {/* Delete button */}
         <Button

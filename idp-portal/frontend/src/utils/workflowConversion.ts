@@ -8,6 +8,8 @@ import type { Node, Edge } from '@xyflow/react';
 import type { WorkflowStep } from '../types/api';
 import type { WorkflowStepNodeData } from '../components/admin/WorkflowStepNode';
 import { STYLE_TOKENS } from '../theme/styleTokens';
+// Story 57.13: WorkflowStepType imported for backward compat default
+import type { WorkflowStepType } from '../types/api';
 
 /** Generate unique step ID using crypto.randomUUID or fallback. */
 export function generateStepId(): string {
@@ -36,8 +38,9 @@ export function workflowStepsToReactFlow(
     type: 'workflowStep',
     position: { x: (index % 4) * GRID_SPACING_X, y: Math.floor(index / 4) * GRID_SPACING_Y + START_OFFSET_Y },
     data: {
-      action_id: step.referenced_action_id,
-      action_name: step.action_name ?? `Action #${step.referenced_action_id}`,
+      // platform fields
+      action_id: step.referenced_action_id ?? null,
+      action_name: step.action_name ?? (step.referenced_action_id ? `Action #${step.referenced_action_id}` : ''),
       action_engine: '',
       action_platform: '',
       name: step.name,
@@ -55,6 +58,22 @@ export function workflowStepsToReactFlow(
         : null,
       isStartNode: false,
       isEndNode: false,
+      // Story 57.13: step type and type-specific fields
+      step_type: step.step_type ?? 'platform',
+      integration_type: step.integration_type ?? null,
+      operation: step.operation ?? null,
+      policy_id: step.policy_id ?? null,
+      gate_type: step.gate_type ?? null,
+      on_timeout: step.on_timeout ?? null,
+      context_from: step.context_from ?? null,
+      timeout: step.timeout ?? null,
+      url: step.url ?? null,
+      method: step.method ?? null,
+      headers: step.headers ?? null,
+      request_timeout: step.request_timeout ?? null,
+      condition: step.condition ?? null,
+      input_mapping: step.input_mapping ?? null,
+      output_mapping: step.output_mapping ?? null,
     } satisfies WorkflowStepNodeData,
   }));
 
@@ -187,17 +206,72 @@ export function reactFlowToWorkflowSteps(
       (e) => e.source === node.id && e.sourceHandle === 'error' && e.target !== END_NODE_ID
     );
 
-    return {
+    // Story 57.13: backward compat — default to 'platform' if step_type not set
+    const stepType: WorkflowStepType = data.step_type ?? 'platform';
+
+    const baseStep: WorkflowStep = {
       order: index + 1,
       step_id: node.id,
-      name: data.name,
-      referenced_action_id: data.action_id,
+      step_type: stepType,
+      name: data.name ?? null,
       on_success_step_id: successEdge?.target ?? null,
       on_error_step_id: errorEdge?.target ?? null,
-      retry_enabled: data.retry_enabled ?? false,
-      retry_max_attempts: data.retry_max_attempts ?? null,
-      retry_interval_seconds: data.retry_interval_seconds ?? null,
-      retry_backoff_multiplier: data.retry_backoff_multiplier ?? null,
+      // shared
+      condition: data.condition ?? null,
     };
+
+    if (stepType === 'platform' || !data.step_type) {
+      return {
+        ...baseStep,
+        referenced_action_id: data.action_id ?? null,
+        retry_enabled: data.retry_enabled ?? false,
+        retry_max_attempts: data.retry_max_attempts ?? null,
+        retry_interval_seconds: data.retry_interval_seconds ?? null,
+        retry_backoff_multiplier: data.retry_backoff_multiplier ?? null,
+      };
+    }
+
+    if (stepType === 'service_call') {
+      return {
+        ...baseStep,
+        integration_type: data.integration_type ?? null,
+        operation: data.operation ?? null,
+        input_mapping: data.input_mapping ?? null,
+        output_mapping: data.output_mapping ?? null,
+      };
+    }
+
+    if (stepType === 'evaluation') {
+      return {
+        ...baseStep,
+        policy_id: data.policy_id ?? null,
+        input_mapping: data.input_mapping ?? null,
+      };
+    }
+
+    if (stepType === 'gate') {
+      return {
+        ...baseStep,
+        gate_type: data.gate_type ?? null,
+        on_timeout: data.on_timeout ?? null,
+        context_from: data.context_from ?? null,
+        timeout: data.timeout ?? null,
+      };
+    }
+
+    if (stepType === 'http_request') {
+      return {
+        ...baseStep,
+        url: data.url ?? null,
+        method: data.method ?? null,
+        headers: data.headers ?? null,
+        request_timeout: data.request_timeout ?? null,
+        input_mapping: data.input_mapping ?? null,
+        output_mapping: data.output_mapping ?? null,
+      };
+    }
+
+    // Fallback
+    return baseStep;
   });
 }

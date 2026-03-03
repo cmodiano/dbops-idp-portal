@@ -31,7 +31,7 @@ export interface ParametersFormStepProps {
   parameters: Record<string, unknown>;
   onParametersChange: (values: Record<string, unknown>) => void;
   isWorkflow: boolean;
-  workflowSteps: Array<{ order: number; name: string | null; referenced_action_id: number }>;
+  workflowSteps: Array<{ order: number; name: string | null; referenced_action_id?: number | null }>;
   workflowStepActions: Record<number, CatalogActionDetail>;
   loadingWorkflowStepActions: boolean;
   workflowStepActionsError: string | null;

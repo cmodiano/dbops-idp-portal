@@ -1,10 +1,18 @@
 /**
- * Tests for workflowValidation utilities — Story 26.5 AC8
+ * Tests for workflowValidation utilities — Story 26.5 AC8; Story 57.13 AC8
  */
 import { describe, it, expect } from 'vitest';
 import type { Node, Edge } from '@xyflow/react';
 import { validateWorkflowGraph } from '../workflowValidation';
 import { START_NODE_ID, END_NODE_ID } from '../workflowConversion';
+import type { WorkflowStepNodeData } from '../../components/admin/WorkflowStepNode';
+
+const makeNodeWithData = (id: string, data: Partial<WorkflowStepNodeData> = {}): Node => ({
+  id,
+  type: 'workflowStep',
+  position: { x: 0, y: 0 },
+  data,
+});
 
 const makeNode = (id: string): Node => ({
   id,
@@ -125,5 +133,107 @@ describe('validateWorkflowGraph', () => {
       (e) => e.nodeId === START_NODE_ID || e.nodeId === END_NODE_ID
     );
     expect(startEndErrors).toHaveLength(0);
+  });
+});
+
+describe('validateWorkflowGraph — Story 57.13 AC8 — validation per step_type', () => {
+  const startNode: Node = { id: START_NODE_ID, type: 'start', position: { x: 0, y: 0 }, data: {} };
+  const endNode: Node = { id: END_NODE_ID, type: 'end', position: { x: 0, y: 300 }, data: {} };
+  const edgesForNode = (id: string): Edge[] => [
+    makeEdge(START_NODE_ID, id, 'output'),
+    makeEdge(id, END_NODE_ID, 'success'),
+    makeEdge(id, END_NODE_ID, 'error'),
+  ];
+
+  it('platform sans action_id → erreur', () => {
+    const node = makeNodeWithData('p-1', { step_type: 'platform' });
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('p-1'));
+    const errors = result.errors.filter((e) => e.nodeId === 'p-1' && e.type === 'error');
+    expect(errors.some((e) => e.message.includes('Action requise'))).toBe(true);
+  });
+
+  it('platform avec action_id → pas d\'erreur de type', () => {
+    const node = makeNodeWithData('p-1', { step_type: 'platform', action_id: 10 });
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('p-1'));
+    const typeErrors = result.errors.filter((e) => e.nodeId === 'p-1' && e.type === 'error');
+    expect(typeErrors).toHaveLength(0);
+  });
+
+  it('service_call sans integration_type → erreur', () => {
+    const node = makeNodeWithData('sc-1', { step_type: 'service_call', operation: 'create_change' });
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('sc-1'));
+    const errors = result.errors.filter((e) => e.nodeId === 'sc-1' && e.type === 'error');
+    expect(errors.some((e) => e.message.includes("intégration"))).toBe(true);
+  });
+
+  it('service_call sans operation → erreur', () => {
+    const node = makeNodeWithData('sc-1', { step_type: 'service_call', integration_type: 'servicenow' });
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('sc-1'));
+    const errors = result.errors.filter((e) => e.nodeId === 'sc-1' && e.type === 'error');
+    expect(errors.some((e) => e.message.includes('Opération'))).toBe(true);
+  });
+
+  it('service_call complet → pas d\'erreur de type', () => {
+    const node = makeNodeWithData('sc-1', {
+      step_type: 'service_call',
+      integration_type: 'servicenow',
+      operation: 'create_change',
+    });
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('sc-1'));
+    const typeErrors = result.errors.filter((e) => e.nodeId === 'sc-1' && e.type === 'error');
+    expect(typeErrors).toHaveLength(0);
+  });
+
+  it('evaluation sans policy_id → erreur', () => {
+    const node = makeNodeWithData('ev-1', { step_type: 'evaluation' });
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('ev-1'));
+    const errors = result.errors.filter((e) => e.nodeId === 'ev-1' && e.type === 'error');
+    expect(errors.some((e) => e.message.includes('Politique'))).toBe(true);
+  });
+
+  it('evaluation avec policy_id → pas d\'erreur de type', () => {
+    const node = makeNodeWithData('ev-1', { step_type: 'evaluation', policy_id: 5 });
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('ev-1'));
+    const typeErrors = result.errors.filter((e) => e.nodeId === 'ev-1' && e.type === 'error');
+    expect(typeErrors).toHaveLength(0);
+  });
+
+  it('gate sans gate_type → erreur', () => {
+    const node = makeNodeWithData('g-1', { step_type: 'gate' });
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('g-1'));
+    const errors = result.errors.filter((e) => e.nodeId === 'g-1' && e.type === 'error');
+    expect(errors.some((e) => e.message.includes('gate'))).toBe(true);
+  });
+
+  it('gate avec gate_type → pas d\'erreur de type', () => {
+    const node = makeNodeWithData('g-1', { step_type: 'gate', gate_type: 'approval' });
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('g-1'));
+    const typeErrors = result.errors.filter((e) => e.nodeId === 'g-1' && e.type === 'error');
+    expect(typeErrors).toHaveLength(0);
+  });
+
+  it('http_request sans url → erreur', () => {
+    const node = makeNodeWithData('h-1', { step_type: 'http_request', method: 'GET' });
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('h-1'));
+    const errors = result.errors.filter((e) => e.nodeId === 'h-1' && e.type === 'error');
+    expect(errors.some((e) => e.message.includes('URL'))).toBe(true);
+  });
+
+  it('http_request sans method → erreur', () => {
+    const node = makeNodeWithData('h-1', { step_type: 'http_request', url: 'https://api.test.com' });
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('h-1'));
+    const errors = result.errors.filter((e) => e.nodeId === 'h-1' && e.type === 'error');
+    expect(errors.some((e) => e.message.includes('Méthode'))).toBe(true);
+  });
+
+  it('http_request complet → pas d\'erreur de type', () => {
+    const node = makeNodeWithData('h-1', {
+      step_type: 'http_request',
+      url: 'https://api.test.com',
+      method: 'POST',
+    });
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('h-1'));
+    const typeErrors = result.errors.filter((e) => e.nodeId === 'h-1' && e.type === 'error');
+    expect(typeErrors).toHaveLength(0);
   });
 });

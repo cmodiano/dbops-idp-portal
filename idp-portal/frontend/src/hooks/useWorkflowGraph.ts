@@ -22,7 +22,7 @@ import {
   type OnNodesChange,
 } from '@xyflow/react';
 import { STYLE_TOKENS } from '../theme/styleTokens';
-import type { WorkflowStep, ActionListItem } from '../types/api';
+import type { WorkflowStep, ActionListItem, WorkflowStepType } from '../types/api';
 import type { WorkflowStepNodeData } from '../components/admin/WorkflowStepNode';
 import {
   END_NODE_ID,
@@ -67,6 +67,10 @@ export interface UseWorkflowGraphReturn {
   clearValidation: () => void;
   loadImportedWorkflow: (newNodes: Node[], newEdges: Edge[]) => void;
   goToNode: (nodeId: string) => void;
+  /** Story 57.13: Add a non-platform step type and open config panel */
+  handleAddSpecialStep: (stepType: WorkflowStepType) => void;
+  /** Story 57.13: IDs of workflow step nodes (for gate context_from) */
+  workflowStepIds: string[];
 }
 
 /**
@@ -196,6 +200,7 @@ export function useWorkflowGraph({
         type: 'workflowStep',
         position,
         data: {
+          step_type: 'platform',
           action_id: action.id,
           action_name: action.name,
           action_engine: action.engine ?? '',
@@ -295,6 +300,72 @@ export function useWorkflowGraph({
   const workflowNodeCount = useMemo(
     () => nodes.filter((n) => n.id !== START_NODE_ID && n.id !== END_NODE_ID).length,
     [nodes]
+  );
+
+  // Story 57.13: IDs of workflow step nodes (for gate context_from)
+  const workflowStepIds = useMemo(
+    () => nodes
+      .filter((n) => n.id !== START_NODE_ID && n.id !== END_NODE_ID)
+      .map((n) => n.id),
+    [nodes]
+  );
+
+  // Story 57.13: Add a special (non-platform) step and open config panel
+  const handleAddSpecialStep = useCallback(
+    (stepType: WorkflowStepType) => {
+      if (disabled) return;
+      const stepId = generateStepId();
+      const stepNodes = nodes.filter((n) => n.id !== START_NODE_ID && n.id !== END_NODE_ID);
+      const newNode: Node = {
+        id: stepId,
+        type: 'workflowStep',
+        position: { x: 200, y: stepNodes.length * 200 + 120 },
+        data: {
+          step_type: stepType,
+          name: null,
+          action_id: null,
+          action_name: '',
+          action_engine: '',
+          action_platform: '',
+          retry_enabled: false,
+          retry_max_attempts: null,
+          retry_interval_seconds: null,
+          retry_backoff_multiplier: null,
+          on_success_step_id: null,
+          on_error_step_id: null,
+          isStartNode: false,
+          isEndNode: false,
+          // Default on_timeout = FAIL for gate steps
+          ...(stepType === 'gate' ? { on_timeout: 'FAIL' } : {}),
+        } satisfies WorkflowStepNodeData,
+      };
+      setNodes((nds) => {
+        const existing = nds.filter((n) => n.type === 'workflowStep');
+        if (existing.length === 0) {
+          // Auto-connect Start → first step
+          setEdges((eds) => [
+            ...eds,
+            {
+              id: `${START_NODE_ID}_output_${stepId}`,
+              source: START_NODE_ID,
+              target: stepId,
+              sourceHandle: 'output',
+              targetHandle: 'input',
+              type: 'customEdge',
+              animated: false,
+              style: { stroke: STYLE_TOKENS.iconSuccess, strokeWidth: 2 },
+              label: 'succès',
+              labelStyle: { fontSize: 10, fill: STYLE_TOKENS.textSuccess },
+            } as Edge,
+          ]);
+        }
+        return [...nds, newNode];
+      });
+      // Open config panel on the new node
+      setSelectedNode(newNode);
+      setConfigPanelOpen(true);
+    },
+    [disabled, nodes, setNodes, setEdges]
   );
 
   const handleNodeDelete = useCallback(
@@ -406,5 +477,7 @@ export function useWorkflowGraph({
     clearValidation,
     loadImportedWorkflow,
     goToNode,
+    handleAddSpecialStep,
+    workflowStepIds,
   };
 }

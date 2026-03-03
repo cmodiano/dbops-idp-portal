@@ -36,9 +36,10 @@ describe('ActionPalette', () => {
     mockUseEligibleActions();
   });
 
-  it('affiche le titre "Actions disponibles"', () => {
+  it('affiche le titre de la section actions plateforme', () => {
     render(<ActionPalette />);
-    expect(screen.getByText('Actions disponibles')).toBeInTheDocument();
+    // Story 57.13: section renamed to "Actions (Exécuter)"
+    expect(screen.getByText('Actions (Exécuter)')).toBeInTheDocument();
   });
 
   it('affiche toutes les actions', () => {
