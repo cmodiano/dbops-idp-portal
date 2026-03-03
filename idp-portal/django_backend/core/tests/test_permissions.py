@@ -16,7 +16,12 @@ from unittest.mock import MagicMock, patch
 from django.db import OperationalError
 from django.test import override_settings
 
-from core.permissions import AdminProfilePermission, IsAdminUser
+from core.permissions import (
+    AdminProfilePermission,
+    DBOPSProfilePermission,
+    IsAdminUser,
+    IsDBAOrDBOPS,
+)
 
 
 def _make_user(**kwargs):
@@ -54,6 +59,19 @@ def _make_request(user):
 
 # Patch target: the Profile model imported inside has_permission (lazy import)
 FIND_BY_AD_GROUPS = "profiles.models.ProfileManager.find_by_ad_groups"
+
+
+@pytest.mark.unit
+class TestBackwardCompatAliases:
+    """Story 56.4: Assert backward-compat aliases still point to original classes."""
+
+    def test_dbops_profile_permission_is_admin_profile_permission(self):
+        """DBOPSProfilePermission must be the same object as AdminProfilePermission."""
+        assert DBOPSProfilePermission is AdminProfilePermission
+
+    def test_is_dba_or_dbops_is_admin_user(self):
+        """IsDBAOrDBOPS must be the same object as IsAdminUser."""
+        assert IsDBAOrDBOPS is IsAdminUser
 
 
 @pytest.mark.unit

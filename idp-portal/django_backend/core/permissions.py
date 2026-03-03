@@ -19,13 +19,28 @@ logger = structlog.get_logger(__name__)
 _ADMIN_PROFILES = {'dbops', 'dba', 'dba_applicatif', 'dba_infrastructure'}
 
 
-def _get_admin_profile_names() -> set:
+def _get_admin_profile_names() -> set[str]:
     """Résout le set de noms de profils admin depuis settings (configurable).
 
     Story 56.4: Utilise ADMIN_PROFILE_NAMES si défini, sinon fallback vers _ADMIN_PROFILES
     pour la compatibilité. Permet d'ajouter des profils admin sans changer le code.
+
+    Returns a set of normalized (strip + lower) strings so matching is reliable
+    regardless of mixed-case or padded values in configuration.
     """
-    return getattr(settings, 'ADMIN_PROFILE_NAMES', _ADMIN_PROFILES)
+    raw = getattr(settings, 'ADMIN_PROFILE_NAMES', _ADMIN_PROFILES)
+    return {str(item).strip().lower() for item in raw if str(item).strip()}
+
+
+def _get_dbops_profile_names() -> set[str]:
+    """Résout le set de noms de profils DBOPS (admin endpoints only).
+
+    Story 15.2 AC2: DBA doit être refusé sur les endpoints admin (profiles, integrations,
+    actions, analytics). Seul DBOPS (ou profils configurés dans DBOPS_PROFILE_NAMES)
+    peut y accéder. Utilisé par AdminProfilePermission pour le chemin SAML string.
+    """
+    raw = getattr(settings, 'DBOPS_PROFILE_NAMES', {'dbops'})
+    return {str(item).strip().lower() for item in raw if str(item).strip()}
 
 
 def is_admin_user(user: Any) -> bool:
@@ -42,18 +57,22 @@ def is_admin_user(user: Any) -> bool:
     if not user or not getattr(user, 'is_authenticated', False):
         return False
 
-    # Chemin 1 : SAML string → comparaison par nom (configurable via ADMIN_PROFILE_NAMES)
-    profile_str = getattr(user, 'profile', None)
-    if profile_str and isinstance(profile_str, str) and profile_str.lower() in _get_admin_profile_names():
+    # Chemin 1 : Profile ORM object → is_admin_bool (aligné avec AdminProfilePermission)
+    profile_val = getattr(user, 'profile', None)
+    if profile_val is not None and hasattr(profile_val, 'is_admin_bool') and profile_val.is_admin_bool:
         return True
 
-    # Chemin 2 : M2M profiles → utiliser is_admin_bool (PAS comparaison de nom)
+    # Chemin 2 : SAML string → comparaison par nom (configurable via ADMIN_PROFILE_NAMES)
+    if profile_val and isinstance(profile_val, str) and profile_val.strip().lower() in _get_admin_profile_names():
+        return True
+
+    # Chemin 3 : M2M profiles → utiliser is_admin_bool (PAS comparaison de nom)
     if hasattr(user, 'profiles'):
         for profile in user.profiles.all():
             if getattr(profile, 'is_admin_bool', False):
                 return True
 
-    # Chemin 3 : ad_groups → Profile.objects.find_by_ad_groups() → is_admin_bool
+    # Chemin 4 : ad_groups → Profile.objects.find_by_ad_groups() → is_admin_bool
     if hasattr(user, 'ad_groups'):
         ad_groups = user.ad_groups or []
         if not isinstance(ad_groups, list):
@@ -136,11 +155,16 @@ class IsAdminUser(permissions.BasePermission):
 
 class AdminProfilePermission(permissions.BasePermission):
     """
-    Permission class that requires an admin profile (is_admin=1 ou ADMIN_PROFILE_NAMES).
+    Permission class that requires a DBOPS profile for admin endpoints.
 
-    Story 56.4: Renommé depuis DBOPSProfilePermission. Utilise maintenant Profile.is_admin_bool
-    au lieu de la comparaison hardcodée 'dbops', permettant des profils admin avec d'autres noms
-    (AUTOMATION, OPERATOR, etc.).
+    Story 15.2 AC2: DBA is DENIED on admin endpoints (profiles, integrations, actions,
+    analytics). Only DBOPS (or profiles in DBOPS_PROFILE_NAMES) can access these.
+    Uses DBOPS_PROFILE_NAMES for SAML string path; M2M/ad_groups use Profile.is_admin_bool
+    (Profile DBOPS has is_admin=1, Profile DBA has is_admin=0).
+
+    Story 56.4: Renommé depuis DBOPSProfilePermission. Utilise DBOPS_PROFILE_NAMES pour
+    le chemin SAML string (exclut DBA). Les chemins M2M et ad_groups utilisent
+    Profile.is_admin_bool (Profile DBA a is_admin=0 donc refusé).
 
     Story 22.1 CRIT-1: Fixed AttributeError from non-existent service.get_profiles_by_ad_groups()
     by using Profile.objects.find_by_ad_groups() directly.
@@ -150,25 +174,25 @@ class AdminProfilePermission(permissions.BasePermission):
     """
 
     def has_permission(self, request: Any, view: Any) -> bool:
-        """Check if user has an admin profile."""
+        """Check if user has a DBOPS profile (admin endpoints only — DBA denied)."""
         if not request.user or not request.user.is_authenticated:
             return False
 
-        # Chemin 1 : SAML string → ADMIN_PROFILE_NAMES configurable
+        # Chemin 1 : SAML string → DBOPS_PROFILE_NAMES (dbops only, DBA excluded)
         if hasattr(request.user, 'profile'):
             profile = request.user.profile
-            if isinstance(profile, str) and profile.lower() in _get_admin_profile_names():
+            if isinstance(profile, str) and profile.strip().lower() in _get_dbops_profile_names():
                 return True
             elif hasattr(profile, 'is_admin_bool') and profile.is_admin_bool:
                 return True
 
-        # Chemin 2 : M2M profiles → is_admin_bool (PAS comparaison de nom)
+        # Chemin 2 : M2M profiles → is_admin_bool (Profile DBOPS=1, DBA=0)
         if hasattr(request.user, 'profiles'):
             for p in request.user.profiles.all():
                 if getattr(p, 'is_admin_bool', False):
                     return True
 
-        # Chemin 3 : ad_groups → Profile → is_admin_bool
+        # Chemin 3 : ad_groups → Profile → is_admin_bool (Profile DBOPS=1, DBA=0)
         if hasattr(request.user, 'ad_groups'):
             ad_groups = request.user.ad_groups
             # Normalize ad_groups to list (handle None, string, or non-list values)

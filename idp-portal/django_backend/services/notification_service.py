@@ -130,12 +130,12 @@ class NotificationService:
 
     def send_page_oncall(
         self,
-        api_url: str,
         message: str,
         action_name: str,
         execution_id: int,
         level: str,
         correlation_id: str | None = None,
+        api_url: str | None = None,
     ) -> None:
         """Appelle l'API interne de page on-call (agnostique). Epic 56."""
         effective_url = (

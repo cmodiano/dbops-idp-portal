@@ -194,7 +194,7 @@ Header `Retry-After` présent. Attendre 1 minute.
 
 ### Catalogue (Admin)
 
-**Permission requise:** `AdminProfilePermission` (alias: `DBOPSProfilePermission` pour rétro-compatibilité)
+**Permission requise:** `AdminProfilePermission` (alias: `DBOPSProfilePermission` pour rétrocompatibilité)
 
 | Méthode | Endpoint | Description |
 |---------|----------|-------------|

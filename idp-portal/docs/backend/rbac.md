@@ -102,7 +102,7 @@ Liste des environnements autorisés pour l'exécution:
 
 ### AdminProfilePermission
 
-> **Note :** `DBOPSProfilePermission` est un alias maintenu pour la rétro-compatibilité. Utiliser désormais `AdminProfilePermission` (nom canonique depuis story 56.4).
+> **Note :** `DBOPSProfilePermission` est un alias maintenu pour la rétrocompatibilité. Utiliser désormais `AdminProfilePermission` (nom canonique depuis story 56.4).
 
 ```python
 class AdminProfilePermission(permissions.BasePermission):

@@ -176,7 +176,7 @@ L’effort estimé est de **5–8 jours** pour les phases 1 et 2. La phase 3 (ne
 |-------|-------|--------|
 | 56.1 | Inventaire Oracle : schéma fallback configurable | ✅ done |
 | 56.2 | Notifications : canal `page_oncall` agnostique | ✅ done |
-| 56.3 | Frontend : `hasTab(‘dashboard’)` dans AnalyticsGuard | ✅ done |
+| 56.3 | Frontend : `hasTab(‘analytics’)` dans AnalyticsGuard | ✅ done |
 
 ### Phase 2 — Renommage canonique ✅ Complète
 
@@ -185,10 +185,12 @@ L’effort estimé est de **5–8 jours** pour les phases 1 et 2. La phase 3 (ne
 | 56.4 | Permissions : `AdminProfilePermission` / `IsAdminUser` (avec aliases) | ✅ done |
 | 56.5 | Tests : migration vers les noms canoniques | ✅ done |
 
-### Phase 3 — Nettoyage documentation et code ✅ Complète
+### Phase 3 — Nettoyage documentation et code ✅ Complète avec reliquats
 
 | Story | Titre | Statut |
 |-------|-------|--------|
 | 56.6 | Nettoyage documentation et renommage complet | ✅ done |
 
-**Résumé :** L’ensemble de l’epic 56 est terminé. Les profils `DBA` et `DBOPS` restent valides en base de données et les aliases Python (`DBOPSProfilePermission`, `IsDBAOrDBOPS`) sont maintenus dans `core/permissions.py` pour la rétro-compatibilité. Le code applicatif utilise désormais `AdminProfilePermission` et `IsAdminUser` comme noms canoniques. Remarque : `executions/views/` (execution_views, scheduled_views, approval_views) continuent d’importer `IsDBAOrDBOPS` (alias vers `IsAdminUser`) ; une migration vers `IsAdminUser` pourrait être envisagée dans un sprint ultérieur de nettoyage.
+**Résumé :** L’ensemble de l’epic 56 est terminé. Les profils `DBA` et `DBOPS` restent valides en base de données et les aliases Python (`DBOPSProfilePermission`, `IsDBAOrDBOPS`) sont maintenus dans `core/permissions.py` pour la rétrocompatibilité. Le code applicatif utilise désormais `AdminProfilePermission` et `IsAdminUser` comme noms canoniques.
+
+**Travail restant :** `executions/views/` (execution_views, scheduled_views, approval_views) continuent d’importer `IsDBAOrDBOPS` (alias vers `IsAdminUser`) ; une migration vers `IsAdminUser` pourrait être envisagée dans un sprint ultérieur de nettoyage.

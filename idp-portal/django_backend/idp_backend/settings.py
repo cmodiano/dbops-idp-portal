@@ -573,10 +573,13 @@ AUTH_DEV_BYPASS = os.getenv('AUTH_DEV_BYPASS', 'False').lower() == 'true'
 ALLOW_SUPERUSER_FALLBACK = os.getenv('ALLOW_SUPERUSER_FALLBACK', 'false').lower() == 'true'
 
 # Story 56.4 — Décorrélation DBOPS/DBA : noms de profils admin configurables
-# Ces profils sont considérés "admin" pour la résolution SAML string.
-# Modifier pour ajouter de nouveaux profils admin sans changer le code.
-# Les chemins M2M et ad_groups utilisent Profile.is_admin_bool (pas de comparaison de nom).
+# ADMIN_PROFILE_NAMES : profils "admin" au sens large (DBA + DBOPS) — utilisé par IsAdminUser
+# pour scope=all, approbations, etc. DBA peut voir exécutions, catalogue, dashboard.
+# DBOPS_PROFILE_NAMES : profils autorisés sur les endpoints admin (profiles, integrations,
+# actions, analytics, feature flags). DBA est explicitement exclu — seul DBOPS (ou équivalent)
+# peut gérer ces ressources. Modifier pour ajouter des profils sans changer le code.
 ADMIN_PROFILE_NAMES = {'dbops', 'dba', 'dba_applicatif', 'dba_infrastructure'}
+DBOPS_PROFILE_NAMES = {'dbops'}  # Admin endpoints only — DBA denied (Story 15.2 AC2)
 
 # Application environment
 APP_ENV = os.getenv('APP_ENV', 'development')
@@ -732,4 +735,4 @@ ALLOWED_HTTP_REQUEST_HOSTS: list[str] = [
 del _allowed_http_hosts_env
 
 # Epic 56 — Décorrélation : schéma/synonyme Oracle fallback pour l'inventaire
-INVENTORY_FALLBACK_SCHEMA = 'DBOPS_INVENTORY'
+INVENTORY_FALLBACK_SCHEMA = os.getenv('INVENTORY_FALLBACK_SCHEMA', 'DBOPS_INVENTORY')
