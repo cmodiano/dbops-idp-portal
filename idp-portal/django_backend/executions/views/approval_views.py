@@ -431,7 +431,62 @@ class RejectExecutionView(APIView):
     @transaction.atomic
     def post(self, request: Request, execution_id: int) -> Response:
         # Code Review 30.1: Atomic transaction + row-level locking to prevent race conditions
-        execution = _get_and_validate_pending_execution(execution_id)
+        # ADR-007 backward compat (Story 58.1): if execution not PENDING_APPROVAL, try step gate
+        try:
+            execution = _get_and_validate_pending_execution(execution_id)
+        except BadRequestError:
+            step = _find_first_waiting_approval_step(execution_id)
+            if step is not None:
+                _validate_approval_gate_step(step)
+                rejection_reason = (request.data or {}).get("rejection_reason", "")
+                correlation_id = get_correlation_id()
+                user_id = (
+                    str(request.user.id)
+                    if request.user and hasattr(request.user, "id")
+                    else "unknown"
+                )
+                step.status = ExecutionStepStatus.FAILED
+                step.completed_at = timezone.now()
+                step.approval_comment = rejection_reason or ""
+                step.save()
+                step_config = _get_step_config(step)
+                on_error_step_id = step_config.get("on_error_step_id")
+                if on_error_step_id:
+                    transaction.on_commit(
+                        lambda: resume_container_workflow_from_gate.apply_async(
+                            args=[execution_id, on_error_step_id]
+                        )
+                    )
+                else:
+                    exec_ = step.execution
+                    if exec_.status == ExecutionStatus.RUNNING:
+                        exec_.status = ExecutionStatus.FAILED
+                        exec_.completed_at = timezone.now()
+                        exec_.error_message = rejection_reason or "Step approval rejected"
+                        exec_.save()
+                AuditService.create_entry(
+                    user_id=user_id,
+                    action_type=AuditActionType.EXECUTION_REJECTED,
+                    entity_type=AuditEntityType.EXECUTION,
+                    entity_id=execution_id,
+                    details={
+                        "step_id": step.id,
+                        "step_name": step.step_name,
+                        "on_error_step_id": on_error_step_id,
+                        "rejection_reason": rejection_reason or None,
+                        "via_legacy_endpoint": True,
+                    },
+                    correlation_id=correlation_id,
+                )
+                logger.info(
+                    "step_rejected_via_legacy_endpoint",
+                    step_id=step.id,
+                    execution_id=execution_id,
+                    user_id=user_id,
+                    correlation_id=correlation_id,
+                )
+                return Response({"data": ExecutionStepSerializer(step).data})
+            raise  # Re-raise original BadRequestError si aucun step WAITING trouvé
 
         rejection_reason = (request.data or {}).get("rejection_reason", "")
 

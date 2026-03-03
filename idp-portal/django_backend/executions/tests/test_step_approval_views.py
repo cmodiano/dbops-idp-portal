@@ -322,3 +322,150 @@ class TestApproveExecutionBackwardCompat(TestCase):
             format='json',
         )
         self.assertEqual(response.status_code, 400)
+
+
+@pytest.mark.django_db
+class TestRejectExecutionBackwardCompat(TestCase):
+    """Tests backward compat pour RejectExecutionView — Story 58.1."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = UserFactory(username="compat_rejector_58_1", profile="DBOPS")
+        self.client.force_authenticate(user=self.admin)
+        self.integration = IntegrationFactory(type="aap")
+        self.action = ActionFactory(
+            status="published",
+            integration=self.integration,
+            execution_steps=[{
+                "step_id": "request-approval",
+                "name": "request-approval",
+                "step_type": "gate",
+                "gate_type": "approval",
+                "on_success_step_id": "execute-action",
+                "on_error_step_id": "notify-rejected",
+            }]
+        )
+
+    @patch('executions.views.approval_views.resume_container_workflow_from_gate')
+    def test_running_execution_with_waiting_step_reject_with_error_path(self, mock_resume):
+        """AC#1 : RUNNING + step WAITING + on_error_step_id → step FAILED, resume appelée."""
+        execution = ExecutionFactory(
+            action=self.action,
+            user=self.admin,
+            status=ExecutionStatus.RUNNING,
+        )
+        step = _make_approval_step(execution)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                f"/api/v1/executions/{execution.id}/reject/",
+                {"rejection_reason": "Non conforme"},
+                format='json',
+            )
+        self.assertEqual(response.status_code, 200)
+
+        step.refresh_from_db()
+        self.assertEqual(step.status, ExecutionStepStatus.FAILED)
+        self.assertEqual(step.approval_comment, "Non conforme")
+        self.assertIsNotNone(step.completed_at)
+
+        data = response.json()
+        self.assertIn("data", data)
+        self.assertEqual(data["data"]["status"], ExecutionStepStatus.FAILED)
+
+        # Vérifie que la tâche Celery de resume est déclenchée avec le chemin d'erreur
+        mock_resume.apply_async.assert_called_once_with(
+            args=[execution.id, "notify-rejected"]
+        )
+
+    @patch('executions.views.approval_views.resume_container_workflow_from_gate')
+    def test_running_execution_with_waiting_step_reject_no_error_path(self, mock_resume):
+        """AC#1 : RUNNING + step WAITING sans on_error_step_id → step FAILED, execution FAILED."""
+        self.action.execution_steps = [{
+            "step_id": "request-approval",
+            "name": "request-approval",
+            "step_type": "gate",
+            "gate_type": "approval",
+            # pas de on_error_step_id
+        }]
+        self.action.save()
+
+        execution = ExecutionFactory(
+            action=self.action,
+            user=self.admin,
+            status=ExecutionStatus.RUNNING,
+        )
+        step = _make_approval_step(execution)
+
+        response = self.client.post(
+            f"/api/v1/executions/{execution.id}/reject/",
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200)
+
+        step.refresh_from_db()
+        self.assertEqual(step.status, ExecutionStepStatus.FAILED)
+
+        execution.refresh_from_db()
+        self.assertEqual(execution.status, ExecutionStatus.FAILED)
+        self.assertEqual(execution.error_message, "Step approval rejected")
+        mock_resume.apply_async.assert_not_called()
+
+    def test_running_execution_no_waiting_step_returns_400(self):
+        """AC#4 : RUNNING sans step WAITING approval_granted → 400 original (INVALID_STATUS)."""
+        execution = ExecutionFactory(
+            action=self.action,
+            user=self.admin,
+            status=ExecutionStatus.RUNNING,
+        )
+        # Pas de step WAITING avec approval_granted
+
+        response = self.client.post(
+            f"/api/v1/executions/{execution.id}/reject/",
+            format='json',
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data.get("error", {}).get("code"), "INVALID_STATUS")
+
+    def test_legacy_pending_approval_reject_unaffected(self):
+        """AC#3 : PENDING_APPROVAL → comportement existant inchangé (→ REJECTED)."""
+        execution = ExecutionFactory(
+            action=self.action,
+            user=self.admin,
+            status=ExecutionStatus.PENDING_APPROVAL,
+        )
+
+        response = self.client.post(
+            f"/api/v1/executions/{execution.id}/reject/",
+            {"rejection_reason": "Non approuvé"},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200)
+        execution.refresh_from_db()
+        self.assertEqual(execution.status, ExecutionStatus.REJECTED)
+        self.assertEqual(execution.error_message, "Non approuvé")
+        # Le chemin legacy ne doit pas modifier les steps (pas de step WAITING ici)
+        self.assertFalse(
+            execution.executionstep_set.filter(status=ExecutionStepStatus.FAILED).exists()
+        )
+
+    @patch('executions.views.approval_views.resume_container_workflow_from_gate')
+    def test_rejection_reason_captured_in_approval_comment(self, mock_resume):
+        """AC#1 : rejection_reason est capturé dans approval_comment du step."""
+        execution = ExecutionFactory(
+            action=self.action,
+            user=self.admin,
+            status=ExecutionStatus.RUNNING,
+        )
+        step = _make_approval_step(execution)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                f"/api/v1/executions/{execution.id}/reject/",
+                {"rejection_reason": "Audit requis"},
+                format='json',
+            )
+        self.assertEqual(response.status_code, 200)
+
+        step.refresh_from_db()
+        self.assertEqual(step.approval_comment, "Audit requis")
