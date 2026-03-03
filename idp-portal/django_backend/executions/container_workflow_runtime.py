@@ -39,6 +39,8 @@ from core.exceptions import ServiceUnavailableError
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.middleware import get_correlation_id
+from executions.output_extractor import OutputExtractor
+from executions.template_resolver import StepTemplateResolver
 
 logger = structlog.get_logger(__name__)
 
@@ -92,6 +94,9 @@ class ContainerWorkflowRuntime:
 
         # Transition counter for loop detection
         self._transition_count = 0
+
+        # Contexte partagé des outputs de steps (ADR-007 §3a)
+        self._step_outputs: dict[str, dict] = {}
 
         logger.info(
             "container_workflow_runtime_initialized",
@@ -249,8 +254,23 @@ class ContainerWorkflowRuntime:
             )
             return ExecutionStatus.FAILED
 
+        # Step ID pour le contexte partagé (ADR-007 §3)
+        step_id = step.get('step_id')
+
+        # Résoudre les input_mapping depuis _step_outputs (ADR-007 §3b)
+        input_mapping = step.get('input_mapping', {})
+        if input_mapping:
+            resolver = StepTemplateResolver(self._step_outputs)
+            resolved_params = resolver.resolve(input_mapping)
+        else:
+            resolved_params = {}
+
         # Build child execution parameters (AC3: inject workflow_step_parameters)
         child_params = self._get_step_parameters(step)
+
+        # Fusionner les resolved_params dans child_params (AC5)
+        if resolved_params:
+            child_params = {**child_params, **resolved_params}
 
         # Create child execution
         exec_req = ExecutionRequest(
@@ -337,6 +357,22 @@ class ContainerWorkflowRuntime:
             'parameters_injected': bool(child_params),
         })
         parent_step.save()
+
+        # Extraire les outputs via output_mapping (ADR-007 §3c)
+        if step_id is not None:
+            output_mapping = step.get('output_mapping', {})
+            extractor = OutputExtractor()
+            raw_output = parent_step.get_output() or {}
+            extracted = extractor.extract(raw_output, output_mapping)
+            self._step_outputs[step_id] = extracted
+            if extracted:
+                logger.info(
+                    "container_workflow_step_output_extracted",
+                    execution_id=self.execution.id,
+                    step_id=step_id,
+                    extracted_keys=list(extracted.keys()),
+                    correlation_id=self.correlation_id,
+                )
 
         return cast(ExecutionStatus, child_execution.status)
 
@@ -564,6 +600,7 @@ class ContainerWorkflowRuntime:
             self.child_executions = []
             self._step_order_counter = 0
             self._transition_count = 0
+            self._step_outputs = {}
 
             self._execute_workflow_steps()
 

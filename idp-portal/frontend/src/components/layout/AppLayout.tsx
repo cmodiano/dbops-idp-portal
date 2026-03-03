@@ -50,6 +50,8 @@ export function AppLayout() {
           padding: '32px 40px',
           background: 'transparent',
           minHeight: 'calc(100vh - 64px)',
+          flex: 'none',
+          overflow: 'visible',
           transition: 'background 0.2s ease',
         }}
       >
