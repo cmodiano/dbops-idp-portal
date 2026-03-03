@@ -39,12 +39,10 @@ function AuditGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-// Story 9.10 AC10: Analytics (formerly Dashboard) restricted to DBOPS
+// Story 56.3: Analytics access based on navigation_tabs (hasTab) instead of profile name
 function AnalyticsGuard({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
-  // DBOPS only for advanced analytics
-  const isDbops = user?.profile?.toLowerCase() === 'dbops';
-  if (!isDbops) {
+  const { hasTab } = useAuth();
+  if (!hasTab('dashboard')) {
     return <Navigate to="/executions" replace />;
   }
   return <>{children}</>;
@@ -113,7 +111,7 @@ function ThemedApp() {
                   <Route path="/executions/:id" element={<ExecutionsPage />} />
                   {/* Story 13.6: Calendar for DBA/DBOPS to view scheduled executions */}
                   <Route path="/calendar" element={<CalendarGuard><CalendarPage /></CalendarGuard>} />
-                  {/* Story 9.10: Dashboard renamed to Analytics, RBAC restricted to DBOPS */}
+                  {/* Story 9.10: Dashboard renamed to Analytics — Story 56.3: access restricted to users with 'dashboard' in navigation_tabs (hasTab) */}
                   <Route path="/analytics" element={<AnalyticsGuard><DashboardPage /></AnalyticsGuard>} />
                   {/* Backward compatibility: redirect /dashboard to /analytics */}
                   <Route path="/dashboard" element={<Navigate to="/analytics" replace />} />

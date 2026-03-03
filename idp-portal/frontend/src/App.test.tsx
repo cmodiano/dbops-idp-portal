@@ -19,7 +19,9 @@ function mockAuthSession(profile: string, navigationTabs: string[]) {
           navigation_tabs: navigationTabs,
         },
       }),
-    });
+    })
+    // Catch-all: any unexpected fetch call returns a safe 204 to avoid silent undefined returns
+    .mockResolvedValue({ ok: true, status: 204, json: async () => ({}) });
 }
 
 describe('App routing', () => {
@@ -76,5 +78,50 @@ describe('App routing', () => {
     });
     // Should have been redirected away from /admin — no Admin tab visible
     expect(screen.queryByText('Admin')).not.toBeInTheDocument();
+  });
+
+  // Story 56.3: AnalyticsGuard uses hasTab('dashboard') instead of profile === 'dbops'
+  it('AnalyticsGuard allows access to /analytics when user has dashboard in navigation_tabs (AC1)', async () => {
+    // User with 'dashboard' in navigation_tabs can access /analytics
+    mockAuthSession('dbops', ['catalog', 'executions', 'dashboard', 'admin']);
+
+    window.history.pushState({}, '', '/analytics');
+    render(<App />);
+
+    await waitFor(() => {
+      // Guard must NOT redirect: URL stays at /analytics (not /executions or /catalog)
+      expect(window.location.pathname).toBe('/analytics');
+      // Confirm no redirection to catalog or executions occurred
+      expect(screen.queryByText('Catalogue')).not.toBeInTheDocument();
+    });
+  });
+
+  // Story 56.3 AC3: access is based on navigation_tabs, NOT on profile name
+  it('AnalyticsGuard allows access to /analytics for non-DBOPS profile if dashboard is in navigation_tabs (AC3)', async () => {
+    // A non-DBOPS profile that has 'dashboard' in navigation_tabs must be granted access
+    // This validates that profile name is irrelevant — only hasTab('dashboard') matters
+    mockAuthSession('dba_applicatif', ['catalog', 'executions', 'dashboard']);
+
+    window.history.pushState({}, '', '/analytics');
+    render(<App />);
+
+    await waitFor(() => {
+      // Guard must NOT redirect: URL stays at /analytics
+      expect(window.location.pathname).toBe('/analytics');
+      expect(screen.queryByText('Catalogue')).not.toBeInTheDocument();
+    });
+  });
+
+  it('AnalyticsGuard redirects to /executions when user lacks dashboard in navigation_tabs (AC2)', async () => {
+    // User without 'dashboard' in navigation_tabs is redirected from /analytics
+    mockAuthSession('dba_applicatif', ['catalog', 'executions', 'calendar']);
+
+    window.history.pushState({}, '', '/analytics');
+    render(<App />);
+
+    await waitFor(() => {
+      // Should be redirected to /executions page
+      expect(screen.getByText(/exécutions|executions/i)).toBeInTheDocument();
+    });
   });
 });
