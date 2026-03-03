@@ -183,17 +183,21 @@ class ContainerWorkflowRuntime:
 
     def _execute_step(self, step: Dict[str, Any]) -> ExecutionStatus:
         """
-        Execute a single container workflow step by creating a child execution.
+        Execute a single container workflow step.
+
+        Orchestrates: input_mapping resolution → condition evaluation →
+        step_type dispatch → output_mapping extraction (ADR-007 §3d).
 
         Args:
             step: Step dict from workflow definition
 
         Returns:
-            ExecutionStatus of the child execution
+            ExecutionStatus of the step (COMPLETED for SKIPPED steps)
         """
         step_order = step.get('order', 0)
         step_name = step.get('name') or f"Step {step_order}"
-        referenced_action_id = step.get('referenced_action_id')
+        step_id = step.get('step_id')
+        step_type = step.get('step_type', 'platform')  # ADR-007 §3d, backward compat
 
         self._step_order_counter += 1
         self._transition_count += 1
@@ -208,14 +212,73 @@ class ContainerWorkflowRuntime:
             )
             return ExecutionStatus.FAILED
 
+        # Résoudre les input_mapping depuis _step_outputs (ADR-007 §3b)
+        input_mapping = step.get('input_mapping', {})
+        resolved_params: dict = {}
+        if input_mapping and isinstance(input_mapping, dict):
+            resolver = StepTemplateResolver(self._step_outputs)
+            resolved_params = resolver.resolve(input_mapping)
+            if not isinstance(resolved_params, dict):
+                logger.warning(
+                    "container_workflow_input_mapping_resolve_non_dict",
+                    step_id=step_id,
+                    resolved_type=type(resolved_params).__name__,
+                    correlation_id=self.correlation_id,
+                )
+                resolved_params = {}
+        elif input_mapping and not isinstance(input_mapping, dict):
+            logger.warning(
+                "container_workflow_input_mapping_not_dict",
+                step_id=step_id,
+                input_type=type(input_mapping).__name__,
+                correlation_id=self.correlation_id,
+            )
+
         logger.info(
             "container_workflow_step_starting",
             execution_id=self.execution.id,
             step_order=step_order,
             step_name=step_name,
-            referenced_action_id=referenced_action_id,
+            step_type=step_type,
             correlation_id=self.correlation_id,
         )
+
+        # Évaluer la condition (ADR-007 §6)
+        condition_evaluator = StepConditionEvaluator()
+        if not condition_evaluator.should_execute(step, self.execution):
+            return self._create_skipped_step(step_name, step_id, step_type)
+
+        # Dispatcher selon step_type (ADR-007 §3d)
+        match step_type:
+            case 'platform':
+                return self._execute_platform_step(step, resolved_params, step_name, step_id)
+            case 'service_call':
+                handler = ServiceCallHandler()
+            case 'http_request':
+                handler = HttpRequestHandler()
+            case 'evaluation':
+                handler = EvaluationHandler()
+            case 'gate':
+                handler = GateHandler()
+            case _:
+                raise ValueError(f"Unknown step_type: {step_type!r}")
+
+        return self._execute_handler_step(step, resolved_params, step_name, step_id, step_type, handler)
+
+    def _execute_platform_step(
+        self,
+        step: Dict[str, Any],
+        resolved_params: dict,
+        step_name: str,
+        step_id: str | None,
+    ) -> ExecutionStatus:
+        """
+        Logique platform extraite de _execute_step() (ADR-007 §3d).
+
+        Crée une child execution, exécute, met à jour _step_outputs.
+        """
+        step_order = step.get('order', 0)
+        referenced_action_id = step.get('referenced_action_id')
 
         # Create a tracking step on the parent execution
         parent_step = ExecutionStep.objects.create(
@@ -258,31 +321,6 @@ class ContainerWorkflowRuntime:
                 correlation_id=self.correlation_id,
             )
             return ExecutionStatus.FAILED
-
-        # Step ID pour le contexte partagé (ADR-007 §3)
-        step_id = step.get('step_id')
-
-        # Résoudre les input_mapping depuis _step_outputs (ADR-007 §3b)
-        input_mapping = step.get('input_mapping', {})
-        resolved_params: dict = {}
-        if input_mapping and isinstance(input_mapping, dict):
-            resolver = StepTemplateResolver(self._step_outputs)
-            resolved_params = resolver.resolve(input_mapping)
-            if not isinstance(resolved_params, dict):
-                logger.warning(
-                    "container_workflow_input_mapping_resolve_non_dict",
-                    step_id=step_id,
-                    resolved_type=type(resolved_params).__name__,
-                    correlation_id=self.correlation_id,
-                )
-                resolved_params = {}
-        elif input_mapping and not isinstance(input_mapping, dict):
-            logger.warning(
-                "container_workflow_input_mapping_not_dict",
-                step_id=step_id,
-                input_type=type(input_mapping).__name__,
-                correlation_id=self.correlation_id,
-            )
 
         # Build child execution parameters (AC3: inject workflow_step_parameters)
         child_params = self._get_step_parameters(step)
@@ -394,6 +432,112 @@ class ContainerWorkflowRuntime:
                 )
 
         return cast(ExecutionStatus, child_execution.status)
+
+    def _create_skipped_step(
+        self,
+        step_name: str,
+        step_id: str | None,
+        step_type: str,
+    ) -> ExecutionStatus:
+        """
+        Crée un ExecutionStep SKIPPED et met à jour _step_outputs (ADR-007 §6).
+
+        Returns:
+            ExecutionStatus.COMPLETED — le runtime continue au step suivant.
+        """
+        step_type_map = {
+            'platform': ExecutionStepType.PLATFORM,
+            'service_call': ExecutionStepType.SERVICE_CALL,
+            'http_request': ExecutionStepType.HTTP_REQUEST,
+            'evaluation': ExecutionStepType.EVALUATION,
+            'gate': ExecutionStepType.GATE,
+        }
+        db_step_type = step_type_map.get(step_type, ExecutionStepType.PLATFORM)
+
+        now = timezone.now()
+        ExecutionStep.objects.create(
+            execution=self.execution,
+            step_order=self._step_order_counter,
+            step_name=step_name,
+            step_type=db_step_type,
+            status=ExecutionStepStatus.SKIPPED,
+            started_at=now,
+            completed_at=now,
+        )
+
+        # _step_outputs[step_id] = {} pour que les steps suivants obtiennent null
+        if step_id is not None:
+            self._step_outputs[step_id] = {}
+
+        logger.info(
+            "container_workflow_step_skipped",
+            execution_id=self.execution.id,
+            step_name=step_name,
+            step_type=step_type,
+            correlation_id=self.correlation_id,
+        )
+        # Traité comme SUCCESS par le runtime (continue au step suivant)
+        return ExecutionStatus.COMPLETED
+
+    def _execute_handler_step(
+        self,
+        step: Dict[str, Any],
+        resolved_params: dict,
+        step_name: str,
+        step_id: str | None,
+        step_type: str,
+        handler,
+    ) -> ExecutionStatus:
+        """
+        Wrapper générique pour les handlers non-platform (ADR-007 §3d).
+
+        Story 57.3: les handlers lèvent NotImplementedError.
+        Stories 57.4–57.7: les handlers retournent {'status': ..., 'raw_output': ...}.
+        """
+        step_type_map = {
+            'service_call': ExecutionStepType.SERVICE_CALL,
+            'http_request': ExecutionStepType.HTTP_REQUEST,
+            'evaluation': ExecutionStepType.EVALUATION,
+            'gate': ExecutionStepType.GATE,
+        }
+        db_step_type = step_type_map.get(step_type, ExecutionStepType.PLATFORM)
+
+        parent_step = ExecutionStep.objects.create(
+            execution=self.execution,
+            step_order=self._step_order_counter,
+            step_name=step_name,
+            step_type=db_step_type,
+            status=ExecutionStepStatus.RUNNING,
+            started_at=timezone.now(),
+        )
+
+        try:
+            result = handler.execute(
+                step_config=step,
+                resolved_params=resolved_params,
+                execution=self.execution,
+                step=step,
+                correlation_id=self.correlation_id,
+            )
+        except Exception:
+            parent_step.status = ExecutionStepStatus.FAILED
+            parent_step.completed_at = timezone.now()
+            parent_step.save()
+            raise
+
+        # Extraction output_mapping (même pattern que platform)
+        if step_id is not None:
+            output_mapping = step.get('output_mapping', {})
+            extractor = OutputExtractor()
+            raw_output = result if isinstance(result, dict) else {}
+            extracted = extractor.extract(raw_output, output_mapping)
+            self._step_outputs[step_id] = extracted
+
+        parent_step.status = ExecutionStepStatus.COMPLETED
+        parent_step.completed_at = timezone.now()
+        parent_step.save()
+
+        return ExecutionStatus.COMPLETED
 
     def run(self) -> None:
         """

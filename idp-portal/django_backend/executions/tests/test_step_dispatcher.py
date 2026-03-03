@@ -329,18 +329,18 @@ class TestStepDispatcher:
 
     # --- _create_skipped_step : tous les types mappés ---
 
+    @pytest.mark.parametrize("step_type_str,expected_db_type", [
+        ('platform', ExecutionStepType.PLATFORM),
+        ('service_call', ExecutionStepType.SERVICE_CALL),
+        ('http_request', ExecutionStepType.HTTP_REQUEST),
+        ('evaluation', ExecutionStepType.EVALUATION),
+        ('gate', ExecutionStepType.GATE),
+    ])
     @patch('executions.container_workflow_runtime.AuditService')
-    def test_create_skipped_step_all_types(self, mock_audit):
+    def test_create_skipped_step_all_types(self, mock_audit, step_type_str, expected_db_type):
         """_create_skipped_step mappe correctement tous les step_types vers ExecutionStepType."""
-        type_map = {
-            'platform': ExecutionStepType.PLATFORM,
-            'service_call': ExecutionStepType.SERVICE_CALL,
-            'http_request': ExecutionStepType.HTTP_REQUEST,
-            'evaluation': ExecutionStepType.EVALUATION,
-            'gate': ExecutionStepType.GATE,
-        }
         workflow_action = ActionFactory(
-            name="Skip Types Workflow",
+            name=f"Skip Types Workflow {step_type_str}",
             status=ActionStatus.PUBLISHED,
             item_type=ActionItemType.WORKFLOW,
             execution_steps=[],
@@ -352,19 +352,17 @@ class TestStepDispatcher:
             environment=TEST_ENVIRONMENT_LAB,
             status=ExecutionStatus.SUBMITTED,
         )
-
-        for step_type_str, expected_db_type in type_map.items():
-            runtime = ContainerWorkflowRuntime(execution)
-            result = runtime._create_skipped_step(
-                step_name=f"Step {step_type_str}",
-                step_id=f"id-{step_type_str}",
-                step_type=step_type_str,
-            )
-            assert result == ExecutionStatus.COMPLETED
-            skipped = ExecutionStep.objects.filter(
-                execution=execution,
-                step_name=f"Step {step_type_str}",
-                status=ExecutionStepStatus.SKIPPED,
-            ).first()
-            assert skipped is not None
-            assert skipped.step_type == expected_db_type
+        runtime = ContainerWorkflowRuntime(execution)
+        result = runtime._create_skipped_step(
+            step_name=f"Step {step_type_str}",
+            step_id=f"id-{step_type_str}",
+            step_type=step_type_str,
+        )
+        assert result == ExecutionStatus.COMPLETED
+        skipped = ExecutionStep.objects.filter(
+            execution=execution,
+            step_name=f"Step {step_type_str}",
+            status=ExecutionStepStatus.SKIPPED,
+        ).first()
+        assert skipped is not None
+        assert skipped.step_type == expected_db_type
