@@ -1,10 +1,14 @@
 """
-Unit tests for core/permissions.py — DBOPSProfilePermission + IsDBAOrDBOPS.
+Unit tests for core/permissions.py — AdminProfilePermission + IsAdminUser.
+
+Backward-compat aliases: DBOPSProfilePermission = AdminProfilePermission, IsDBAOrDBOPS = IsAdminUser.
 
 Story 22.1: CRIT-1 fix — verify Profile.objects.find_by_ad_groups() is used
 instead of the non-existent service.get_profiles_by_ad_groups().
 
-Story 26.8: IsDBAOrDBOPS permission — replaces fragile _is_dba_or_dbops() pattern.
+Story 26.8: IsAdminUser permission — replaces fragile _is_dba_or_dbops() pattern.
+Story 56.4: Renaming DBOPSProfilePermission → AdminProfilePermission, IsDBAOrDBOPS → IsAdminUser.
+           M2M and ad_groups paths now check Profile.is_admin_bool instead of profile name.
 """
 
 import pytest
@@ -57,13 +61,14 @@ class TestDBOPSProfilePermissionAdGroups:
     """Tests for AD group-based profile resolution (Story 22.1 CRIT-1)."""
 
     def test_dbops_permission_with_ad_groups(self):
-        """AC#4: User with DBOPS AD group gets access via find_by_ad_groups."""
+        """AC#4: User with admin AD group gets access via find_by_ad_groups (is_admin_bool=True)."""
         user = _make_user(ad_groups=["GRP-IDP-DBOPS"])
         request = _make_request(user)
         permission = DBOPSProfilePermission()
 
         mock_profile = MagicMock()
         mock_profile.name = "DBOPS"
+        mock_profile.is_admin_bool = True  # Story 56.4: access granted via is_admin_bool, not name
 
         with patch(FIND_BY_AD_GROUPS, return_value=[mock_profile]) as mock_find:
             result = permission.has_permission(request, MagicMock())
@@ -79,6 +84,7 @@ class TestDBOPSProfilePermissionAdGroups:
 
         mock_profile = MagicMock()
         mock_profile.name = "VIEWER"
+        mock_profile.is_admin_bool = False  # Story 56.4: now checks is_admin_bool, not name
 
         with patch(FIND_BY_AD_GROUPS, return_value=[mock_profile]):
             result = permission.has_permission(request, MagicMock())
@@ -104,6 +110,7 @@ class TestDBOPSProfilePermissionAdGroups:
 
         mock_profile = MagicMock()
         mock_profile.name = "DBOPS"
+        mock_profile.is_admin_bool = True  # Story 56.4: explicit is_admin_bool check
 
         with patch(FIND_BY_AD_GROUPS, return_value=[mock_profile]) as mock_find:
             permission.has_permission(request, MagicMock())
@@ -132,30 +139,33 @@ class TestDBOPSProfilePermissionAdGroups:
             with pytest.raises(AttributeError, match="bug in code"):
                 permission.has_permission(request, MagicMock())
 
-    def test_dbops_permission_multiple_profiles_one_dbops(self):
-        """User with multiple profiles, one being DBOPS, gets access."""
+    def test_dbops_permission_multiple_profiles_one_admin(self):
+        """User with multiple profiles, one with is_admin=True, gets access."""
         user = _make_user(ad_groups=["GRP-IDP-VIEWER", "GRP-IDP-DBOPS"])
         request = _make_request(user)
         permission = DBOPSProfilePermission()
 
         viewer = MagicMock()
         viewer.name = "VIEWER"
+        viewer.is_admin_bool = False  # Story 56.4: non-admin profile must not grant access
         dbops = MagicMock()
         dbops.name = "DBOPS"
+        dbops.is_admin_bool = True  # Story 56.4: admin flag grants access
 
         with patch(FIND_BY_AD_GROUPS, return_value=[viewer, dbops]):
             result = permission.has_permission(request, MagicMock())
 
         assert result is True
 
-    def test_dbops_permission_case_insensitive_name(self):
-        """DBOPS name matching is case-insensitive."""
-        user = _make_user(ad_groups=["GRP-IDP-DBOPS"])
+    def test_dbops_permission_ad_groups_is_admin_bool_true_grants_access(self):
+        """Story 56.4: AD groups path grants access based on is_admin_bool, not profile name."""
+        user = _make_user(ad_groups=["GRP-IDP-CUSTOM"])
         request = _make_request(user)
         permission = DBOPSProfilePermission()
 
         mock_profile = MagicMock()
-        mock_profile.name = "Dbops"  # Mixed case
+        mock_profile.name = "CUSTOM_ADMIN"  # Any name — only is_admin_bool matters
+        mock_profile.is_admin_bool = True
 
         with patch(FIND_BY_AD_GROUPS, return_value=[mock_profile]):
             result = permission.has_permission(request, MagicMock())
@@ -365,9 +375,10 @@ class TestIsDBAOrDBOPSHasPermission:
         assert IsDBAOrDBOPS().has_permission(request2, None) is True
 
     def test_has_permission_via_profiles_m2m(self):
-        """User gets access via profiles M2M relation."""
+        """User gets access via profiles M2M relation (is_admin_bool=True)."""
         profile_obj = MagicMock()
         profile_obj.name = "dba"
+        profile_obj.is_admin_bool = True  # Story 56.4: M2M path checks is_admin_bool, not name
         profiles_qs = MagicMock()
         profiles_qs.all.return_value = [profile_obj]
 
@@ -376,12 +387,13 @@ class TestIsDBAOrDBOPSHasPermission:
         assert IsDBAOrDBOPS().has_permission(request, None) is True
 
     def test_has_permission_via_ad_groups(self):
-        """User gets access via AD groups → Profile resolution."""
+        """User gets access via AD groups → Profile resolution (is_admin_bool=True)."""
         user = _make_user(profile=None, ad_groups=['AD_DBOPS_GROUP'])
         request = _make_request(user)
 
         mock_profile = MagicMock()
         mock_profile.name = "dbops"
+        mock_profile.is_admin_bool = True  # Story 56.4: ad_groups path checks is_admin_bool, not name
         with patch(FIND_BY_AD_GROUPS, return_value=[mock_profile]):
             assert IsDBAOrDBOPS().has_permission(request, None) is True
 
@@ -514,10 +526,11 @@ class TestIsAdminUserMissingBranches:
 class TestDBOPSProfilePermissionMissingBranches:
     """Cover branches in DBOPSProfilePermission not yet exercised."""
 
-    def test_profile_object_with_name_attribute(self):
-        """Branch: profile is an object with .name == 'dbops' (lines 160-161)."""
+    def test_profile_object_with_is_admin_bool(self):
+        """Branch: profile is an ORM object with is_admin_bool=True (Story 56.4 path 1)."""
         profile_obj = MagicMock()
         profile_obj.name = "dbops"
+        profile_obj.is_admin_bool = True  # Story 56.4: ORM object path checks is_admin_bool
         user = _make_user(profile=profile_obj)
         request = _make_request(user)
         permission = DBOPSProfilePermission()
@@ -526,10 +539,24 @@ class TestDBOPSProfilePermissionMissingBranches:
 
         assert result is True
 
-    def test_profiles_m2m_dbops(self):
-        """Branch: user.profiles M2M has a DBOPS profile (lines 165-168)."""
+    def test_profile_object_with_is_admin_bool_false_denied(self):
+        """Branch: profile ORM object with is_admin_bool=False is denied."""
+        profile_obj = MagicMock()
+        profile_obj.name = "dbops"
+        profile_obj.is_admin_bool = False  # Even if name is 'dbops', is_admin_bool=False denies
+        user = _make_user(profile=profile_obj)
+        request = _make_request(user)
+        permission = DBOPSProfilePermission()
+
+        result = permission.has_permission(request, MagicMock())
+
+        assert result is False
+
+    def test_profiles_m2m_admin(self):
+        """Branch: user.profiles M2M has a profile with is_admin_bool=True (Story 56.4 path 2)."""
         dbops_profile = MagicMock()
         dbops_profile.name = "dbops"
+        dbops_profile.is_admin_bool = True  # Story 56.4: M2M path checks is_admin_bool, not name
         profiles_qs = MagicMock()
         profiles_qs.all.return_value = [dbops_profile]
 
@@ -539,6 +566,88 @@ class TestDBOPSProfilePermissionMissingBranches:
 
         result = permission.has_permission(request, MagicMock())
 
+        assert result is True
+
+
+# ============================================================================
+# _get_admin_profile_names — Story 56.4 (AC4)
+# ============================================================================
+
+@pytest.mark.unit
+class TestGetAdminProfileNames:
+    """Tests for _get_admin_profile_names() helper (Story 56.4 AC4)."""
+
+    def test_returns_settings_value_when_defined(self):
+        """AC4: Returns ADMIN_PROFILE_NAMES from settings when defined."""
+        from core.permissions import _get_admin_profile_names
+        custom = {'automation', 'operator'}
+        with override_settings(ADMIN_PROFILE_NAMES=custom):
+            result = _get_admin_profile_names()
+        assert result == {'automation', 'operator'}
+
+    def test_returns_default_fallback_when_not_defined(self):
+        """AC4: Returns default set when ADMIN_PROFILE_NAMES is not defined in settings."""
+        from core.permissions import _get_admin_profile_names
+        from django.conf import settings as django_settings
+        # Temporarily remove the setting to test fallback
+        original = django_settings.ADMIN_PROFILE_NAMES
+        del django_settings.ADMIN_PROFILE_NAMES
+        try:
+            result = _get_admin_profile_names()
+        finally:
+            django_settings.ADMIN_PROFILE_NAMES = original
+        assert result == {'dbops', 'dba', 'dba_applicatif', 'dba_infrastructure'}
+
+    def test_default_set_contains_all_legacy_profiles(self):
+        """AC4: Default set includes all legacy admin profiles for backward compat."""
+        from core.permissions import _get_admin_profile_names
+        result = _get_admin_profile_names()
+        assert 'dbops' in result
+        assert 'dba' in result
+        assert 'dba_applicatif' in result
+        assert 'dba_infrastructure' in result
+
+
+# ============================================================================
+# ADMIN_PROFILE_NAMES custom — Story 56.4 (AC4 end-to-end)
+# ============================================================================
+
+@pytest.mark.unit
+class TestAdminProfileNamesCustom:
+    """AC4: SAML string path uses ADMIN_PROFILE_NAMES (configurable)."""
+
+    def test_is_admin_user_accepts_custom_profile_name(self):
+        """AC4: is_admin_user() accepts new admin profile name from custom ADMIN_PROFILE_NAMES."""
+        from core.permissions import is_admin_user
+        user = _make_user(profile="automation")
+        with override_settings(ADMIN_PROFILE_NAMES={'automation', 'operator'}):
+            result = is_admin_user(user)
+        assert result is True
+
+    def test_is_admin_user_rejects_old_profile_when_not_in_custom_set(self):
+        """AC4: is_admin_user() rejects 'dbops' when ADMIN_PROFILE_NAMES is overridden."""
+        from core.permissions import is_admin_user
+        user = _make_user(profile="dbops")
+        with override_settings(ADMIN_PROFILE_NAMES={'automation', 'operator'}):
+            result = is_admin_user(user)
+        assert result is False
+
+    def test_admin_profile_permission_accepts_custom_profile_name(self):
+        """AC4: AdminProfilePermission accepts new admin profile via custom ADMIN_PROFILE_NAMES."""
+        user = _make_user(profile="operator")
+        request = _make_request(user)
+        permission = DBOPSProfilePermission()
+        with override_settings(ADMIN_PROFILE_NAMES={'automation', 'operator'}):
+            result = permission.has_permission(request, MagicMock())
+        assert result is True
+
+    def test_admin_profile_permission_case_insensitive_saml_string(self):
+        """AC4 + AC1: SAML string profile matching is case-insensitive."""
+        user = _make_user(profile="AUTOMATION")
+        request = _make_request(user)
+        permission = DBOPSProfilePermission()
+        with override_settings(ADMIN_PROFILE_NAMES={'automation', 'operator'}):
+            result = permission.has_permission(request, MagicMock())
         assert result is True
 
 

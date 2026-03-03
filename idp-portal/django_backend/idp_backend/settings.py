@@ -565,11 +565,18 @@ JWT_REFRESH_TOKEN_EXPIRE_HOURS = int(os.getenv('JWT_REFRESH_TOKEN_EXPIRE_HOURS',
 AUTH_DEV_BYPASS = os.getenv('AUTH_DEV_BYPASS', 'False').lower() == 'true'
 
 # Story 22.2 CRIT-2: Superuser fallback control for RBAC bypass
-# Controls whether Django superusers can bypass DBOPS profile requirement.
-# When False (default): superusers WITHOUT a DBOPS profile are DENIED access (fail-secure)
-# When True (dev only): superusers WITHOUT a DBOPS profile are granted access with WARNING log
+# Story 56.4: Updated — controls bypass of admin profile requirement (is_admin=1), not just DBOPS.
+# Controls whether Django superusers can bypass the admin profile requirement.
+# When False (default): superusers WITHOUT an admin profile are DENIED access (fail-secure)
+# When True (dev only): superusers WITHOUT an admin profile are granted access with WARNING log
 # SECURITY: Must be False in production to enforce principle of least privilege
 ALLOW_SUPERUSER_FALLBACK = os.getenv('ALLOW_SUPERUSER_FALLBACK', 'false').lower() == 'true'
+
+# Story 56.4 — Décorrélation DBOPS/DBA : noms de profils admin configurables
+# Ces profils sont considérés "admin" pour la résolution SAML string.
+# Modifier pour ajouter de nouveaux profils admin sans changer le code.
+# Les chemins M2M et ad_groups utilisent Profile.is_admin_bool (pas de comparaison de nom).
+ADMIN_PROFILE_NAMES = {'dbops', 'dba', 'dba_applicatif', 'dba_infrastructure'}
 
 # Application environment
 APP_ENV = os.getenv('APP_ENV', 'development')

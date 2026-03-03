@@ -34,6 +34,10 @@ GITHUB_WEBHOOK_SECRET = 'test-github-webhook-secret'
 # Enable per-test with @override_settings(ALLOW_SUPERUSER_FALLBACK=True) for dev-mode tests
 ALLOW_SUPERUSER_FALLBACK = False
 
+# Story 56.4: Admin profile names for SAML string resolution (configurable, explicit in tests)
+# Override per-test with @override_settings(ADMIN_PROFILE_NAMES=...) to test custom profiles
+ADMIN_PROFILE_NAMES = {'dbops', 'dba', 'dba_applicatif', 'dba_infrastructure'}
+
 # Story 19.0: Disable simulation by default in tests (enable per-test with @override_settings)
 SIMULATE_EXECUTION_DEV = False
 SIMULATE_EXECUTION_FAILURE_RATE = 0.0
