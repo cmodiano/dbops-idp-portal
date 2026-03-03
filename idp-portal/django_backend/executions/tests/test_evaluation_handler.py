@@ -224,3 +224,96 @@ class TestEvaluationHandler:
                 step=step_config,
                 correlation_id=None,
             )
+
+    # ── Structlog tests ──────────────────────────────────────────────────────
+
+    @patch('executions.step_handlers.evaluation_handler.logger')
+    @patch('executions.step_handlers.evaluation_handler.RuleEngine')
+    @patch('executions.step_handlers.evaluation_handler.BusinessRulePolicy')
+    def test_logs_start_and_decision_events(self, mock_brp_class, mock_engine_class, mock_logger):
+        """Task 2 : evaluation_handler_start et evaluation_handler_decision loggués lors d'un succès."""
+        mock_brp_class.objects.get.return_value = MagicMock()
+        mock_engine_class.return_value.evaluate.return_value = PolicyDecision(
+            require_approval=False, decision_reason="ok"
+        )
+
+        execution = self._make_execution(exec_id=42)
+        step_config = self._make_step_config(policy_id=7, artifact_type='terraform_cloud')
+        self.handler.execute(
+            step_config=step_config,
+            resolved_params={'artifact': {'plan': 'data'}},
+            execution=execution,
+            step=step_config,
+            correlation_id='corr-log',
+        )
+
+        mock_logger.info.assert_any_call(
+            "evaluation_handler_start",
+            policy_id=7,
+            artifact_type='terraform_cloud',
+            execution_id=42,
+            correlation_id='corr-log',
+        )
+        mock_logger.info.assert_any_call(
+            "evaluation_handler_decision",
+            decision='auto_approved',
+            decision_reason='ok',
+            num_matched_criteria=0,
+            execution_id=42,
+            correlation_id='corr-log',
+        )
+
+    @patch('executions.step_handlers.evaluation_handler.logger')
+    @patch('executions.step_handlers.evaluation_handler.RuleEngine')
+    @patch('executions.step_handlers.evaluation_handler.BusinessRulePolicy')
+    def test_logs_error_event_on_rule_engine_failure(self, mock_brp_class, mock_engine_class, mock_logger):
+        """Task 2 : evaluation_handler_error loggué quand RuleEngine lève une exception."""
+        mock_brp_class.objects.get.return_value = MagicMock()
+        mock_engine_class.return_value.evaluate.side_effect = RuntimeError("boom")
+
+        execution = self._make_execution(exec_id=5)
+        step_config = self._make_step_config(policy_id=3, artifact_type='aap')
+        with pytest.raises(RuntimeError):
+            self.handler.execute(
+                step_config=step_config,
+                resolved_params={},
+                execution=execution,
+                step=step_config,
+                correlation_id='corr-err',
+            )
+
+        mock_logger.error.assert_called_once_with(
+            "evaluation_handler_error",
+            policy_id=3,
+            artifact_type='aap',
+            execution_id=5,
+            correlation_id='corr-err',
+            exc_info=True,
+        )
+
+    @patch('executions.step_handlers.evaluation_handler.logger')
+    @patch('executions.step_handlers.evaluation_handler.BusinessRulePolicy')
+    def test_logs_error_event_on_db_failure(self, mock_brp_class, mock_logger):
+        """evaluation_handler_error loggué quand BusinessRulePolicy.objects.get() échoue."""
+        mock_brp_class.DoesNotExist = type('DoesNotExist', (Exception,), {})
+        mock_brp_class.objects.get.side_effect = mock_brp_class.DoesNotExist("Not found")
+
+        execution = self._make_execution(exec_id=9)
+        step_config = self._make_step_config(policy_id=99, artifact_type='terraform_cloud')
+        with pytest.raises(mock_brp_class.DoesNotExist):
+            self.handler.execute(
+                step_config=step_config,
+                resolved_params={},
+                execution=execution,
+                step=step_config,
+                correlation_id='corr-db',
+            )
+
+        mock_logger.error.assert_called_once_with(
+            "evaluation_handler_error",
+            policy_id=99,
+            artifact_type='terraform_cloud',
+            execution_id=9,
+            correlation_id='corr-db',
+            exc_info=True,
+        )
