@@ -8,7 +8,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Button, Input, Space } from 'antd';
+import { Alert, Button, Input, Space } from 'antd';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 
 export interface KeyValueEditorProps {
@@ -18,6 +18,12 @@ export interface KeyValueEditorProps {
   keyPlaceholder?: string;
   valuePlaceholder?: string;
   'data-testid'?: string;
+  /** Story 57.20: Contenu d'aide affiché à côté du label (ex. MappingHelpPopover). */
+  helpContent?: React.ReactNode;
+  /** Story 57.20: Label affiché au-dessus de l'éditeur. */
+  label?: string;
+  /** Story 57.20: Avertissements à afficher sous l'éditeur. */
+  warnings?: string[];
 }
 
 interface KvPair {
@@ -44,6 +50,9 @@ export const KeyValueEditor: React.FC<KeyValueEditorProps> = ({
   keyPlaceholder = 'Clé',
   valuePlaceholder = 'Valeur',
   'data-testid': testId,
+  helpContent,
+  label,
+  warnings,
 }) => {
   // Internal state keeps empty-key rows visible during typing
   const [localPairs, setLocalPairs] = useState<KvPair[]>(() => recordToPairs(value));
@@ -103,6 +112,15 @@ export const KeyValueEditor: React.FC<KeyValueEditorProps> = ({
 
   return (
     <div data-testid={testId}>
+      {label && (
+        <Space style={{ marginBottom: 4 }} size={4}>
+          <span style={{ fontSize: 12, color: 'rgba(0, 0, 0, 0.45)' }}>{label}</span>
+          {helpContent}
+        </Space>
+      )}
+      {!label && helpContent && (
+        <div style={{ marginBottom: 4 }}>{helpContent}</div>
+      )}
       {localPairs.map((pair, index) => (
         <Space key={index} style={{ display: 'flex', marginBottom: 4 }} align="start">
           <Input
@@ -145,6 +163,15 @@ export const KeyValueEditor: React.FC<KeyValueEditorProps> = ({
         >
           Ajouter une entrée
         </Button>
+      )}
+      {warnings && warnings.length > 0 && (
+        <Alert
+          type="warning"
+          showIcon
+          title={warnings.join(' ; ')}
+          style={{ marginTop: 4 }}
+          data-testid={testId ? `${testId}-warning` : 'kv-warning'}
+        />
       )}
     </div>
   );

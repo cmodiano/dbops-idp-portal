@@ -261,12 +261,22 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({
 
         {/* service_call */}
         {stepType === 'service_call' && (
-          <ServiceCallStepConfig data={data} onUpdate={handleUpdate} disabled={disabled} />
+          <ServiceCallStepConfig
+            data={data}
+            onUpdate={handleUpdate}
+            disabled={disabled}
+            availableStepOptions={availableStepOptions}
+          />
         )}
 
         {/* evaluation */}
         {stepType === 'evaluation' && (
-          <EvaluationStepConfig data={data} onUpdate={handleUpdate} disabled={disabled} />
+          <EvaluationStepConfig
+            data={data}
+            onUpdate={handleUpdate}
+            disabled={disabled}
+            availableStepOptions={availableStepOptions}
+          />
         )}
 
         {/* gate */}
@@ -282,7 +292,12 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({
 
         {/* http_request */}
         {stepType === 'http_request' && (
-          <HttpRequestStepConfig data={data} onUpdate={handleUpdate} disabled={disabled} />
+          <HttpRequestStepConfig
+            data={data}
+            onUpdate={handleUpdate}
+            disabled={disabled}
+            availableStepOptions={availableStepOptions}
+          />
         )}
 
         {/* schedule_execution — Story 57.16 */}
