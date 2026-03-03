@@ -35,7 +35,6 @@ from executions.dtos import ExecutionRequest
 from executions.services import ExecutionService
 from executions.simulation_service import SimulationService
 from executions.cancellation_cache import is_cancelled
-from core.exceptions import ServiceUnavailableError
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.middleware import get_correlation_id
@@ -67,6 +66,31 @@ class ContainerWorkflowRuntime:
     - AC2: Child executions with parent_execution_id for traceability
     - AC3: workflow_step_parameters injection (Story 4.12)
     - AC4: Failure/cancellation propagation
+
+    ServiceNow change management (ADR-007 Story 57.10):
+    ServiceNow change creation is no longer handled by a pre-hook.
+    It must be defined as an explicit step in the workflow's execution_steps:
+
+        {
+            "step_id": "create-change",
+            "step_type": "service_call",
+            "name": "Créer change ServiceNow",
+            "integration_type": "servicenow",
+            "operation": "create_change",
+            "condition": {"environment_in": ["production", "pre-production"]},
+            "input_mapping": {
+                "short_description": "IDP Portal — {{ execution.action_name }}",
+                "change_model_code": "MDL001",
+                "change_type": "normal"
+            },
+            "output_mapping": {
+                "change_number": "$.number",
+                "sys_id": "$.sys_id"
+            }
+        }
+
+    The change number is then available as steps['create-change']['change_number']
+    for subsequent steps (e.g., close-change via operation: close_change).
     """
 
     # Mapping step_type string → ExecutionStepType enum (ADR-007 §3d)
@@ -408,7 +432,11 @@ class ContainerWorkflowRuntime:
         child_execution.refresh_from_db()
 
         # Update parent step to reflect child outcome
-        parent_step.status = ExecutionStepStatus.COMPLETED
+        parent_step.status = (
+            ExecutionStepStatus.FAILED
+            if child_execution.status == ExecutionStatus.FAILED
+            else ExecutionStepStatus.COMPLETED
+        )
         parent_step.completed_at = timezone.now()
         parent_step.set_output({
             'child_execution_id': child_execution.id,
@@ -612,32 +640,6 @@ class ContainerWorkflowRuntime:
             correlation_id=self.correlation_id,
         )
 
-        # Story 31.6: Create ServiceNow change if required before RUNNING
-        try:
-            self._create_servicenow_change_if_required(self.execution.environment)
-        except Exception as exc:  # noqa: BLE001 — catch-all-mark-failed: ServiceNow failure marks execution FAILED
-            logger.error(
-                "execution_servicenow_change_failed",
-                execution_id=self.execution.id,
-                error=str(exc),
-                error_type=type(exc).__name__,
-                correlation_id=self.correlation_id,
-                exc_info=True,
-            )
-            self.execution.status = ExecutionStatus.FAILED
-            self.execution.error_message = f"Échec de la création du changement ServiceNow : {exc}"
-            self.execution.completed_at = timezone.now()
-            self.execution.save(update_fields=['status', 'error_message', 'completed_at'])
-            AuditService.create_entry(
-                user_id=str(self.execution.user_id),
-                action_type=AuditActionType.EXECUTION_FAILED,
-                entity_type=AuditEntityType.EXECUTION,
-                entity_id=self.execution.id,
-                details={'reason': 'servicenow_change_creation_failed', 'error': str(exc)},
-                correlation_id=self.correlation_id,
-            )
-            return
-
         # Update parent to RUNNING immediately (visible to frontend)
         self.execution.status = ExecutionStatus.RUNNING
         self.execution.started_at = timezone.now()
@@ -684,32 +686,6 @@ class ContainerWorkflowRuntime:
             correlation_id=self.correlation_id,
         )
 
-        # Story 31.6: Create ServiceNow change if required before RUNNING
-        try:
-            self._create_servicenow_change_if_required(self.execution.environment)
-        except Exception as exc:  # noqa: BLE001 — catch-all-mark-failed: ServiceNow failure marks execution FAILED
-            logger.error(
-                "execution_servicenow_change_failed",
-                execution_id=self.execution.id,
-                error=str(exc),
-                error_type=type(exc).__name__,
-                correlation_id=self.correlation_id,
-                exc_info=True,
-            )
-            self.execution.status = ExecutionStatus.FAILED
-            self.execution.error_message = f"Échec de la création du changement ServiceNow : {exc}"
-            self.execution.completed_at = timezone.now()
-            self.execution.save(update_fields=['status', 'error_message', 'completed_at'])
-            AuditService.create_entry(
-                user_id=str(self.execution.user_id),
-                action_type=AuditActionType.EXECUTION_FAILED,
-                entity_type=AuditEntityType.EXECUTION,
-                entity_id=self.execution.id,
-                details={'reason': 'servicenow_change_creation_failed', 'error': str(exc)},
-                correlation_id=self.correlation_id,
-            )
-            return ExecutionStatus.FAILED
-
         self.execution.status = ExecutionStatus.RUNNING
         self.execution.started_at = timezone.now()
         self.execution.save(update_fields=['status', 'started_at'])
@@ -722,90 +698,6 @@ class ContainerWorkflowRuntime:
             return ExecutionStatus.FAILED
 
         return self._execute_workflow_steps()
-
-    def _create_servicenow_change_if_required(self, environment: str) -> None:
-        """
-        Story 31.6 (Partie B): Create a ServiceNow change before RUNNING if required.
-
-        Logic:
-        1. Check change_type_config[env].required == True
-        2. Resolve ServiceNow integration (gate_config or fallback)
-        3. Call ServiceNowService.create_change()
-        4. Store change number in execution.servicenow_change_id
-
-        Raises:
-            ServiceUnavailableError: if no ServiceNow integration is available when required,
-                or if create_change() fails
-        """
-        from adapters.utils import build_auth_headers
-        from services.servicenow_service import ServiceNowService
-        from integrations.services import IntegrationService
-
-        change_type_config = self.action.change_type_config or {}
-        env_config = change_type_config.get(environment, {})
-
-        if not isinstance(env_config, dict) or not env_config.get('required'):
-            return  # No change required for this environment
-
-        # Resolve ServiceNow integration
-        gate_config = self.action.gate_config or {}
-        servicenow_integration_id = gate_config.get('servicenow_change', {}).get('integration_id')
-
-        integration_service = IntegrationService()
-
-        integration = None
-        if servicenow_integration_id:
-            integration = integration_service.get_by_id(servicenow_integration_id)
-            if not integration or integration.type != 'servicenow':
-                logger.warning(
-                    "servicenow_gate_integration_not_found",
-                    integration_id=servicenow_integration_id,
-                    execution_id=self.execution.id,
-                )
-                integration = None
-
-        if not integration:
-            # Fallback: first available servicenow integration
-            integration = integration_service.get_by_type('servicenow')
-
-        if not integration:
-            logger.warning(
-                "servicenow_no_integration_found_skipping",
-                execution_id=self.execution.id,
-                environment=environment,
-            )
-            # env_config['required'] is truthy here; missing integration is a hard failure
-            raise ServiceUnavailableError(
-                code="SERVICENOW_INTEGRATION_MISSING",
-                message=(
-                    f"ServiceNow change is required for environment {environment!r} but no "
-                    "ServiceNow integration is configured or available. Configure an integration in "
-                    "Admin > Intégrations and select it in the action's gate config."
-                ),
-                details={"execution_id": self.execution.id, "environment": environment},
-            )
-
-        auth_headers = build_auth_headers(integration, get_correlation_id())
-        svc = ServiceNowService(base_url=integration.base_url, auth_headers=auth_headers)
-        change_result = svc.create_change(
-            change_model_code=env_config.get('change_model_code') or env_config.get('template_id'),
-            change_type=env_config.get('change_type'),
-            short_description=f"IDP Portal — {self.action.name}",
-            description=f"Exécution automatisée {self.execution.id} (env: {environment})",
-        )
-        change_number = change_result["number"]
-
-        # Store change number
-        self.execution.servicenow_change_id = change_number
-        self.execution.save(update_fields=['servicenow_change_id'])
-
-        logger.info(
-            "servicenow_change_created",
-            change_number=change_number,
-            execution_id=self.execution.id,
-            environment=environment,
-            integration_id=integration.id,
-        )
 
     def _run_workflow_loop(self, execution_id: int) -> None:
         """Background workflow execution loop (runs in a daemon thread)."""
@@ -853,6 +745,7 @@ class ContainerWorkflowRuntime:
             Final ExecutionStatus of the parent workflow
         """
         final_status = ExecutionStatus.COMPLETED
+        _failed_step_name: str | None = None
 
         for step in self.workflow_steps:
             # Check cancellation before each step (AC4)
@@ -883,10 +776,12 @@ class ContainerWorkflowRuntime:
 
             # AC4: Propagate failure — stop on first failure
             if child_status == ExecutionStatus.FAILED:
+                _failed_step_name = step.get('name') or f"order {step.get('order', '?')}"
                 logger.warning(
                     "container_workflow_step_failed",
                     execution_id=self.execution.id,
                     step_order=step.get('order', 0),
+                    step_name=_failed_step_name,
                     child_status=child_status,
                     correlation_id=self.correlation_id,
                 )
@@ -909,7 +804,8 @@ class ContainerWorkflowRuntime:
             'completed_at': timezone.now(),
         }
         if final_status == ExecutionStatus.FAILED:
-            update_fields['error_message'] = "Workflow failed: a referenced action failed"
+            step_info = f" (step: {_failed_step_name})" if _failed_step_name else ""
+            update_fields['error_message'] = f"Workflow failed: a referenced action failed{step_info}"
         Execution.objects.filter(id=self.execution.id).update(**update_fields)
         # Sync in-memory
         self.execution.status = final_status
