@@ -10,7 +10,7 @@ from typing import cast
 import structlog
 
 from django.db import connection, transaction
-from django.db.models import Q, Subquery
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -203,17 +203,19 @@ class PendingApprovalsView(APIView):
         if connection.vendor == "oracle":
             # Sous-requête IN (pas EXISTS) pour éviter ORA-22848 : le CLOB reste dans
             # la sous-requête qui retourne uniquement execution_id (scalaire).
+            # DBMS_LOB.INSTR fonctionne sur CLOB sans contrainte IS JSON (contrairement
+            # à JSON_EXISTS qui peut échouer silencieusement sans IS JSON sur la colonne).
             approval_exec_ids = (
                 ExecutionStep.objects.filter(status=ExecutionStepStatus.WAITING)
                 .extra(
                     where=[
-                        "JSON_EXISTS(OUTPUT, '$.gate_conditions[*]?(@.type == \"approval_granted\")')"
+                        "OUTPUT IS NOT NULL AND DBMS_LOB.INSTR(OUTPUT, 'approval_granted') > 0"
                     ]
                 )
                 .values_list("execution_id", flat=True)
             )
             run_filter = Q(status=ExecutionStatus.RUNNING) & Q(
-                pk__in=Subquery(approval_exec_ids)
+                pk__in=approval_exec_ids
             )
         else:
             run_filter = Q(
