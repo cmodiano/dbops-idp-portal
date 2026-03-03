@@ -19,6 +19,8 @@ class GateHandler:
         step: dict,
         correlation_id: str | None,
     ) -> dict:
-        raise NotImplementedError(
-            "GateHandler.execute() not yet implemented — see story 57.7"
-        )
+        return {
+            "status": "skipped",
+            "outputs": {},
+            "message": "Gate steps are no-op in this runtime (story 57.7)",
+        }

@@ -77,6 +77,14 @@ class ServiceCallHandler:
             raise ValueError("service_call step requires 'integration_type'")
         if not operation:
             raise ValueError("service_call step requires 'operation'")
+        if not isinstance(integration_type, str):
+            raise ValueError(
+                f"integration_type must be a string, got {type(integration_type).__name__}"
+            )
+        if not isinstance(operation, str):
+            raise ValueError(
+                f"operation must be a string, got {type(operation).__name__}"
+            )
 
         # Sécurité : bloquer les méthodes privées
         if operation.startswith("_"):
@@ -84,9 +92,14 @@ class ServiceCallHandler:
                 f"Operation '{operation}' is not allowed: private methods cannot be called"
             )
 
-        # Sécurité : vérification par liste positive (défense en profondeur)
+        # Sécurité : vérification par liste positive (défense en profondeur, deny-by-default)
         _allowed = _ALLOWED_OPERATIONS.get(integration_type)
-        if _allowed is not None and operation not in _allowed:
+        if _allowed is None:
+            raise ValueError(
+                f"Unknown integration_type: '{integration_type}'. "
+                f"Allowed types: {sorted(_ALLOWED_OPERATIONS)}"
+            )
+        if operation not in _allowed:
             raise ValueError(
                 f"Operation '{operation}' is not in the allowed list for '{integration_type}'. "
                 f"Allowed: {sorted(_allowed)}"

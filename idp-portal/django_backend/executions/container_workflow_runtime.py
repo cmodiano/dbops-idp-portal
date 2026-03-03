@@ -206,7 +206,7 @@ class ContainerWorkflowRuntime:
         step_order = step.get('order', 0)
         step_name = step.get('name') or f"Step {step_order}"
         step_id = step.get('step_id')
-        step_type = step.get('step_type', 'platform')  # ADR-007 §3d, backward compat
+        step_type = step.get('step_type') or 'platform'  # ADR-007 §3d, coalesce null/"" to platform
 
         self._step_order_counter += 1
         self._transition_count += 1
@@ -422,6 +422,15 @@ class ContainerWorkflowRuntime:
         # Extraire les outputs via output_mapping (ADR-007 §3c)
         if step_id is not None:
             output_mapping = step.get('output_mapping', {})
+            if not isinstance(output_mapping, dict):
+                logger.warning(
+                    "container_workflow_output_mapping_not_dict",
+                    execution_id=self.execution.id,
+                    step_id=step_id,
+                    output_mapping_type=type(output_mapping).__name__,
+                    correlation_id=self.correlation_id,
+                )
+                output_mapping = {}
             extractor = OutputExtractor()
             raw_output = parent_step.get_output() or {}
             extracted = extractor.extract(raw_output, output_mapping)
@@ -522,6 +531,15 @@ class ContainerWorkflowRuntime:
         # Extraction output_mapping (même pattern que platform)
         if step_id is not None:
             output_mapping = step.get('output_mapping', {})
+            if not isinstance(output_mapping, dict):
+                logger.warning(
+                    "container_workflow_output_mapping_not_dict",
+                    execution_id=self.execution.id,
+                    step_id=step_id,
+                    output_mapping_type=type(output_mapping).__name__,
+                    correlation_id=self.correlation_id,
+                )
+                output_mapping = {}
             extractor = OutputExtractor()
             # Handlers peuvent retourner envelope {raw_output: ...} ou dict brut
             if isinstance(result, dict) and 'raw_output' in result:

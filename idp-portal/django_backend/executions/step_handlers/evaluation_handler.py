@@ -2,7 +2,7 @@
 EvaluationHandler — stub pour story 57.6
 
 Handler pour les steps de type evaluation.
-Implémentation réelle prévue en story 57.6.
+Implémentation complète prévue en story 57.6 (RuleEngine).
 """
 
 from executions.models import Execution
@@ -19,6 +19,9 @@ class EvaluationHandler:
         step: dict,
         correlation_id: str | None,
     ) -> dict:
-        raise NotImplementedError(
-            "EvaluationHandler.execute() not yet implemented — see story 57.6"
-        )
+        # Minimal implementation: return no-op result until RuleEngine integration (story 57.6)
+        return {
+            "result": None,
+            "decision": "auto_approved",
+            "message": "EvaluationHandler not yet fully implemented — see story 57.6",
+        }

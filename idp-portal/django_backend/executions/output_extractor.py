@@ -21,7 +21,7 @@ class OutputExtractor:
     AC#7 : si ``raw_output`` vide → retourne ``{}``.
     """
 
-    def extract(self, raw_output: dict, output_mapping: dict) -> dict:
+    def extract(self, raw_output: dict, output_mapping: dict | None) -> dict:
         """
         Extrait les valeurs de ``raw_output`` selon ``output_mapping``.
 
@@ -33,7 +33,11 @@ class OutputExtractor:
             Dict ``{alias: valeur_extraite}`` ; valeur = ``None`` si chemin introuvable.
             Retourne ``{}`` si ``output_mapping`` ou ``raw_output`` est vide/None.
         """
-        if not output_mapping or not raw_output:
+        if not raw_output:
+            return {}
+        if not isinstance(output_mapping, dict):
+            return {}
+        if not output_mapping:
             return {}
         result: dict = {}
         for key, path in output_mapping.items():

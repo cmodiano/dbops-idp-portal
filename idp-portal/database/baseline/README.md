@@ -32,7 +32,7 @@ flyway \
   -url=jdbc:oracle:thin:@NEW_ENV:1521/XEPDB1 \
   -user=idp_user \
   -password=password \
-  -baselineVersion=98 \
+  -baselineVersion=100 \
   -baselineDescription=baseline_schema_v088 \
   baseline
 ```
@@ -125,7 +125,7 @@ flyway -url=jdbc:oracle:thin:@oracle-a:1521/XEPDB1 migrate
 # 3. Sur oracle-b : appliquer le baseline uniquement
 sqlplus idp_user/password@oracle-b:1521/XEPDB1 @database/baseline/baseline_schema_v088.sql
 flyway -url=jdbc:oracle:thin:@oracle-b:1521/XEPDB1 \
-       -baselineVersion=98 \
+       -baselineVersion=100 \
        -baselineDescription=baseline_schema_v088 \
        baseline
 

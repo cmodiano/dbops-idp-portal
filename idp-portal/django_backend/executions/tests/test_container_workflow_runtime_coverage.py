@@ -318,7 +318,7 @@ class TestCreateServiceNowChangeCoverage(TestCase):
             with patch('integrations.services.IntegrationService.get_by_type', return_value=mock_integration):
                 with patch('adapters.utils.build_auth_headers', return_value={}):
                     with patch('services.servicenow_service.ServiceNowService.create_change',
-                               return_value='CHG0001234'):
+                               return_value={'number': 'CHG0001234', 'sys_id': 'abc123'}):
                         runtime._create_servicenow_change_if_required(TEST_ENV)
 
         execution.refresh_from_db()
@@ -348,7 +348,7 @@ class TestCreateServiceNowChangeCoverage(TestCase):
             with patch('integrations.services.IntegrationService.get_by_type', return_value=mock_sn):
                 with patch('adapters.utils.build_auth_headers', return_value={}):
                     with patch('services.servicenow_service.ServiceNowService.create_change',
-                               return_value='CHG0009999'):
+                               return_value={'number': 'CHG0009999', 'sys_id': 'xyz999'}):
                         runtime._create_servicenow_change_if_required(TEST_ENV)
 
 
@@ -705,7 +705,7 @@ class TestServiceNowGateIntegrationValid(TestCase):
             with patch('integrations.services.IntegrationService.get_by_type') as mock_fallback:
                 with patch('adapters.utils.build_auth_headers', return_value={}):
                     with patch('services.servicenow_service.ServiceNowService.create_change',
-                               return_value='CHG0042'):
+                               return_value={'number': 'CHG0042', 'sys_id': 'sys42'}):
                         runtime._create_servicenow_change_if_required(TEST_ENV)
 
         # Le fallback ne doit pas avoir été appelé

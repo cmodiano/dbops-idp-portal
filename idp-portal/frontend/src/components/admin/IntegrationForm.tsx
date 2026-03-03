@@ -37,7 +37,7 @@ export interface IntegrationFormProps {
 /** URL pattern: must start with http(s):// and have a valid hostname. */
 const URL_PATTERN = /^https?:\/\/[a-zA-Z0-9][-a-zA-Z0-9.]*[a-zA-Z0-9]/;
 
-/** Exemple multi-tables (servers, instances, databases) — docs/inventory-mapping-guide.md */
+/** Exemple multi-table (servers, instances, databases) — docs/inventory-mapping-guide.md */
 const INVENTORY_CONFIG_ENTITIES = `{
   "entities": {
     "servers": {
@@ -123,21 +123,24 @@ export function IntegrationForm({
         else if (isApiKeyFlow) payload.config = { header_name: values.header_name?.trim() || null };
       }
       if (isInventoryDb) {
-        const schemaVal = values.schema?.trim() || null;
-        const tableVal = values.table?.trim() || null;
+        const hasAdvanced = !!values.config_advanced?.trim();
         let config: Record<string, unknown> = {};
-        if (values.config_advanced?.trim()) {
+        if (hasAdvanced) {
           try {
-            const parsed = JSON.parse(values.config_advanced.trim()) as Record<string, unknown>;
+            const parsed = JSON.parse(values.config_advanced!.trim()) as Record<string, unknown>;
             if (typeof parsed === 'object' && parsed !== null && (parsed.entities != null || parsed.flat_table != null)) {
               config = { ...parsed };
             } else {
-              message.warning('Config JSON : utilisez "entities" (multi-tables) ou "flat_table" (une table). Voir le guide de mapping inventaire.');
+              message.warning('Config JSON : utilisez "entities" (multi-table) ou "flat_table" (une table). Voir le guide de mapping inventaire.');
               return;
             }
           } catch { message.error('Config JSON invalide. Vérifiez la syntaxe.'); return; }
         }
-        if (schemaVal != null || tableVal != null) { config.schema = schemaVal; config.table = tableVal; }
+        if (!hasAdvanced) {
+          const schemaVal = values.schema?.trim() || null;
+          const tableVal = values.table?.trim() || null;
+          if (schemaVal != null || tableVal != null) { config.schema = schemaVal; config.table = tableVal; }
+        }
         if (Object.keys(config).length > 0) (payload as IntegrationCreate).config = config;
       }
       const res = await onSubmit(payload);
@@ -225,22 +228,22 @@ export function IntegrationForm({
                   type="link"
                   size="small"
                   icon={<FileTextOutlined />}
-                  onClick={() => form.setFieldsValue({ config_advanced: INVENTORY_CONFIG_ENTITIES })}
+                  onClick={() => form.setFieldsValue({ config_advanced: INVENTORY_CONFIG_ENTITIES, schema: undefined, table: undefined })}
                   style={{ padding: 0, height: 'auto' }}
                 >
-                  Exemple multi-tables
+                  Exemple multi-table
                 </Button>
                 <Button
                   type="link"
                   size="small"
-                  onClick={() => form.setFieldsValue({ config_advanced: INVENTORY_CONFIG_FLAT })}
+                  onClick={() => form.setFieldsValue({ config_advanced: INVENTORY_CONFIG_FLAT, schema: undefined, table: undefined })}
                   style={{ padding: 0, height: 'auto' }}
                 >
                   Exemple une table
                 </Button>
               </Space>
             }
-            tooltip="Optionnel. Multi-tables : entities.servers, entities.instances (server_ref, db_ref), entities.databases. Une table : flat_table. Si rempli, remplace Schéma BD / Table ou vue. Guide : docs/inventory-mapping-guide.md"
+            tooltip="Optionnel. Multi-table : entities.servers, entities.instances (server_ref, db_ref), entities.databases. Une table : flat_table. Si rempli, remplace Schéma BD / Table ou vue. Guide : docs/inventory-mapping-guide.md"
           >
             <Input.TextArea
               placeholder="Cliquez sur « Insérer un exemple » pour charger un modèle, puis adaptez les noms de tables/colonnes."

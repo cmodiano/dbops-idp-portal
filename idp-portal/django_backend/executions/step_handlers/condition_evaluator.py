@@ -21,11 +21,15 @@ class StepConditionEvaluator:
             execution:   instance Execution avec .environment (str)
         """
         condition = step_config.get('condition')
-        if not condition:
+        if not condition or not isinstance(condition, dict):
             return True
 
         env_list = condition.get('environment_in')
         if env_list is not None:
+            if isinstance(env_list, str):
+                env_list = [env_list]
+            elif not isinstance(env_list, (list, tuple, set)):
+                return True  # Invalid type → treat as no-op, execute step
             if env_list and execution.environment not in env_list:
                 return False
 

@@ -87,6 +87,10 @@ class ServiceNowService(IHealthCheckable):
         }
         if change_model_code:
             payload["chg_model"] = change_model_code
+        for k, v in kwargs.items():
+            if v is None:
+                continue
+            payload[k] = str(v) if not isinstance(v, str) else v
 
         timeout = getattr(settings, 'SERVICENOW_TIMEOUT', 30)
         verify_tls = self._get_verify_tls()
@@ -98,6 +102,17 @@ class ServiceNowService(IHealthCheckable):
                 result = resp.json().get('result', {})
                 change_number = result.get('number') or result.get('sys_id', '')
                 sys_id = result.get('sys_id', '')
+                if not change_number and not sys_id:
+                    logger.error(
+                        "servicenow_create_change_no_identifiers",
+                        status_code=resp.status_code,
+                        resp_text=resp.text[:500] if resp.text else "",
+                        base_url=self.base_url,
+                    )
+                    raise ServiceUnavailableError(
+                        code="SERVICENOW_INVALID_RESPONSE",
+                        message="ServiceNow create_change returned 2xx but no number or sys_id in result",
+                    )
                 logger.info(
                     "servicenow_create_change_success",
                     change_number=change_number,

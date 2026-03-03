@@ -261,7 +261,7 @@ Si la condition n'est pas remplie, le step passe en statut `SKIPPED`
 (`ExecutionStepStatus.SKIPPED`, déjà defini dans `models.py:265`).
 
 Les steps suivants qui référencent l'output d'un step SKIPPED reçoivent une chaîne
-vide : `_step_outputs[step_id] = {}` et le template `{{ steps.create-change.change_number }}`
+vide : `_step_outputs[step_id] = {}` et le template `{{ steps["create-change"]["change_number"] }}`
 résout à `''` (Jinja2 finalize convertit None en chaîne vide).
 
 ### Approbation comme step gate
@@ -344,7 +344,7 @@ La source de vérité passe de l'Execution au `ExecutionStep`. Cela permet :
       "name": "Check pre-patch health",
       "step_type": "evaluation",
       "input_mapping": {
-        "artifact": "{{ steps.pre-check.health_report }}"
+        "artifact": "{{ steps['pre-check']['health_report'] }}"
       },
       "policy_id": 7,
       "on_success_step_id": "wait-window",
@@ -372,7 +372,7 @@ La source de vérité passe de l'Execution au `ExecutionStep`. Cela permet :
       "referenced_action_id": 200,
       "input_mapping": {
         "extra_vars": {
-          "change_id": "{{ steps.create-change.change_number }}",
+          "change_id": "{{ steps['create-change']['change_number'] }}",
           "databases": "{{ steps.discovery.databases }}",
           "patch_number": "{{ steps.discovery.patch_number }}"
         }
@@ -389,7 +389,7 @@ La source de vérité passe de l'Execution au `ExecutionStep`. Cela permet :
         "environment_in": ["production", "pre-production"]
       },
       "input_mapping": {
-        "change_id": "{{ steps.create-change.change_number }}"
+        "change_id": "{{ steps['create-change']['change_number'] }}"
       },
       "on_success_step_id": null
     },
@@ -403,7 +403,7 @@ La source de vérité passe de l'Execution au `ExecutionStep`. Cela permet :
         "environment_in": ["production", "pre-production"]
       },
       "input_mapping": {
-        "change_id": "{{ steps.create-change.change_number }}"
+        "change_id": "{{ steps['create-change']['change_number'] }}"
       }
     }
   ]
@@ -432,7 +432,7 @@ La source de vérité passe de l'Execution au `ExecutionStep`. Cela permet :
       "name": "Analyze Plan",
       "step_type": "evaluation",
       "input_mapping": {
-        "artifact": "{{ steps.tf-plan.plan }}"
+        "artifact": "{{ steps['tf-plan']['plan'] }}"
       },
       "policy_id": 5,
       "on_success_step_id": "create-change",
@@ -461,7 +461,7 @@ La source de vérité passe de l'Execution au `ExecutionStep`. Cela permet :
         "environment_in": ["production"]
       },
       "input_mapping": {
-        "short_description": "Terraform apply — {{ steps.tf-plan.resource_count }} resources"
+        "short_description": "Terraform apply — {{ steps['tf-plan']['resource_count'] }} resources"
       },
       "output_mapping": {
         "change_number": "$.number"
@@ -475,7 +475,7 @@ La source de vérité passe de l'Execution au `ExecutionStep`. Cela permet :
       "referenced_action_id": 301,
       "input_mapping": {
         "extra_vars": {
-          "change_id": "{{ steps.create-change.change_number }}"
+          "change_id": "{{ steps['create-change']['change_number'] }}"
         }
       }
     },
@@ -490,7 +490,7 @@ La source de vérité passe de l'Execution au `ExecutionStep`. Cela permet :
         "environment_in": ["production"]
       },
       "input_mapping": {
-        "change_id": "{{ steps.create-change.change_number }}"
+        "change_id": "{{ steps['create-change']['change_number'] }}"
       }
     }
   ]
@@ -716,8 +716,17 @@ class ServiceCallHandler:
         # Instanciation du service via registry
         service = self._get_service(integration)
 
-        # Appel de l'operation
+        # Appel de l'operation — validation avant getattr (Sécurité)
+        allowed = _ALLOWED_OPERATIONS.get(integration_type)
+        if allowed is None:
+            raise ValueError(f"Unknown integration_type: {integration_type!r}")
+        if operation not in allowed:
+            raise ValueError(f"Operation '{operation}' not in allowlist for '{integration_type}'")
+        if not hasattr(service, operation):
+            raise ValueError(f"Operation '{operation}' does not exist on service")
         method = getattr(service, operation)
+        if not callable(method):
+            raise ValueError(f"'{operation}' is not callable")
         result = method(**resolved_params)
 
         return result
@@ -756,6 +765,8 @@ class HttpRequestHandler:
                 resp = client.get(url, headers=headers, params=config.get('params'))
             elif method == 'POST':
                 resp = client.post(url, headers=headers, json=resolved_params)
+            else:
+                raise ValueError(f"Unsupported HTTP method: {method!r}")
             resp.raise_for_status()
             return resp.json()
 ```

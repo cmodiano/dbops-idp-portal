@@ -2,7 +2,7 @@
 -- Baseline Schema V088 — IDP Portal
 -- ===========================================================================
 -- Date            : 2026-02-25
--- Version couverte: V000–V098 + V099 (EXECUTION_STEPS) + V100 (CK_AUDIT_LOG_ACTION_TYPE)
+-- Version couverte: V000–V100 (incl. V099 EXECUTION_STEPS, V100 CK_AUDIT_LOG_ACTION_TYPE)
 -- Auteur          : Agent de développement (Story 41-2)
 --
 -- Usage           : NOUVEAUX ENVIRONNEMENTS UNIQUEMENT (base Oracle vierge)
@@ -10,10 +10,10 @@
 --
 -- Procédure de déploiement :
 --   1. sqlplus idp_user/password@HOST:1521/XEPDB1 @database/baseline/baseline_schema_v088.sql
---   2. flyway -baselineVersion=98 -baselineDescription=baseline_schema_v088 baseline
+--   2. flyway -baselineVersion=100 -baselineDescription=baseline_schema_v088 baseline
 --
--- Ce script couvre TOUTES les migrations V000–V098. Aucune migration incrémentale
--- n'est nécessaire après application. État identique à V000→V098 sans phases intermédiaires.
+-- Ce script couvre TOUTES les migrations V000–V100. Aucune migration incrémentale
+-- n'est nécessaire après application. État identique à V000→V100 sans phases intermédiaires.
 -- ===========================================================================
 --
 -- Objets créés :
@@ -1220,9 +1220,9 @@ COMMIT;
 -- FIN DU SCRIPT BASELINE V088
 -- ===========================================================================
 -- Après application de ce script :
---   flyway baseline -baselineVersion=98 -baselineDescription=baseline_schema_v088
+--   flyway baseline -baselineVersion=100 -baselineDescription=baseline_schema_v088
 --
--- Aucune migration incrémentale requise — état identique à V000→V098.
+-- Aucune migration incrémentale requise — état identique à V000→V100.
 --
 -- Validation rapide :
 --   SELECT COUNT(*) FROM user_tables;             -- doit retourner 25
