@@ -104,46 +104,35 @@ Liste des environnements autorisés pour l'exécution:
 
 > **Note :** `DBOPSProfilePermission` est un alias maintenu pour la rétrocompatibilité. Utiliser désormais `AdminProfilePermission` (nom canonique depuis story 56.4).
 
-`AdminProfilePermission` (dans `core/permissions.py`) restreint l'accès aux endpoints admin (profiles, integrations, actions, analytics) aux seuls profils DBOPS. Le chemin SAML string utilise `DBOPS_PROFILE_NAMES` et `_get_dbops_profile_names()` — configurez `settings.DBOPS_PROFILE_NAMES` pour les noms de profils autorisés sur ces endpoints.
+`AdminProfilePermission` (dans `core/permissions.py`) restreint l'accès aux endpoints admin (profiles, integrations, actions, analytics) aux seuls profils avec `is_admin=1` en base de données. Tous les chemins d'authentification utilisent désormais `Profile.is_admin_bool` — il n'y a plus de comparaison par nom de profil.
+
+**Story 56.7** : Le chemin SAML string utilise désormais un DB lookup (`Profile.objects.filter(name__iexact=...)`) au lieu de `DBOPS_PROFILE_NAMES`. La distinction DBA/DBOPS provient maintenant exclusivement de la base de données (`is_admin=0` pour DBA, `is_admin=1` pour DBOPS).
+
+**Ordre canonique de résolution (Story 56.7) :**
+1. `user.ad_groups` → `Profile.objects.find_by_ad_groups()` → `any(p.is_admin_bool)`
+2. `user.profiles` (M2M si présent) → `any(p.is_admin_bool)`
+3. `user.profile` (string) → `Profile.objects.filter(name__iexact=...).first()` → `is_admin_bool`
+4. `user.profile` (objet Profile ORM) → `is_admin_bool` direct
+
+En cas d'`OperationalError` DB, l'accès est refusé (fail-secure) et un log structuré `profile_db_unavailable_admin_check` est émis.
 
 ```python
 class AdminProfilePermission(permissions.BasePermission):
     """
-    Permission class that requires a DBOPS profile for admin endpoints (DBA denied).
+    Permission class that requires an admin profile (is_admin=1 in DB).
 
-    Story 15.2 AC2: DBA est refusé sur les endpoints admin. Seul DBOPS (ou profils
-    dans DBOPS_PROFILE_NAMES) peut y accéder. Le chemin SAML string compare
-    request.user.profile (str) à _get_dbops_profile_names() (DBOPS_PROFILE_NAMES).
-    Les chemins M2M et ad_groups utilisent Profile.is_admin_bool.
+    Story 56.7: Fully flag-based — uses Profile.is_admin_bool for all auth paths.
+    Story 15.2 AC2: DBA (is_admin=0) est refusé sur les endpoints admin.
+    Seul DBOPS (ou tout profil avec is_admin=1) peut y accéder.
     """
 
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
 
-        # Chemin 1 : SAML string → DBOPS_PROFILE_NAMES via _get_dbops_profile_names()
-        if hasattr(request.user, 'profile'):
-            profile = request.user.profile
-            if isinstance(profile, str) and profile.strip().lower() in _get_dbops_profile_names():
-                return True
-            elif hasattr(profile, 'is_admin_bool') and profile.is_admin_bool:
-                return True
-
-        # Chemin 2 : M2M profiles → is_admin_bool (PAS comparaison de nom)
-        if hasattr(request.user, 'profiles'):
-            for p in request.user.profiles.all():
-                if getattr(p, 'is_admin_bool', False):
-                    return True
-
-        # Chemin 3 : ad_groups → Profile.objects.find_by_ad_groups() → is_admin_bool
-        if hasattr(request.user, 'ad_groups'):
-            ad_groups = request.user.ad_groups or []
-            try:
-                for profile in Profile.objects.find_by_ad_groups(ad_groups):
-                    if profile.is_admin_bool:
-                        return True
-            except OperationalError:
-                pass  # DB indisponible : accès refusé par défaut (fail-secure)
+        profiles = _resolve_user_profiles(request.user)
+        if any(getattr(p, 'is_admin_bool', False) for p in profiles):
+            return True
 
         # Fallback superuser : uniquement si ALLOW_SUPERUSER_FALLBACK=True (défaut: False)
         if getattr(settings, 'ALLOW_SUPERUSER_FALLBACK', False) and request.user.is_superuser:
@@ -151,6 +140,8 @@ class AdminProfilePermission(permissions.BasePermission):
 
         return False
 ```
+
+> **Note :** `ADMIN_PROFILE_NAMES` et `DBOPS_PROFILE_NAMES` dans `settings.py` sont **dépréciés** (Story 56.7). Ils ne sont plus utilisés par `core/permissions.py`. Conservés pour compatibilité avec d'éventuels outils externes.
 
 **Utilisation dans ViewSet:**
 

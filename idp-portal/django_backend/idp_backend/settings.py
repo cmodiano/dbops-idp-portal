@@ -579,6 +579,7 @@ ALLOW_SUPERUSER_FALLBACK = os.getenv('ALLOW_SUPERUSER_FALLBACK', 'false').lower(
 # actions, analytics, feature flags). DBA est explicitement exclu — seul DBOPS (ou équivalent)
 # peut gérer ces ressources. Modifier pour ajouter des profils sans changer le code.
 # Env vars: ADMIN_PROFILE_NAMES, DBOPS_PROFILE_NAMES (comma-separated, e.g. "dbops,dba")
+# Déprécié (Story 56.7) — conservé pour référence, non utilisé par core/permissions.py (chemin SAML string → DB lookup désormais)
 def _parse_profile_names_env(env_key: str, default: set[str]) -> set[str]:
     raw = os.getenv(env_key, "")
     if not raw:

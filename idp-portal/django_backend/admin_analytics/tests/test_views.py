@@ -10,7 +10,7 @@ import pytest
 from rest_framework.test import APIClient
 
 from catalog.models import ActionStatus
-from tests.factories import UserFactory, ActionFactory, ExecutionFactory, IntegrationFactory
+from tests.factories import UserFactory, ActionFactory, ExecutionFactory, IntegrationFactory, ProfileFactory
 
 
 @pytest.mark.django_db
@@ -22,6 +22,8 @@ class TestAdminAnalyticsViewPermissions:
     def setup_method(self):
         self.client = APIClient()
         self.integration = IntegrationFactory.create()
+        # Story 56.7: SAML string path uses DB lookup — create DBOPS Profile with is_admin=1
+        ProfileFactory.create(name='DBOPS', is_admin=1)
 
     def test_dbops_user_gets_200(self):
         """Utilisateur DBOPS → 200."""
@@ -64,6 +66,8 @@ class TestAdminAnalyticsViewDaysParam:
 
     def setup_method(self):
         self.client = APIClient()
+        # Story 56.7: SAML string path uses DB lookup — create DBOPS Profile with is_admin=1
+        ProfileFactory.create(name='DBOPS', is_admin=1)
         self.user = UserFactory.create(profile='DBOPS')
         self.client.force_authenticate(user=self.user)
 
@@ -111,6 +115,8 @@ class TestAdminAnalyticsViewResponseStructure:
 
     def setup_method(self):
         self.client = APIClient()
+        # Story 56.7: SAML string path uses DB lookup — create DBOPS Profile with is_admin=1
+        ProfileFactory.create(name='DBOPS', is_admin=1)
         self.user = UserFactory.create(profile='DBOPS')
         self.integration = IntegrationFactory.create()
         self.client.force_authenticate(user=self.user)

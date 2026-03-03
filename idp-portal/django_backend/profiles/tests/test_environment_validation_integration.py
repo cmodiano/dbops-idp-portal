@@ -117,6 +117,8 @@ class TestProfileEnvironmentValidationViews:
         """Set up test data."""
         self.client = APIClient()
         self.user = User.objects.create(username='dbops_user', profile='dbops')
+        # Story 56.7: SAML string path uses DB lookup — create DBOPS Profile with is_admin=1
+        Profile.objects.create(name='DBOPS', is_admin=1, ad_group='GRP-DBOPS')
         self.profile = Profile.objects.create(name='Test Profile', ad_group='GRP-TEST')
         self.client.force_authenticate(user=self.user)
 
