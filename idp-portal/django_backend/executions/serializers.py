@@ -126,6 +126,9 @@ class ExecutionStepSerializer(serializers.Serializer):
             "output": obj.get_output(),
             "platform_job_id": obj.platform_job_id,
             "error_message": obj.error_message,
+            "approved_by_id": obj.approved_by_id,
+            "approved_at": ensure_utc_isoformat(obj.approved_at),
+            "approval_comment": obj.approval_comment,
         }
 
 

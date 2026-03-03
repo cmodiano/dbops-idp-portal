@@ -2,7 +2,7 @@
 -- Baseline Schema V088 — IDP Portal
 -- ===========================================================================
 -- Date            : 2026-02-25
--- Version couverte: V000–V100 (incl. V099 EXECUTION_STEPS, V100 CK_AUDIT_LOG_ACTION_TYPE)
+-- Version couverte: V000–V103 (incl. V099 EXECUTION_STEPS, V100 CK_AUDIT_LOG_ACTION_TYPE, V103 SCHEDULED_EXECUTION_CELERY_TRIGGERED)
 -- Auteur          : Agent de développement (Story 41-2)
 --
 -- Usage           : NOUVEAUX ENVIRONNEMENTS UNIQUEMENT (base Oracle vierge)
@@ -689,6 +689,7 @@ ALTER TABLE AUDIT_LOG ADD CONSTRAINT CK_AUDIT_LOG_ACTION_TYPE CHECK (
             'SCHEDULED_EXECUTION_CREATED', 'SCHEDULED_EXECUTION_RECURRING_CREATED',
             'SCHEDULED_EXECUTION_EXECUTED', 'SCHEDULED_EXECUTION_CANCELLED',
             'SCHEDULED_EXECUTION_RECURRING_DISABLED',
+            'SCHEDULED_EXECUTION_CELERY_TRIGGERED',  -- V103: Celery Beat process_pending_scheduled_executions
 
             -- User / Auth / Favorites (V094: API_KEY_TOKEN_EXCHANGE, SERVICE_LOGIN)
             'USER_CREATED', 'USER_UPDATED', 'USER_LOGIN', 'USER_LOGOUT', 'USER_REFRESH',
