@@ -95,6 +95,11 @@ class Execution(models.Model):
     """
     Execution model mapping to Oracle EXECUTIONS table (V023, V030, V033).
     Represents an execution of an action.
+
+    Champs dépréciés (ADR-007, Story 57.12) :
+    - approved_by, approved_at, approval_comment : source de vérité migrée vers
+      ExecutionStep (Story 57.1 / V099). Conservés pour données historiques et
+      backward compat. Ne plus écrire dans ces champs, utiliser ExecutionStep.approved_* à la place.
     """
     id = models.BigAutoField(primary_key=True, db_column='ID')
     action = models.ForeignKey(
@@ -126,6 +131,8 @@ class Execution(models.Model):
         db_column='SERVICENOW_CHANGE_ID'
     )
     # Approval workflow fields (V030)
+    # DEPRECATED ADR-007 (Story 57.12) — La source de vérité est ExecutionStep.approved_by depuis Story 57.1.
+    # Ce champ sera supprimé dans une release future. Ne plus écrire dans ce champ.
     approved_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
@@ -134,7 +141,9 @@ class Execution(models.Model):
         related_name='approved_executions',
         db_column='APPROVED_BY'
     )
+    # DEPRECATED ADR-007 (Story 57.12) — source de vérité: ExecutionStep.approved_at
     approved_at = models.DateTimeField(null=True, blank=True, db_column='APPROVED_AT')
+    # DEPRECATED ADR-007 (Story 57.12) — source de vérité: ExecutionStep.approval_comment
     approval_comment = models.CharField(
         max_length=1000,
         null=True,
@@ -186,6 +195,27 @@ class Execution(models.Model):
             self.parameters = json.dumps(value)
         else:
             self.parameters = None
+
+    @property
+    def is_pending_approval(self) -> bool:
+        """
+        ADR-007 (Story 57.12) : Dérivé depuis les ExecutionSteps.
+        True si l'exécution est en attente d'une action humaine, soit via :
+        - le mécanisme legacy (status == PENDING_APPROVAL)
+        - le nouveau mécanisme step-based (au moins un ExecutionStep est en statut WAITING)
+
+        Note : la vérification step-based couvre tous les types de gate WAITING
+        (gate_type=approval ET gate_type=maintenance_window). Cette approche est
+        intentionnelle — les deux types représentent un blocage humain/opérationnel légitime.
+        Vérifier gate_type=approval dans le champ JSON output de chaque step serait coûteux
+        pour une propriété fréquemment appelée. Voir ADR-007 Phase 4.2 Dev Notes.
+        """
+        if self.status == ExecutionStatus.PENDING_APPROVAL:
+            return True
+        # Vérification step-based : un step WAITING existe (tous gate_types confondus)
+        return self.executionstep_set.filter(
+            status=ExecutionStepStatus.WAITING
+        ).exists()
 
 
 class TargetType(models.TextChoices):

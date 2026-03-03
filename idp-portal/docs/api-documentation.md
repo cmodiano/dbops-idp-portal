@@ -2,17 +2,26 @@
 
 ## Accès aux interfaces de documentation
 
-### Swagger UI (recommandé)
+### Swagger UI — API complète (privée, filtrée par permissions)
 - **URL** : `http://localhost:8000/api/schema/swagger-ui/`
-- Interface interactive permettant de tester les requêtes directement
-- Authentification Bearer JWT configurable via le bouton "Authorize"
+- **Accès** : authentification requise (session SAML ou JWT)
+- **Filtrage** : chaque utilisateur ne voit que les endpoints auxquels il a droit (permissions DRF)
+- Ex. : un DBA ne voit pas les endpoints admin (profiles, audit, etc.) ; un DBOPS voit tout
+
+### Swagger UI — API publique
+- **URL** : `http://localhost:8000/api/schema/swagger-ui-public/`
+- Sous-ensemble d'endpoints destinés aux consommateurs externes
+- Inclut : catalog, auth, executions, reference, integrations/types
+- Exclut : admin, audit, dashboard, inventory, profiles, help
 
 ### ReDoc
-- **URL** : `http://localhost:8000/api/schema/redoc/`
+- **URL** : `http://localhost:8000/api/schema/redoc/` (complet)
+- **URL** : `http://localhost:8000/api/schema/redoc-public/` (public)
 - Documentation statique organisée par tags/domaines
 
 ### Schéma OpenAPI brut
-- **URL** : `http://localhost:8000/api/schema/`
+- **URL** : `http://localhost:8000/api/schema/` (complet)
+- **URL** : `http://localhost:8000/api/schema/public/` (public)
 - Format JSON OpenAPI 3.0
 
 ## Authentification

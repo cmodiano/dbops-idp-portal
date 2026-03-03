@@ -31,6 +31,11 @@ class ExecutionTargetSerializer(serializers.Serializer):
 class ExecutionSerializer(serializers.Serializer):
     """
     Serializer matching frontend ExecutionResponse (see frontend/src/types/api.ts).
+
+    Champs dépréciés (ADR-007, Story 57.12) :
+    - approved_by, approved_at, approval_comment : conservés en sortie pour rétrocompatibilité API,
+      mais la source de vérité est désormais ExecutionStep.approved_* depuis Story 57.1.
+      Ne plus utiliser ces champs pour de nouvelles intégrations.
     """
     id = serializers.IntegerField(read_only=True, help_text="Identifiant unique de l'exécution")
     action_id = serializers.IntegerField(help_text="ID de l'action exécutée")
@@ -76,6 +81,8 @@ class ExecutionSerializer(serializers.Serializer):
             "started_at": ensure_utc_isoformat(obj.started_at),
             "completed_at": ensure_utc_isoformat(obj.completed_at),
             "created_at": ensure_utc_isoformat(obj.created_at),
+            # DEPRECATED ADR-007 (Story 57.12) — conservés pour rétrocompatibilité API.
+            # Source de vérité : ExecutionStep.approved_by/at/approval_comment
             "approved_by": obj.approved_by_id,
             "approved_at": ensure_utc_isoformat(obj.approved_at),
             "approval_comment": obj.approval_comment,

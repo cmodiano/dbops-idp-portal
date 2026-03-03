@@ -3,7 +3,8 @@ from django.test import TestCase
 from idp_auth.models import User
 from catalog.models import Action
 from executions.models import (
-    Execution, ExecutionStep, ExecutionStepType, ScheduledExecution, RecurringPattern
+    Execution, ExecutionStep, ExecutionStepStatus, ExecutionStepType,
+    ExecutionStatus, ScheduledExecution, RecurringPattern
 )
 
 
@@ -805,6 +806,121 @@ class ExecutionRBACMultiProfileTests(TestCase):
             }, format='json')
 
         self.assertEqual(response.status_code, 201)
+
+
+# =============================================================================
+# Story 57.12: Tests is_pending_approval (ADR-007 Phase 4.2)
+# =============================================================================
+
+@pytest.mark.django_db
+class TestExecutionIsPendingApproval(TestCase):
+    """
+    AC#6 : Tests unitaires pour Execution.is_pending_approval.
+    Vérifie la logique backward-compat (status PENDING_APPROVAL) et
+    le nouveau mécanisme step-based (ExecutionStep WAITING).
+    """
+
+    def setUp(self):
+        """Fixtures de base."""
+        self.user = User.objects.create(
+            username='approval_testuser',
+            profile='DBA'
+        )
+        self.action = Action.objects.create(
+            name='Approval Test Action',
+            category='Provisioning',
+            engine='Oracle',
+            platform='AAP'
+        )
+
+    def test_is_pending_approval_true_when_status_pending_approval(self):
+        """
+        AC#6 / backward compat : is_pending_approval == True si status == PENDING_APPROVAL
+        même sans aucun ExecutionStep WAITING.
+        """
+        execution = Execution.objects.create(
+            action=self.action,
+            user=self.user,
+            environment='production',
+            status=ExecutionStatus.PENDING_APPROVAL,
+        )
+        self.assertTrue(execution.is_pending_approval)
+
+    def test_is_pending_approval_true_when_step_waiting(self):
+        """
+        AC#6 / step-based : is_pending_approval == True si un ExecutionStep
+        avec status=WAITING existe, même si Execution.status != PENDING_APPROVAL.
+        """
+        execution = Execution.objects.create(
+            action=self.action,
+            user=self.user,
+            environment='production',
+            status=ExecutionStatus.RUNNING,
+        )
+        ExecutionStep.objects.create(
+            execution=execution,
+            step_order=1,
+            step_name='Gate — Approval',
+            step_type='gate',
+            status=ExecutionStepStatus.WAITING,
+        )
+        self.assertTrue(execution.is_pending_approval)
+
+    def test_is_pending_approval_false_when_no_waiting_steps(self):
+        """
+        AC#6 : is_pending_approval == False si aucun step WAITING et
+        status != PENDING_APPROVAL.
+        """
+        execution = Execution.objects.create(
+            action=self.action,
+            user=self.user,
+            environment='developpement',
+            status=ExecutionStatus.RUNNING,
+        )
+        ExecutionStep.objects.create(
+            execution=execution,
+            step_order=1,
+            step_name='Platform Step',
+            step_type='platform',
+            status=ExecutionStepStatus.COMPLETED,
+        )
+        self.assertFalse(execution.is_pending_approval)
+
+    def test_is_pending_approval_false_when_no_steps_and_running(self):
+        """
+        AC#6 : is_pending_approval == False si aucun step du tout et
+        status == RUNNING.
+        """
+        execution = Execution.objects.create(
+            action=self.action,
+            user=self.user,
+            environment='developpement',
+            status=ExecutionStatus.RUNNING,
+        )
+        self.assertFalse(execution.is_pending_approval)
+
+    def test_is_pending_approval_true_when_maintenance_window_waiting(self):
+        """
+        ADR-007 Dev Notes (Story 57.12) : comportement documenté intentionnel —
+        un step WAITING de type maintenance_window déclenche aussi is_pending_approval=True.
+        Les deux types de gate (approval et maintenance_window) représentent
+        un blocage opérationnel légitime. Voir docstring de is_pending_approval.
+        """
+        execution = Execution.objects.create(
+            action=self.action,
+            user=self.user,
+            environment='production',
+            status=ExecutionStatus.RUNNING,
+        )
+        ExecutionStep.objects.create(
+            execution=execution,
+            step_order=1,
+            step_name='Gate — Maintenance Window',
+            step_type='gate',
+            status=ExecutionStepStatus.WAITING,
+        )
+        # Comportement intentionnel : maintenance_window WAITING → is_pending_approval True
+        self.assertTrue(execution.is_pending_approval)
 
 
 # Story 13.4 tests: see executions/tests/test_story_13_4.py (single source of truth)

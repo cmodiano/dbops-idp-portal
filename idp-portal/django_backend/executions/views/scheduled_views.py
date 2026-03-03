@@ -12,6 +12,7 @@ from operator import or_
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
+from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -45,7 +46,7 @@ from executions.utils import (
 from inventory.services import InventoryService, InventoryServiceError, MAX_TARGETS_FOR_RBAC_FILTER
 
 from croniter import croniter, CroniterBadCronError, CroniterBadDateError
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import extend_schema, OpenApiParameter, inline_serializer
 import structlog
 
 UTC = dt_timezone(timedelta(0))
@@ -64,7 +65,22 @@ class ScheduledExecutionsView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    @extend_schema(tags=['scheduling'], summary='Lister les exécutions planifiées', responses={200: ScheduledExecutionListItemSerializer(many=True)})
+    @extend_schema(
+        tags=['scheduling'],
+        summary='Lister les exécutions planifiées',
+        parameters=[
+            OpenApiParameter('limit', int, description='Résultats par page (défaut: 50, max: 100)'),
+            OpenApiParameter('offset', int, description='Décalage pagination'),
+            OpenApiParameter('status', str, description='Filtre par statut'),
+            OpenApiParameter('action_id', int, description='Filtre par action'),
+            OpenApiParameter('scheduled_from', str, description='Date/heure début (ISO 8601)'),
+            OpenApiParameter('scheduled_to', str, description='Date/heure fin (ISO 8601)'),
+            OpenApiParameter('environment', str, description='Filtre par environnement'),
+            OpenApiParameter('engine', str, description='Filtre par technologie'),
+            OpenApiParameter('platform', str, description='Filtre par plateforme'),
+        ],
+        responses={200: ScheduledExecutionListItemSerializer(many=True)},
+    )
     def get(self, request: Request) -> Response:
         limit = parse_int(request.query_params.get("limit"), 50, name="limit")
         offset = parse_int(request.query_params.get("offset"), 0, name="offset")
@@ -144,7 +160,24 @@ class ScheduledExecutionsView(APIView):
             "available_actions": available_actions,
         })
 
-    @extend_schema(tags=['scheduling'], summary='Créer une exécution planifiée', responses={201: ScheduledExecutionSerializer})
+    @extend_schema(
+        tags=['scheduling'],
+        summary='Créer une exécution planifiée',
+        request=inline_serializer(
+            name='ScheduledExecutionCreateRequest',
+            fields={
+                'action_id': serializers.IntegerField(help_text='ID de l\'action'),
+                'environment': serializers.CharField(help_text='Environnement cible'),
+                'parameters': serializers.DictField(required=False, help_text='Paramètres d\'exécution'),
+                'scheduled_at': serializers.DateTimeField(help_text='Date/heure planifiée (ISO 8601)'),
+                'recurring_pattern': serializers.DictField(
+                    required=False,
+                    help_text='Pattern récurrent: {pattern_type, pattern_config}',
+                ),
+            },
+        ),
+        responses={201: ScheduledExecutionSerializer},
+    )
     def post(self, request: Request) -> Response:
         payload = request.data or {}
 

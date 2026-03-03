@@ -79,7 +79,20 @@ class ExecutionStatsView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    @extend_schema(tags=['executions'], summary='Statistiques des exécutions')
+    @extend_schema(
+        tags=['executions'],
+        summary='Statistiques des exécutions',
+        parameters=[
+            OpenApiParameter('scope', str, description='Scope: mine (défaut) ou all'),
+            OpenApiParameter('start_date', str, description='Date de début (YYYY-MM-DD)'),
+            OpenApiParameter('end_date', str, description='Date de fin (YYYY-MM-DD)'),
+            OpenApiParameter('action_id', int, description='Filtrage par action'),
+            OpenApiParameter('status', str, description='Filtrage par statut'),
+            OpenApiParameter('engine', str, description='Filtrage par technologie'),
+            OpenApiParameter('environment', str, description='Filtrage par environnement'),
+            OpenApiParameter('tags', str, description='Tags séparés par virgules (AND)'),
+        ],
+    )
     def get(self, request: Request) -> Response:
         qs = Execution.objects.select_related("action")
         qs, _effective_scope = apply_scope_filter(qs, user=request.user, scope=request.query_params.get("scope") or "mine")
@@ -117,7 +130,19 @@ class ExecutionTimeSeriesView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    @extend_schema(tags=['executions'], summary='Série temporelle des exécutions')
+    @extend_schema(
+        tags=['executions'],
+        summary='Série temporelle des exécutions',
+        parameters=[
+            OpenApiParameter('scope', str, description='Scope: mine (défaut) ou all'),
+            OpenApiParameter('start_date', str, description='Date de début (YYYY-MM-DD, défaut: -7 jours)'),
+            OpenApiParameter('end_date', str, description='Date de fin (YYYY-MM-DD, défaut: aujourd\'hui)'),
+            OpenApiParameter('action_id', int, description='Filtrage par action'),
+            OpenApiParameter('engine', str, description='Filtrage par technologie'),
+            OpenApiParameter('environment', str, description='Filtrage par environnement'),
+            OpenApiParameter('tags', str, description='Tags séparés par virgules (AND)'),
+        ],
+    )
     def get(self, request: Request) -> Response:
         qs = Execution.objects.all()
         qs, _effective_scope = apply_scope_filter(qs, user=request.user, scope=request.query_params.get("scope") or "mine")

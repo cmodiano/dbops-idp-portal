@@ -366,6 +366,8 @@ curl -X POST http://localhost:8000/api/v1/auth/token \\
 """,
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
+    # Filtre le schéma selon les permissions DRF de l'utilisateur (endpoints admin masqués pour non-admin)
+    'SERVE_PUBLIC': False,
     'SWAGGER_UI_SETTINGS': {
         'deepLinking': True,
         'persistAuthorization': True,

@@ -8,6 +8,7 @@ from typing import Any
 
 from django.conf import settings
 from django.db import transaction
+from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -33,7 +34,7 @@ from executions.validators.env_config_resolver import EnvironmentConfigResolver
 from executions.validators.mutex_validator import MutexValidator
 from executions.validators.workflow_validator import WorkflowValidator
 
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import extend_schema, inline_serializer
 import structlog
 
 # Story 27.9: Use factory pattern for platform adapter instantiation
@@ -128,6 +129,35 @@ class ExecutionsCreateView(APIView):
         tags=['executions'],
         summary='Créer une exécution',
         description="Lance une nouvelle exécution d'action. target_names requis si requires_target=True.",
+        request=inline_serializer(
+            name='ExecutionCreateRequest',
+            fields={
+                'action_id': serializers.IntegerField(help_text='ID de l\'action à exécuter (requis)'),
+                'target_names': serializers.ListField(
+                    child=serializers.CharField(),
+                    required=False,
+                    help_text='Liste de noms de targets (requis si action.requires_target=True)',
+                ),
+                'environment': serializers.CharField(
+                    required=False,
+                    help_text='Environnement (requis si pas de target_names)',
+                ),
+                'parameters': serializers.DictField(
+                    required=False,
+                    help_text='Paramètres spécifiques à l\'action',
+                ),
+                'workflow_step_parameters': serializers.DictField(
+                    required=False,
+                    help_text='Paramètres par étape pour workflows: {"1": {"parameters": {...}}, "2": {...}}',
+                ),
+                'parent_execution_id': serializers.IntegerField(required=False),
+                'page_me': serializers.BooleanField(
+                    required=False,
+                    default=False,
+                    help_text='Injecter user_id/user_name dans parameters',
+                ),
+            },
+        ),
         responses={201: ExecutionSerializer},
     )
     def post(self, request: Request) -> Response:

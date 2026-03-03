@@ -9,6 +9,7 @@ from django.db.models import Q
 from django.http import HttpResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
+from drf_spectacular.utils import extend_schema, OpenApiParameter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -290,6 +291,27 @@ class AuditExecutionsView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        tags=['audit'],
+        summary='Lister les entrées d\'audit',
+        parameters=[
+            OpenApiParameter('limit', int, description='Nombre de résultats par page (défaut: 25, max: 500)'),
+            OpenApiParameter('offset', int, description='Décalage pour la pagination'),
+            OpenApiParameter('entity_type', str, description='Filtre par type d\'entité (execution, action, user, ...)'),
+            OpenApiParameter('action_type', str, description='Filtre par type d\'action d\'audit'),
+            OpenApiParameter('user', str, description='Recherche icontains sur username ou display_name'),
+            OpenApiParameter('user_id', str, description='Filtre par user_id exact'),
+            OpenApiParameter('from', str, description='Date de début (ISO 8601)'),
+            OpenApiParameter('to', str, description='Date de fin (ISO 8601)'),
+            OpenApiParameter('environment', str, description='Filtre par environnement (execution-only)'),
+            OpenApiParameter('action_id', int, description='Filtre par action ID (execution-only)'),
+            OpenApiParameter('engine_type', str, description='Filtre par engine (execution-only)'),
+            OpenApiParameter('status', str, description='success | failed | running (execution-only)'),
+            OpenApiParameter('correlation_id', str, description='Filtre par correlation_id'),
+            OpenApiParameter('sort', str, description='Champ de tri'),
+            OpenApiParameter('order', str, description='asc | desc'),
+        ],
+    )
     def get(self, request):
         if not _is_auditor(request.user):
             raise ForbiddenError(
@@ -393,6 +415,26 @@ class AuditExportView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        tags=['audit'],
+        summary='Exporter les entrées d\'audit (CSV ou PDF)',
+        parameters=[
+            OpenApiParameter('fmt', str, description='Format: csv | pdf (ou export_format)'),
+            OpenApiParameter('export_format', str, description='Alias pour fmt'),
+            OpenApiParameter('limit', int, description='Max 10000 lignes'),
+            OpenApiParameter('offset', int, description='Décalage'),
+            OpenApiParameter('entity_type', str, description='Filtre par type d\'entité'),
+            OpenApiParameter('action_type', str, description='Filtre par type d\'action'),
+            OpenApiParameter('user', str, description='Recherche user'),
+            OpenApiParameter('from', str, description='Date début (ISO 8601)'),
+            OpenApiParameter('to', str, description='Date fin (ISO 8601)'),
+            OpenApiParameter('environment', str, description='Filtre environnement'),
+            OpenApiParameter('action_id', int, description='Filtre action_id'),
+            OpenApiParameter('engine_type', str, description='Filtre engine'),
+            OpenApiParameter('status', str, description='success | failed | running'),
+            OpenApiParameter('correlation_id', str, description='Filtre correlation_id'),
+        ],
+    )
     def get(self, request):
         if not _is_auditor(request.user):
             raise ForbiddenError(
