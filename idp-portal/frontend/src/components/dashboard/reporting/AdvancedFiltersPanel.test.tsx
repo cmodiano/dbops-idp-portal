@@ -84,8 +84,8 @@ describe('AdvancedFiltersPanel', () => {
       />,
     );
 
-    const badge = screen.getByTestId('active-filters-count');
-    expect(badge).toHaveTextContent('2 filtres actifs');
+    const badge = screen.getByTestId('active-filters-badge');
+    expect(badge).toHaveTextContent('2');
   });
 
   it('displays singular form for single active filter', () => {
@@ -100,14 +100,14 @@ describe('AdvancedFiltersPanel', () => {
       />,
     );
 
-    const badge = screen.getByTestId('active-filters-count');
-    expect(badge).toHaveTextContent('1 filtre actif');
+    const badge = screen.getByTestId('active-filters-badge');
+    expect(badge).toHaveTextContent('1');
   });
 
   it('does not display active filters badge when no filters', () => {
     render(<AdvancedFiltersPanel {...defaultProps} />);
 
-    expect(screen.queryByTestId('active-filters-count')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('active-filters-badge')).not.toBeInTheDocument();
   });
 
   it('disables inputs when loading', () => {
@@ -133,8 +133,8 @@ describe('AdvancedFiltersPanel', () => {
       />,
     );
 
-    const badge = screen.getByTestId('active-filters-count');
-    expect(badge).toHaveTextContent('1 filtre actif');
+    const badge = screen.getByTestId('active-filters-badge');
+    expect(badge).toHaveTextContent('1');
   });
 
   it('counts tags array as single filter', () => {
@@ -149,8 +149,8 @@ describe('AdvancedFiltersPanel', () => {
       />,
     );
 
-    const badge = screen.getByTestId('active-filters-count');
-    expect(badge).toHaveTextContent('1 filtre actif');
+    const badge = screen.getByTestId('active-filters-badge');
+    expect(badge).toHaveTextContent('1');
   });
 
   it('uses dynamic filterOptions from API when provided', () => {
@@ -253,8 +253,8 @@ describe('AdvancedFiltersPanel — coverage extension', () => {
     // Only fromDate set, toDate not set: the filter (fromDate || toDate) = truthy
     const filtersWithFromOnly: DashboardFilters = { fromDate: '2026-01-01' };
     render(<AdvancedFiltersPanel {...defaultProps} filters={filtersWithFromOnly} />);
-    const badge = screen.getByTestId('active-filters-count');
-    expect(badge).toHaveTextContent('1 filtre actif');
+    const badge = screen.getByTestId('active-filters-badge');
+    expect(badge).toHaveTextContent('1');
   });
 
   it('renders with existing dateRange value shown in RangePicker', () => {

@@ -177,7 +177,7 @@ class TestContainerWorkflowRuntimeBasic:
             name="Empty Workflow",
             status=ActionStatus.PUBLISHED,
             item_type=ActionItemType.WORKFLOW,
-            execution_steps=[],
+            execution_steps=[], change_type_config=None,
             created_by=self.user,
         )
         execution = self._create_execution(action=workflow)

@@ -64,7 +64,8 @@ export function mapToCalendarEvent(exec: ScheduledExecutionListItem): CalendarEv
   const hasTime = effectiveDate.includes('T') && /T\d{1,2}:\d{2}/.test(effectiveDate);
   const startMoment = hasTime ? parsed : parsed.hour(9).minute(0).second(0).millisecond(0);
   const startStr = startMoment.toISOString();
-  const endStr = startMoment.add(1, 'hour').toISOString();
+  // 30 min par défaut : évite qu'un événement à 23h08 déborde visuellement sur le lendemain
+  const endStr = startMoment.add(30, 'minute').toISOString();
 
   return {
     id: String(exec.scheduled_execution_id),

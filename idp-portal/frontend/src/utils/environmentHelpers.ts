@@ -98,3 +98,51 @@ export function isProductionEnvironment(env: string): boolean {
   const normalized = env.toLowerCase();
   return normalized === 'prod' || normalized === 'production';
 }
+
+/** Shape for environment stats (compatible with EnvironmentStats from api/analytics). */
+interface EnvironmentStatsShape {
+  environment: string;
+  count: number;
+  success_rate: number | null;
+}
+
+/**
+ * Normalizes environment stats by grouping case-insensitively (DEV + dev → single bucket).
+ * Uses existing frontend normalization: lowercase key, sortEnvironments order.
+ */
+export function normalizeEnvironmentStats<T extends EnvironmentStatsShape>(
+  stats: T[],
+): T[] {
+  const byKey = new Map<string, { count: number; weightedSuccess: number; totalForRate: number }>();
+
+  for (const row of stats) {
+    const key = (row.environment || '').toLowerCase().trim() || 'n/a';
+    const existing = byKey.get(key);
+    const successRate = row.success_rate;
+    const count = row.count;
+
+    if (existing) {
+      existing.count += count;
+      if (successRate != null && count > 0) {
+        existing.weightedSuccess += successRate * count;
+        existing.totalForRate += count;
+      }
+    } else {
+      byKey.set(key, {
+        count,
+        weightedSuccess: successRate != null ? successRate * count : 0,
+        totalForRate: successRate != null ? count : 0,
+      });
+    }
+  }
+
+  const sortedKeys = sortEnvironments([...byKey.keys()]);
+  return sortedKeys.map((env) => {
+    const agg = byKey.get(env)!;
+    const success_rate =
+      agg.totalForRate > 0
+        ? Math.round((agg.weightedSuccess / agg.totalForRate) * 10) / 10
+        : null;
+    return { environment: env, count: agg.count, success_rate } as T;
+  });
+}

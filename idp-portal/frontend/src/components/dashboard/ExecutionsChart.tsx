@@ -30,6 +30,22 @@ function formatAxisDate(dateStr: string): string {
   return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
 }
 
+/** Custom tooltip. */
+function CustomTooltip(props: { active?: boolean; payload?: Array<{ name: string; value: number; color: string }>; label?: string }) {
+  const { active, payload, label } = props;
+  if (!active || !payload?.length) return null;
+  return (
+    <div style={{ fontSize: 13 }}>
+      <div style={{ fontWeight: 600, marginBottom: 4 }}>Date: {label}</div>
+      {payload.map((entry, index) => (
+        <div key={index} style={{ color: entry.color }}>
+          {entry.name === 'success' ? 'Succès' : 'Échecs'}: {entry.value ?? 0}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function ExecutionsChart({ data, loading = false }: ExecutionsChartProps) {
   if (loading) {
     return (
@@ -65,15 +81,7 @@ export function ExecutionsChart({ data, loading = false }: ExecutionsChartProps)
             tickLine={false}
             axisLine={false}
           />
-          <Tooltip
-            labelFormatter={(label) => `Date: ${label}`}
-            formatter={(value: number | undefined, name: string | undefined) => [
-              value ?? 0,
-              name === 'success' ? 'Succès' : 'Échecs',
-            ]}
-            contentStyle={{ fontSize: 13 }}
-            labelStyle={{ fontWeight: 600 }}
-          />
+          <Tooltip content={<CustomTooltip />} />
           <Legend
             wrapperStyle={{ fontSize: 13 }}
             formatter={(value) => (value === 'success' ? 'Succès' : 'Échecs')}

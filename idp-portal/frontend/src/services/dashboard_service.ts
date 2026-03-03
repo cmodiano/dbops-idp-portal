@@ -87,17 +87,15 @@ export async function fetchTimeSeries(
  * Fetch execution stats grouped by database engine (Story 8.3, AC3, AC7; Story 8.4, AC7).
  *
  * Returns executions aggregated by engine with count and success rate.
- * Note: engine filter is not applicable here since engine is the grouping key.
+ * All filters (engine, environment, tags, status, period) are applied.
  *
- * @param filters Optional filters including days, environment, tags, status, fromDate, toDate
+ * @param filters Optional filters including days, engine, environment, tags, status, fromDate, toDate
  * @returns Array of TechnologyStats
  */
 export async function fetchStatsByTechnology(
   filters: DashboardFilters = {},
 ): Promise<TechnologyStats[]> {
-  // Remove engine from filters since it's the grouping key
-  const { engine: _, ...restFilters } = filters;
-  const params = buildFilterParams({ days: 14, ...restFilters });
+  const params = buildFilterParams({ days: 14, ...filters });
   return apiFetch<TechnologyStats[]>(`/dashboard/stats-by-technology?${params.toString()}`);
 }
 
@@ -106,17 +104,15 @@ export async function fetchStatsByTechnology(
  *
  * Returns executions aggregated by environment with count and success rate.
  * Results are ordered: dev, staging, prod, then alphabetical.
- * Note: environment filter is not applicable here since environment is the grouping key.
+ * All filters (engine, environment, tags, status, period) are applied.
  *
- * @param filters Optional filters including days, engine, tags, status, fromDate, toDate
+ * @param filters Optional filters including days, engine, environment, tags, status, fromDate, toDate
  * @returns Array of EnvironmentStats
  */
 export async function fetchStatsByEnvironment(
   filters: DashboardFilters = {},
 ): Promise<EnvironmentStats[]> {
-  // Remove environment from filters since it's the grouping key
-  const { environment: _, ...restFilters } = filters;
-  const params = buildFilterParams({ days: 14, ...restFilters });
+  const params = buildFilterParams({ days: 14, ...filters });
   return apiFetch<EnvironmentStats[]>(`/dashboard/stats-by-environment?${params.toString()}`);
 }
 

@@ -88,7 +88,7 @@ def _apply_common_filters(qs: QuerySet, *, request: Any, include_status: bool) -
 
     environment = request.query_params.get("environment")
     if environment:
-        qs = qs.filter(environment=environment)
+        qs = qs.filter(environment__iexact=environment)
 
     tags = request.query_params.getlist("tags")
     tags = [t.strip() for t in tags if t and t.strip()]
@@ -186,8 +186,7 @@ class DashboardTimeSeriesView(APIView):
         qs = Execution.objects.select_related("action")
         qs = _filter_queryset_by_ownership(qs, request)  # AC3: Story 26.8
 
-        # Ignore status filter (timeseries always success/failed)
-        qs = _apply_common_filters(qs, request=request, include_status=False)
+        qs = _apply_common_filters(qs, request=request, include_status=True)
 
         period_start, period_end_exclusive = _get_period_bounds(request)
         qs = qs.filter(created_at__gte=period_start, created_at__lt=period_end_exclusive)
@@ -223,8 +222,7 @@ class DashboardStatsByTechnologyView(APIView):
         qs = Execution.objects.select_related("action")
         qs = _filter_queryset_by_ownership(qs, request)  # AC3: Story 26.8
 
-        # Ignore status filter; engine is grouping key
-        qs = _apply_common_filters(qs, request=request, include_status=False)
+        qs = _apply_common_filters(qs, request=request, include_status=True)
 
         period_start, period_end_exclusive = _get_period_bounds(request)
         qs = qs.filter(created_at__gte=period_start, created_at__lt=period_end_exclusive)
@@ -265,8 +263,7 @@ class DashboardStatsByEnvironmentView(APIView):
         qs = Execution.objects.select_related("action")
         qs = _filter_queryset_by_ownership(qs, request)  # AC3: Story 26.8
 
-        # Ignore status filter; environment is grouping key
-        qs = _apply_common_filters(qs, request=request, include_status=False)
+        qs = _apply_common_filters(qs, request=request, include_status=True)
 
         period_start, period_end_exclusive = _get_period_bounds(request)
         qs = qs.filter(created_at__gte=period_start, created_at__lt=period_end_exclusive)

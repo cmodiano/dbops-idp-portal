@@ -113,8 +113,8 @@ describe('EnvironmentBarChart — additional coverage', () => {
       { environment: 'dev', count: 40, success_rate: 92.0 },
     ];
     render(<EnvironmentBarChart data={mockData} loading={false} />);
-    // The Tooltip mock invokes CustomTooltip with active=true, so tooltip content appears
-    expect(screen.getByText('dev')).toBeInTheDocument();
+    // The Tooltip mock invokes CustomTooltip with active=true; label uses getEnvironmentLabel (dev → Développement)
+    expect(screen.getByText('Développement')).toBeInTheDocument();
     expect(screen.getByText('Exécutions: 40')).toBeInTheDocument();
     expect(screen.getByText('Taux de succès: 92.0%')).toBeInTheDocument();
   });
