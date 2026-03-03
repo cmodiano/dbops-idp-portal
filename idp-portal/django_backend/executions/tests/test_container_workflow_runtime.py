@@ -854,7 +854,7 @@ class TestContainerWorkflowStepOutputs:
         workflow_action = ActionFactory(
             name="Init Test Workflow",
             status=ActionStatus.PUBLISHED,
-            item_type=ActionItemType.ACTION,
+            item_type=ActionItemType.WORKFLOW,
             execution_steps=[],
             created_by=self.user,
         )

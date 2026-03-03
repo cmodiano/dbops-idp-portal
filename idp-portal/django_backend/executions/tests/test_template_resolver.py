@@ -15,6 +15,8 @@ Tests :
 - Filtres non autorisés indisponibles
 """
 
+import pytest
+
 from executions.template_resolver import StepTemplateResolver
 
 
@@ -126,7 +128,7 @@ class TestStepTemplateResolver:
         """StepTemplateResolver avec dict vide — pas d'erreur."""
         resolver = StepTemplateResolver({})
         result = resolver.resolve({"val": "{{ steps.nonexistent.field }}"})
-        assert "val" in result
+        assert result["val"] == ""
 
     def test_resolve_multiple_steps(self):
         """Résolution depuis plusieurs steps dans le même input_mapping."""
@@ -180,15 +182,15 @@ class TestStepTemplateResolver:
     def test_step_output_proxy_private_attr_raises(self):
         """_StepOutputProxy.__getattr__ lève AttributeError pour les attributs privés."""
         from executions.template_resolver import _StepOutputProxy
-        import pytest as pt
+
         proxy = _StepOutputProxy({})
-        with pt.raises(AttributeError):
-            _ = proxy.__custom_private
+        with pytest.raises(AttributeError):
+            _ = proxy._private
 
     def test_steps_proxy_private_attr_raises(self):
         """_StepsProxy.__getattr__ lève AttributeError pour les attributs privés."""
         from executions.template_resolver import _StepsProxy
-        import pytest as pt
+
         proxy = _StepsProxy({})
-        with pt.raises(AttributeError):
-            _ = proxy.__custom_private
+        with pytest.raises(AttributeError):
+            _ = proxy._private

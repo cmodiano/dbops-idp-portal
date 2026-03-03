@@ -151,6 +151,8 @@ iniconfig==2.3.0
     # via pytest
 isodate==0.7.2
     # via python3-saml
+jinja2==3.1.6
+    # via idp-portal-backend (pyproject.toml)
 jsonschema==4.26.0
     # via drf-spectacular
 jsonschema-specifications==2025.9.1
@@ -169,6 +171,8 @@ lxml==6.0.2
     #   xmlsec
 markdown-it-py==4.0.0
     # via rich
+markupsafe==3.0.3
+    # via jinja2
 mdurl==0.1.2
     # via markdown-it-py
 msgpack==1.1.2

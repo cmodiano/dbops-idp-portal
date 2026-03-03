@@ -37,7 +37,10 @@ class OutputExtractor:
             return {}
         result: dict = {}
         for key, path in output_mapping.items():
-            result[key] = self._resolve_path(raw_output, path)
+            if not isinstance(path, str):
+                result[key] = None
+            else:
+                result[key] = self._resolve_path(raw_output, path)
         return result
 
     def _resolve_path(self, data: dict, path: str) -> Any:
@@ -49,8 +52,11 @@ class OutputExtractor:
             path: Expression JSONPath simple (ex : ``$.data.databases``).
 
         Returns:
-            Valeur extraite, ou ``None`` si un segment du chemin est introuvable.
+            Valeur extraite, ou ``None`` si un segment du chemin est introuvable
+            ou si path n'est pas une chaîne (config malformée).
         """
+        if not isinstance(path, str):
+            return None
         # Supprimer le préfixe "$." ou "$" si présent
         clean = path.lstrip("$").lstrip(".")
         if not clean:

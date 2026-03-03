@@ -41,6 +41,11 @@ from core.models import AuditActionType, AuditEntityType
 from core.middleware import get_correlation_id
 from executions.output_extractor import OutputExtractor
 from executions.template_resolver import StepTemplateResolver
+from executions.step_handlers.condition_evaluator import StepConditionEvaluator
+from executions.step_handlers.service_call_handler import ServiceCallHandler
+from executions.step_handlers.http_request_handler import HttpRequestHandler
+from executions.step_handlers.evaluation_handler import EvaluationHandler
+from executions.step_handlers.gate_handler import GateHandler
 
 logger = structlog.get_logger(__name__)
 
@@ -259,11 +264,25 @@ class ContainerWorkflowRuntime:
 
         # Résoudre les input_mapping depuis _step_outputs (ADR-007 §3b)
         input_mapping = step.get('input_mapping', {})
-        if input_mapping:
+        resolved_params: dict = {}
+        if input_mapping and isinstance(input_mapping, dict):
             resolver = StepTemplateResolver(self._step_outputs)
             resolved_params = resolver.resolve(input_mapping)
-        else:
-            resolved_params = {}
+            if not isinstance(resolved_params, dict):
+                logger.warning(
+                    "container_workflow_input_mapping_resolve_non_dict",
+                    step_id=step_id,
+                    resolved_type=type(resolved_params).__name__,
+                    correlation_id=self.correlation_id,
+                )
+                resolved_params = {}
+        elif input_mapping and not isinstance(input_mapping, dict):
+            logger.warning(
+                "container_workflow_input_mapping_not_dict",
+                step_id=step_id,
+                input_type=type(input_mapping).__name__,
+                correlation_id=self.correlation_id,
+            )
 
         # Build child execution parameters (AC3: inject workflow_step_parameters)
         child_params = self._get_step_parameters(step)
