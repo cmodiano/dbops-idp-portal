@@ -15,6 +15,7 @@ import structlog
 from django.conf import settings
 
 from core.exceptions import ServiceUnavailableError
+from core.middleware import get_correlation_id
 from integrations.health_check import HealthCheckResult, HealthCheckStatus, IHealthCheckable
 
 logger = structlog.get_logger(__name__)
@@ -42,7 +43,7 @@ class ServiceNowService(IHealthCheckable):
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.auth_headers = auth_headers
-        self.timeout = timeout
+        self.timeout = getattr(settings, 'SERVICENOW_TIMEOUT', timeout)
         logger.info("servicenow_service_initialized", base_url=self.base_url)
 
     def _get_verify_tls(self) -> bool:
@@ -94,11 +95,11 @@ class ServiceNowService(IHealthCheckable):
                 continue
             payload[k] = str(v) if not isinstance(v, str) else v
 
-        timeout = getattr(settings, 'SERVICENOW_TIMEOUT', 30)
         verify_tls = self._get_verify_tls()
+        correlation_id = get_correlation_id()
 
         try:
-            with httpx.Client(headers=self.auth_headers, timeout=timeout, verify=verify_tls) as client:
+            with httpx.Client(headers=self.auth_headers, timeout=self.timeout, verify=verify_tls) as client:
                 resp = client.post(url, json=payload)
                 resp.raise_for_status()
                 try:
@@ -118,34 +119,50 @@ class ServiceNowService(IHealthCheckable):
                     raise ServiceUnavailableError(
                         code="SERVICENOW_INVALID_RESPONSE",
                         message="ServiceNow create_change returned 2xx but no number or sys_id in result",
+                        details={"base_url": self.base_url},
                     )
                 logger.info(
                     "servicenow_create_change_success",
                     change_number=change_number,
                     base_url=self.base_url,
+                    correlation_id=correlation_id,
                 )
                 return {"number": str(change_number), "sys_id": str(sys_id)}
         except httpx.TimeoutException as exc:
-            logger.error("servicenow_create_change_timeout", base_url=self.base_url, error=str(exc))
+            logger.error(
+                "servicenow_create_change_timeout",
+                base_url=self.base_url,
+                error=str(exc),
+                correlation_id=correlation_id,
+            )
             raise ServiceUnavailableError(
                 code="SERVICENOW_TIMEOUT",
                 message="ServiceNow create_change timeout",
+                details={"base_url": self.base_url},
             ) from exc
         except httpx.HTTPStatusError as exc:
             logger.error(
                 "servicenow_create_change_http_error",
                 status=exc.response.status_code,
                 error=str(exc),
+                correlation_id=correlation_id,
             )
             raise ServiceUnavailableError(
                 code="SERVICENOW_HTTP_ERROR",
                 message=f"ServiceNow create_change erreur {exc.response.status_code}",
+                details={"base_url": self.base_url, "status_code": str(exc.response.status_code)},
             ) from exc
         except httpx.RequestError as exc:
-            logger.error("servicenow_create_change_request_error", base_url=self.base_url, error=str(exc))
+            logger.error(
+                "servicenow_create_change_request_error",
+                base_url=self.base_url,
+                error=str(exc),
+                correlation_id=correlation_id,
+            )
             raise ServiceUnavailableError(
                 code="SERVICENOW_UNAVAILABLE",
                 message=f"ServiceNow indisponible: {exc}",
+                details={"base_url": self.base_url},
             ) from exc
 
     def update_change(self, change_id: str, **kwargs: object) -> None:
@@ -161,6 +178,95 @@ class ServiceNowService(IHealthCheckable):
             "ServiceNowService.get_change_status() is not yet implemented. "
             "See integration-type-catalogue.md for specification."
         )
+
+    def _patch_change_request(
+        self,
+        change_id: str,
+        payload: dict[str, str],
+        operation: str,
+        success_key: str,
+        success_value: bool,
+    ) -> dict:
+        """
+        Helper for PATCH change_request operations (close_change, cancel_change).
+        Story 57.9 — DRY extraction to reduce duplication.
+        """
+        url = f"{self.base_url}/api/now/table/change_request/{change_id}"
+        verify_tls = self._get_verify_tls()
+        correlation_id = get_correlation_id()
+        details = {"change_id": change_id, "base_url": self.base_url}
+
+        try:
+            with httpx.Client(headers=self.auth_headers, timeout=self.timeout, verify=verify_tls) as client:
+                resp = client.patch(url, json=payload)
+                resp.raise_for_status()
+                try:
+                    json_body = resp.json()
+                except (json.JSONDecodeError, ValueError):
+                    json_body = {}
+                result = json_body.get('result', {}) if isinstance(json_body, dict) else {}
+                sys_id = result.get('sys_id', '')
+                if not sys_id:
+                    logger.error(
+                        f"servicenow_{operation}_no_sys_id",
+                        change_id=change_id,
+                        status_code=resp.status_code,
+                        base_url=self.base_url,
+                        correlation_id=correlation_id,
+                    )
+                    raise ServiceUnavailableError(
+                        code="SERVICENOW_INVALID_RESPONSE",
+                        message=f"ServiceNow {operation} returned 2xx but no sys_id in result",
+                        details=details,
+                    )
+                logger.info(
+                    f"servicenow_{operation}_success",
+                    change_id=change_id,
+                    sys_id=sys_id,
+                    base_url=self.base_url,
+                    correlation_id=correlation_id,
+                )
+                return {success_key: success_value, "sys_id": str(sys_id)}
+        except httpx.TimeoutException as exc:
+            logger.error(
+                f"servicenow_{operation}_timeout",
+                change_id=change_id,
+                base_url=self.base_url,
+                error=str(exc),
+                correlation_id=correlation_id,
+            )
+            raise ServiceUnavailableError(
+                code="SERVICENOW_TIMEOUT",
+                message=f"ServiceNow {operation} timeout",
+                details=details,
+            ) from exc
+        except httpx.HTTPStatusError as exc:
+            logger.error(
+                f"servicenow_{operation}_http_error",
+                change_id=change_id,
+                status=exc.response.status_code,
+                error=str(exc),
+                correlation_id=correlation_id,
+            )
+            details["status_code"] = str(exc.response.status_code)
+            raise ServiceUnavailableError(
+                code="SERVICENOW_HTTP_ERROR",
+                message=f"ServiceNow {operation} erreur {exc.response.status_code}",
+                details=details,
+            ) from exc
+        except httpx.RequestError as exc:
+            logger.error(
+                f"servicenow_{operation}_request_error",
+                change_id=change_id,
+                base_url=self.base_url,
+                error=str(exc),
+                correlation_id=correlation_id,
+            )
+            raise ServiceUnavailableError(
+                code="SERVICENOW_UNAVAILABLE",
+                message=f"ServiceNow indisponible: {exc}",
+                details=details,
+            ) from exc
 
     def close_change(
         self,
@@ -184,7 +290,6 @@ class ServiceNowService(IHealthCheckable):
         Raises:
             ServiceUnavailableError: If the API is unavailable or returns an error
         """
-        url = f"{self.base_url}/api/now/table/change_request/{change_id}"
         payload: dict[str, str] = {
             "state": "3",
             "close_code": close_code,
@@ -194,50 +299,9 @@ class ServiceNowService(IHealthCheckable):
             if v is None:
                 continue
             payload[k] = str(v) if not isinstance(v, str) else v
-
-        timeout = getattr(settings, 'SERVICENOW_TIMEOUT', 30)
-        verify_tls = self._get_verify_tls()
-
-        try:
-            with httpx.Client(headers=self.auth_headers, timeout=timeout, verify=verify_tls) as client:
-                resp = client.patch(url, json=payload)
-                resp.raise_for_status()
-                try:
-                    json_body = resp.json()
-                except (json.JSONDecodeError, ValueError):
-                    json_body = {}
-                result = json_body.get('result', {}) if isinstance(json_body, dict) else {}
-                sys_id = result.get('sys_id', '')
-                logger.info(
-                    "servicenow_close_change_success",
-                    change_id=change_id,
-                    sys_id=sys_id,
-                    base_url=self.base_url,
-                )
-                return {"closed": True, "sys_id": str(sys_id)}
-        except httpx.TimeoutException as exc:
-            logger.error("servicenow_close_change_timeout", change_id=change_id, base_url=self.base_url, error=str(exc))
-            raise ServiceUnavailableError(
-                code="SERVICENOW_TIMEOUT",
-                message="ServiceNow close_change timeout",
-            ) from exc
-        except httpx.HTTPStatusError as exc:
-            logger.error(
-                "servicenow_close_change_http_error",
-                change_id=change_id,
-                status=exc.response.status_code,
-                error=str(exc),
-            )
-            raise ServiceUnavailableError(
-                code="SERVICENOW_HTTP_ERROR",
-                message=f"ServiceNow close_change erreur {exc.response.status_code}",
-            ) from exc
-        except httpx.RequestError as exc:
-            logger.error("servicenow_close_change_request_error", change_id=change_id, base_url=self.base_url, error=str(exc))
-            raise ServiceUnavailableError(
-                code="SERVICENOW_UNAVAILABLE",
-                message=f"ServiceNow indisponible: {exc}",
-            ) from exc
+        return self._patch_change_request(
+            change_id, payload, "close_change", "closed", True
+        )
 
     def cancel_change(
         self,
@@ -259,7 +323,6 @@ class ServiceNowService(IHealthCheckable):
         Raises:
             ServiceUnavailableError: If the API is unavailable or returns an error
         """
-        url = f"{self.base_url}/api/now/table/change_request/{change_id}"
         payload: dict[str, str] = {
             "state": "4",
             "cancel_reason": reason,
@@ -268,50 +331,9 @@ class ServiceNowService(IHealthCheckable):
             if v is None:
                 continue
             payload[k] = str(v) if not isinstance(v, str) else v
-
-        timeout = getattr(settings, 'SERVICENOW_TIMEOUT', 30)
-        verify_tls = self._get_verify_tls()
-
-        try:
-            with httpx.Client(headers=self.auth_headers, timeout=timeout, verify=verify_tls) as client:
-                resp = client.patch(url, json=payload)
-                resp.raise_for_status()
-                try:
-                    json_body = resp.json()
-                except (json.JSONDecodeError, ValueError):
-                    json_body = {}
-                result = json_body.get('result', {}) if isinstance(json_body, dict) else {}
-                sys_id = result.get('sys_id', '')
-                logger.info(
-                    "servicenow_cancel_change_success",
-                    change_id=change_id,
-                    sys_id=sys_id,
-                    base_url=self.base_url,
-                )
-                return {"cancelled": True, "sys_id": str(sys_id)}
-        except httpx.TimeoutException as exc:
-            logger.error("servicenow_cancel_change_timeout", change_id=change_id, base_url=self.base_url, error=str(exc))
-            raise ServiceUnavailableError(
-                code="SERVICENOW_TIMEOUT",
-                message="ServiceNow cancel_change timeout",
-            ) from exc
-        except httpx.HTTPStatusError as exc:
-            logger.error(
-                "servicenow_cancel_change_http_error",
-                change_id=change_id,
-                status=exc.response.status_code,
-                error=str(exc),
-            )
-            raise ServiceUnavailableError(
-                code="SERVICENOW_HTTP_ERROR",
-                message=f"ServiceNow cancel_change erreur {exc.response.status_code}",
-            ) from exc
-        except httpx.RequestError as exc:
-            logger.error("servicenow_cancel_change_request_error", change_id=change_id, base_url=self.base_url, error=str(exc))
-            raise ServiceUnavailableError(
-                code="SERVICENOW_UNAVAILABLE",
-                message=f"ServiceNow indisponible: {exc}",
-            ) from exc
+        return self._patch_change_request(
+            change_id, payload, "cancel_change", "cancelled", True
+        )
 
     # ------------------------------------------------------------------
     # Health check — Story 51.1

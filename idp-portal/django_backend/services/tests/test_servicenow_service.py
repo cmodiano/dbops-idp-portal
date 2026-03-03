@@ -198,6 +198,21 @@ class TestServiceNowTLSEnforcement:
         mock_logger.warning.assert_not_called()
 
 
+def _make_patch_mock_client(mock_client_class, response_json=None):
+    """Helper partagé pour mocker httpx.Client avec PATCH (close_change, cancel_change)."""
+    if response_json is None:
+        response_json = {"result": {"sys_id": "abc123def456"}}
+    mock_response = MagicMock()
+    mock_response.json.return_value = response_json
+    mock_response.raise_for_status = MagicMock()
+    mock_client = MagicMock()
+    mock_client.patch.return_value = mock_response
+    mock_client.__enter__ = MagicMock(return_value=mock_client)
+    mock_client.__exit__ = MagicMock(return_value=False)
+    mock_client_class.return_value = mock_client
+    return mock_client
+
+
 class TestServiceNowCloseChange:
     """Test ServiceNowService.close_change() (Story 57.9, AC#1, #4, #5, #6, #7)."""
 
@@ -208,17 +223,7 @@ class TestServiceNowCloseChange:
         )
 
     def _make_mock_client(self, mock_client_class, response_json=None):
-        if response_json is None:
-            response_json = {"result": {"sys_id": "abc123def456"}}
-        mock_response = MagicMock()
-        mock_response.json.return_value = response_json
-        mock_response.raise_for_status = MagicMock()
-        mock_client = MagicMock()
-        mock_client.patch.return_value = mock_response
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client_class.return_value = mock_client
-        return mock_client
+        return _make_patch_mock_client(mock_client_class, response_json)
 
     @patch("services.servicenow_service.httpx.Client")
     def test_close_change_success(self, mock_client_class):
@@ -312,9 +317,39 @@ class TestServiceNowCloseChange:
         assert payload["state"] == "3"
         assert payload["close_code"] == "unsuccessful"
 
+    @patch("services.servicenow_service.httpx.Client")
+    def test_close_change_empty_sys_id_raises(self, mock_client_class):
+        """HIGH-2 : 2xx sans sys_id → ServiceUnavailableError SERVICENOW_INVALID_RESPONSE."""
+        self._make_mock_client(mock_client_class, {"result": {}})
+
+        with pytest.raises(ServiceUnavailableError) as exc_info:
+            self.service.close_change(change_id="CHG001")
+
+        assert exc_info.value.code == "SERVICENOW_INVALID_RESPONSE"
+        assert "sys_id" in exc_info.value.message.lower()
+
+    @patch("services.servicenow_service.httpx.Client")
+    def test_close_change_extra_fields_via_kwargs(self, mock_client_class):
+        """AC#3 : kwargs dynamiques sont passés dans le payload PATCH de close_change."""
+        mock_client = self._make_mock_client(
+            mock_client_class,
+            {"result": {"sys_id": "abc123"}},
+        )
+
+        self.service.close_change(
+            change_id="CHG001",
+            close_code="successful",
+            u_work_notes="Clôture avec note",
+        )
+
+        payload = mock_client.patch.call_args[1]["json"]
+        assert payload["state"] == "3"
+        assert payload["close_code"] == "successful"
+        assert payload["u_work_notes"] == "Clôture avec note"
+
 
 class TestServiceNowCancelChange:
-    """Test ServiceNowService.cancel_change() (Story 57.9, AC#2, #4, #5, #6)."""
+    """Test ServiceNowService.cancel_change() (Story 57.9, AC#2, #4, #5, #6, #7)."""
 
     def setup_method(self):
         self.service = ServiceNowService(
@@ -323,17 +358,7 @@ class TestServiceNowCancelChange:
         )
 
     def _make_mock_client(self, mock_client_class, response_json=None):
-        if response_json is None:
-            response_json = {"result": {"sys_id": "abc123def456"}}
-        mock_response = MagicMock()
-        mock_response.json.return_value = response_json
-        mock_response.raise_for_status = MagicMock()
-        mock_client = MagicMock()
-        mock_client.patch.return_value = mock_response
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client_class.return_value = mock_client
-        return mock_client
+        return _make_patch_mock_client(mock_client_class, response_json)
 
     @patch("services.servicenow_service.httpx.Client")
     def test_cancel_change_success(self, mock_client_class):
@@ -388,6 +413,55 @@ class TestServiceNowCancelChange:
             self.service.cancel_change(change_id="CHG001")
 
         assert exc_info.value.code == "SERVICENOW_TIMEOUT"
+        assert "timeout" in exc_info.value.message.lower()
+
+    @patch("services.servicenow_service.httpx.Client")
+    @override_settings(DEBUG=False, SERVICENOW_VERIFY_TLS=False)
+    def test_cancel_change_tls_forced_production(self, mock_client_class):
+        """AC#7 : DEBUG=False → verify=True pour cancel_change aussi."""
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"result": {"sys_id": "abc123"}}
+        mock_response.raise_for_status = MagicMock()
+        mock_client.patch.return_value = mock_response
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client_class.return_value = mock_client
+
+        self.service.cancel_change(change_id="CHG001")
+
+        call_kwargs = mock_client_class.call_args[1]
+        assert call_kwargs["verify"] is True
+
+    @patch("services.servicenow_service.httpx.Client")
+    def test_cancel_change_empty_sys_id_raises(self, mock_client_class):
+        """HIGH-2 : 2xx sans sys_id → ServiceUnavailableError SERVICENOW_INVALID_RESPONSE."""
+        self._make_mock_client(mock_client_class, {"result": {}})
+
+        with pytest.raises(ServiceUnavailableError) as exc_info:
+            self.service.cancel_change(change_id="CHG001")
+
+        assert exc_info.value.code == "SERVICENOW_INVALID_RESPONSE"
+        assert "sys_id" in exc_info.value.message.lower()
+
+    @patch("services.servicenow_service.httpx.Client")
+    def test_cancel_change_extra_fields_via_kwargs(self, mock_client_class):
+        """AC#3 : kwargs dynamiques sont passés dans le payload PATCH de cancel_change."""
+        mock_client = self._make_mock_client(
+            mock_client_class,
+            {"result": {"sys_id": "abc123"}},
+        )
+
+        self.service.cancel_change(
+            change_id="CHG001",
+            reason="Test",
+            u_work_notes="Note additionnelle",
+        )
+
+        payload = mock_client.patch.call_args[1]["json"]
+        assert payload["state"] == "4"
+        assert payload["cancel_reason"] == "Test"
+        assert payload["u_work_notes"] == "Note additionnelle"
 
     @patch("services.servicenow_service.httpx.Client")
     def test_cancel_change_payload_state_4(self, mock_client_class):
