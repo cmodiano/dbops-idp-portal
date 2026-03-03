@@ -397,6 +397,9 @@ class ActionSerializer(ActionFieldValidationMixin, serializers.ModelSerializer):
         'on_error_step_id': {'type': 'string'}, 'retry_enabled': {'type': 'boolean'},
         'retry_max_attempts': {'type': 'integer'}, 'retry_interval_seconds': {'type': 'integer'},
         'retry_backoff_multiplier': {'type': 'number'},
+        # Story 57.15: step_type and schedule_config
+        'step_type': {'type': 'string', 'enum': ['platform', 'schedule_execution'], 'default': 'platform'},
+        'schedule_config': {'type': 'object', 'nullable': True},
     }}, 'nullable': True})
     def get_workflow_steps(self, obj: Action) -> list[dict[str, Any]] | None:
         """
@@ -435,6 +438,10 @@ class ActionSerializer(ActionFieldValidationMixin, serializers.ModelSerializer):
                     'referenced_action_id': ref_id,
                     'action_name': action_names.get(ref_id),
                 }
+
+                # Story 57.15: Expose step_type and schedule_config
+                workflow_step['step_type'] = step.get('step_type', 'platform')
+                workflow_step['schedule_config'] = step.get('schedule_config')
 
                 # Story 16.2: Add optional branch and retry fields
                 if 'step_id' in step:

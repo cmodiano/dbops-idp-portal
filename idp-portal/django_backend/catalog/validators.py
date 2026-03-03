@@ -298,6 +298,44 @@ def validate_notification_config(notification_config: dict | None) -> None:
 VALID_POLICY_TYPES = ('review_if_modified',)
 
 
+# Story 57.15: Valid schedule sources and offset pattern
+VALID_SCHEDULE_SOURCES = ('parameter', 'fixed_offset', 'recurring')
+VALID_OFFSET_PATTERN = re.compile(r'^\+\d+[dhwm]$')
+
+
+def validate_schedule_config(schedule_config: dict) -> None:
+    """
+    Valide la configuration schedule_config d'un step schedule_execution.
+    Story 57.15 AC #9.
+    """
+    if not isinstance(schedule_config, dict):
+        raise ValidationError("schedule_config doit être un objet")
+
+    source = schedule_config.get('schedule_source')
+    if source not in VALID_SCHEDULE_SOURCES:
+        raise ValidationError(
+            f"schedule_source invalide: {source!r}. Valeurs attendues: {VALID_SCHEDULE_SOURCES}"
+        )
+
+    if source == 'parameter':
+        if not schedule_config.get('schedule_parameter_name'):
+            raise ValidationError(
+                "schedule_parameter_name requis quand schedule_source='parameter'"
+            )
+    elif source == 'fixed_offset':
+        offset = schedule_config.get('fixed_offset')
+        if not offset or not VALID_OFFSET_PATTERN.match(offset):
+            raise ValidationError(
+                f"fixed_offset invalide: {offset!r}. Format attendu: +Nd, +Nh, +Nw, +Nm"
+            )
+    elif source == 'recurring':
+        pattern = schedule_config.get('recurring_pattern', {})
+        if not pattern.get('pattern_type'):
+            raise ValidationError(
+                "recurring_pattern.pattern_type requis quand schedule_source='recurring'"
+            )
+
+
 def validate_business_rule_policies(value: dict | None) -> None:
     """
     Validate business_rule_policies JSON schema (Story 28.1).

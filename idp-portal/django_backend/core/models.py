@@ -95,6 +95,8 @@ class AuditActionType(models.TextChoices):
     EXECUTION_STEP_POLICY_APPROVAL_REQUIRED = 'EXECUTION_STEP_POLICY_APPROVAL_REQUIRED', 'Execution Step Policy Approval Required'
     EXECUTION_STEP_POLICY_AUTO_APPROVED = 'EXECUTION_STEP_POLICY_AUTO_APPROVED', 'Execution Step Policy Auto Approved'
     EXECUTION_STEP_POLICY_EVALUATION_FAILED = 'EXECUTION_STEP_POLICY_EVALUATION_FAILED', 'Execution Step Policy Evaluation Failed'
+    # Story 57.15: Workflow schedule step audit type
+    WORKFLOW_STEP_SCHEDULE_CREATED = 'WORKFLOW_STEP_SCHEDULE_CREATED', 'Workflow Step Schedule Created'
     # Story 28.4: Business rule policy CRUD audit types
     POLICY_CREATED = 'POLICY_CREATED', 'Policy Created'
     POLICY_UPDATED = 'POLICY_UPDATED', 'Policy Updated'
