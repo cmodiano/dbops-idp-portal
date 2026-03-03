@@ -67,7 +67,7 @@ class EvaluationHandler:
         if policy_id is not None:
             try:
                 policy_obj = BusinessRulePolicy.objects.get(id=policy_id)
-            except Exception:
+            except Exception as _:
                 logger.error(
                     "evaluation_handler_error",
                     policy_id=policy_id,
@@ -102,7 +102,7 @@ class EvaluationHandler:
         try:
             engine = RuleEngine()
             decision = engine.evaluate(action_proxy, step_proxy, artifact)
-        except Exception:
+        except Exception as _:
             logger.error(
                 "evaluation_handler_error",
                 policy_id=policy_id,

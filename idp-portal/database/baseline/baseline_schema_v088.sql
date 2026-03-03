@@ -2,7 +2,7 @@
 -- Baseline Schema V088 — IDP Portal
 -- ===========================================================================
 -- Date            : 2026-02-25
--- Version couverte: V000–V103 (incl. V099 EXECUTION_STEPS, V100 CK_AUDIT_LOG_ACTION_TYPE, V103 SCHEDULED_EXECUTION_CELERY_TRIGGERED)
+-- Version couverte: V000–V105 (incl. V099 EXECUTION_STEPS, V100 CK_AUDIT_LOG_ACTION_TYPE, V103 SCHEDULED_EXECUTION_CELERY_TRIGGERED, V105 PROFILES.IS_APPROVER)
 -- Auteur          : Agent de développement (Story 41-2)
 --
 -- Usage           : NOUVEAUX ENVIRONNEMENTS UNIQUEMENT (base Oracle vierge)
@@ -179,7 +179,7 @@ CREATE TABLE TAGS (
 );
 
 -- ---------------------------------------------------------------------------
--- PROFILES (V010)
+-- PROFILES (V010 + V105 IS_APPROVER)
 -- ---------------------------------------------------------------------------
 CREATE TABLE PROFILES (
     ID          NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -188,17 +188,20 @@ CREATE TABLE PROFILES (
     AD_GROUP    VARCHAR2(512) NOT NULL,
     IS_ADMIN    NUMBER(1) DEFAULT 0 NOT NULL,
     IS_AUDITOR  NUMBER(1) DEFAULT 0 NOT NULL,
+    IS_APPROVER NUMBER(1) DEFAULT 0 NOT NULL,
     CREATED_AT  TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
     UPDATED_AT  TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
 
     CONSTRAINT UK_PROFILES_NAME    UNIQUE (NAME),
     CONSTRAINT CK_PROFILES_IS_ADMIN   CHECK (IS_ADMIN IN (0, 1)),
-    CONSTRAINT CK_PROFILES_IS_AUDITOR CHECK (IS_AUDITOR IN (0, 1))
+    CONSTRAINT CK_PROFILES_IS_AUDITOR CHECK (IS_AUDITOR IN (0, 1)),
+    CONSTRAINT CK_PROFILES_IS_APPROVER CHECK (IS_APPROVER IN (0, 1))
 );
 
 CREATE INDEX IDX_PROFILES_AD_GROUP ON PROFILES(AD_GROUP);
 
 COMMENT ON COLUMN PROFILES.AD_GROUP IS 'Groupe AD associé au profil (ex. GRP-IDP-ASSURANCE).';
+COMMENT ON COLUMN PROFILES.IS_APPROVER IS '1 = profil éligible comme approbateur dans un step gate approval (Epic 57)';
 
 -- ---------------------------------------------------------------------------
 -- INTEGRATIONS (V020 + V024 + V026 + V064 + V077 + V088 + V098)
