@@ -45,7 +45,7 @@ PROTECTED_ENDPOINTS = [
     ('GET', '/api/v1/audit/export/'),
     ('GET', '/api/v1/inventory/targets/'),
     ('GET', '/api/v1/inventory/environments/'),
-    # Admin endpoints (IsAuthenticated + DBOPSProfilePermission)
+    # Admin endpoints (IsAuthenticated + AdminProfilePermission)
     ('GET', '/api/v1/admin/actions/'),
     ('POST', '/api/v1/admin/actions/'),
     ('GET', '/api/v1/admin/profiles/'),

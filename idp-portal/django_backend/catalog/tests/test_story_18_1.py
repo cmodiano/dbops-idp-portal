@@ -21,7 +21,7 @@ def _create_dbops_user(username='dbops_user'):
 
 
 def _create_regular_user(username='regular_user'):
-    return UserFactory(username=username, profile='dba')
+    return UserFactory(username=username, profile='business')
 
 
 def _create_action(name='Test Action', user=None, item_type='action', action_status='draft'):
@@ -58,7 +58,7 @@ class TestDeleteActionNoExecutions(TestCase):
         self.dbops_user = _create_dbops_user()
         self.action = _create_action(user=self.dbops_user)
 
-    @patch('core.permissions.DBOPSProfilePermission.has_permission', return_value=True)
+    @patch('core.permissions.AdminProfilePermission.has_permission', return_value=True)
     def test_delete_action_success(self, _mock_perm):
         """DELETE /admin/actions/{id} — 204 quand execution_count=0."""
         self.client.force_authenticate(user=self.dbops_user)
@@ -66,7 +66,7 @@ class TestDeleteActionNoExecutions(TestCase):
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(Action.objects.filter(id=self.action.id).exists())
 
-    @patch('core.permissions.DBOPSProfilePermission.has_permission', return_value=True)
+    @patch('core.permissions.AdminProfilePermission.has_permission', return_value=True)
     def test_delete_action_creates_audit_entry(self, _mock_perm):
         """DELETE creates audit log entry with action_type='ACTION_DELETED'."""
         self.client.force_authenticate(user=self.dbops_user)
@@ -75,7 +75,7 @@ class TestDeleteActionNoExecutions(TestCase):
         audit = AuditLog.objects.filter(entity_id=action_id, action_type='ACTION_DELETED')
         self.assertTrue(audit.exists())
 
-    @patch('core.permissions.DBOPSProfilePermission.has_permission', return_value=True)
+    @patch('core.permissions.AdminProfilePermission.has_permission', return_value=True)
     def test_delete_action_conflict_executions_exist(self, _mock_perm):
         """DELETE returns 409 when action has executions."""
         self.client.force_authenticate(user=self.dbops_user)
@@ -93,7 +93,7 @@ class TestDeleteActionNoExecutions(TestCase):
         response = self.client.delete(f'/api/v1/admin/actions/{self.action.id}/')
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-    @patch('core.permissions.DBOPSProfilePermission.has_permission', return_value=True)
+    @patch('core.permissions.AdminProfilePermission.has_permission', return_value=True)
     def test_delete_action_not_found(self, _mock_perm):
         """DELETE returns 404 for non-existent action."""
         self.client.force_authenticate(user=self.dbops_user)
@@ -116,7 +116,7 @@ class TestDeactivateAction(TestCase):
             action_status='published',
         )
 
-    @patch('core.permissions.DBOPSProfilePermission.has_permission', return_value=True)
+    @patch('core.permissions.AdminProfilePermission.has_permission', return_value=True)
     def test_deactivate_action_no_workflows(self, _mock_perm):
         """PUT /admin/actions/{id}/deactivate — success, no cascade."""
         self.client.force_authenticate(user=self.dbops_user)
@@ -132,7 +132,7 @@ class TestDeactivateAction(TestCase):
         self.assertEqual(self.action.deleted_by, self.dbops_user)
         self.assertEqual(self.action.deletion_reason, 'Plus utilisée')
 
-    @patch('core.permissions.DBOPSProfilePermission.has_permission', return_value=True)
+    @patch('core.permissions.AdminProfilePermission.has_permission', return_value=True)
     def test_deactivate_already_disabled_returns_409(self, _mock_perm):
         """PUT deactivate returns 409 if already disabled."""
         self.client.force_authenticate(user=self.dbops_user)
@@ -148,7 +148,7 @@ class TestDeactivateAction(TestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
 
-    @patch('core.permissions.DBOPSProfilePermission.has_permission', return_value=True)
+    @patch('core.permissions.AdminProfilePermission.has_permission', return_value=True)
     def test_deactivate_creates_audit_entry(self, _mock_perm):
         """Deactivation creates audit log."""
         self.client.force_authenticate(user=self.dbops_user)
@@ -191,7 +191,7 @@ class TestDeactivateCascadeWorkflows(TestCase):
             ],
         )
 
-    @patch('core.permissions.DBOPSProfilePermission.has_permission', return_value=True)
+    @patch('core.permissions.AdminProfilePermission.has_permission', return_value=True)
     def test_deactivate_requires_confirmation_when_workflows(self, _mock_perm):
         """PUT deactivate without confirmed returns requires_confirmation with workflow list."""
         self.client.force_authenticate(user=self.dbops_user)
@@ -204,7 +204,7 @@ class TestDeactivateCascadeWorkflows(TestCase):
         self.assertEqual(len(response.data['affected_workflows']), 1)
         self.assertEqual(response.data['affected_workflows'][0]['name'], 'Workflow Referencing')
 
-    @patch('core.permissions.DBOPSProfilePermission.has_permission', return_value=True)
+    @patch('core.permissions.AdminProfilePermission.has_permission', return_value=True)
     def test_deactivate_cascades_workflows(self, _mock_perm):
         """PUT deactivate with confirmed=true cascades to workflows."""
         self.client.force_authenticate(user=self.dbops_user)
@@ -250,7 +250,7 @@ class TestListActionsFilter(TestCase):
             deletion_reason='Test disable',
         )
 
-    @patch('core.permissions.DBOPSProfilePermission.has_permission', return_value=True)
+    @patch('core.permissions.AdminProfilePermission.has_permission', return_value=True)
     def test_list_actions_default_excludes_disabled(self, _mock_perm):
         """GET /admin/actions/ par défaut exclut les disabled."""
         self.client.force_authenticate(user=self.dbops_user)
@@ -261,7 +261,7 @@ class TestListActionsFilter(TestCase):
         self.assertIn('Published Action', names)
         self.assertNotIn('Disabled Action', names)
 
-    @patch('core.permissions.DBOPSProfilePermission.has_permission', return_value=True)
+    @patch('core.permissions.AdminProfilePermission.has_permission', return_value=True)
     def test_list_actions_include_disabled_shows_all(self, _mock_perm):
         """GET /admin/actions/?include_disabled=true inclut les disabled."""
         self.client.force_authenticate(user=self.dbops_user)
@@ -272,7 +272,7 @@ class TestListActionsFilter(TestCase):
         self.assertIn('Published Action', names)
         self.assertIn('Disabled Action', names)
 
-    @patch('core.permissions.DBOPSProfilePermission.has_permission', return_value=True)
+    @patch('core.permissions.AdminProfilePermission.has_permission', return_value=True)
     def test_list_actions_includes_soft_delete_fields(self, _mock_perm):
         """GET /admin/actions/?include_disabled=true includes soft-delete fields."""
         self.client.force_authenticate(user=self.dbops_user)
@@ -306,7 +306,7 @@ class TestReactivateAction(TestCase):
             deletion_reason='Test',
         )
 
-    @patch('core.permissions.DBOPSProfilePermission.has_permission', return_value=True)
+    @patch('core.permissions.AdminProfilePermission.has_permission', return_value=True)
     def test_reactivate_disabled_action(self, _mock_perm):
         """PUT /admin/actions/{id}/reactivate — 200, status=published, cleared soft-delete."""
         self.client.force_authenticate(user=self.dbops_user)
@@ -320,7 +320,7 @@ class TestReactivateAction(TestCase):
         self.assertIsNone(self.disabled_action.deleted_by)
         self.assertIsNone(self.disabled_action.deletion_reason)
 
-    @patch('core.permissions.DBOPSProfilePermission.has_permission', return_value=True)
+    @patch('core.permissions.AdminProfilePermission.has_permission', return_value=True)
     def test_reactivate_active_action_fails(self, _mock_perm):
         """PUT reactivate on a non-disabled action returns 409."""
         active = _create_action(name='Active', user=self.dbops_user, action_status='published')
@@ -330,7 +330,7 @@ class TestReactivateAction(TestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
 
-    @patch('core.permissions.DBOPSProfilePermission.has_permission', return_value=True)
+    @patch('core.permissions.AdminProfilePermission.has_permission', return_value=True)
     def test_reactivate_creates_audit_entry(self, _mock_perm):
         """Reactivation creates audit log."""
         self.client.force_authenticate(user=self.dbops_user)
@@ -457,14 +457,14 @@ class TestEdgeCases(TestCase):
         self.client = APIClient()
         self.dbops_user = _create_dbops_user()
 
-    @patch('core.permissions.DBOPSProfilePermission.has_permission', return_value=True)
+    @patch('core.permissions.AdminProfilePermission.has_permission', return_value=True)
     def test_delete_nonexistent_action(self, _mock_perm):
         """DELETE on non-existent action returns 404."""
         self.client.force_authenticate(user=self.dbops_user)
         response = self.client.delete('/api/v1/admin/actions/99999/')
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
-    @patch('core.permissions.DBOPSProfilePermission.has_permission', return_value=True)
+    @patch('core.permissions.AdminProfilePermission.has_permission', return_value=True)
     def test_deactivate_nonexistent_action(self, _mock_perm):
         """PUT deactivate on non-existent action returns 404."""
         self.client.force_authenticate(user=self.dbops_user)
@@ -474,7 +474,7 @@ class TestEdgeCases(TestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
-    @patch('core.permissions.DBOPSProfilePermission.has_permission', return_value=True)
+    @patch('core.permissions.AdminProfilePermission.has_permission', return_value=True)
     def test_reactivate_nonexistent_action(self, _mock_perm):
         """PUT reactivate on non-existent action returns 404."""
         self.client.force_authenticate(user=self.dbops_user)
