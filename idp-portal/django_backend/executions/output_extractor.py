@@ -52,11 +52,9 @@ class OutputExtractor:
             path: Expression JSONPath simple (ex : ``$.data.databases``).
 
         Returns:
-            Valeur extraite, ou ``None`` si un segment du chemin est introuvable
-            ou si path n'est pas une chaîne (config malformée).
+            Valeur extraite, ou ``None`` si un segment du chemin est introuvable.
+            Note: l'appelant (extract) valide que path est str avant d'appeler.
         """
-        if not isinstance(path, str):
-            return None
         # Supprimer le préfixe "$." ou "$" si présent
         clean = path.lstrip("$").lstrip(".")
         if not clean:
