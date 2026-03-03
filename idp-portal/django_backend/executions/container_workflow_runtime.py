@@ -69,6 +69,15 @@ class ContainerWorkflowRuntime:
     - AC4: Failure/cancellation propagation
     """
 
+    # Mapping step_type string → ExecutionStepType enum (ADR-007 §3d)
+    _STEP_TYPE_TO_DB_TYPE: dict[str, ExecutionStepType] = {
+        'platform': ExecutionStepType.PLATFORM,
+        'service_call': ExecutionStepType.SERVICE_CALL,
+        'http_request': ExecutionStepType.HTTP_REQUEST,
+        'evaluation': ExecutionStepType.EVALUATION,
+        'gate': ExecutionStepType.GATE,
+    }
+
     def __init__(
         self,
         execution: Execution,
@@ -440,14 +449,7 @@ class ContainerWorkflowRuntime:
         Returns:
             ExecutionStatus.COMPLETED — le runtime continue au step suivant.
         """
-        step_type_map = {
-            'platform': ExecutionStepType.PLATFORM,
-            'service_call': ExecutionStepType.SERVICE_CALL,
-            'http_request': ExecutionStepType.HTTP_REQUEST,
-            'evaluation': ExecutionStepType.EVALUATION,
-            'gate': ExecutionStepType.GATE,
-        }
-        db_step_type = step_type_map.get(step_type, ExecutionStepType.PLATFORM)
+        db_step_type = self._STEP_TYPE_TO_DB_TYPE.get(step_type, ExecutionStepType.PLATFORM)
 
         now = timezone.now()
         ExecutionStep.objects.create(
@@ -467,6 +469,7 @@ class ContainerWorkflowRuntime:
         logger.info(
             "container_workflow_step_skipped",
             execution_id=self.execution.id,
+            step_id=step_id,
             step_name=step_name,
             step_type=step_type,
             correlation_id=self.correlation_id,
@@ -491,13 +494,7 @@ class ContainerWorkflowRuntime:
         Story 57.3: les handlers lèvent NotImplementedError.
         Stories 57.4–57.7: les handlers retournent {'status': ..., 'raw_output': ...}.
         """
-        step_type_map = {
-            'service_call': ExecutionStepType.SERVICE_CALL,
-            'http_request': ExecutionStepType.HTTP_REQUEST,
-            'evaluation': ExecutionStepType.EVALUATION,
-            'gate': ExecutionStepType.GATE,
-        }
-        db_step_type = step_type_map.get(step_type, ExecutionStepType.PLATFORM)
+        db_step_type = self._STEP_TYPE_TO_DB_TYPE.get(step_type, ExecutionStepType.PLATFORM)
 
         parent_step = ExecutionStep.objects.create(
             execution=self.execution,
@@ -516,7 +513,7 @@ class ContainerWorkflowRuntime:
                 step=step,
                 correlation_id=self.correlation_id,
             )
-        except Exception as _e:
+        except Exception:
             parent_step.status = ExecutionStepStatus.FAILED
             parent_step.completed_at = timezone.now()
             parent_step.save()
@@ -534,11 +531,24 @@ class ContainerWorkflowRuntime:
             extracted = extractor.extract(raw_output, output_mapping)
             self._step_outputs[step_id] = extracted
 
-        parent_step.status = ExecutionStepStatus.COMPLETED
+        # Lire le statut retourné par le handler (ADR-007 §3d — contrat 57.4–57.7)
+        # Les handlers retournent {'status': ExecutionStatus, 'raw_output': dict}
+        result_execution_status = ExecutionStatus.COMPLETED
+        if isinstance(result, dict):
+            handler_status = result.get('status')
+            if isinstance(handler_status, ExecutionStatus):
+                result_execution_status = handler_status
+
+        final_step_status = (
+            ExecutionStepStatus.FAILED
+            if result_execution_status == ExecutionStatus.FAILED
+            else ExecutionStepStatus.COMPLETED
+        )
+        parent_step.status = final_step_status
         parent_step.completed_at = timezone.now()
         parent_step.save()
 
-        return ExecutionStatus.COMPLETED
+        return result_execution_status
 
     def run(self) -> None:
         """
