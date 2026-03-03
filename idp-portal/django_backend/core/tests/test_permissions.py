@@ -651,11 +651,11 @@ class TestAdminProfileNamesCustom:
         assert result is False
 
     def test_admin_profile_permission_accepts_custom_profile_name(self):
-        """AC4: AdminProfilePermission accepts new admin profile via custom ADMIN_PROFILE_NAMES."""
+        """AC4: AdminProfilePermission accepts profile via custom DBOPS_PROFILE_NAMES."""
         user = _make_user(profile="operator")
         request = _make_request(user)
         permission = AdminProfilePermission()
-        with override_settings(ADMIN_PROFILE_NAMES={'automation', 'operator'}):
+        with override_settings(DBOPS_PROFILE_NAMES={'automation', 'operator'}):
             result = permission.has_permission(request, MagicMock())
         assert result is True
 
@@ -664,7 +664,7 @@ class TestAdminProfileNamesCustom:
         user = _make_user(profile="AUTOMATION")
         request = _make_request(user)
         permission = AdminProfilePermission()
-        with override_settings(ADMIN_PROFILE_NAMES={'automation', 'operator'}):
+        with override_settings(DBOPS_PROFILE_NAMES={'automation', 'operator'}):
             result = permission.has_permission(request, MagicMock())
         assert result is True
 
