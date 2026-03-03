@@ -5,11 +5,13 @@ StepConditionEvaluator — ADR-007 §6
 Aucun accès DB : l'objet execution est passé en paramètre.
 """
 
+from executions.models import Execution
+
 
 class StepConditionEvaluator:
     """Évalue si un step doit être exécuté ou SKIPPED (ADR-007 §6)."""
 
-    def should_execute(self, step_config: dict, execution) -> bool:
+    def should_execute(self, step_config: dict, execution: Execution) -> bool:
         """
         Retourne True si le step doit être exécuté.
         Retourne False si le step doit être SKIPPED.

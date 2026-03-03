@@ -21,7 +21,7 @@ Architecture:
 
 import structlog
 from threading import Thread
-from typing import Dict, Any, List, cast
+from typing import Dict, Any, List, Union, cast
 
 from django.db import close_old_connections
 from django.utils import timezone
@@ -218,14 +218,6 @@ class ContainerWorkflowRuntime:
         if input_mapping and isinstance(input_mapping, dict):
             resolver = StepTemplateResolver(self._step_outputs)
             resolved_params = resolver.resolve(input_mapping)
-            if not isinstance(resolved_params, dict):
-                logger.warning(
-                    "container_workflow_input_mapping_resolve_non_dict",
-                    step_id=step_id,
-                    resolved_type=type(resolved_params).__name__,
-                    correlation_id=self.correlation_id,
-                )
-                resolved_params = {}
         elif input_mapping and not isinstance(input_mapping, dict):
             logger.warning(
                 "container_workflow_input_mapping_not_dict",
@@ -249,6 +241,9 @@ class ContainerWorkflowRuntime:
             return self._create_skipped_step(step_name, step_id, step_type)
 
         # Dispatcher selon step_type (ADR-007 §3d)
+        handler: Union[
+            ServiceCallHandler, HttpRequestHandler, EvaluationHandler, GateHandler
+        ]
         match step_type:
             case 'platform':
                 return self._execute_platform_step(step, resolved_params, step_name, step_id)
@@ -486,7 +481,9 @@ class ContainerWorkflowRuntime:
         step_name: str,
         step_id: str | None,
         step_type: str,
-        handler,
+        handler: Union[
+            ServiceCallHandler, HttpRequestHandler, EvaluationHandler, GateHandler
+        ],
     ) -> ExecutionStatus:
         """
         Wrapper générique pour les handlers non-platform (ADR-007 §3d).
@@ -519,7 +516,7 @@ class ContainerWorkflowRuntime:
                 step=step,
                 correlation_id=self.correlation_id,
             )
-        except Exception:
+        except Exception as _e:
             parent_step.status = ExecutionStepStatus.FAILED
             parent_step.completed_at = timezone.now()
             parent_step.save()
