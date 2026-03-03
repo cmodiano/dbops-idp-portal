@@ -13,20 +13,22 @@ logger = structlog.get_logger(__name__)
 
 class ProfileSerializer(serializers.ModelSerializer):
     """Serializer for Profile read/write operations."""
-    
+
     is_admin = serializers.BooleanField()
     is_auditor = serializers.BooleanField()
-    
+    is_approver = serializers.BooleanField()
+
     class Meta:
         model = Profile
-        fields = ['id', 'name', 'description', 'ad_group', 'is_admin', 'is_auditor', 'created_at', 'updated_at']
+        fields = ['id', 'name', 'description', 'ad_group', 'is_admin', 'is_auditor', 'is_approver', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
-    
+
     def to_representation(self, instance: Any) -> dict[str, Any]:
-        """Convert is_admin/is_auditor from IntegerField (0/1) to boolean."""
+        """Convert is_admin/is_auditor/is_approver from IntegerField (0/1) to boolean."""
         data = super().to_representation(instance)
         data['is_admin'] = bool(instance.is_admin)
         data['is_auditor'] = bool(instance.is_auditor)
+        data['is_approver'] = bool(instance.is_approver)
         return data
 
 
@@ -38,6 +40,7 @@ class ProfileCreateSerializer(serializers.Serializer):
     ad_group = serializers.CharField(min_length=1, max_length=512, trim_whitespace=True)
     is_admin = serializers.BooleanField(default=False)
     is_auditor = serializers.BooleanField(default=False)
+    is_approver = serializers.BooleanField(default=False)
 
     def validate_name(self, value: str) -> str:
         """Strip and validate name is not empty."""
@@ -62,6 +65,7 @@ class ProfileUpdateSerializer(serializers.Serializer):
     ad_group = serializers.CharField(min_length=1, max_length=512, required=False, allow_null=True, trim_whitespace=True)
     is_admin = serializers.BooleanField(required=False, allow_null=True)
     is_auditor = serializers.BooleanField(required=False, allow_null=True)
+    is_approver = serializers.BooleanField(required=False, allow_null=True)
 
     def validate_name(self, value: str | None) -> str | None:
         """Strip name if provided."""
@@ -83,18 +87,20 @@ class ProfileListSerializer(serializers.ModelSerializer):
 
     is_admin = serializers.BooleanField()
     is_auditor = serializers.BooleanField()
+    is_approver = serializers.BooleanField()
     permission_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Profile
-        fields = ['id', 'name', 'ad_group', 'is_admin', 'is_auditor', 'permission_count', 'created_at']
+        fields = ['id', 'name', 'ad_group', 'is_admin', 'is_auditor', 'is_approver', 'permission_count', 'created_at']
         read_only_fields = ['id', 'permission_count', 'created_at']
 
     def to_representation(self, instance: Any) -> dict[str, Any]:
-        """Convert is_admin/is_auditor from IntegerField (0/1) to boolean."""
+        """Convert is_admin/is_auditor/is_approver from IntegerField (0/1) to boolean."""
         data = super().to_representation(instance)
         data['is_admin'] = bool(instance.is_admin)
         data['is_auditor'] = bool(instance.is_auditor)
+        data['is_approver'] = bool(instance.is_approver)
         return data
 
 

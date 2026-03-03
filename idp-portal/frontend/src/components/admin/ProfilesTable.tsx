@@ -56,6 +56,15 @@ export function ProfilesTable({ dataSource, loading, onEdit, onDelete, onNew, on
       render: (v: boolean) => (v ? 'Oui' : 'Non'),
     },
     {
+      title: 'Approbateur',
+      dataIndex: 'is_approver',
+      key: 'is_approver',
+      width: 100,
+      align: 'center',
+      sorter: (a: ProfileListItem, b: ProfileListItem) => Number(a.is_approver) - Number(b.is_approver),
+      render: (v: boolean) => (v ? 'Oui' : 'Non'),
+    },
+    {
       title: 'Permissions',
       dataIndex: 'permission_count',
       key: 'permission_count',

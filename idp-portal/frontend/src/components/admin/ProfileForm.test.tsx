@@ -62,6 +62,7 @@ const editProfile: ProfileResponse = {
   ad_group: 'GRP-X',
   is_admin: false,
   is_auditor: true,
+  is_approver: false,
   created_at: '2026-01-28T10:00:00Z',
   updated_at: '2026-01-28T10:00:00Z',
 };
@@ -110,6 +111,7 @@ describe('ProfileForm', () => {
           ad_group: 'GRP-X',
           is_admin: false,
           is_auditor: true,
+          is_approver: false,
           created_at: '2026-01-28T10:00:00Z',
           updated_at: '2026-01-28T10:00:00Z',
         }}
@@ -828,6 +830,7 @@ describe('ProfileForm — exclusion patterns validator', () => {
       ad_group: 'GRP-X',
       is_admin: false,
       is_auditor: false,
+      is_approver: false,
       created_at: '2026-01-01T00:00:00Z',
       updated_at: '2026-01-01T00:00:00Z',
     };
@@ -846,6 +849,7 @@ describe('ProfileForm — exclusion patterns validator', () => {
       ad_group: 'GRP-X',
       is_admin: false,
       is_auditor: false,
+      is_approver: false,
       created_at: '2026-01-01T00:00:00Z',
       updated_at: '2026-01-01T00:00:00Z',
     };
@@ -877,6 +881,7 @@ describe('ProfileForm — exclusion patterns validator', () => {
       ad_group: 'GRP-X',
       is_admin: false,
       is_auditor: false,
+      is_approver: false,
       created_at: '2026-01-01T00:00:00Z',
       updated_at: '2026-01-01T00:00:00Z',
     };
@@ -912,6 +917,7 @@ describe('ProfileForm — exclusion patterns validator', () => {
       ad_group: 'GRP-X',
       is_admin: false,
       is_auditor: false,
+      is_approver: false,
       created_at: '2026-01-01T00:00:00Z',
       updated_at: '2026-01-01T00:00:00Z',
     };
@@ -946,6 +952,7 @@ describe('ProfileForm — exclusion patterns validator', () => {
       ad_group: 'GRP-X',
       is_admin: false,
       is_auditor: false,
+      is_approver: false,
       created_at: '2026-01-01T00:00:00Z',
       updated_at: '2026-01-01T00:00:00Z',
     };

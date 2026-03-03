@@ -31,7 +31,7 @@ class TestProfileSerializerToRepresentation(TestCase):
     """Cover ProfileSerializer.to_representation (lines 25-30)."""
 
     def test_to_representation_converts_int_to_bool(self):
-        """is_admin=1, is_auditor=0 → True/False."""
+        """is_admin=1, is_auditor=0, is_approver=1 → True/False/True."""
         instance = MagicMock()
         instance.id = 1
         instance.name = "TestProfile"
@@ -39,6 +39,7 @@ class TestProfileSerializerToRepresentation(TestCase):
         instance.ad_group = "CN=group"
         instance.is_admin = 1
         instance.is_auditor = 0
+        instance.is_approver = 1
         instance.created_at = None
         instance.updated_at = None
 
@@ -54,6 +55,7 @@ class TestProfileSerializerToRepresentation(TestCase):
                 "ad_group": "CN=group",
                 "is_admin": 1,
                 "is_auditor": 0,
+                "is_approver": 1,
                 "created_at": None,
                 "updated_at": None,
             },
@@ -62,23 +64,26 @@ class TestProfileSerializerToRepresentation(TestCase):
 
         self.assertEqual(result["is_admin"], True)
         self.assertEqual(result["is_auditor"], False)
+        self.assertEqual(result["is_approver"], True)
 
     def test_to_representation_already_bool(self):
-        """is_admin=True, is_auditor=True stays True."""
+        """is_admin=True, is_auditor=True, is_approver=False stays True/True/False."""
         instance = MagicMock()
         instance.is_admin = True
         instance.is_auditor = True
+        instance.is_approver = False
 
         serializer = ProfileSerializer()
         with patch.object(
             serializers.ModelSerializer,
             "to_representation",
-            return_value={"is_admin": True, "is_auditor": True},
+            return_value={"is_admin": True, "is_auditor": True, "is_approver": False},
         ):
             result = serializer.to_representation(instance)
 
         self.assertEqual(result["is_admin"], True)
         self.assertEqual(result["is_auditor"], True)
+        self.assertEqual(result["is_approver"], False)
 
 
 # ---------------------------------------------------------------------------
@@ -177,21 +182,23 @@ class TestProfileListSerializerToRepresentation(TestCase):
     """Cover ProfileListSerializer.to_representation (lines 93-98)."""
 
     def test_to_representation_converts_int_to_bool(self):
-        """is_admin=0, is_auditor=1 → False/True."""
+        """is_admin=0, is_auditor=1, is_approver=0 → False/True/False."""
         instance = MagicMock()
         instance.is_admin = 0
         instance.is_auditor = 1
+        instance.is_approver = 0
 
         serializer = ProfileListSerializer()
         with patch.object(
             serializers.ModelSerializer,
             "to_representation",
-            return_value={"is_admin": 0, "is_auditor": 1},
+            return_value={"is_admin": 0, "is_auditor": 1, "is_approver": 0},
         ):
             result = serializer.to_representation(instance)
 
         self.assertEqual(result["is_admin"], False)
         self.assertEqual(result["is_auditor"], True)
+        self.assertEqual(result["is_approver"], False)
 
 
 # ---------------------------------------------------------------------------
@@ -726,3 +733,104 @@ class TestProfileTargetPermissionsToRepresentation(TestCase):
         ) as mock_super:
             _result = s.to_representation({"targets_type": "all"})
         mock_super.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Story 57.14 — is_approver serialization/deserialization
+# ---------------------------------------------------------------------------
+
+class TestProfileSerializerIsApprover(TestCase):
+    """Story 57.14 AC3: Test is_approver in ProfileSerializer.to_representation."""
+
+    def test_to_representation_is_approver_int_to_bool(self):
+        """is_approver=1 → True, is_approver=0 → False."""
+        instance = MagicMock()
+        instance.is_admin = 0
+        instance.is_auditor = 0
+        instance.is_approver = 1
+
+        serializer = ProfileSerializer()
+        with patch.object(
+            serializers.ModelSerializer,
+            "to_representation",
+            return_value={"is_admin": 0, "is_auditor": 0, "is_approver": 1},
+        ):
+            result = serializer.to_representation(instance)
+
+        self.assertEqual(result["is_approver"], True)
+
+    def test_to_representation_is_approver_zero_to_false(self):
+        """is_approver=0 → False."""
+        instance = MagicMock()
+        instance.is_admin = 0
+        instance.is_auditor = 0
+        instance.is_approver = 0
+
+        serializer = ProfileSerializer()
+        with patch.object(
+            serializers.ModelSerializer,
+            "to_representation",
+            return_value={"is_admin": 0, "is_auditor": 0, "is_approver": 0},
+        ):
+            result = serializer.to_representation(instance)
+
+        self.assertEqual(result["is_approver"], False)
+
+
+class TestProfileListSerializerIsApprover(TestCase):
+    """Story 57.14 AC3: Test is_approver in ProfileListSerializer.to_representation."""
+
+    def test_to_representation_is_approver_int_to_bool(self):
+        """is_approver=1 → True."""
+        instance = MagicMock()
+        instance.is_admin = 0
+        instance.is_auditor = 0
+        instance.is_approver = 1
+
+        serializer = ProfileListSerializer()
+        with patch.object(
+            serializers.ModelSerializer,
+            "to_representation",
+            return_value={"is_admin": 0, "is_auditor": 0, "is_approver": 1},
+        ):
+            result = serializer.to_representation(instance)
+
+        self.assertEqual(result["is_approver"], True)
+
+
+class TestProfileCreateSerializerIsApprover(TestCase):
+    """Story 57.14 AC3: Test is_approver in ProfileCreateSerializer."""
+
+    def test_is_approver_defaults_to_false(self):
+        """is_approver defaults to False in ProfileCreateSerializer."""
+        s = ProfileCreateSerializer(data={"name": "test", "ad_group": "GRP-TEST"})
+        self.assertTrue(s.is_valid(), s.errors)
+        self.assertFalse(s.validated_data["is_approver"])
+
+    def test_is_approver_true_accepted(self):
+        """is_approver=True is accepted."""
+        s = ProfileCreateSerializer(data={"name": "test", "ad_group": "GRP-TEST", "is_approver": True})
+        self.assertTrue(s.is_valid(), s.errors)
+        self.assertTrue(s.validated_data["is_approver"])
+
+
+class TestProfileUpdateSerializerIsApprover(TestCase):
+    """Story 57.14 AC3: Test is_approver in ProfileUpdateSerializer."""
+
+    def test_is_approver_optional(self):
+        """is_approver is optional (not required) in ProfileUpdateSerializer."""
+        s = ProfileUpdateSerializer(data={})
+        self.assertTrue(s.is_valid(), s.errors)
+        self.assertNotIn("is_approver", s.validated_data)
+
+    def test_is_approver_null_accepted(self):
+        """is_approver=null is accepted (allow_null=True)."""
+        s = ProfileUpdateSerializer(data={"is_approver": None})
+        self.assertTrue(s.is_valid(), s.errors)
+        self.assertIsNone(s.validated_data["is_approver"])
+
+    def test_is_approver_true_accepted(self):
+        """is_approver=True is accepted."""
+        s = ProfileUpdateSerializer(data={"is_approver": True})
+        self.assertTrue(s.is_valid(), s.errors)
+        self.assertTrue(s.validated_data["is_approver"])

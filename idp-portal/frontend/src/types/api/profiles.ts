@@ -6,6 +6,7 @@ export interface ProfileCreate {
   ad_group: string;
   is_admin?: boolean;
   is_auditor?: boolean;
+  is_approver?: boolean;  // Story 57.14
 }
 
 export interface ProfileUpdate {
@@ -14,6 +15,7 @@ export interface ProfileUpdate {
   ad_group?: string | null;
   is_admin?: boolean | null;
   is_auditor?: boolean | null;
+  is_approver?: boolean | null;  // Story 57.14
 }
 
 export interface ProfileResponse {
@@ -23,6 +25,7 @@ export interface ProfileResponse {
   ad_group: string;
   is_admin: boolean;
   is_auditor: boolean;
+  is_approver: boolean;  // Story 57.14
   created_at: string;
   updated_at: string;
 }
@@ -33,6 +36,7 @@ export interface ProfileListItem {
   ad_group: string;
   is_admin: boolean;
   is_auditor: boolean;
+  is_approver: boolean;  // Story 57.14
   permission_count: number;
   created_at: string;
 }

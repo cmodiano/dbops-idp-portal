@@ -80,9 +80,9 @@ USERS = [
 ]
 
 PROFILES = [
-    {"name": "DBOPS", "description": "Database Operations - Full access", "ad_group": "GRP-IDP-DBOPS", "is_admin": 1, "is_auditor": 0},
-    {"name": "DBA", "description": "Database Administrator - Execute access", "ad_group": "GRP-IDP-DBA", "is_admin": 0, "is_auditor": 0},
-    {"name": "BUSINESS", "description": "Business User - Limited access", "ad_group": "GRP-IDP-BUSINESS", "is_admin": 0, "is_auditor": 1},
+    {"name": "DBOPS", "description": "Database Operations - Full access", "ad_group": "GRP-IDP-DBOPS", "is_admin": 1, "is_auditor": 0, "is_approver": 1},
+    {"name": "DBA", "description": "Database Administrator - Execute access", "ad_group": "GRP-IDP-DBA", "is_admin": 0, "is_auditor": 0, "is_approver": 1},
+    {"name": "BUSINESS", "description": "Business User - Limited access", "ad_group": "GRP-IDP-BUSINESS", "is_admin": 0, "is_auditor": 1, "is_approver": 0},
 ]
 
 TAGS = [
@@ -467,8 +467,8 @@ def seed_profiles(conn: oracledb.Connection) -> dict[str, int]:
         out_id_var = cursor.var(int)
         cursor.execute(
             """
-            INSERT INTO PROFILES (NAME, DESCRIPTION, AD_GROUP, IS_ADMIN, IS_AUDITOR)
-            VALUES (:name, :description, :ad_group, :is_admin, :is_auditor)
+            INSERT INTO PROFILES (NAME, DESCRIPTION, AD_GROUP, IS_ADMIN, IS_AUDITOR, IS_APPROVER)
+            VALUES (:name, :description, :ad_group, :is_admin, :is_auditor, :is_approver)
             RETURNING ID INTO :out_id
             """,
             {
@@ -477,6 +477,7 @@ def seed_profiles(conn: oracledb.Connection) -> dict[str, int]:
                 "ad_group": profile["ad_group"],
                 "is_admin": profile["is_admin"],
                 "is_auditor": profile["is_auditor"],
+                "is_approver": profile["is_approver"],
                 "out_id": out_id_var,
             },
         )

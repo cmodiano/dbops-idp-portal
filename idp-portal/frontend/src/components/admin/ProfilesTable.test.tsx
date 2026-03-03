@@ -16,6 +16,7 @@ const items: ProfileListItem[] = [
     ad_group: 'GRP-IDP-ASSURANCE',
     is_admin: false,
     is_auditor: false,
+    is_approver: false,
     permission_count: 0,
     created_at: '2026-01-28T10:00:00Z',
   },
@@ -34,12 +35,13 @@ const defaultProps = {
 };
 
 describe('ProfilesTable', () => {
-  it('renders table with columns Nom, Groupe AD, Admin, Auditeur, Permissions, Date de création', () => {
+  it('renders table with columns Nom, Groupe AD, Admin, Auditeur, Approbateur, Permissions, Date de création', () => {
     render(<ProfilesTable {...defaultProps} />);
     expect(screen.getByText('Nom')).toBeInTheDocument();
     expect(screen.getByText('Groupe AD')).toBeInTheDocument();
     expect(screen.getByText('Admin')).toBeInTheDocument();
     expect(screen.getByText('Auditeur')).toBeInTheDocument();
+    expect(screen.getByText('Approbateur')).toBeInTheDocument();
     expect(screen.getByText('Permissions')).toBeInTheDocument();
     expect(screen.getByText('Date de création')).toBeInTheDocument();
   });
@@ -89,6 +91,7 @@ describe('ProfilesTable', () => {
       ad_group: 'GRP-ADMIN',
       is_admin: true,
       is_auditor: false,
+      is_approver: false,
       permission_count: 10,
       created_at: '2026-01-28T10:00:00Z',
     };
@@ -98,6 +101,48 @@ describe('ProfilesTable', () => {
     const nonElements = screen.getAllByText('Non');
     expect(ouiElements.length).toBeGreaterThanOrEqual(1);
     expect(nonElements.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('Story 57.14 AC5: affiche Oui pour is_approver=true, Non pour is_approver=false', () => {
+    const approverProfile: ProfileListItem = {
+      id: 10,
+      name: 'DBA',
+      ad_group: 'GRP-IDP-DBA',
+      is_admin: false,
+      is_auditor: false,
+      is_approver: true,
+      permission_count: 0,
+      created_at: '2026-01-28T10:00:00Z',
+    };
+    const nonApproverProfile: ProfileListItem = {
+      id: 11,
+      name: 'BUSINESS',
+      ad_group: 'GRP-IDP-BUSINESS',
+      is_admin: false,
+      is_auditor: false,
+      is_approver: false,
+      permission_count: 0,
+      created_at: '2026-01-28T10:00:00Z',
+    };
+    render(<ProfilesTable {...defaultProps} dataSource={[approverProfile, nonApproverProfile]} />);
+    // is_approver=true → 'Oui', is_approver=false → 'Non'
+    expect(screen.getByText('Approbateur')).toBeInTheDocument();
+    const ouiElements = screen.getAllByText('Oui');
+    const nonElements = screen.getAllByText('Non');
+    expect(ouiElements.length).toBeGreaterThanOrEqual(1);
+    expect(nonElements.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('Story 57.14 AC5: la colonne Approbateur est triable', () => {
+    const items2: ProfileListItem[] = [
+      { id: 1, name: 'DBA', ad_group: 'GRP-DBA', is_admin: false, is_auditor: false, is_approver: true, permission_count: 0, created_at: '2026-01-01T00:00:00Z' },
+      { id: 2, name: 'BUSINESS', ad_group: 'GRP-BUSINESS', is_admin: false, is_auditor: false, is_approver: false, permission_count: 0, created_at: '2026-01-02T00:00:00Z' },
+    ];
+    render(<ProfilesTable {...defaultProps} dataSource={items2} />);
+    fireEvent.click(screen.getByText('Approbateur'));
+    fireEvent.click(screen.getByText('Approbateur'));
+    expect(screen.getByText('DBA')).toBeInTheDocument();
+    expect(screen.getByText('BUSINESS')).toBeInTheDocument();
   });
 
   it('affiche le compte de permissions', () => {
@@ -136,6 +181,7 @@ describe('ProfilesTable', () => {
       ad_group: '',
       is_admin: false,
       is_auditor: true,
+      is_approver: false,
       permission_count: null as unknown as number,
       created_at: '2026-01-28T10:00:00Z',
     };
@@ -147,8 +193,8 @@ describe('ProfilesTable', () => {
 
   it('déclenche les sorters au clic sur les en-têtes de colonnes', () => {
     const items2: ProfileListItem[] = [
-      { id: 1, name: 'Zebra', ad_group: 'GRP-Z', is_admin: true, is_auditor: false, permission_count: 5, created_at: '2026-01-01T00:00:00Z' },
-      { id: 2, name: 'Alpha', ad_group: 'GRP-A', is_admin: false, is_auditor: true, permission_count: 10, created_at: '2026-01-02T00:00:00Z' },
+      { id: 1, name: 'Zebra', ad_group: 'GRP-Z', is_admin: true, is_auditor: false, is_approver: true, permission_count: 5, created_at: '2026-01-01T00:00:00Z' },
+      { id: 2, name: 'Alpha', ad_group: 'GRP-A', is_admin: false, is_auditor: true, is_approver: false, permission_count: 10, created_at: '2026-01-02T00:00:00Z' },
     ];
     render(<ProfilesTable {...defaultProps} dataSource={items2} />);
 
@@ -159,6 +205,8 @@ describe('ProfilesTable', () => {
     fireEvent.click(screen.getByText('Admin'));
     fireEvent.click(screen.getByText('Auditeur'));
     fireEvent.click(screen.getByText('Auditeur'));
+    fireEvent.click(screen.getByText('Approbateur'));
+    fireEvent.click(screen.getByText('Approbateur'));
     fireEvent.click(screen.getByText('Permissions'));
     fireEvent.click(screen.getByText('Permissions'));
     fireEvent.click(screen.getByText('Date de création'));

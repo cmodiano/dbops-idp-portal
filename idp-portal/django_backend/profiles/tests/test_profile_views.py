@@ -113,7 +113,9 @@ class TestProfileViewSet(TestCase):
         self.assertIn('data', response.data)
         self.assertEqual(response.data['data']['name'], 'New Profile')
         self.assertEqual(response.data['data']['ad_group'], 'GRP-NEW')
-    
+        self.assertIn('is_approver', response.data['data'])
+        self.assertFalse(response.data['data']['is_approver'])
+
     def test_create_profile_duplicate_name(self):
         """Test POST /admin/profiles with duplicate name returns 400."""
         self.client.force_authenticate(user=self.dbops_user)
@@ -203,6 +205,67 @@ class TestProfileViewSet(TestCase):
         self.client.force_authenticate(user=self.dbops_user)
         profile_id = self.profile.id
         response = self.client.delete(f'/api/v1/admin/profiles/{profile_id}/')
-        
+
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         mock_invalidate.assert_called_once()
+
+    def test_list_profiles_includes_is_approver(self):
+        """
+        Story 57.14 AC3: GET /admin/profiles list includes is_approver field.
+        """
+        self.client.force_authenticate(user=self.dbops_user)
+        response = self.client.get('/api/v1/admin/profiles/')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        items = response.data['data']
+        self.assertGreater(len(items), 0)
+        self.assertIn('is_approver', items[0])
+
+    def test_get_profile_includes_is_approver(self):
+        """
+        Story 57.14 AC3: GET /admin/profiles/{id} returns is_approver field.
+        """
+        approver_profile = Profile.objects.create(
+            name='Approver Test',
+            ad_group='GRP-APPROVER-TEST',
+            is_approver=1
+        )
+        self.client.force_authenticate(user=self.dbops_user)
+        response = self.client.get(f'/api/v1/admin/profiles/{approver_profile.id}/')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('is_approver', response.data['data'])
+        self.assertTrue(response.data['data']['is_approver'])
+
+    def test_create_profile_with_is_approver(self):
+        """
+        Story 57.14 AC3: POST /admin/profiles accepts and stores is_approver.
+        """
+        self.client.force_authenticate(user=self.dbops_user)
+        data = {
+            'name': 'New Approver Profile',
+            'ad_group': 'GRP-NEW-APPROVER',
+            'is_admin': False,
+            'is_auditor': False,
+            'is_approver': True,
+        }
+        response = self.client.post('/api/v1/admin/profiles/', data, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIn('is_approver', response.data['data'])
+        self.assertTrue(response.data['data']['is_approver'])
+
+    def test_update_profile_with_is_approver(self):
+        """
+        Story 57.14 AC3: PUT /admin/profiles/{id} updates is_approver field.
+        """
+        self.client.force_authenticate(user=self.dbops_user)
+        data = {'is_approver': True}
+        response = self.client.put(f'/api/v1/admin/profiles/{self.profile.id}/', data, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('is_approver', response.data['data'])
+        self.assertTrue(response.data['data']['is_approver'])
+        # Verify persisted in DB
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.is_approver, 1)

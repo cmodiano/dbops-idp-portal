@@ -37,6 +37,7 @@ const mockProfile: ProfileResponse = {
   ad_group: 'GRP-TEST',
   is_admin: true,
   is_auditor: false,
+  is_approver: false,
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-02T00:00:00Z',
 };
@@ -193,6 +194,7 @@ describe('ProfileWizard', () => {
           ad_group: 'GRP-NEW',
           is_admin: false,
           is_auditor: false,
+          is_approver: false,
         });
         expect(mockProfilesService.putProfileActions).toHaveBeenCalledWith(1, {
           actions_type: 'all',
@@ -346,6 +348,7 @@ describe('ProfileWizard', () => {
           ad_group: 'GRP-TEST',
           is_admin: true,
           is_auditor: false,
+          is_approver: false,
         });
       });
     });
@@ -830,6 +833,66 @@ describe('ProfileWizard — coverage extras', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/Sélectionnez au moins un target/i)).toBeInTheDocument();
+    });
+  });
+
+  describe('Story 57.14 — Switch Approbateur (AC4)', () => {
+    it('affiche le Switch Approbateur dans l\'étape Général', async () => {
+      renderWithApp(<ProfileWizard {...defaultProps} />);
+
+      // Le Switch Approbateur doit être visible à l'étape 0 (Général)
+      await waitFor(() => {
+        expect(screen.getByLabelText('Approbateur')).toBeInTheDocument();
+      });
+    });
+
+    it('inclut is_approver dans le payload lors de la création', async () => {
+      const user = userEvent.setup();
+      renderWithApp(<ProfileWizard {...defaultProps} />);
+
+      // Remplir étape 1
+      await user.type(screen.getByLabelText(/Nom du profil/i), 'Profil Approbateur');
+
+      // Cliquer le Switch Approbateur pour activer is_approver=true
+      const approverSwitch = screen.getByLabelText('Approbateur');
+      await user.click(approverSwitch);
+
+      // Aller à l'étape 2
+      await user.click(screen.getByRole('button', { name: /Suivant/i }));
+      await waitFor(() => expect(screen.getByText(/Type de permission actions/i)).toBeInTheDocument());
+
+      // Aller à l'étape 3
+      await user.click(screen.getByRole('button', { name: /Suivant/i }));
+      await waitFor(() => expect(screen.getByText(/Type de permission targets/i)).toBeInTheDocument());
+
+      // Soumettre
+      await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
+
+      await waitFor(() => {
+        expect(mockProfilesService.createProfile).toHaveBeenCalledWith(
+          expect.objectContaining({ is_approver: true }),
+        );
+      });
+    });
+
+    it('pré-remplit is_approver depuis editProfile en mode édition', async () => {
+      const approverProfile: ProfileResponse = { ...mockProfile, is_approver: true };
+      mockProfilesService.updateProfile.mockResolvedValue(approverProfile);
+
+      renderWithApp(<ProfileWizard {...defaultProps} editProfile={approverProfile} />);
+
+      // Attendre que le useEffect de pré-remplissage s'exécute (nécessite profileActionsPerms + profileTargetsPerms)
+      await waitFor(() => {
+        expect(mockProfilesService.getProfileActions).toHaveBeenCalledWith(approverProfile.id);
+        expect(mockProfilesService.getProfileTargets).toHaveBeenCalledWith(approverProfile.id);
+      });
+
+      // Vérifier que le switch Approbateur est coché (is_approver=true → aria-checked="true")
+      await waitFor(() => {
+        const approverSwitch = screen.getByLabelText('Approbateur');
+        expect(approverSwitch).toBeInTheDocument();
+        expect(approverSwitch).toHaveAttribute('aria-checked', 'true');
+      });
     });
   });
 });
