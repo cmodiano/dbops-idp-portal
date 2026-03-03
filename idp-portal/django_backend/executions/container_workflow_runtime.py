@@ -532,7 +532,7 @@ class ContainerWorkflowRuntime:
             parent_step.status = ExecutionStepStatus.FAILED
             parent_step.completed_at = timezone.now()
             parent_step.save()
-            return ExecutionStatus.FAILED
+            raise
 
         # Extraction output_mapping (même pattern que platform)
         if step_id is not None:
@@ -554,6 +554,23 @@ class ContainerWorkflowRuntime:
                 raw_output = result if isinstance(result, dict) else {}
             extracted = extractor.extract(raw_output, output_mapping)
             self._step_outputs[step_id] = extracted
+
+        # Protocole WAITING pour gate steps (story 57.7)
+        # DOIT précéder le fail-closed pour éviter que le gate soit marqué FAILED
+        if isinstance(result, dict) and result.get('waiting'):
+            gate_output = result.get('gate_output', {})
+            parent_step.set_output(gate_output)
+            parent_step.status = ExecutionStepStatus.WAITING
+            # NE PAS SET completed_at — step est en attente
+            parent_step.save()
+            logger.info(
+                "container_workflow_gate_step_waiting",
+                step_name=step_name,
+                step_id=step_id,
+                execution_id=self.execution.id,
+                correlation_id=self.correlation_id,
+            )
+            return ExecutionStatus.RUNNING  # Sentinel : boucle doit s'arrêter
 
         # Lire le statut retourné par le handler (ADR-007 §3d — contrat 57.4–57.7)
         # Les handlers retournent {'status': ExecutionStatus, 'raw_output': dict}
@@ -850,6 +867,17 @@ class ContainerWorkflowRuntime:
 
             # Execute step (creates child execution)
             child_status = self._execute_step(step)
+
+            # Story 57.7: Gate step en WAITING — l'exécution reste RUNNING
+            # Celery Beat reprendra via resume_container_workflow_from_gate
+            if child_status == ExecutionStatus.RUNNING:
+                logger.info(
+                    "container_workflow_paused_on_gate",
+                    execution_id=self.execution.id,
+                    step_order=step.get('order', 0),
+                    correlation_id=self.correlation_id,
+                )
+                return ExecutionStatus.RUNNING
 
             # AC4: Propagate failure — stop on first failure
             if child_status == ExecutionStatus.FAILED:

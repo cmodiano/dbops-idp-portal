@@ -51,7 +51,7 @@ class RuleEngine:
         self,
         action: Any,
         execution_step: Any,
-        step_output: dict | str,
+        step_output: dict | str | None,
     ) -> PolicyDecision:
         """
         Evaluate business_rule_policies for a step output.
@@ -123,7 +123,11 @@ class RuleEngine:
                 f"Unsupported policy type: {policy_type}", correlation_id,
             )
 
-        # 3. Dispatch to interpreter
+        # 3. Handle missing artifact (AC#7 — EvaluationHandler passes None when key absent)
+        if step_output is None:
+            return self._no_approval("No artifact provided", correlation_id)
+
+        # 4. Dispatch to interpreter
         interpreter = self._registry.get(step_type)
         if interpreter is None:
             raise PolicyEvaluationError(

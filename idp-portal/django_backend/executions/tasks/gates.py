@@ -210,19 +210,60 @@ def _transition_step_to_running(step: ExecutionStep, gate_status: dict, correlat
             break
 
     if step_def:
-        # Access through package namespace for testability:
-        # allows @patch("executions.tasks.retry_workflow_step") to intercept
+        # Story 57.7: Détecter si c'est un step ADR-007 container workflow
+        # Les steps ADR-007 ont un step_type ; les old-style steps n'en ont pas
+        is_adr007_step = bool(step_def.get('step_type'))
+        on_success_step_id = step_def.get('on_success_step_id')
+
+        # Access through package namespace for testability (retry_workflow_step)
         import executions.tasks as _tasks
-        _tasks.retry_workflow_step.apply_async(
-            args=[step.execution_id, step_def, 1],
-        )
-        logger.info(
-            "evaluate_waiting_gates_step_execution_triggered",
-            step_id=step.id,
-            execution_id=step.execution_id,
-            step_def_id=step_def.get('step_id'),
-            correlation_id=correlation_id,
-        )
+
+        if is_adr007_step and on_success_step_id:
+            # Container workflow ADR-007 : reprendre depuis le prochain step
+            resume_container_workflow_from_gate.apply_async(
+                args=[step.execution_id, on_success_step_id],
+            )
+            logger.info(
+                "evaluate_waiting_gates_step_container_workflow_resumed",
+                step_id=step.id,
+                execution_id=step.execution_id,
+                on_success_step_id=on_success_step_id,
+                correlation_id=correlation_id,
+            )
+        elif is_adr007_step and not on_success_step_id:
+            # Gate est le dernier step du workflow — compléter l'exécution
+            try:
+                execution = step.execution
+                if execution.status == ExecutionStatus.RUNNING:
+                    execution.status = ExecutionStatus.COMPLETED
+                    execution.completed_at = timezone.now()
+                    execution.save()
+                    logger.info(
+                        "evaluate_waiting_gates_step_container_workflow_completed",
+                        step_id=step.id,
+                        execution_id=step.execution_id,
+                        correlation_id=correlation_id,
+                    )
+            except Exception as exc:  # noqa: BLE001 — resilience-boundary: gate completion update failure logged
+                logger.error(
+                    "evaluate_waiting_gates_step_container_workflow_complete_error",
+                    execution_id=step.execution_id,
+                    error=str(exc),
+                    correlation_id=correlation_id,
+                    exc_info=True,
+                )
+        else:
+            # Old-style workflow : comportement existant
+            _tasks.retry_workflow_step.apply_async(
+                args=[step.execution_id, step_def, 1],
+            )
+            logger.info(
+                "evaluate_waiting_gates_step_execution_triggered",
+                step_id=step.id,
+                execution_id=step.execution_id,
+                step_def_id=step_def.get('step_id'),
+                correlation_id=correlation_id,
+            )
     else:
         # Story 25.3 code review fix LOW-1: ERROR instead of WARNING (step in zombie state)
         logger.error(
@@ -380,3 +421,114 @@ def _handle_gate_timeout(step: ExecutionStep, gate_status: dict, correlation_id:
                 correlation_id=correlation_id,
                 exc_info=True,
             )
+
+
+@shared_task(bind=True, max_retries=0, name="executions.tasks.resume_container_workflow_from_gate")
+def resume_container_workflow_from_gate(self: Any, execution_id: int, on_success_step_id: str) -> dict:
+    """
+    Story 57.7: Reprend le container workflow après satisfaction d'un gate step.
+
+    Appelé par _transition_step_to_running() quand le gate step est satisfait
+    et que l'exécution est un container workflow ADR-007.
+
+    Args:
+        execution_id: ID de l'Execution à reprendre
+        on_success_step_id: step_id à partir duquel reprendre le workflow
+    """
+    from executions.models import Execution, ExecutionStatus
+    from executions.cancellation_cache import is_cancelled
+    from executions.container_workflow_runtime import ContainerWorkflowRuntime
+
+    correlation_id = get_correlation_id()
+
+    logger.info(
+        "resume_container_workflow_gate_start",
+        execution_id=execution_id,
+        on_success_step_id=on_success_step_id,
+        correlation_id=correlation_id,
+    )
+
+    try:
+        if is_cancelled(execution_id):
+            logger.info(
+                "resume_container_workflow_gate_cancelled",
+                execution_id=execution_id,
+                correlation_id=correlation_id,
+            )
+            return {'outcome': 'cancelled'}
+
+        execution = Execution.objects.select_related('action').get(id=execution_id)
+
+        # Vérifier que l'exécution est toujours en RUNNING
+        if execution.status != ExecutionStatus.RUNNING:
+            logger.warning(
+                "resume_container_workflow_gate_not_running",
+                execution_id=execution_id,
+                status=execution.status,
+                correlation_id=correlation_id,
+            )
+            return {'outcome': 'not_running', 'status': str(execution.status)}
+
+        # Trouver les steps restants à partir de on_success_step_id
+        all_steps = execution.action.execution_steps or []
+        remaining_steps = []
+        found = False
+        for s in all_steps:
+            if isinstance(s, dict):
+                if found:
+                    remaining_steps.append(s)
+                elif s.get('step_id') == on_success_step_id:
+                    found = True
+                    remaining_steps.append(s)
+
+        if not found:
+            logger.error(
+                "resume_container_workflow_gate_step_not_found",
+                execution_id=execution_id,
+                on_success_step_id=on_success_step_id,
+                correlation_id=correlation_id,
+            )
+            return {'outcome': 'step_not_found', 'step_id': on_success_step_id}
+
+        # Reconstruire le contexte _step_outputs depuis les ExecutionStep COMPLETED existants
+        from executions.models import ExecutionStep, ExecutionStepStatus
+        completed_steps = ExecutionStep.objects.filter(
+            execution=execution,
+            status=ExecutionStepStatus.COMPLETED,
+        ).order_by('step_order')
+
+        # Reprendre le workflow depuis le step cible
+        runtime = ContainerWorkflowRuntime(execution)
+        # Restaurer le contexte des outputs de steps déjà exécutés
+        for db_step in completed_steps:
+            step_output = db_step.get_output() or {}
+            if db_step.step_name:
+                runtime._step_outputs[db_step.step_name] = step_output
+        runtime.workflow_steps = remaining_steps
+        runtime._execute_workflow_steps()
+
+        logger.info(
+            "resume_container_workflow_gate_complete",
+            execution_id=execution_id,
+            on_success_step_id=on_success_step_id,
+            remaining_steps_count=len(remaining_steps),
+            correlation_id=correlation_id,
+        )
+        return {'outcome': 'completed', 'resumed_from': on_success_step_id}
+
+    except Execution.DoesNotExist:
+        logger.error(
+            "resume_container_workflow_gate_execution_not_found",
+            execution_id=execution_id,
+            correlation_id=correlation_id,
+        )
+        return {'outcome': 'error', 'error': 'Execution not found'}
+    except Exception as exc:  # noqa: BLE001 — resilience-boundary: gate resume failure logged
+        logger.error(
+            "resume_container_workflow_gate_error",
+            execution_id=execution_id,
+            error=str(exc),
+            correlation_id=correlation_id,
+            exc_info=True,
+        )
+        return {'outcome': 'error', 'error': str(exc)}

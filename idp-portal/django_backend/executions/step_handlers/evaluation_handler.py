@@ -97,7 +97,7 @@ class EvaluationHandler:
             id=None,
         )
 
-        artifact: dict | str = resolved_params.get('artifact') or {}
+        artifact: dict | str | None = resolved_params.get('artifact')
 
         try:
             engine = RuleEngine()

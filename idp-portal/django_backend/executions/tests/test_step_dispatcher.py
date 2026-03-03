@@ -289,7 +289,7 @@ class TestStepDispatcher:
     @patch('executions.step_handlers.service_call_handler.ServiceCallHandler.execute')
     def test_handler_step_creates_execution_step_with_correct_type(self, mock_execute, mock_audit):
         """_execute_handler_step crée un ExecutionStep avec le step_type correct."""
-        mock_execute.return_value = {}
+        mock_execute.return_value = {'status': ExecutionStatus.COMPLETED}
         step = {
             'order': 1,
             'name': 'SVC Call',
