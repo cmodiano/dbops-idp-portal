@@ -11,6 +11,8 @@ import { ReloadOutlined, LinkOutlined, ClockCircleOutlined, StopOutlined, Warnin
 import type { ExecutionResponse, ExecutionStepResponse } from '../../../types/api';
 import type { AutoRemediationState } from '../../../hooks/useAutoRemediationState';
 import { formatDuration } from './utils';
+import { formatUtcToLocal } from '../../../utils/dateFormat';
+import { getEnvironmentLabel } from '../../../utils/environmentHelpers';
 
 const { Text } = Typography;
 
@@ -73,7 +75,7 @@ export function ExecutionStatusBanners({
             <>
               Cette exécution nécessite l'approbation d'un DBA avant de pouvoir démarrer.
               <br />
-              <Tag color="orange" style={{ marginTop: 8 }}>Environnement : {execution.environment.toUpperCase()}</Tag>
+              <Tag color="orange" style={{ marginTop: 8 }}>Environnement : {getEnvironmentLabel(execution.environment ?? '')}</Tag>
             </>
           }
           style={{ marginBottom: 16 }}
@@ -100,7 +102,7 @@ export function ExecutionStatusBanners({
                 <>
                   <br />
                   <Text type="secondary" style={{ fontSize: 12 }}>
-                    Refusé le {new Date(execution.approved_at).toLocaleString()}
+                    Refusé le {formatUtcToLocal(execution.approved_at)}
                   </Text>
                 </>
               )}
@@ -131,7 +133,7 @@ export function ExecutionStatusBanners({
                 <>
                   <br />
                   <Text type="secondary" style={{ fontSize: 12 }}>
-                    Approuvé le {new Date(execution.approved_at).toLocaleString()}
+                    Approuvé le {formatUtcToLocal(execution.approved_at)}
                     {execution.approval_comment && <> — {execution.approval_comment}</>}
                   </Text>
                 </>

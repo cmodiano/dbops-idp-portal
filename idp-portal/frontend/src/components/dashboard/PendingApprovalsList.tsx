@@ -18,6 +18,7 @@ import {
 import type { ExecutionResponse } from '../../types/api';
 import { usePendingApprovals } from '../../hooks/usePendingApprovals';
 import { getEnvironmentBadgeColor } from '../../utils/executionRenderers';
+import { getEnvironmentLabel } from '../../utils/environmentHelpers';
 import { STYLE_TOKENS } from '../../theme/styleTokens';
 
 const { Text } = Typography;
@@ -178,7 +179,7 @@ export function PendingApprovalsList({
             <p>
               Vous êtes sur le point d'approuver l'exécution de{' '}
               <strong>{selectedExecution.action_name || `Action #${selectedExecution.action_id}`}</strong>{' '}
-              en environnement <Tag color={getEnvironmentBadgeColor(selectedExecution.environment)}>{(selectedExecution.environment ?? '').toUpperCase()}</Tag>
+              en environnement <Tag color={getEnvironmentBadgeColor(selectedExecution.environment)}>{getEnvironmentLabel(selectedExecution.environment ?? '')}</Tag>
             </p>
             <p style={{ color: '#666', fontSize: 13 }}>
               L'exécution sera lancée immédiatement après approbation.
@@ -214,7 +215,7 @@ export function PendingApprovalsList({
             <p>
               Vous êtes sur le point de refuser l'exécution de{' '}
               <strong>{selectedExecution.action_name || `Action #${selectedExecution.action_id}`}</strong>{' '}
-              en environnement <Tag color={getEnvironmentBadgeColor(selectedExecution.environment)}>{(selectedExecution.environment ?? '').toUpperCase()}</Tag>
+              en environnement <Tag color={getEnvironmentBadgeColor(selectedExecution.environment)}>{getEnvironmentLabel(selectedExecution.environment ?? '')}</Tag>
             </p>
             <p style={{ color: '#666', fontSize: 13 }}>
               Le demandeur sera notifié du refus.

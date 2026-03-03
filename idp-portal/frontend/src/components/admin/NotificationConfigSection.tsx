@@ -20,6 +20,7 @@ const CONDITION_LABELS: Record<string, string> = {
   on_failure: 'En cas d\'échec',
   on_success: 'En cas de succès',
   always: 'Toujours',
+  on_approval_required: 'Approbation requise',
 };
 
 const DEFAULT_CHANNELS: NotificationChannel[] = [

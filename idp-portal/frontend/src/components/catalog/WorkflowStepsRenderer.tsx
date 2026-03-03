@@ -21,7 +21,7 @@ import { renderFieldInput } from './renderFieldInput';
 const { Title } = Typography;
 
 export interface WorkflowStepsRendererProps {
-  workflowSteps: Array<{ order: number; name: string | null; referenced_action_id: number }>;
+  workflowSteps: Array<{ order: number; name: string | null; referenced_action_id?: number | null }>;
   workflowStepActions: Record<number, CatalogActionDetail>;
   loadingWorkflowStepActions: boolean;
   workflowStepActionsError: string | null;
@@ -77,7 +77,7 @@ export const WorkflowStepsRenderer = memo(function WorkflowStepsRenderer({
       )}
 
       {workflowSteps.map((step, stepIndex) => {
-        const refAction = workflowStepActions[step.referenced_action_id];
+        const refAction = step.referenced_action_id != null ? workflowStepActions[step.referenced_action_id] : undefined;
         const actionName = refAction?.name || `Action #${step.referenced_action_id}`;
         const schema = refAction?.parameters_schema ?? null;
         const fields = extractParameterFields(schema as Record<string, unknown> | null);

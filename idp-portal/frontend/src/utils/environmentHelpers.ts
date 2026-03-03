@@ -5,6 +5,7 @@ const STANDARD_ENVIRONMENT_LABELS: Record<string, string> = {
   developpement: 'Développement',
   staging: 'Staging',
   certification: 'Certification',
+  preprod: 'Pré-production',
   prod: 'Production',
   production: 'Production',
 };
@@ -14,8 +15,31 @@ const ENVIRONMENT_COLORS: Record<string, BadgeProps['status']> = {
   developpement: 'success',
   staging: 'warning',
   certification: 'warning',
+  preprod: 'warning',
   prod: 'error',
   production: 'error',
+  test: 'default',
+  lab: 'default',
+  qa: 'default',
+  uat: 'default',
+};
+
+/** Hex colors for calendar/visualization — aligned with styleTokens.environmentBadgeColor.
+ * Supports all inventory values (dev, developpement, staging, certification, prod, production, etc.). */
+const ENVIRONMENT_HEX_COLORS: Record<string, string> = {
+  dev: '#3B82F6',
+  developpement: '#3B82F6',
+  development: '#3B82F6',
+  staging: '#F97316',
+  certification: '#F97316',
+  certif: '#F97316',
+  preprod: '#F97316',
+  prod: '#EF4444',
+  production: '#EF4444',
+  test: '#8B5CF6',
+  lab: '#6B7280',
+  qa: '#6B7280',
+  uat: '#6B7280',
 };
 
 /**
@@ -40,11 +64,21 @@ export function getEnvironmentColor(env: string): BadgeProps['status'] {
 }
 
 /**
+ * Returns hex color for an environment (calendar, charts, etc.).
+ * Supports all inventory values (dev, developpement, staging, certification, prod, production).
+ * Unknown envs → gray (#6B7280).
+ */
+export function getEnvironmentHexColor(env: string): string {
+  const normalized = env.toLowerCase().trim();
+  return ENVIRONMENT_HEX_COLORS[normalized] ?? '#6B7280';
+}
+
+/**
  * Sorts environments by canonical order: dev/developpement, staging/certification, prod/production first,
  * then alphabetical for unknown environments.
  */
 export function sortEnvironments(environments: string[]): string[] {
-  const priorityOrder = ['dev', 'developpement', 'staging', 'certification', 'prod', 'production'];
+  const priorityOrder = ['dev', 'developpement', 'staging', 'certification', 'preprod', 'prod', 'production', 'test', 'lab', 'qa', 'uat'];
 
   return [...environments].sort((a, b) => {
     const indexA = priorityOrder.indexOf(a.toLowerCase());
@@ -63,4 +97,52 @@ export function sortEnvironments(environments: string[]): string[] {
 export function isProductionEnvironment(env: string): boolean {
   const normalized = env.toLowerCase();
   return normalized === 'prod' || normalized === 'production';
+}
+
+/** Shape for environment stats (compatible with EnvironmentStats from api/analytics). */
+interface EnvironmentStatsShape {
+  environment: string;
+  count: number;
+  success_rate: number | null;
+}
+
+/**
+ * Normalizes environment stats by grouping case-insensitively (DEV + dev → single bucket).
+ * Uses existing frontend normalization: lowercase key, sortEnvironments order.
+ */
+export function normalizeEnvironmentStats<T extends EnvironmentStatsShape>(
+  stats: T[],
+): T[] {
+  const byKey = new Map<string, { count: number; weightedSuccess: number; totalForRate: number }>();
+
+  for (const row of stats) {
+    const key = (row.environment || '').toLowerCase().trim() || 'n/a';
+    const existing = byKey.get(key);
+    const successRate = row.success_rate;
+    const count = row.count;
+
+    if (existing) {
+      existing.count += count;
+      if (successRate != null && count > 0) {
+        existing.weightedSuccess += successRate * count;
+        existing.totalForRate += count;
+      }
+    } else {
+      byKey.set(key, {
+        count,
+        weightedSuccess: successRate != null ? successRate * count : 0,
+        totalForRate: successRate != null ? count : 0,
+      });
+    }
+  }
+
+  const sortedKeys = sortEnvironments([...byKey.keys()]);
+  return sortedKeys.map((env) => {
+    const agg = byKey.get(env)!;
+    const success_rate =
+      agg.totalForRate > 0
+        ? Math.round((agg.weightedSuccess / agg.totalForRate) * 10) / 10
+        : null;
+    return { environment: env, count: agg.count, success_rate } as T;
+  });
 }

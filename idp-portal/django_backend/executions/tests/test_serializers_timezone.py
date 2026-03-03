@@ -303,3 +303,33 @@ class TestNaiveDatetimeSafetyNet:
         serializer = ExecutionSerializer()
         data = serializer.to_representation(obj)
         assert data["started_at"] == "2026-06-15T10:00:00Z"
+
+
+# ---------------------------------------------------------------------------
+# Story 57.17: source_execution_id in ScheduledExecutionListItemSerializer
+# ---------------------------------------------------------------------------
+
+class TestScheduledExecutionListItemSerializerSourceExecutionId:
+    """Verify that source_execution_id is correctly serialized."""
+
+    def test_source_execution_id_present(self):
+        obj = _make_scheduled_list_mock()
+        obj.source_execution_id = 42
+        serializer = ScheduledExecutionListItemSerializer()
+        data = serializer.to_representation(obj)
+        assert data["source_execution_id"] == 42
+
+    def test_source_execution_id_none(self):
+        obj = _make_scheduled_list_mock()
+        obj.source_execution_id = None
+        serializer = ScheduledExecutionListItemSerializer()
+        data = serializer.to_representation(obj)
+        assert data["source_execution_id"] is None
+
+    def test_source_execution_id_zero_is_valid(self):
+        """Edge case: source_execution_id=0 should serialize as 0, not None."""
+        obj = _make_scheduled_list_mock()
+        obj.source_execution_id = 0
+        serializer = ScheduledExecutionListItemSerializer()
+        data = serializer.to_representation(obj)
+        assert data["source_execution_id"] == 0

@@ -33,6 +33,7 @@ import {
   fetchFilterOptions,
   fetchComparison,
 } from '../../../services/dashboard_service';
+import { normalizeEnvironmentStats } from '../../../utils/environmentHelpers';
 import { useUrlFilters } from '../../../hooks/useUrlFilters';
 import type {
   TechnologyStats,
@@ -191,7 +192,7 @@ export function ReportingDashboard() {
         if (cancelled) return;
 
         setTechStats(techData);
-        setEnvStats(envData);
+        setEnvStats(normalizeEnvironmentStats(envData));
         setTimeSeries(timeData);
       } catch (err) {
         if (cancelled) return;

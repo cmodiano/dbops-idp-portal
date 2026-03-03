@@ -10,7 +10,7 @@ from rest_framework import viewsets, status, serializers as drf_serializers
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
-from drf_spectacular.utils import extend_schema, inline_serializer, OpenApiResponse, OpenApiParameter
+from drf_spectacular.utils import extend_schema, extend_schema_view, inline_serializer, OpenApiResponse, OpenApiParameter
 from integrations.serializers import (
     IntegrationSerializer, IntegrationCreateSerializer,
     IntegrationUpdateSerializer, IntegrationListSerializer
@@ -26,6 +26,20 @@ from core.middleware import get_correlation_id
 logger = structlog.get_logger(__name__)
 
 
+@extend_schema_view(
+    list=extend_schema(
+        tags=['integrations'],
+        summary='Lister les intégrations',
+        parameters=[
+            OpenApiParameter('type', str, description='Filtre par type d\'intégration'),
+        ],
+    ),
+    retrieve=extend_schema(tags=['integrations'], summary='Détail d\'une intégration'),
+    create=extend_schema(tags=['integrations'], summary='Créer une intégration'),
+    update=extend_schema(tags=['integrations'], summary='Modifier une intégration'),
+    partial_update=extend_schema(tags=['integrations'], summary='Modifier partiellement une intégration'),
+    destroy=extend_schema(tags=['integrations'], summary='Supprimer une intégration'),
+)
 class IntegrationViewSet(viewsets.ViewSet):
     """
     ViewSet for integrations CRUD operations.
@@ -218,6 +232,7 @@ class IntegrationViewSet(viewsets.ViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @extend_schema(
+        tags=['integrations'],
         summary="Validate a single integration against the type catalogue",
         responses={
             200: inline_serializer(
@@ -292,6 +307,7 @@ class IntegrationViewSet(viewsets.ViewSet):
         }})
 
     @extend_schema(
+        tags=['integrations'],
         summary="Liste les templates AAP (job ou workflow) d'une intégration",
         parameters=[
             OpenApiParameter('resource_type', str, description="job_template | workflow_job", default='job_template'),
@@ -374,6 +390,7 @@ class IntegrationViewSet(viewsets.ViewSet):
             )
 
     @extend_schema(
+        tags=['integrations'],
         summary="Tester la connexion d'une intégration (health check synchrone)",
         responses={
             200: inline_serializer(name='TestConnectionResponse', fields={
@@ -474,6 +491,7 @@ class IntegrationViewSet(viewsets.ViewSet):
         }})
 
     @extend_schema(
+        tags=['integrations'],
         summary="Validate all integrations against the type catalogue",
         responses={
             200: inline_serializer(

@@ -10,6 +10,7 @@ import {
   ENV_COLORS,
   ENV_LABELS,
 } from '../calendarEventUtils';
+import { getEnvironmentHexColor } from '../environmentHelpers';
 import type { RecurringPatternResponse, ScheduledExecutionListItem } from '../../types/api';
 import type { DailyPatternConfig, WeeklyPatternConfig, CronPatternConfig } from '../../types/api';
 
@@ -98,9 +99,16 @@ describe('mapToCalendarEvent', () => {
   });
 
   it('should use fallback color for unknown env', () => {
-    const exec = makeExec({ environment: 'lab' as 'dev' });
+    const exec = makeExec({ environment: 'unknown-env' });
     const event = mapToCalendarEvent(exec);
-    expect(event.backgroundColor).toBe('#888');
+    expect(event.backgroundColor).toBe(getEnvironmentHexColor('unknown-env'));
+    expect(event.backgroundColor).toBe('#6B7280');
+  });
+
+  it('should use correct color for inventory env values (developpement, certification, production)', () => {
+    expect(mapToCalendarEvent(makeExec({ environment: 'developpement' })).backgroundColor).toBe('#3B82F6');
+    expect(mapToCalendarEvent(makeExec({ environment: 'certification' })).backgroundColor).toBe('#F97316');
+    expect(mapToCalendarEvent(makeExec({ environment: 'production' })).backgroundColor).toBe('#EF4444');
   });
 });
 
@@ -167,11 +175,11 @@ describe('getDisplayParameters', () => {
   });
 });
 
-describe('ENV_COLORS and ENV_LABELS', () => {
+describe('ENV_COLORS and ENV_LABELS (deprecated, use environmentHelpers)', () => {
   it('should have color for dev, staging, prod', () => {
-    expect(ENV_COLORS.dev).toBe('#1890ff');
-    expect(ENV_COLORS.staging).toBe('#fa8c16');
-    expect(ENV_COLORS.prod).toBe('#f5222d');
+    expect(ENV_COLORS.dev).toBe('#3B82F6');
+    expect(ENV_COLORS.staging).toBe('#F97316');
+    expect(ENV_COLORS.prod).toBe('#EF4444');
   });
 
   it('should have labels for dev, staging, prod', () => {

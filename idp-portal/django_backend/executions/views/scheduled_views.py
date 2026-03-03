@@ -6,10 +6,13 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from datetime import timezone as dt_timezone
+from functools import reduce
+from operator import or_
 
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
+from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -43,7 +46,7 @@ from executions.utils import (
 from inventory.services import InventoryService, InventoryServiceError, MAX_TARGETS_FOR_RBAC_FILTER
 
 from croniter import croniter, CroniterBadCronError, CroniterBadDateError
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import extend_schema, OpenApiParameter, inline_serializer
 import structlog
 
 UTC = dt_timezone(timedelta(0))
@@ -62,7 +65,22 @@ class ScheduledExecutionsView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    @extend_schema(tags=['scheduling'], summary='Lister les exécutions planifiées', responses={200: ScheduledExecutionListItemSerializer(many=True)})
+    @extend_schema(
+        tags=['scheduling'],
+        summary='Lister les exécutions planifiées',
+        parameters=[
+            OpenApiParameter('limit', int, description='Résultats par page (défaut: 50, max: 100)'),
+            OpenApiParameter('offset', int, description='Décalage pagination'),
+            OpenApiParameter('status', str, description='Filtre par statut'),
+            OpenApiParameter('action_id', int, description='Filtre par action'),
+            OpenApiParameter('scheduled_from', str, description='Date/heure début (ISO 8601)'),
+            OpenApiParameter('scheduled_to', str, description='Date/heure fin (ISO 8601)'),
+            OpenApiParameter('environment', str, description='Filtre par environnement'),
+            OpenApiParameter('engine', str, description='Filtre par technologie'),
+            OpenApiParameter('platform', str, description='Filtre par plateforme'),
+        ],
+        responses={200: ScheduledExecutionListItemSerializer(many=True)},
+    )
     def get(self, request: Request) -> Response:
         limit = parse_int(request.query_params.get("limit"), 50, name="limit")
         offset = parse_int(request.query_params.get("offset"), 0, name="offset")
@@ -77,6 +95,7 @@ class ScheduledExecutionsView(APIView):
         engine_filter = request.query_params.get("engine")
         platform_filter = request.query_params.get("platform")
 
+        # Story 57.17: source_execution_id est un champ DB direct sur ScheduledExecution
         qs = ScheduledExecution.objects.select_related("action", "user").select_related("recurringpattern")
         # Story 26.12 — View-level permission: admins see all, non-admins see only allowed actions
         # Note: This uses has_permission() (view-level), not has_object_permission() (object-level)
@@ -100,7 +119,9 @@ class ScheduledExecutionsView(APIView):
 
         if environment_filter:
             validate_environment_against_inventory(environment_filter, user_id=request.user.id)
-            qs = qs.filter(environment=EnvironmentHelper.normalize(environment_filter))
+            env_values = EnvironmentHelper.values_for_filter(environment_filter)
+            if env_values:
+                qs = qs.filter(reduce(or_, [Q(environment__iexact=v) for v in env_values]))
 
         if engine_filter:
             qs = qs.filter(action__engine__iexact=engine_filter)
@@ -140,7 +161,24 @@ class ScheduledExecutionsView(APIView):
             "available_actions": available_actions,
         })
 
-    @extend_schema(tags=['scheduling'], summary='Créer une exécution planifiée', responses={201: ScheduledExecutionSerializer})
+    @extend_schema(
+        tags=['scheduling'],
+        summary='Créer une exécution planifiée',
+        request=inline_serializer(
+            name='ScheduledExecutionCreateRequest',
+            fields={
+                'action_id': serializers.IntegerField(help_text='ID de l\'action'),
+                'environment': serializers.CharField(help_text='Environnement cible'),
+                'parameters': serializers.DictField(required=False, help_text='Paramètres d\'exécution'),
+                'scheduled_at': serializers.DateTimeField(help_text='Date/heure planifiée (ISO 8601)'),
+                'recurring_pattern': serializers.DictField(
+                    required=False,
+                    help_text='Pattern récurrent: {pattern_type, pattern_config}',
+                ),
+            },
+        ),
+        responses={201: ScheduledExecutionSerializer},
+    )
     def post(self, request: Request) -> Response:
         payload = request.data or {}
 
@@ -226,7 +264,26 @@ class ScheduledExecutionUpdateView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    @extend_schema(tags=['scheduling'], summary='Annuler ou marquer exécutée une scheduled execution', responses={200: ScheduledExecutionSerializer})
+    @extend_schema(
+        tags=['scheduling'],
+        summary='Annuler ou marquer exécutée une scheduled execution',
+        request=inline_serializer(
+            name='ScheduledExecutionPatchRequest',
+            fields={
+                'status': serializers.ChoiceField(
+                    choices=['cancelled', 'executed'],
+                    required=False,
+                    default='cancelled',
+                    help_text='cancelled ou executed',
+                ),
+                'execution_id': serializers.IntegerField(
+                    required=False,
+                    help_text='Requis si status=executed',
+                ),
+            },
+        ),
+        responses={200: ScheduledExecutionSerializer},
+    )
     def patch(self, request: Request, scheduled_execution_id: int) -> Response:
         try:
             se = ScheduledExecution.objects.select_related("action", "user").select_related("recurringpattern").get(
@@ -307,6 +364,37 @@ class ScheduledExecutionUpdateView(APIView):
 
         raise BadRequestError(code="INVALID_STATUS", message="Statut invalide", details={"status": new_status})
 
+    @extend_schema(
+        tags=['scheduling'],
+        summary='Modifier une exécution planifiée (PUT)',
+        request=inline_serializer(
+            name='ScheduledExecutionPutRequest',
+            fields={
+                'scheduled_at': serializers.DateTimeField(
+                    required=False,
+                    help_text='Date/heure planifiée (ISO 8601)',
+                ),
+                'environment': serializers.CharField(
+                    required=False,
+                    help_text='Environnement cible',
+                ),
+                'target_names': serializers.ListField(
+                    child=serializers.CharField(),
+                    required=False,
+                    help_text='Liste de noms de targets',
+                ),
+                'parameters': serializers.DictField(
+                    required=False,
+                    help_text='Paramètres d\'exécution',
+                ),
+                'recurring_pattern': serializers.DictField(
+                    required=False,
+                    help_text='Pattern récurrent: {pattern_type, pattern_config}',
+                ),
+            },
+        ),
+        responses={200: ScheduledExecutionSerializer},
+    )
     def put(self, request: Request, scheduled_execution_id: int) -> Response:
         """PUT /scheduled-executions/{id} - update pending scheduled execution (Story 13.8, AC4)."""
         try:
@@ -465,6 +553,19 @@ class ScheduledExecutionRecurringPatternView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        tags=['scheduling'],
+        summary='Activer/désactiver le pattern récurrent',
+        request=inline_serializer(
+            name='RecurringPatternPatchRequest',
+            fields={
+                'is_active': serializers.BooleanField(
+                    help_text='Activer (true) ou désactiver (false) le pattern',
+                ),
+            },
+        ),
+        responses={200: RecurringPatternSerializer},
+    )
     def patch(self, request: Request, scheduled_execution_id: int) -> Response:
         try:
             se = ScheduledExecution.objects.select_related("user").select_related("recurringpattern").get(
@@ -516,6 +617,11 @@ class ScheduledExecutionValidateCronView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        tags=['scheduling'],
+        summary='Valider une expression cron',
+        parameters=[OpenApiParameter('expression', str, description='Expression cron (minute hour day month day_of_week)')],
+    )
     def get(self, request: Request) -> Response:
         expr = (request.query_params.get("expression") or "").strip()
         if not expr:
@@ -549,6 +655,14 @@ class ScheduledExecutionCronNextExecutionsView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        tags=['scheduling'],
+        summary='Prochaines dates d\'exécution pour une expression cron',
+        parameters=[
+            OpenApiParameter('expression', str, description='Expression cron'),
+            OpenApiParameter('count', int, description='Nombre de dates à retourner (1-10, défaut: 5)'),
+        ],
+    )
     def get(self, request: Request) -> Response:
         expr = (request.query_params.get("expression") or "").strip()
         count = parse_int(request.query_params.get("count"), 5, name="count")

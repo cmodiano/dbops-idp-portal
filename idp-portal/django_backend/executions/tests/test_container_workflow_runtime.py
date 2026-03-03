@@ -177,7 +177,7 @@ class TestContainerWorkflowRuntimeBasic:
             name="Empty Workflow",
             status=ActionStatus.PUBLISHED,
             item_type=ActionItemType.WORKFLOW,
-            execution_steps=[],
+            execution_steps=[], change_type_config=None,
             created_by=self.user,
         )
         execution = self._create_execution(action=workflow)
@@ -794,3 +794,204 @@ class TestContainerWorkflowChildSteps:
             assert child_steps.count() == 5
             for step in child_steps:
                 assert step.status == ExecutionStepStatus.COMPLETED
+
+
+@pytest.mark.django_db
+class TestContainerWorkflowStepOutputs:
+    """
+    Tests Story 57.2 : _step_outputs initialisé, alimenté et utilisé pour résoudre input_mapping.
+
+    AC#1 : self._step_outputs initialisé à {} dans __init__
+    AC#2 : _step_outputs alimenté après exécution d'un step avec step_id
+    AC#5 : ordre d'opération : résoudre input_mapping → exécuter step → extraire output_mapping
+    AC#6 : step sans step_id → pas d'entrée dans _step_outputs
+    AC#7 : output_mapping absent → _step_outputs[step_id] = {}
+    """
+
+    def setup_method(self):
+        """Données de test communes."""
+        self.user = UserFactory(username="step_outputs_test_user")
+        self.ref_action = ActionFactory(
+            name="Referenced Action",
+            status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.ACTION,
+            created_by=self.user,
+        )
+
+    def _make_step(self, order=1, step_id=None, output_mapping=None, input_mapping=None):
+        step = {
+            "order": order,
+            "name": f"Step {order}",
+            "referenced_action_id": self.ref_action.id,
+        }
+        if step_id is not None:
+            step["step_id"] = step_id
+        if output_mapping is not None:
+            step["output_mapping"] = output_mapping
+        if input_mapping is not None:
+            step["input_mapping"] = input_mapping
+        return step
+
+    def _create_workflow_execution(self, steps):
+        from catalog.models import ActionItemType
+        workflow_action = ActionFactory(
+            name="Step Outputs Workflow",
+            status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.WORKFLOW,
+            execution_steps=steps,
+            created_by=self.user,
+        )
+        execution = Execution.objects.create(
+            action=workflow_action,
+            user=self.user,
+            environment=TEST_ENVIRONMENT,
+            status=ExecutionStatus.SUBMITTED,
+        )
+        return execution
+
+    def test_step_outputs_initialized_to_empty_dict(self):
+        """AC#1 : _step_outputs initialisé à {} dans __init__."""
+        workflow_action = ActionFactory(
+            name="Init Test Workflow",
+            status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.WORKFLOW,
+            execution_steps=[],
+            created_by=self.user,
+        )
+        execution = Execution.objects.create(
+            action=workflow_action,
+            user=self.user,
+            environment=TEST_ENVIRONMENT,
+            status=ExecutionStatus.SUBMITTED,
+        )
+        runtime = ContainerWorkflowRuntime(execution)
+        assert hasattr(runtime, '_step_outputs')
+        assert runtime._step_outputs == {}
+
+    @override_settings(
+        SIMULATE_EXECUTION_DEV=True,
+        SIMULATE_EXECUTION_STEP_DURATION=0,
+        SIMULATE_EXECUTION_FAILURE_RATE=0,
+    )
+    @patch('executions.container_workflow_runtime.AuditService')
+    def test_step_outputs_populated_after_step_with_step_id(self, mock_audit):
+        """AC#2 : _step_outputs alimenté après exécution d'un step avec step_id."""
+        steps = [self._make_step(
+            order=1,
+            step_id="discovery",
+            output_mapping={},
+        )]
+        execution = self._create_workflow_execution(steps)
+        runtime = ContainerWorkflowRuntime(execution)
+        runtime.run_sync()
+
+        # Le step_id "discovery" doit être présent dans _step_outputs
+        assert "discovery" in runtime._step_outputs
+
+    @override_settings(
+        SIMULATE_EXECUTION_DEV=True,
+        SIMULATE_EXECUTION_STEP_DURATION=0,
+        SIMULATE_EXECUTION_FAILURE_RATE=0,
+    )
+    @patch('executions.container_workflow_runtime.AuditService')
+    def test_step_without_step_id_not_added_to_outputs(self, mock_audit):
+        """AC#6 : step sans step_id → pas d'entrée dans _step_outputs (pas d'erreur)."""
+        # Step sans step_id
+        step = {
+            "order": 1,
+            "name": "Step without ID",
+            "referenced_action_id": self.ref_action.id,
+        }
+        execution = self._create_workflow_execution([step])
+        runtime = ContainerWorkflowRuntime(execution)
+        runtime.run_sync()
+
+        # _step_outputs doit rester vide (pas d'entrée sans step_id)
+        assert runtime._step_outputs == {}
+
+    @override_settings(
+        SIMULATE_EXECUTION_DEV=True,
+        SIMULATE_EXECUTION_STEP_DURATION=0,
+        SIMULATE_EXECUTION_FAILURE_RATE=0,
+    )
+    @patch('executions.container_workflow_runtime.AuditService')
+    def test_step_without_output_mapping_gets_empty_dict(self, mock_audit):
+        """AC#7 : output_mapping absent → _step_outputs[step_id] = {}."""
+        steps = [self._make_step(order=1, step_id="step-a")]
+        execution = self._create_workflow_execution(steps)
+        runtime = ContainerWorkflowRuntime(execution)
+        runtime.run_sync()
+
+        # _step_outputs["step-a"] doit être {} (output_mapping absent)
+        assert "step-a" in runtime._step_outputs
+        assert runtime._step_outputs["step-a"] == {}
+
+    @override_settings(
+        SIMULATE_EXECUTION_DEV=True,
+        SIMULATE_EXECUTION_STEP_DURATION=0,
+        SIMULATE_EXECUTION_FAILURE_RATE=0,
+    )
+    @patch('executions.container_workflow_runtime.AuditService')
+    def test_input_mapping_resolved_from_previous_step(self, mock_audit):
+        """AC#5 : résolution input_mapping depuis le step précédent dans _step_outputs."""
+        from unittest.mock import MagicMock, patch as mock_patch
+
+        # Simuler des outputs pré-chargés pour un step précédent
+        steps = [
+            self._make_step(order=1, step_id="step-a"),
+            self._make_step(
+                order=2,
+                step_id="step-b",
+                input_mapping={"db": "{{ steps['step-a'].database }}"},
+            ),
+        ]
+        execution = self._create_workflow_execution(steps)
+        runtime = ContainerWorkflowRuntime(execution)
+
+        # Pré-charger _step_outputs avec les outputs du step-a
+        runtime._step_outputs["step-a"] = {"database": "PROD_DB"}
+
+        # Espionner StepTemplateResolver.resolve pour vérifier qu'il est appelé
+        with mock_patch('executions.container_workflow_runtime.StepTemplateResolver') as MockResolver:
+            mock_resolver_instance = MagicMock()
+            mock_resolver_instance.resolve.return_value = {"db": "PROD_DB"}
+            MockResolver.return_value = mock_resolver_instance
+
+            # Exécuter uniquement step-b (order=2)
+            runtime._execute_step(steps[1])
+
+            # Vérifier que StepTemplateResolver a été instancié et appelé
+            MockResolver.assert_called_once_with(runtime._step_outputs)
+            mock_resolver_instance.resolve.assert_called_once_with({"db": "{{ steps['step-a'].database }}"})
+
+    @override_settings(
+        SIMULATE_EXECUTION_DEV=True,
+        SIMULATE_EXECUTION_STEP_DURATION=0,
+        SIMULATE_EXECUTION_FAILURE_RATE=0,
+    )
+    @patch('executions.container_workflow_runtime.AuditService')
+    def test_output_extractor_called_for_step_with_id(self, mock_audit):
+        """AC#2/#5 : OutputExtractor appelé pour les steps avec step_id."""
+        from unittest.mock import MagicMock, patch as mock_patch
+
+        steps = [self._make_step(
+            order=1,
+            step_id="step-x",
+            output_mapping={"result": "$.child_execution_id"},
+        )]
+        execution = self._create_workflow_execution(steps)
+        runtime = ContainerWorkflowRuntime(execution)
+
+        with mock_patch('executions.container_workflow_runtime.OutputExtractor') as MockExtractor:
+            mock_extractor_instance = MagicMock()
+            mock_extractor_instance.extract.return_value = {"result": "some_value"}
+            MockExtractor.return_value = mock_extractor_instance
+
+            runtime._execute_step(steps[0])
+
+            # Vérifier que OutputExtractor a été appelé
+            MockExtractor.assert_called_once()
+            mock_extractor_instance.extract.assert_called_once()
+            # _step_outputs doit être alimenté
+            assert "step-x" in runtime._step_outputs
+            assert runtime._step_outputs["step-x"] == {"result": "some_value"}

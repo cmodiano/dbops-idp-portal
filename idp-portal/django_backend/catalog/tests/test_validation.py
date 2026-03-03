@@ -174,6 +174,22 @@ class TestValidateWorkflowSteps:
         result = validate_workflow_steps(steps)
         assert result == steps
 
+    def test_gate_step_without_referenced_action_valid(self):
+        """Story 57.13: Gate steps (approval, maintenance_window) do not require referenced_action_id."""
+        steps = [
+            {'order': 1, 'name': 'Approval', 'step_type': 'gate', 'gate_type': 'approval', 'step_id': 'g1'},
+            {'order': 2, 'name': 'Execute', 'referenced_action_id': 10, 'step_id': 's1'},
+        ]
+        result = validate_workflow_steps(steps)
+        assert result == steps
+
+    def test_platform_step_without_referenced_action_invalid(self):
+        """Platform steps require referenced_action_id."""
+        steps = [{'order': 1, 'name': 'Step 1', 'step_id': 's1'}]  # no referenced_action_id
+        with pytest.raises(drf_serializers.ValidationError) as exc_info:
+            validate_workflow_steps(steps)
+        assert "referenced_action_id is required for platform steps" in str(exc_info.value)
+
     def test_workflow_with_branches_valid(self):
         """Workflow with valid branches is valid."""
         steps = [

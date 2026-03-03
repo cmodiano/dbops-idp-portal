@@ -11,11 +11,11 @@ import { useAuth } from '../contexts/AuthContext';
 import logger from '../services/logger';
 
 /**
- * Default polling interval: 60 seconds.
+ * Default polling interval: 15 seconds.
  * Story 8.8 Dev Notes: Balance between server load and data freshness.
- * Can be reduced to 30s or increased to 120s based on monitoring.
+ * Reduced from 60s to 15s for faster approval notification visibility.
  */
-const DEFAULT_POLLING_INTERVAL = 60_000; // 60 seconds
+const DEFAULT_POLLING_INTERVAL = 15_000; // 15 seconds
 
 interface UsePendingApprovalsCountResult {
   count: number;
@@ -74,11 +74,20 @@ export function usePendingApprovalsCount(
       return;
     }
 
-    // Setup polling (AC7: 60 second interval)
+    // Setup polling (AC7)
     const interval = setInterval(fetchCount, pollingInterval);
 
+    // Refresh immediately when tab becomes visible again
+    const handleVisibility = () => {
+      if (!document.hidden) fetchCount();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
     // Cleanup on unmount
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [fetchCount, pollingInterval, canApprove]);
 
   return { count, loading, error, refetch: fetchCount };

@@ -13,7 +13,9 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
+from rest_framework import serializers
 from rest_framework.parsers import MultiPartParser
+from drf_spectacular.utils import extend_schema, inline_serializer
 from core.permissions import DBOPSProfilePermission
 from core.exceptions import BadRequestError, InvalidStateError
 
@@ -119,6 +121,18 @@ class UploadIconView(APIView):
     parser_classes = [MultiPartParser]
     permission_classes = [IsAuthenticated, DBOPSProfilePermission]
 
+    @extend_schema(
+        tags=['integrations'],
+        summary='Uploader une icône d\'intégration',
+        request=inline_serializer(
+            name='UploadIconRequest',
+            fields={
+                'file': serializers.FileField(
+                    help_text='Fichier image (PNG, JPEG, SVG, GIF, max 2MB)',
+                ),
+            },
+        ),
+    )
     def post(self, request):
         """
         Upload integration icon file.

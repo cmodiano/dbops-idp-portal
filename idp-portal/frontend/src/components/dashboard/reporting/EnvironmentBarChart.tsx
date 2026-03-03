@@ -18,6 +18,7 @@ import {
   Cell,
 } from 'recharts';
 import type { EnvironmentStats } from '../../../types/api';
+import { getEnvironmentLabel } from '../../../utils/environmentHelpers';
 
 export interface EnvironmentBarChartProps {
   /** Environment stats data. */
@@ -54,14 +55,8 @@ function CustomTooltip({ active, payload, label }: { active?: boolean; payload?:
   if (!active || !payload?.length) return null;
   const data = payload[0]?.payload as EnvironmentStats;
   return (
-    <div style={{
-      background: 'var(--color-bg-elevated, #fff)',
-      padding: '8px 12px',
-      border: '1px solid var(--color-border-secondary, #d9d9d9)',
-      borderRadius: 4,
-      fontSize: 13,
-    }}>
-      <div style={{ fontWeight: 600, marginBottom: 4 }}>{label}</div>
+    <div style={{ fontSize: 13 }}>
+      <div style={{ fontWeight: 600, marginBottom: 4 }}>{getEnvironmentLabel(label ?? data.environment)}</div>
       <div>Exécutions: {data.count}</div>
       {data.success_rate !== null && (
         <div>Taux de succès: {data.success_rate.toFixed(1)}%</div>
@@ -107,10 +102,11 @@ export function EnvironmentBarChart({ data, loading = false }: EnvironmentBarCha
           <YAxis
             type="category"
             dataKey="environment"
+            tickFormatter={(value) => getEnvironmentLabel(value)}
             tick={{ fontSize: 13 }}
             tickLine={false}
             axisLine={false}
-            width={80}
+            width={130}
           />
           <Tooltip content={<CustomTooltip />} />
           <Bar dataKey="count" name="Executions" radius={[0, 4, 4, 0]}>

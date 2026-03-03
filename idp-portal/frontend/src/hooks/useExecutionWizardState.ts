@@ -113,7 +113,7 @@ export interface UseExecutionWizardStateReturn {
   workflowInvalidStepOrders: number[];
   workflowValidationSummary: string | null;
   isWorkflow: boolean;
-  workflowSteps: Array<{ order: number; name: string | null; referenced_action_id: number }>;
+  workflowSteps: Array<{ order: number; name: string | null; referenced_action_id?: number | null }>;
   isWorkflowStep2Valid: boolean;
   // Derived
   parameterFields: ReturnType<typeof extractParameterFields>;

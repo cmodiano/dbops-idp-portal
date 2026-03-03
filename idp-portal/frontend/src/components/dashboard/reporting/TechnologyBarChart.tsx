@@ -50,13 +50,7 @@ function CustomTooltip({ active, payload, label }: { active?: boolean; payload?:
   if (!active || !payload?.length) return null;
   const data = payload[0]?.payload as TechnologyStats;
   return (
-    <div style={{
-      background: 'var(--color-bg-elevated, #fff)',
-      padding: '8px 12px',
-      border: '1px solid var(--color-border-secondary, #d9d9d9)',
-      borderRadius: 4,
-      fontSize: 13,
-    }}>
+    <div style={{ fontSize: 13 }}>
       <div style={{ fontWeight: 600, marginBottom: 4 }}>{label}</div>
       <div>Exécutions: {data.count}</div>
       {data.success_rate !== null && (

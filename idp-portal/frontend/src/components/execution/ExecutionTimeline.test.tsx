@@ -461,10 +461,10 @@ describe('ExecutionTimeline', () => {
         execution: {
           id: 1,
           status: 'COMPLETED',
-          started_at: '2026-02-01T10:00:00',
-          completed_at: '2026-02-01T10:00:10',
+          started_at: '2026-02-01T10:00:00Z',
+          completed_at: '2026-02-01T10:00:10Z',
           approved_by: 10,
-          approved_at: '2026-02-01T09:55:00',
+          approved_at: '2026-02-01T09:55:00Z',
           approval_comment: 'Approved after review',
         } as unknown as import('../../types/api').ExecutionResponse,
         loading: false,

@@ -78,6 +78,57 @@ class ProfileModelTest(TestCase):
         self.assertTrue(profile.is_auditor_bool)
         self.assertFalse(profile.is_admin_bool)
 
+    def test_profile_is_approver_bool_property_zero_is_false(self):
+        """
+        Story 57.14 AC1: Test is_approver_bool property — 0 → False.
+        Validates INCON-4 pattern for is_approver (Oracle NUMBER(1)).
+        """
+        profile = Profile.objects.create(
+            name='REGULAR',
+            ad_group='GRP-IDP-REGULAR',
+            is_approver=0
+        )
+        self.assertIsInstance(profile.is_approver_bool, bool)
+        self.assertFalse(profile.is_approver_bool)
+
+    def test_profile_is_approver_bool_property_one_is_true(self):
+        """
+        Story 57.14 AC1: Test is_approver_bool property — 1 → True.
+        Validates INCON-4 pattern for is_approver (Oracle NUMBER(1)).
+        """
+        profile = Profile.objects.create(
+            name='APPROVER',
+            ad_group='GRP-IDP-APPROVER',
+            is_approver=1
+        )
+        self.assertIsInstance(profile.is_approver_bool, bool)
+        self.assertTrue(profile.is_approver_bool)
+
+    def test_profile_is_approver_default_is_zero(self):
+        """
+        Story 57.14 AC1: Test is_approver defaults to 0 when not specified.
+        """
+        profile = Profile.objects.create(
+            name='DEFAULT_APPROVER',
+            ad_group='GRP-IDP-DEFAULT'
+        )
+        self.assertEqual(profile.is_approver, 0)
+        self.assertFalse(profile.is_approver_bool)
+
+    def test_profile_is_approver_bool_property_nonone_is_false(self):
+        """
+        Story 57.14 AC1: Test is_approver_bool uses strict equality (== 1).
+        Any value other than exactly 1 (e.g. 2) returns False.
+        Validates INCON-4 — property is is_approver == 1, not bool(is_approver).
+        """
+        profile = Profile(
+            name='EDGE_CASE',
+            ad_group='GRP-IDP-EDGE',
+            is_approver=2  # Hors plage Oracle CHECK (0,1) — non insérable en DB
+        )
+        self.assertIsInstance(profile.is_approver_bool, bool)
+        self.assertFalse(profile.is_approver_bool)
+
 
 @pytest.mark.django_db
 class ProfileActionPermissionModelTest(TestCase):

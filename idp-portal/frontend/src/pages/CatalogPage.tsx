@@ -21,7 +21,6 @@ import type { ActionPreviewData, ActionStats, ImpactLevel } from '../types/api';
 
 const { Title, Text } = Typography;
 
-const contentMaxWidth = 1600;
 
 /** Convert CatalogAction to ActionPreviewData for ActionCard (Story 8.1: optional stats). */
 function toPreviewData(action: CatalogAction, stats?: ActionStats | null): ActionPreviewData {
@@ -146,7 +145,7 @@ export default function CatalogPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      <div style={{ maxWidth: contentMaxWidth, margin: '0 auto' }}>
+      <div style={{ width: '100%' }}>
         <Title level={2}>Catalogue</Title>
 
         <CategoryTabs

@@ -9,6 +9,7 @@ import { DashboardProvider } from './contexts/DashboardContext';
 import { FeatureFlagProvider } from './contexts/FeatureFlagContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import './styles/glass.css';
+import './styles/recharts-tooltips.css';
 
 const CatalogPage = lazy(() => import('./pages/CatalogPage'));
 const ExecutionsPage = lazy(() => import('./pages/ExecutionsPage'));

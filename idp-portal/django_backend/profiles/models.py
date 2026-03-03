@@ -111,6 +111,13 @@ class Profile(models.Model):
     # Les serializers DRF font la conversion int ↔ bool automatiquement.
     is_admin = models.IntegerField(default=0, db_column='IS_ADMIN')
     is_auditor = models.IntegerField(default=0, db_column='IS_AUDITOR')
+    # INCON-4 (Story 57.14): IntegerField intentionnel pour compatibilité Oracle.
+    # Oracle n'a pas de type BOOLEAN natif — ces champs mappent NUMBER(1) avec CHECK (val IN (0, 1)).
+    # Schema legacy Oracle existant. BooleanField Django créerait une incohérence.
+    # CHECK constraint définie dans migration Flyway (gérée par DBA, pas Django ORM).
+    # L'API Python utilise la property is_approver_bool (ci-dessous).
+    # Les serializers DRF font la conversion int ↔ bool automatiquement.
+    is_approver = models.IntegerField(default=0, db_column='IS_APPROVER')
     created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
     updated_at = models.DateTimeField(auto_now=True, db_column='UPDATED_AT')
     
@@ -130,6 +137,11 @@ class Profile(models.Model):
     def is_auditor_bool(self) -> bool:
         """Oracle NUMBER(1) → bool (1 = True, 0 = False)."""
         return self.is_auditor == 1
+
+    @property
+    def is_approver_bool(self) -> bool:
+        """Oracle NUMBER(1) → bool (1 = True, 0 = False)."""
+        return self.is_approver == 1
 
     def __str__(self) -> str:
         return self.name

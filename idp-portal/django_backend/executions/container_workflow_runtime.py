@@ -21,9 +21,9 @@ Architecture:
 
 import structlog
 from threading import Thread
-from typing import Dict, Any, List, cast
+from typing import Dict, Any, List, Union, cast
 
-from django.db import close_old_connections
+from django.db import close_old_connections, transaction
 from django.utils import timezone
 
 from catalog.models import Action, ActionStatus
@@ -35,10 +35,16 @@ from executions.dtos import ExecutionRequest
 from executions.services import ExecutionService
 from executions.simulation_service import SimulationService
 from executions.cancellation_cache import is_cancelled
-from core.exceptions import ServiceUnavailableError
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.middleware import get_correlation_id
+from executions.output_extractor import OutputExtractor
+from executions.template_resolver import StepTemplateResolver
+from executions.step_handlers.condition_evaluator import StepConditionEvaluator
+from executions.step_handlers.service_call_handler import ServiceCallHandler
+from executions.step_handlers.http_request_handler import HttpRequestHandler
+from executions.step_handlers.evaluation_handler import EvaluationHandler
+from executions.step_handlers.gate_handler import GateHandler
 
 logger = structlog.get_logger(__name__)
 
@@ -60,7 +66,41 @@ class ContainerWorkflowRuntime:
     - AC2: Child executions with parent_execution_id for traceability
     - AC3: workflow_step_parameters injection (Story 4.12)
     - AC4: Failure/cancellation propagation
+
+    ServiceNow change management (ADR-007 Story 57.10):
+    ServiceNow change creation is no longer handled by a pre-hook.
+    It must be defined as an explicit step in the workflow's execution_steps:
+
+        {
+            "step_id": "create-change",
+            "step_type": "service_call",
+            "name": "Créer change ServiceNow",
+            "integration_type": "servicenow",
+            "operation": "create_change",
+            "condition": {"environment_in": ["production", "pre-production"]},
+            "input_mapping": {
+                "short_description": "IDP Portal — {{ execution.action_name }}",
+                "change_model_code": "MDL001",
+                "change_type": "normal"
+            },
+            "output_mapping": {
+                "change_number": "$.number",
+                "sys_id": "$.sys_id"
+            }
+        }
+
+    The change number is then available as steps['create-change']['change_number']
+    for subsequent steps (e.g., close-change via operation: close_change).
     """
+
+    # Mapping step_type string → ExecutionStepType enum (ADR-007 §3d)
+    _STEP_TYPE_TO_DB_TYPE: dict[str, ExecutionStepType] = {
+        'platform': ExecutionStepType.PLATFORM,
+        'service_call': ExecutionStepType.SERVICE_CALL,
+        'http_request': ExecutionStepType.HTTP_REQUEST,
+        'evaluation': ExecutionStepType.EVALUATION,
+        'gate': ExecutionStepType.GATE,
+    }
 
     def __init__(
         self,
@@ -93,6 +133,9 @@ class ContainerWorkflowRuntime:
         # Transition counter for loop detection
         self._transition_count = 0
 
+        # Contexte partagé des outputs de steps (ADR-007 §3a)
+        self._step_outputs: dict[str, dict] = {}
+
         logger.info(
             "container_workflow_runtime_initialized",
             execution_id=self.execution.id,
@@ -113,8 +156,72 @@ class ContainerWorkflowRuntime:
                 correlation_id=self.correlation_id,
             )
             return []
-        # Sort by order
-        return sorted(steps, key=lambda s: s.get('order', 0))
+        steps = sorted(steps, key=lambda s: s.get('order', 0))
+
+        # Story 57.11 — Backward compatibility wrapper
+        # Si l'action n'a pas de steps ET a change_type_config ET n'est pas une exécution enfant
+        # → générer le workflow implicite [create-change] → [execute-action] → [close-change]
+        if not steps and self.action.change_type_config and not self.execution.parent_execution_id:
+            logger.info(
+                "container_workflow_backward_compat_wrapper_applied",
+                execution_id=self.execution.id,
+                action_id=self.action.id,
+                correlation_id=self.correlation_id,
+            )
+            steps = self._build_change_wrapper_steps()
+
+        return steps
+
+    def _build_change_wrapper_steps(self) -> List[Dict[str, Any]]:
+        """
+        Story 57.11 — Génère un workflow implicite [create-change]→[execute-action]→[close-change]
+        pour les actions avec change_type_config mais sans execution_steps.
+        """
+        config = self.action.change_type_config or {}
+        return [
+            {
+                "order": 1,
+                "step_id": "create-change",
+                "step_type": "service_call",
+                "name": "Créer change ServiceNow",
+                "integration_type": "servicenow",
+                "operation": "create_change",
+                "input_mapping": {
+                    "short_description": f"IDP Portal — {self.action.name}"[:160],
+                    "change_type": config.get("model", "standard"),
+                    "category": config.get("category", ""),
+                    "assignment_group": config.get("assignment_group", ""),
+                },
+                "output_mapping": {
+                    "change_number": "$.number",
+                    "sys_id": "$.sys_id",
+                },
+                "on_success_step_id": "execute-action",
+            },
+            {
+                "order": 2,
+                "step_id": "execute-action",
+                "step_type": "platform",
+                "name": self.action.name,
+                "referenced_action_id": self.action.id,
+                "on_success_step_id": "close-change",
+            },
+            {
+                "order": 3,
+                "step_id": "close-change",
+                "step_type": "service_call",
+                "name": "Fermer change ServiceNow",
+                "integration_type": "servicenow",
+                "operation": "close_change",
+                "input_mapping": {
+                    "change_id": "{{ steps['create-change']['change_number'] }}",
+                    "close_code": "successful",
+                },
+                "output_mapping": {
+                    "closed": "$.closed",
+                },
+            },
+        ]
 
     def _get_step_parameters(self, step: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -171,19 +278,66 @@ class ContainerWorkflowRuntime:
                     correlation_id=self.correlation_id,
                 )
 
+    def _has_approval_notification_configured(self) -> bool:
+        """Vérifie si au moins un canal a on_approval_required dans ses conditions."""
+        config = self.action.notification_config or {}
+        for ch in config.get("channels", []):
+            if ch.get("enabled") and "on_approval_required" in (ch.get("conditions") or []):
+                return True
+        return False
+
+    def _schedule_approval_notification(self) -> None:
+        """Story 57.8: Envoie notification on_approval_required via on_commit."""
+        try:
+            from services.notification_service import NotificationService
+
+            _execution = self.execution
+            _action = self.action
+            _correlation_id = self.correlation_id
+
+            def _send() -> None:
+                try:
+                    notif = NotificationService()
+                    notif.notify_execution_event(
+                        execution=_execution,
+                        action=_action,
+                        event="on_approval_required",
+                        correlation_id=_correlation_id,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.error(
+                        "approval_notification_failed",
+                        execution_id=_execution.id,
+                        error=str(exc),
+                        correlation_id=_correlation_id,
+                    )
+
+            transaction.on_commit(_send)
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "approval_notification_setup_failed",
+                execution_id=self.execution.id,
+                error=str(exc),
+                correlation_id=self.correlation_id,
+            )
+
     def _execute_step(self, step: Dict[str, Any]) -> ExecutionStatus:
         """
-        Execute a single container workflow step by creating a child execution.
+        Execute a single container workflow step.
+
+        Orchestrates: input_mapping resolution → condition evaluation →
+        step_type dispatch → output_mapping extraction (ADR-007 §3d).
 
         Args:
             step: Step dict from workflow definition
 
         Returns:
-            ExecutionStatus of the child execution
+            ExecutionStatus of the step (COMPLETED for SKIPPED steps)
         """
         step_order = step.get('order', 0)
         step_name = step.get('name') or f"Step {step_order}"
-        referenced_action_id = step.get('referenced_action_id')
+        step_id = step.get('step_id')
+        step_type = step.get('step_type') or 'platform'  # ADR-007 §3d, coalesce null/"" to platform
 
         self._step_order_counter += 1
         self._transition_count += 1
@@ -198,14 +352,68 @@ class ContainerWorkflowRuntime:
             )
             return ExecutionStatus.FAILED
 
+        # Résoudre les input_mapping depuis _step_outputs (ADR-007 §3b)
+        input_mapping = step.get('input_mapping', {})
+        resolved_params: dict = {}
+        if input_mapping and isinstance(input_mapping, dict):
+            resolver = StepTemplateResolver(self._step_outputs)
+            resolved_params = resolver.resolve(input_mapping)
+        elif input_mapping and not isinstance(input_mapping, dict):
+            logger.warning(
+                "container_workflow_input_mapping_not_dict",
+                step_id=step_id,
+                input_type=type(input_mapping).__name__,
+                correlation_id=self.correlation_id,
+            )
+
         logger.info(
             "container_workflow_step_starting",
             execution_id=self.execution.id,
             step_order=step_order,
             step_name=step_name,
-            referenced_action_id=referenced_action_id,
+            step_type=step_type,
             correlation_id=self.correlation_id,
         )
+
+        # Évaluer la condition (ADR-007 §6)
+        condition_evaluator = StepConditionEvaluator()
+        if not condition_evaluator.should_execute(step, self.execution):
+            return self._create_skipped_step(step_name, step_id, step_type)
+
+        # Dispatcher selon step_type (ADR-007 §3d)
+        handler: Union[
+            ServiceCallHandler, HttpRequestHandler, EvaluationHandler, GateHandler
+        ]
+        match step_type:
+            case 'platform':
+                return self._execute_platform_step(step, resolved_params, step_name, step_id)
+            case 'service_call':
+                handler = ServiceCallHandler()
+            case 'http_request':
+                handler = HttpRequestHandler()
+            case 'evaluation':
+                handler = EvaluationHandler()
+            case 'gate':
+                handler = GateHandler()
+            case _:
+                raise ValueError(f"Unknown step_type: {step_type!r}")
+
+        return self._execute_handler_step(step, resolved_params, step_name, step_id, step_type, handler)
+
+    def _execute_platform_step(
+        self,
+        step: Dict[str, Any],
+        resolved_params: dict,
+        step_name: str,
+        step_id: str | None,
+    ) -> ExecutionStatus:
+        """
+        Logique platform extraite de _execute_step() (ADR-007 §3d).
+
+        Crée une child execution, exécute, met à jour _step_outputs.
+        """
+        step_order = step.get('order', 0)
+        referenced_action_id = step.get('referenced_action_id')
 
         # Create a tracking step on the parent execution
         parent_step = ExecutionStep.objects.create(
@@ -251,6 +459,10 @@ class ContainerWorkflowRuntime:
 
         # Build child execution parameters (AC3: inject workflow_step_parameters)
         child_params = self._get_step_parameters(step)
+
+        # Fusionner les resolved_params dans child_params (AC5)
+        if resolved_params:
+            child_params = {**child_params, **resolved_params}
 
         # Create child execution
         exec_req = ExecutionRequest(
@@ -327,7 +539,11 @@ class ContainerWorkflowRuntime:
         child_execution.refresh_from_db()
 
         # Update parent step to reflect child outcome
-        parent_step.status = ExecutionStepStatus.COMPLETED
+        parent_step.status = (
+            ExecutionStepStatus.FAILED
+            if child_execution.status == ExecutionStatus.FAILED
+            else ExecutionStepStatus.COMPLETED
+        )
         parent_step.completed_at = timezone.now()
         parent_step.set_output({
             'child_execution_id': child_execution.id,
@@ -338,7 +554,188 @@ class ContainerWorkflowRuntime:
         })
         parent_step.save()
 
+        # Extraire les outputs via output_mapping (ADR-007 §3c)
+        if step_id is not None:
+            output_mapping = step.get('output_mapping', {})
+            if not isinstance(output_mapping, dict):
+                logger.warning(
+                    "container_workflow_output_mapping_not_dict",
+                    execution_id=self.execution.id,
+                    step_id=step_id,
+                    output_mapping_type=type(output_mapping).__name__,
+                    correlation_id=self.correlation_id,
+                )
+                output_mapping = {}
+            extractor = OutputExtractor()
+            raw_output = parent_step.get_output() or {}
+            extracted = extractor.extract(raw_output, output_mapping)
+            self._step_outputs[step_id] = extracted
+            if extracted:
+                logger.info(
+                    "container_workflow_step_output_extracted",
+                    execution_id=self.execution.id,
+                    step_id=step_id,
+                    extracted_keys=list(extracted.keys()),
+                    correlation_id=self.correlation_id,
+                )
+
         return cast(ExecutionStatus, child_execution.status)
+
+    def _create_skipped_step(
+        self,
+        step_name: str,
+        step_id: str | None,
+        step_type: str,
+    ) -> ExecutionStatus:
+        """
+        Crée un ExecutionStep SKIPPED et met à jour _step_outputs (ADR-007 §6).
+
+        Returns:
+            ExecutionStatus.COMPLETED — le runtime continue au step suivant.
+        """
+        db_step_type = self._STEP_TYPE_TO_DB_TYPE.get(step_type, ExecutionStepType.PLATFORM)
+
+        now = timezone.now()
+        ExecutionStep.objects.create(
+            execution=self.execution,
+            step_order=self._step_order_counter,
+            step_name=step_name,
+            step_type=db_step_type,
+            status=ExecutionStepStatus.SKIPPED,
+            started_at=now,
+            completed_at=now,
+        )
+
+        # _step_outputs[step_id] = {} pour que les steps suivants obtiennent null
+        if step_id is not None:
+            self._step_outputs[step_id] = {}
+
+        logger.info(
+            "container_workflow_step_skipped",
+            execution_id=self.execution.id,
+            step_id=step_id,
+            step_name=step_name,
+            step_type=step_type,
+            correlation_id=self.correlation_id,
+        )
+        # Traité comme SUCCESS par le runtime (continue au step suivant)
+        return ExecutionStatus.COMPLETED
+
+    def _execute_handler_step(
+        self,
+        step: Dict[str, Any],
+        resolved_params: dict,
+        step_name: str,
+        step_id: str | None,
+        step_type: str,
+        handler: Union[
+            ServiceCallHandler, HttpRequestHandler, EvaluationHandler, GateHandler
+        ],
+    ) -> ExecutionStatus:
+        """
+        Wrapper générique pour les handlers non-platform (ADR-007 §3d).
+
+        Story 57.3: les handlers lèvent NotImplementedError.
+        Stories 57.4–57.7: les handlers retournent {'status': ..., 'raw_output': ...}.
+        """
+        db_step_type = self._STEP_TYPE_TO_DB_TYPE.get(step_type, ExecutionStepType.PLATFORM)
+
+        parent_step = ExecutionStep.objects.create(
+            execution=self.execution,
+            step_order=self._step_order_counter,
+            step_name=step_name,
+            step_type=db_step_type,
+            status=ExecutionStepStatus.RUNNING,
+            started_at=timezone.now(),
+        )
+
+        try:
+            result = handler.execute(
+                step_config=step,
+                resolved_params=resolved_params,
+                execution=self.execution,
+                step=step,
+                correlation_id=self.correlation_id,
+            )
+        except Exception as _e:
+            logger.exception(
+                "container_workflow_handler_exception",
+                step_name=step_name,
+                execution_id=self.execution.id,
+                correlation_id=self.correlation_id,
+            )
+            parent_step.status = ExecutionStepStatus.FAILED
+            parent_step.completed_at = timezone.now()
+            parent_step.save()
+            return ExecutionStatus.FAILED
+
+        # Protocole WAITING pour gate steps (story 57.7)
+        # DOIT précéder l'output_mapping ET le fail-closed :
+        # - évite que le gate soit marqué FAILED (fail-closed)
+        # - évite que le dict gate {'waiting', 'gate_conditions', ...} pollue _step_outputs
+        if isinstance(result, dict) and result.get('waiting'):
+            gate_output = result.get('gate_output', {})
+            gate_conditions = gate_output.get('gate_conditions', [])
+            parent_step.set_output(gate_output)
+            parent_step.status = ExecutionStepStatus.WAITING
+            # NE PAS SET completed_at — step est en attente
+            parent_step.save()
+            logger.info(
+                "container_workflow_gate_step_waiting",
+                step_name=step_name,
+                step_id=step_id,
+                execution_id=self.execution.id,
+                correlation_id=self.correlation_id,
+            )
+            # Story 57.8: Notification approbation requise (on_approval_required)
+            is_approval_gate = any(
+                isinstance(c, dict) and c.get('type') == 'approval_granted'
+                for c in gate_conditions
+            )
+            if is_approval_gate and self._has_approval_notification_configured():
+                self._schedule_approval_notification()
+            return ExecutionStatus.RUNNING  # Sentinel : boucle doit s'arrêter
+
+        # Extraction output_mapping pour les handlers non-gate (même pattern que platform)
+        if step_id is not None:
+            output_mapping = step.get('output_mapping', {})
+            if not isinstance(output_mapping, dict):
+                logger.warning(
+                    "container_workflow_output_mapping_not_dict",
+                    execution_id=self.execution.id,
+                    step_id=step_id,
+                    output_mapping_type=type(output_mapping).__name__,
+                    correlation_id=self.correlation_id,
+                )
+                output_mapping = {}
+            extractor = OutputExtractor()
+            # Handlers peuvent retourner envelope {raw_output: ...} ou dict brut
+            if isinstance(result, dict) and 'raw_output' in result:
+                raw_output = result.get('raw_output', {}) or {}
+            else:
+                raw_output = result if isinstance(result, dict) else {}
+            extracted = extractor.extract(raw_output, output_mapping)
+            self._step_outputs[step_id] = extracted
+
+        # Lire le statut retourné par le handler (ADR-007 §3d — contrat 57.4–57.7)
+        # Les handlers retournent {'status': ExecutionStatus, 'raw_output': dict}
+        # Fail-closed: missing/invalid handler_status → FAILED
+        result_execution_status = ExecutionStatus.FAILED
+        if isinstance(result, dict):
+            handler_status = result.get('status')
+            if isinstance(handler_status, ExecutionStatus):
+                result_execution_status = handler_status
+
+        final_step_status = (
+            ExecutionStepStatus.FAILED
+            if result_execution_status == ExecutionStatus.FAILED
+            else ExecutionStepStatus.COMPLETED
+        )
+        parent_step.status = final_step_status
+        parent_step.completed_at = timezone.now()
+        parent_step.save()
+
+        return result_execution_status
 
     def run(self) -> None:
         """
@@ -357,32 +754,6 @@ class ContainerWorkflowRuntime:
             step_count=len(self.workflow_steps),
             correlation_id=self.correlation_id,
         )
-
-        # Story 31.6: Create ServiceNow change if required before RUNNING
-        try:
-            self._create_servicenow_change_if_required(self.execution.environment)
-        except Exception as exc:  # noqa: BLE001 — catch-all-mark-failed: ServiceNow failure marks execution FAILED
-            logger.error(
-                "execution_servicenow_change_failed",
-                execution_id=self.execution.id,
-                error=str(exc),
-                error_type=type(exc).__name__,
-                correlation_id=self.correlation_id,
-                exc_info=True,
-            )
-            self.execution.status = ExecutionStatus.FAILED
-            self.execution.error_message = f"Échec de la création du changement ServiceNow : {exc}"
-            self.execution.completed_at = timezone.now()
-            self.execution.save(update_fields=['status', 'error_message', 'completed_at'])
-            AuditService.create_entry(
-                user_id=str(self.execution.user_id),
-                action_type=AuditActionType.EXECUTION_FAILED,
-                entity_type=AuditEntityType.EXECUTION,
-                entity_id=self.execution.id,
-                details={'reason': 'servicenow_change_creation_failed', 'error': str(exc)},
-                correlation_id=self.correlation_id,
-            )
-            return
 
         # Update parent to RUNNING immediately (visible to frontend)
         self.execution.status = ExecutionStatus.RUNNING
@@ -430,32 +801,6 @@ class ContainerWorkflowRuntime:
             correlation_id=self.correlation_id,
         )
 
-        # Story 31.6: Create ServiceNow change if required before RUNNING
-        try:
-            self._create_servicenow_change_if_required(self.execution.environment)
-        except Exception as exc:  # noqa: BLE001 — catch-all-mark-failed: ServiceNow failure marks execution FAILED
-            logger.error(
-                "execution_servicenow_change_failed",
-                execution_id=self.execution.id,
-                error=str(exc),
-                error_type=type(exc).__name__,
-                correlation_id=self.correlation_id,
-                exc_info=True,
-            )
-            self.execution.status = ExecutionStatus.FAILED
-            self.execution.error_message = f"Échec de la création du changement ServiceNow : {exc}"
-            self.execution.completed_at = timezone.now()
-            self.execution.save(update_fields=['status', 'error_message', 'completed_at'])
-            AuditService.create_entry(
-                user_id=str(self.execution.user_id),
-                action_type=AuditActionType.EXECUTION_FAILED,
-                entity_type=AuditEntityType.EXECUTION,
-                entity_id=self.execution.id,
-                details={'reason': 'servicenow_change_creation_failed', 'error': str(exc)},
-                correlation_id=self.correlation_id,
-            )
-            return ExecutionStatus.FAILED
-
         self.execution.status = ExecutionStatus.RUNNING
         self.execution.started_at = timezone.now()
         self.execution.save(update_fields=['status', 'started_at'])
@@ -469,89 +814,6 @@ class ContainerWorkflowRuntime:
 
         return self._execute_workflow_steps()
 
-    def _create_servicenow_change_if_required(self, environment: str) -> None:
-        """
-        Story 31.6 (Partie B): Create a ServiceNow change before RUNNING if required.
-
-        Logic:
-        1. Check change_type_config[env].required == True
-        2. Resolve ServiceNow integration (gate_config or fallback)
-        3. Call ServiceNowService.create_change()
-        4. Store change number in execution.servicenow_change_id
-
-        Raises:
-            ServiceUnavailableError: if no ServiceNow integration is available when required,
-                or if create_change() fails
-        """
-        from adapters.utils import build_auth_headers
-        from services.servicenow_service import ServiceNowService
-        from integrations.services import IntegrationService
-
-        change_type_config = self.action.change_type_config or {}
-        env_config = change_type_config.get(environment, {})
-
-        if not isinstance(env_config, dict) or not env_config.get('required'):
-            return  # No change required for this environment
-
-        # Resolve ServiceNow integration
-        gate_config = self.action.gate_config or {}
-        servicenow_integration_id = gate_config.get('servicenow_change', {}).get('integration_id')
-
-        integration_service = IntegrationService()
-
-        integration = None
-        if servicenow_integration_id:
-            integration = integration_service.get_by_id(servicenow_integration_id)
-            if not integration or integration.type != 'servicenow':
-                logger.warning(
-                    "servicenow_gate_integration_not_found",
-                    integration_id=servicenow_integration_id,
-                    execution_id=self.execution.id,
-                )
-                integration = None
-
-        if not integration:
-            # Fallback: first available servicenow integration
-            integration = integration_service.get_by_type('servicenow')
-
-        if not integration:
-            logger.warning(
-                "servicenow_no_integration_found_skipping",
-                execution_id=self.execution.id,
-                environment=environment,
-            )
-            # env_config['required'] is truthy here; missing integration is a hard failure
-            raise ServiceUnavailableError(
-                code="SERVICENOW_INTEGRATION_MISSING",
-                message=(
-                    f"ServiceNow change is required for environment {environment!r} but no "
-                    "ServiceNow integration is configured or available. Configure an integration in "
-                    "Admin > Intégrations and select it in the action's gate config."
-                ),
-                details={"execution_id": self.execution.id, "environment": environment},
-            )
-
-        auth_headers = build_auth_headers(integration, get_correlation_id())
-        svc = ServiceNowService(base_url=integration.base_url, auth_headers=auth_headers)
-        change_number = svc.create_change(
-            change_model_code=env_config.get('change_model_code') or env_config.get('template_id'),
-            change_type=env_config.get('change_type'),
-            short_description=f"IDP Portal — {self.action.name}",
-            description=f"Exécution automatisée {self.execution.id} (env: {environment})",
-        )
-
-        # Store change number
-        self.execution.servicenow_change_id = change_number
-        self.execution.save(update_fields=['servicenow_change_id'])
-
-        logger.info(
-            "servicenow_change_created",
-            change_number=change_number,
-            execution_id=self.execution.id,
-            environment=environment,
-            integration_id=integration.id,
-        )
-
     def _run_workflow_loop(self, execution_id: int) -> None:
         """Background workflow execution loop (runs in a daemon thread)."""
         try:
@@ -564,6 +826,7 @@ class ContainerWorkflowRuntime:
             self.child_executions = []
             self._step_order_counter = 0
             self._transition_count = 0
+            self._step_outputs = {}
 
             self._execute_workflow_steps()
 
@@ -597,6 +860,7 @@ class ContainerWorkflowRuntime:
             Final ExecutionStatus of the parent workflow
         """
         final_status = ExecutionStatus.COMPLETED
+        _failed_step_name: str | None = None
 
         for step in self.workflow_steps:
             # Check cancellation before each step (AC4)
@@ -614,12 +878,25 @@ class ContainerWorkflowRuntime:
             # Execute step (creates child execution)
             child_status = self._execute_step(step)
 
+            # Story 57.7: Gate step en WAITING — l'exécution reste RUNNING
+            # Celery Beat reprendra via resume_container_workflow_from_gate
+            if child_status == ExecutionStatus.RUNNING:
+                logger.info(
+                    "container_workflow_paused_on_gate",
+                    execution_id=self.execution.id,
+                    step_order=step.get('order', 0),
+                    correlation_id=self.correlation_id,
+                )
+                return ExecutionStatus.RUNNING
+
             # AC4: Propagate failure — stop on first failure
             if child_status == ExecutionStatus.FAILED:
+                _failed_step_name = step.get('name') or f"order {step.get('order', '?')}"
                 logger.warning(
                     "container_workflow_step_failed",
                     execution_id=self.execution.id,
                     step_order=step.get('order', 0),
+                    step_name=_failed_step_name,
                     child_status=child_status,
                     correlation_id=self.correlation_id,
                 )
@@ -642,7 +919,8 @@ class ContainerWorkflowRuntime:
             'completed_at': timezone.now(),
         }
         if final_status == ExecutionStatus.FAILED:
-            update_fields['error_message'] = "Workflow failed: a referenced action failed"
+            step_info = f" (step: {_failed_step_name})" if _failed_step_name else ""
+            update_fields['error_message'] = f"Workflow failed: a referenced action failed{step_info}"
         Execution.objects.filter(id=self.execution.id).update(**update_fields)
         # Sync in-memory
         self.execution.status = final_status

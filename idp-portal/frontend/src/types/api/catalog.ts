@@ -101,7 +101,7 @@ export interface GateConfig {
 export interface NotificationChannel {
   type: 'email' | 'teams' | 'page_dba';
   enabled: boolean;
-  conditions: ('on_failure' | 'on_success' | 'always')[];
+  conditions: ('on_failure' | 'on_success' | 'always' | 'on_approval_required')[];
   /** Email only: "requester" or direct email address. */
   recipient?: string;
   /** Teams only: webhook URL or Vault reference. */
@@ -132,11 +132,40 @@ export interface ChangeTypeConfigEntry {
   requires_approval?: boolean;
 }
 
-/** Workflow step - reference to an existing action (Story 5.7, AC2; Story 16.2 branches & retry). */
+// ADR-007 Story 57.13 — Step types for step-based workflows
+// Story 57.16: Schedule step types
+/** Source for scheduling date in a schedule_execution step. */
+export type ScheduleSource = 'parameter' | 'fixed_offset' | 'recurring';
+
+/** Configuration for a schedule_execution workflow step. */
+export interface ScheduleStepConfig {
+  /** Source de la date de planification. */
+  schedule_source: ScheduleSource;
+  /** Nom du paramètre contenant la date ISO 8601 (quand source='parameter'). */
+  schedule_parameter_name?: string;
+  /** Offset relatif à now() (quand source='fixed_offset'). Format: +Nd, +Nh, +Nw, +Nm. */
+  fixed_offset?: string;
+  /** Pattern récurrent (quand source='recurring'). */
+  recurring_pattern?: {
+    pattern_type: 'daily' | 'weekly' | 'cron';
+    pattern_config: Record<string, unknown>;
+  };
+  /** Si true, hérite les paramètres de l'exécution courante (défaut: false). */
+  inherit_parameters?: boolean;
+  /** Si true, hérite les targets de l'exécution courante (défaut: false). */
+  inherit_targets?: boolean;
+  /** Mapping de paramètres additionnels. Clé = nom du param cible, Valeur = JSONPath ou valeur statique. */
+  parameter_mapping?: Record<string, string>;
+}
+
+export type WorkflowStepType = 'platform' | 'service_call' | 'http_request' | 'evaluation' | 'gate' | 'schedule_execution';
+
+/** Workflow step - reference to an existing action or special step type (Story 5.7, AC2; Story 16.2 branches & retry; Story 57.13 step types). */
 export interface WorkflowStep {
   order: number;
   name: string | null;
-  referenced_action_id: number;
+  /** Story 57.13: Step type. Defaults to 'platform' for backward compatibility. */
+  step_type?: WorkflowStepType;
   /** Story 18.3: Real action name from backend (resolved from referenced_action). */
   action_name?: string | null;
   /** Story 16.2: Stable ID for referencing in branches (optional for backward compatibility). */
@@ -145,7 +174,10 @@ export interface WorkflowStep {
   on_success_step_id?: string | null;
   /** Story 16.2: Next step ID on error (nullable = workflow fails). */
   on_error_step_id?: string | null;
-  /** Story 16.2: Enable retry for this step. */
+  // === platform ===
+  /** Story 57.13: Optional for backward compat — required if step_type='platform'. */
+  referenced_action_id?: number | null;
+  /** Story 16.2: Enable retry for this step (platform only). */
   retry_enabled?: boolean;
   /** Story 16.2: Max retry attempts (default: 3). */
   retry_max_attempts?: number | null;
@@ -153,6 +185,42 @@ export interface WorkflowStep {
   retry_interval_seconds?: number | null;
   /** Story 16.2: Backoff multiplier for exponential backoff (default: 2.0). */
   retry_backoff_multiplier?: number | null;
+  // === service_call ===
+  /** Story 57.13: Integration type for service_call steps ('servicenow' | 'vault' | 'jira'). */
+  integration_type?: string | null;
+  /** Story 57.13: Operation for service_call steps. */
+  operation?: string | null;
+  // === evaluation ===
+  /** Story 57.13: Business rule policy ID for evaluation steps. */
+  policy_id?: number | null;
+  // === gate ===
+  /** Story 57.13: Gate type for gate steps. */
+  gate_type?: 'maintenance_window' | 'approval' | null;
+  /** Story 57.13: Action on timeout for gate steps. */
+  on_timeout?: 'FAIL' | 'SKIP' | null;
+  /** Story 57.13: Step IDs to show to approver (gate type=approval only). */
+  context_from?: string[] | null;
+  /** Story 57.13: Timeout duration string e.g. '24h', '30m'. */
+  timeout?: string | null;
+  // === http_request ===
+  /** Story 57.13: URL for http_request steps. */
+  url?: string | null;
+  /** Story 57.13: HTTP method for http_request steps. */
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | null;
+  /** Story 57.13: HTTP headers for http_request steps. */
+  headers?: Record<string, string> | null;
+  /** Story 57.13: Request timeout in seconds for http_request steps. */
+  request_timeout?: number | null;
+  // === schedule_execution ===
+  /** Story 57.16: Configuration pour les steps de planification. */
+  schedule_config?: ScheduleStepConfig | null;
+  // === shared (service_call, evaluation, http_request) ===
+  /** Story 57.13: Condition for environment filtering. */
+  condition?: { environment_in?: string[] } | null;
+  /** Story 57.13: Input mapping (key → value expression). */
+  input_mapping?: Record<string, unknown> | null;
+  /** Story 57.13: Output mapping (key → JSONPath expression). */
+  output_mapping?: Record<string, string> | null;
 }
 
 /** Request to update workflow steps (Story 5.7, AC2). */
@@ -255,6 +323,8 @@ export interface ActionListItem {
   status: ActionStatus;
   /** Engine (nullable for workflows). */
   engine: ActionEngine | null;
+  /** Story 57.13: Platform for grouping in ActionPalette (returned by eligible-for-workflow via ActionSerializer). */
+  platform?: string | null;
   created_at: string;
   execution_count: number;
   tags?: string[];
@@ -265,6 +335,8 @@ export interface ActionListItem {
   /** Story 22.18: MED-6 fix — Whether action requires target selection (default true). */
   requires_target?: boolean;
 }
+
+// Story 57.13: BusinessRulePolicyListItem is defined in business_rules.ts (already exists)
 
 export interface AdminActionsFilters {
   status?: ActionStatus;

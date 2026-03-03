@@ -176,9 +176,9 @@ export function CalendarFiltersPanel({
           </Col>
         </Row>
 
-        {/* Row 2: Platform, Date range */}
+        {/* Row 2: Platform, Status, Date range */}
         <Row gutter={16}>
-          <Col xs={24} md={12}>
+          <Col xs={24} md={8}>
             <Form.Item label="Plateforme" style={{ marginBottom: 12 }}>
               <Select
                 size="middle"
@@ -194,7 +194,26 @@ export function CalendarFiltersPanel({
               />
             </Form.Item>
           </Col>
-          <Col xs={24} md={12}>
+          <Col xs={24} md={8}>
+            <Form.Item label="Statut" style={{ marginBottom: 12 }}>
+              <Select
+                size="middle"
+                style={{ width: '100%' }}
+                value={filters.status ?? 'all'}
+                onChange={(value) =>
+                  apply({ ...filters, status: value === 'all' ? null : (value as 'pending' | 'executed' | 'cancelled') })
+                }
+                options={[
+                  { label: 'En attente', value: 'pending' },
+                  { label: 'Terminées', value: 'executed' },
+                  { label: 'Toutes', value: 'all' },
+                ]}
+                disabled={loading}
+                data-testid="filter-status"
+              />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={8}>
             <Form.Item label="Période" style={{ marginBottom: 12 }}>
               <RangePicker
                 size="middle"

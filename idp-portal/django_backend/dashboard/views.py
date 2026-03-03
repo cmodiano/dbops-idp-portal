@@ -6,6 +6,7 @@ from typing import Any
 from django.db.models import Q, Count, QuerySet
 from django.db.models.functions import TruncDate
 from django.utils import timezone
+from drf_spectacular.utils import extend_schema, OpenApiParameter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -88,7 +89,7 @@ def _apply_common_filters(qs: QuerySet, *, request: Any, include_status: bool) -
 
     environment = request.query_params.get("environment")
     if environment:
-        qs = qs.filter(environment=environment)
+        qs = qs.filter(environment__iexact=environment)
 
     tags = request.query_params.getlist("tags")
     tags = [t.strip() for t in tags if t and t.strip()]
@@ -103,11 +104,27 @@ def _apply_common_filters(qs: QuerySet, *, request: Any, include_status: bool) -
     return qs
 
 
+_DASHBOARD_PARAMS = [
+    OpenApiParameter('from_date', str, description='Date de début (YYYY-MM-DD)'),
+    OpenApiParameter('to_date', str, description='Date de fin (YYYY-MM-DD)'),
+    OpenApiParameter('days', int, description='Nombre de jours (défaut: 14, si from_date/to_date non fournis)'),
+    OpenApiParameter('engine', str, description='Filtrage par technologie'),
+    OpenApiParameter('environment', str, description='Filtrage par environnement'),
+    OpenApiParameter('tags', str, description='Tags (multi-valeur, OR)'),
+    OpenApiParameter('status', str, description='Filtrage par statut (pour timeseries/stats-by-*)'),
+]
+
+
 class DashboardStatsView(APIView):
     """GET /dashboard/stats -> {data: DashboardStats}"""
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        tags=['dashboard'],
+        summary='Statistiques du dashboard',
+        parameters=_DASHBOARD_PARAMS[:6],  # sans status
+    )
     def get(self, request):
         # Base queryset: scope = all for DBA/DBOPS, else mine
         qs_base = Execution.objects.select_related("action")
@@ -152,6 +169,7 @@ class DashboardRecentView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(tags=['dashboard'], summary='Exécutions récentes')
     def get(self, request):
         limit = 10
         qs = Execution.objects.select_related("action", "user").order_by("-created_at")
@@ -182,12 +200,16 @@ class DashboardTimeSeriesView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        tags=['dashboard'],
+        summary='Série temporelle du dashboard',
+        parameters=_DASHBOARD_PARAMS,
+    )
     def get(self, request):
         qs = Execution.objects.select_related("action")
         qs = _filter_queryset_by_ownership(qs, request)  # AC3: Story 26.8
 
-        # Ignore status filter (timeseries always success/failed)
-        qs = _apply_common_filters(qs, request=request, include_status=False)
+        qs = _apply_common_filters(qs, request=request, include_status=True)
 
         period_start, period_end_exclusive = _get_period_bounds(request)
         qs = qs.filter(created_at__gte=period_start, created_at__lt=period_end_exclusive)
@@ -219,12 +241,16 @@ class DashboardStatsByTechnologyView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        tags=['dashboard'],
+        summary='Statistiques par technologie',
+        parameters=_DASHBOARD_PARAMS,
+    )
     def get(self, request):
         qs = Execution.objects.select_related("action")
         qs = _filter_queryset_by_ownership(qs, request)  # AC3: Story 26.8
 
-        # Ignore status filter; engine is grouping key
-        qs = _apply_common_filters(qs, request=request, include_status=False)
+        qs = _apply_common_filters(qs, request=request, include_status=True)
 
         period_start, period_end_exclusive = _get_period_bounds(request)
         qs = qs.filter(created_at__gte=period_start, created_at__lt=period_end_exclusive)
@@ -261,12 +287,16 @@ class DashboardStatsByEnvironmentView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        tags=['dashboard'],
+        summary='Statistiques par environnement',
+        parameters=_DASHBOARD_PARAMS,
+    )
     def get(self, request):
         qs = Execution.objects.select_related("action")
         qs = _filter_queryset_by_ownership(qs, request)  # AC3: Story 26.8
 
-        # Ignore status filter; environment is grouping key
-        qs = _apply_common_filters(qs, request=request, include_status=False)
+        qs = _apply_common_filters(qs, request=request, include_status=True)
 
         period_start, period_end_exclusive = _get_period_bounds(request)
         qs = qs.filter(created_at__gte=period_start, created_at__lt=period_end_exclusive)
@@ -307,6 +337,7 @@ class DashboardFilterOptionsView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(tags=['dashboard'], summary='Options de filtres pour le dashboard')
     def get(self, request):
         # Engines from published actions
         engines = (
@@ -410,6 +441,20 @@ class DashboardCompareView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        tags=['dashboard'],
+        summary='Comparaison de statistiques',
+        parameters=[
+            OpenApiParameter('dimension', str, description='technology | environment | period'),
+            OpenApiParameter('value1', str, description='Première valeur à comparer'),
+            OpenApiParameter('value2', str, description='Deuxième valeur à comparer'),
+            OpenApiParameter('days', int, description='Nombre de jours (pour dimension technology/environment)'),
+            OpenApiParameter('period1_start', str, description='Début période 1 (YYYY-MM-DD)'),
+            OpenApiParameter('period1_end', str, description='Fin période 1 (YYYY-MM-DD)'),
+            OpenApiParameter('period2_start', str, description='Début période 2 (YYYY-MM-DD)'),
+            OpenApiParameter('period2_end', str, description='Fin période 2 (YYYY-MM-DD)'),
+        ],
+    )
     def get(self, request):
         dimension = (request.query_params.get("dimension") or "").strip()
         value1 = (request.query_params.get("value1") or "").strip()

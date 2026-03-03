@@ -2,8 +2,10 @@ import { describe, it, expect } from 'vitest';
 import {
   getEnvironmentLabel,
   getEnvironmentColor,
+  getEnvironmentHexColor,
   sortEnvironments,
   isProductionEnvironment,
+  normalizeEnvironmentStats,
 } from './environmentHelpers';
 
 describe('environmentHelpers', () => {
@@ -52,6 +54,27 @@ describe('environmentHelpers', () => {
     });
   });
 
+  describe('getEnvironmentHexColor', () => {
+    it('returns hex for standard and inventory env values', () => {
+      expect(getEnvironmentHexColor('dev')).toBe('#3B82F6');
+      expect(getEnvironmentHexColor('developpement')).toBe('#3B82F6');
+      expect(getEnvironmentHexColor('staging')).toBe('#F97316');
+      expect(getEnvironmentHexColor('certification')).toBe('#F97316');
+      expect(getEnvironmentHexColor('prod')).toBe('#EF4444');
+      expect(getEnvironmentHexColor('production')).toBe('#EF4444');
+    });
+
+    it('returns gray for unknown environments', () => {
+      expect(getEnvironmentHexColor('unknown')).toBe('#6B7280');
+      expect(getEnvironmentHexColor('custom-env')).toBe('#6B7280');
+    });
+
+    it('handles uppercase input', () => {
+      expect(getEnvironmentHexColor('DEV')).toBe('#3B82F6');
+      expect(getEnvironmentHexColor('PRODUCTION')).toBe('#EF4444');
+    });
+  });
+
   describe('sortEnvironments', () => {
     it('sorts with dev, staging, prod first then alphabetical', () => {
       const input = ['qa', 'dev', 'prod', 'lab', 'staging'];
@@ -85,6 +108,53 @@ describe('environmentHelpers', () => {
 
     it('handles empty array', () => {
       expect(sortEnvironments([])).toEqual([]);
+    });
+  });
+
+  describe('normalizeEnvironmentStats', () => {
+    it('merges DEV and dev into single dev bucket', () => {
+      const stats = [
+        { environment: 'DEV', count: 70, success_rate: 90 },
+        { environment: 'dev', count: 10, success_rate: 100 },
+      ];
+      const result = normalizeEnvironmentStats(stats);
+      expect(result).toHaveLength(1);
+      expect(result[0].environment).toBe('dev');
+      expect(result[0].count).toBe(80);
+      expect(result[0].success_rate).toBe(91.3); // weighted: (70*90 + 10*100) / 80
+    });
+
+    it('merges STAGING and staging into single bucket', () => {
+      const stats = [
+        { environment: 'STAGING', count: 55, success_rate: 85 },
+        { environment: 'staging', count: 5, success_rate: 80 },
+      ];
+      const result = normalizeEnvironmentStats(stats);
+      expect(result).toHaveLength(1);
+      expect(result[0].environment).toBe('staging');
+      expect(result[0].count).toBe(60);
+    });
+
+    it('sorts result by canonical order (dev, staging, prod)', () => {
+      const stats = [
+        { environment: 'prod', count: 5, success_rate: 95 },
+        { environment: 'dev', count: 70, success_rate: 90 },
+        { environment: 'staging', count: 55, success_rate: 85 },
+      ];
+      const result = normalizeEnvironmentStats(stats);
+      expect(result.map((r) => r.environment)).toEqual(['dev', 'staging', 'prod']);
+    });
+
+    it('handles null success_rate', () => {
+      const stats = [
+        { environment: 'dev', count: 10, success_rate: null },
+        { environment: 'DEV', count: 5, success_rate: 100 },
+      ];
+      const result = normalizeEnvironmentStats(stats);
+      expect(result).toHaveLength(1);
+      expect(result[0].count).toBe(15);
+      // Only row with success_rate contributes to weighted avg: 5*100/5 = 100
+      expect(result[0].success_rate).toBe(100);
     });
   });
 

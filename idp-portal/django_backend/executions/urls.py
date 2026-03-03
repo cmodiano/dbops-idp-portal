@@ -24,6 +24,17 @@ urlpatterns = [
         views.ExecutionStepLogsView.as_view(),
         name="execution-step-logs",
     ),
+    # Story 57.8: Step-level approval endpoints
+    path(
+        "executions/<int:execution_id>/steps/<int:step_id>/approve/",
+        views.ApproveStepView.as_view(),
+        name="execution-step-approve",
+    ),
+    path(
+        "executions/<int:execution_id>/steps/<int:step_id>/reject/",
+        views.RejectStepView.as_view(),
+        name="execution-step-reject",
+    ),
     path(
         "executions/<int:execution_id>/logs/",
         views.ExecutionLogsView.as_view(),

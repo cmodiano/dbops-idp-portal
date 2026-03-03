@@ -3,7 +3,8 @@ from django.test import TestCase
 from idp_auth.models import User
 from catalog.models import Action
 from executions.models import (
-    Execution, ExecutionStep, ScheduledExecution, RecurringPattern
+    Execution, ExecutionStep, ExecutionStepStatus, ExecutionStepType,
+    ExecutionStatus, ScheduledExecution, RecurringPattern
 )
 
 
@@ -134,6 +135,124 @@ class ExecutionStepModelTest(TestCase):
                 step_name='Step 1 Duplicate',
                 step_type='vault'
             )
+
+    # --- Story 57.1 : Tests nouveaux types et champs d'approbation ---
+
+    def test_execution_step_type_all_nine_values(self):
+        """AC#2 + Story 57.15 : ExecutionStepType doit avoir exactement 10 valeurs."""
+        expected_values = {
+            'vault', 'servicenow', 'platform', 'prerequisite', 'verification',
+            'service_call', 'http_request', 'evaluation', 'gate', 'schedule_execution',
+        }
+        actual_values = {choice[0] for choice in ExecutionStepType.choices}
+        self.assertEqual(actual_values, expected_values)
+
+    def test_execution_step_type_new_values(self):
+        """AC#2 : Les 4 nouvelles valeurs ADR-007 sont présentes dans l'enum."""
+        self.assertEqual(ExecutionStepType.SERVICE_CALL, 'service_call')
+        self.assertEqual(ExecutionStepType.HTTP_REQUEST, 'http_request')
+        self.assertEqual(ExecutionStepType.EVALUATION, 'evaluation')
+        self.assertEqual(ExecutionStepType.GATE, 'gate')
+
+    def test_execution_step_type_existing_values_preserved(self):
+        """AC#2 : Les 5 valeurs existantes sont conservées."""
+        self.assertEqual(ExecutionStepType.VAULT, 'vault')
+        self.assertEqual(ExecutionStepType.SERVICENOW, 'servicenow')
+        self.assertEqual(ExecutionStepType.PLATFORM, 'platform')
+        self.assertEqual(ExecutionStepType.PREREQUISITE, 'prerequisite')
+        self.assertEqual(ExecutionStepType.VERIFICATION, 'verification')
+
+    def test_create_execution_step_with_new_types(self):
+        """AC#2 : Création d'un step avec chaque nouveau type ADR-007."""
+        new_types = [
+            ('service_call', 2),
+            ('http_request', 3),
+            ('evaluation', 4),
+            ('gate', 5),
+        ]
+        for step_type, order in new_types:
+            step = ExecutionStep.objects.create(
+                execution=self.execution,
+                step_order=order,
+                step_name=f'Step {step_type}',
+                step_type=step_type,
+            )
+            self.assertEqual(step.step_type, step_type)
+
+    def test_create_execution_step_with_approval_fields(self):
+        """AC#1 : Création d'un step avec les champs d'approbation renseignés."""
+        from django.utils import timezone
+        approver = User.objects.create(username='approver57', profile='DBA')
+        now = timezone.now()
+        step = ExecutionStep.objects.create(
+            execution=self.execution,
+            step_order=10,
+            step_name='Gate Step',
+            step_type='gate',
+            approved_by=approver,
+            approved_at=now,
+            approval_comment='Approuvé pour production',
+        )
+        self.assertEqual(step.approved_by, approver)
+        self.assertEqual(step.approved_at, now)
+        self.assertEqual(step.approval_comment, 'Approuvé pour production')
+
+    def test_execution_step_approval_fields_nullable(self):
+        """AC#1 : Les champs d'approbation sont null=True / blank=True."""
+        step = ExecutionStep.objects.create(
+            execution=self.execution,
+            step_order=11,
+            step_name='Step sans approbation',
+            step_type='vault',
+        )
+        self.assertIsNone(step.approved_by)
+        self.assertIsNone(step.approved_at)
+        self.assertIsNone(step.approval_comment)
+
+    def test_execution_step_approval_comment_max_length(self):
+        """AC#1 : Le champ approval_comment supporte jusqu'à 1000 caractères mais pas 1001."""
+        from django.core.exceptions import ValidationError
+        long_comment = 'x' * 1000
+        step = ExecutionStep.objects.create(
+            execution=self.execution,
+            step_order=12,
+            step_name='Step long comment',
+            step_type='evaluation',
+            approval_comment=long_comment,
+        )
+        self.assertEqual(len(step.approval_comment), 1000)
+        # Vérifier que 1001 chars échoue la validation Django (full_clean enforce max_length)
+        step.approval_comment = 'x' * 1001
+        with self.assertRaises(ValidationError):
+            step.full_clean()
+
+    def test_execution_step_approved_by_related_name(self):
+        """AC#1 : Le related_name 'approved_steps' est distinct de 'approved_executions'."""
+        approver = User.objects.create(username='approver_steps', profile='DBA')
+        step = ExecutionStep.objects.create(
+            execution=self.execution,
+            step_order=13,
+            step_name='Step avec approver',
+            step_type='gate',
+            approved_by=approver,
+        )
+        # Le reverse relation via related_name='approved_steps' doit fonctionner
+        self.assertIn(step, approver.approved_steps.all())
+
+    def test_execution_step_approved_by_set_null_on_user_delete(self):
+        """AC#1 : La suppression d'un approbateur met approved_by à NULL (on_delete=SET_NULL)."""
+        approver = User.objects.create(username='approver_to_delete', profile='DBA')
+        step = ExecutionStep.objects.create(
+            execution=self.execution,
+            step_order=14,
+            step_name='Step with deletable approver',
+            step_type='gate',
+            approved_by=approver,
+        )
+        self.assertEqual(step.approved_by, approver)
+        approver.delete()
+        step.refresh_from_db()
+        self.assertIsNone(step.approved_by)
 
 
 @pytest.mark.django_db
@@ -687,6 +806,121 @@ class ExecutionRBACMultiProfileTests(TestCase):
             }, format='json')
 
         self.assertEqual(response.status_code, 201)
+
+
+# =============================================================================
+# Story 57.12: Tests is_pending_approval (ADR-007 Phase 4.2)
+# =============================================================================
+
+@pytest.mark.django_db
+class TestExecutionIsPendingApproval(TestCase):
+    """
+    AC#6 : Tests unitaires pour Execution.is_pending_approval.
+    Vérifie la logique backward-compat (status PENDING_APPROVAL) et
+    le nouveau mécanisme step-based (ExecutionStep WAITING).
+    """
+
+    def setUp(self):
+        """Fixtures de base."""
+        self.user = User.objects.create(
+            username='approval_testuser',
+            profile='DBA'
+        )
+        self.action = Action.objects.create(
+            name='Approval Test Action',
+            category='Provisioning',
+            engine='Oracle',
+            platform='AAP'
+        )
+
+    def test_is_pending_approval_true_when_status_pending_approval(self):
+        """
+        AC#6 / backward compat : is_pending_approval == True si status == PENDING_APPROVAL
+        même sans aucun ExecutionStep WAITING.
+        """
+        execution = Execution.objects.create(
+            action=self.action,
+            user=self.user,
+            environment='production',
+            status=ExecutionStatus.PENDING_APPROVAL,
+        )
+        self.assertTrue(execution.is_pending_approval)
+
+    def test_is_pending_approval_true_when_step_waiting(self):
+        """
+        AC#6 / step-based : is_pending_approval == True si un ExecutionStep
+        avec status=WAITING existe, même si Execution.status != PENDING_APPROVAL.
+        """
+        execution = Execution.objects.create(
+            action=self.action,
+            user=self.user,
+            environment='production',
+            status=ExecutionStatus.RUNNING,
+        )
+        ExecutionStep.objects.create(
+            execution=execution,
+            step_order=1,
+            step_name='Gate — Approval',
+            step_type='gate',
+            status=ExecutionStepStatus.WAITING,
+        )
+        self.assertTrue(execution.is_pending_approval)
+
+    def test_is_pending_approval_false_when_no_waiting_steps(self):
+        """
+        AC#6 : is_pending_approval == False si aucun step WAITING et
+        status != PENDING_APPROVAL.
+        """
+        execution = Execution.objects.create(
+            action=self.action,
+            user=self.user,
+            environment='developpement',
+            status=ExecutionStatus.RUNNING,
+        )
+        ExecutionStep.objects.create(
+            execution=execution,
+            step_order=1,
+            step_name='Platform Step',
+            step_type='platform',
+            status=ExecutionStepStatus.COMPLETED,
+        )
+        self.assertFalse(execution.is_pending_approval)
+
+    def test_is_pending_approval_false_when_no_steps_and_running(self):
+        """
+        AC#6 : is_pending_approval == False si aucun step du tout et
+        status == RUNNING.
+        """
+        execution = Execution.objects.create(
+            action=self.action,
+            user=self.user,
+            environment='developpement',
+            status=ExecutionStatus.RUNNING,
+        )
+        self.assertFalse(execution.is_pending_approval)
+
+    def test_is_pending_approval_true_when_maintenance_window_waiting(self):
+        """
+        ADR-007 Dev Notes (Story 57.12) : comportement documenté intentionnel —
+        un step WAITING de type maintenance_window déclenche aussi is_pending_approval=True.
+        Les deux types de gate (approval et maintenance_window) représentent
+        un blocage opérationnel légitime. Voir docstring de is_pending_approval.
+        """
+        execution = Execution.objects.create(
+            action=self.action,
+            user=self.user,
+            environment='production',
+            status=ExecutionStatus.RUNNING,
+        )
+        ExecutionStep.objects.create(
+            execution=execution,
+            step_order=1,
+            step_name='Gate — Maintenance Window',
+            step_type='gate',
+            status=ExecutionStepStatus.WAITING,
+        )
+        # Comportement intentionnel : maintenance_window WAITING → is_pending_approval True
+        self.assertTrue(execution.is_pending_approval)
 
 
 # Story 13.4 tests: see executions/tests/test_story_13_4.py (single source of truth)

@@ -30,12 +30,14 @@ def validate_workflow_steps(steps: list[dict[str, Any]], action_id: int | None =
     if not steps:
         return steps
 
-    # Basic shape validation: each step must reference an action
+    # Basic shape validation: platform steps must reference an action (Story 57.13)
+    # gate, service_call, evaluation, http_request have their own required fields
     for i, step in enumerate(steps):
         if not isinstance(step, dict):
             raise serializers.ValidationError(f"Step {i}: must be an object")
-        if step.get('referenced_action_id') is None:
-            raise serializers.ValidationError(f"Step {i}: referenced_action_id is required")
+        step_type = step.get('step_type') or 'platform'
+        if step_type == 'platform' and step.get('referenced_action_id') is None:
+            raise serializers.ValidationError(f"Step {i}: referenced_action_id is required for platform steps")
 
     # Detect whether this payload uses branching/retry features (Story 16.2).
     # Backward compatibility: older workflows may only have order/name/referenced_action_id.

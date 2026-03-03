@@ -271,4 +271,95 @@ describe('WorkflowStepNode', () => {
       expect(screen.getByText('A very long action name that exceeds thirty characters easily')).toBeInTheDocument();
     });
   });
+
+  // Story 57.16: schedule_execution step rendering
+  describe('schedule_execution step (Story 57.16)', () => {
+    it('affiche le label "Planifier" pour schedule_execution', () => {
+      render(
+        <WorkflowStepNode
+          {...makeProps({ step_type: 'schedule_execution', name: 'Mon step' })}
+        />,
+      );
+      expect(screen.getByText('Planifier')).toBeInTheDocument();
+    });
+
+    it('utilise le nom du step pour le titre principal', () => {
+      render(
+        <WorkflowStepNode
+          {...makeProps({ step_type: 'schedule_execution', name: 'Planifier l\'app' })}
+        />,
+      );
+      expect(screen.getByText('Planifier l\'app')).toBeInTheDocument();
+    });
+
+    it('utilise action_name comme fallback si name est null', () => {
+      render(
+        <WorkflowStepNode
+          {...makeProps({ step_type: 'schedule_execution', name: null, action_name: 'Deploy App' })}
+        />,
+      );
+      expect(screen.getByText('Deploy App')).toBeInTheDocument();
+    });
+
+    it('affiche "Planifier une exécution" si name et action_name sont null', () => {
+      render(
+        <WorkflowStepNode
+          {...makeProps({ step_type: 'schedule_execution', name: null, action_name: undefined })}
+        />,
+      );
+      expect(screen.getByText('Planifier une exécution')).toBeInTheDocument();
+    });
+
+    it('affiche le badge schedule_source "Paramètre utilisateur" pour source=parameter', () => {
+      render(
+        <WorkflowStepNode
+          {...makeProps({
+            step_type: 'schedule_execution',
+            name: null,
+            schedule_config: { schedule_source: 'parameter' },
+          })}
+        />,
+      );
+      expect(screen.getByText('Paramètre utilisateur')).toBeInTheDocument();
+    });
+
+    it('affiche le badge offset pour source=fixed_offset', () => {
+      render(
+        <WorkflowStepNode
+          {...makeProps({
+            step_type: 'schedule_execution',
+            name: null,
+            schedule_config: { schedule_source: 'fixed_offset', fixed_offset: '+3d' },
+          })}
+        />,
+      );
+      expect(screen.getByText('Offset: +3d')).toBeInTheDocument();
+    });
+
+    it('affiche le badge "Récurrent" pour source=recurring', () => {
+      render(
+        <WorkflowStepNode
+          {...makeProps({
+            step_type: 'schedule_execution',
+            name: null,
+            schedule_config: {
+              schedule_source: 'recurring',
+              recurring_pattern: { pattern_type: 'daily', pattern_config: {} },
+            },
+          })}
+        />,
+      );
+      expect(screen.getByText('Récurrent')).toBeInTheDocument();
+    });
+
+    it('n\'affiche pas de badge quand schedule_config est null', () => {
+      render(
+        <WorkflowStepNode
+          {...makeProps({ step_type: 'schedule_execution', name: null, schedule_config: null })}
+        />,
+      );
+      expect(screen.queryByText('Paramètre utilisateur')).not.toBeInTheDocument();
+      expect(screen.queryByText('Récurrent')).not.toBeInTheDocument();
+    });
+  });
 });

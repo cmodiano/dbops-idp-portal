@@ -24,7 +24,7 @@ from .scheduled_views import (
     ScheduledExecutionValidateCronView,
     ScheduledExecutionCronNextExecutionsView,
 )
-from .approval_views import PendingApprovalsView, ApproveExecutionView, RejectExecutionView
+from .approval_views import PendingApprovalsView, ApproveExecutionView, RejectExecutionView, ApproveStepView, RejectStepView
 from .remediation_views import ExecutionRemediationSuggestionsView, ExecutionRemediationContextView
 
 
@@ -46,6 +46,8 @@ __all__ = [
     'PendingApprovalsView',
     'ApproveExecutionView',
     'RejectExecutionView',
+    'ApproveStepView',
+    'RejectStepView',
     'ScheduledExecutionsView',
     'ScheduledExecutionUpdateView',
     'ScheduledExecutionRecurringPatternView',

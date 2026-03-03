@@ -18,15 +18,68 @@ from django.conf import settings
 from django.contrib import admin
 from django.urls import path, include
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
+
+from idp_backend.spectacular_views import SpectacularSwaggerPublicView
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.authentication import SessionAuthentication
 from executions.views.github_webhooks import github_webhook_workflow_run as _github_webhook_workflow_run
 from executions.views.terraform_webhooks import terraform_webhook_run as _terraform_webhook_run
 
+from idp_auth.authentication import JWTAuthentication
+
+# Schéma privé : filtré selon les permissions (SERVE_PUBLIC=False)
+# Nécessite SessionAuthentication pour les utilisateurs SAML + JWTAuthentication pour API key
+_schema_auth = [SessionAuthentication, JWTAuthentication]
+
 urlpatterns = [
     path('admin/', admin.site.urls),
-    # Story 22.20: OpenAPI schema and documentation views
-    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
-    path('api/schema/swagger-ui/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
-    path('api/schema/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
+    # Story 22.20: OpenAPI schema and documentation views (protégés, filtrés par permissions)
+    path(
+        'api/schema/',
+        SpectacularAPIView.as_view(
+            permission_classes=[IsAuthenticated],
+            authentication_classes=_schema_auth,
+        ),
+        name='schema',
+    ),
+    path(
+        'api/schema/swagger-ui/',
+        SpectacularSwaggerView.as_view(
+            url_name='schema',
+            permission_classes=[IsAuthenticated],
+            authentication_classes=_schema_auth,
+        ),
+        name='swagger-ui',
+    ),
+    path(
+        'api/schema/redoc/',
+        SpectacularRedocView.as_view(
+            url_name='schema',
+            permission_classes=[IsAuthenticated],
+            authentication_classes=_schema_auth,
+        ),
+        name='redoc',
+    ),
+    # Public API schema (subset of endpoints for external consumers)
+    path(
+        'api/schema/public/',
+        SpectacularAPIView.as_view(
+            urlconf=['idp_backend.urls_public'],
+            custom_settings={'TITLE': 'DBOps Portal API (Public)'},
+            serve_public=True,  # Pas de filtrage — schéma statique pour consommateurs externes
+        ),
+        name='schema-public',
+    ),
+    path(
+        'api/schema/swagger-ui-public/',
+        SpectacularSwaggerPublicView.as_view(url_name='schema-public'),
+        name='swagger-ui-public',
+    ),
+    path(
+        'api/schema/redoc-public/',
+        SpectacularRedocView.as_view(url_name='schema-public'),
+        name='redoc-public',
+    ),
     path('api/v1/', include('core.urls')),
     path('api/v1/', include('catalog.urls')),
     path('api/v1/', include('executions.urls')),

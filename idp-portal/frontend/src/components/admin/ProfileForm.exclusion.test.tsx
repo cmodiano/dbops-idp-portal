@@ -70,6 +70,7 @@ describe('ProfileForm - exclusion_patterns field', () => {
       ad_group: 'test-dba-group',
       is_admin: false,
       is_auditor: false,
+      is_approver: false,
       created_at: '2026-02-10T00:00:00Z',
       updated_at: '2026-02-10T00:00:00Z',
     };
@@ -88,6 +89,7 @@ describe('ProfileForm - exclusion_patterns field', () => {
       ad_group: 'test-dba-group',
       is_admin: false,
       is_auditor: false,
+      is_approver: false,
       created_at: '2026-02-10T00:00:00Z',
       updated_at: '2026-02-10T00:00:00Z',
     };
@@ -107,6 +109,7 @@ describe('ProfileForm - exclusion_patterns field', () => {
       ad_group: 'test-dba-group',
       is_admin: false,
       is_auditor: false,
+      is_approver: false,
       created_at: '2026-02-10T00:00:00Z',
       updated_at: '2026-02-10T00:00:00Z',
     };
@@ -139,6 +142,7 @@ describe('ProfileForm - exclusion_patterns field', () => {
       ad_group: 'test-dba-group',
       is_admin: false,
       is_auditor: false,
+      is_approver: false,
       created_at: '2026-02-10T00:00:00Z',
       updated_at: '2026-02-10T00:00:00Z',
     };

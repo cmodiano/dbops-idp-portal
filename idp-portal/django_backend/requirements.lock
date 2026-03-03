@@ -115,6 +115,8 @@ inflection==0.5.1
     # via drf-spectacular
 isodate==0.7.2
     # via python3-saml
+jinja2==3.1.6
+    # via idp-portal-backend (pyproject.toml)
 jsonschema==4.26.0
     # via drf-spectacular
 jsonschema-specifications==2025.9.1
@@ -127,6 +129,8 @@ lxml==6.0.2
     # via
     #   python3-saml
     #   xmlsec
+markupsafe==3.0.3
+    # via jinja2
 msgpack==1.1.2
     # via autobahn
 oracledb==3.4.2

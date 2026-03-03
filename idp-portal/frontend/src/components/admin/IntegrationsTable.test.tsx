@@ -56,11 +56,12 @@ describe('IntegrationsTable', () => {
 
   it('renders table with columns Icône, Nom, Type, URL, Date de création', () => {
     renderWithApp(<IntegrationsTable {...defaultProps} />);
-    expect(screen.getByText('Icône')).toBeInTheDocument();
-    expect(screen.getByText('Nom')).toBeInTheDocument();
-    expect(screen.getByText('Type')).toBeInTheDocument();
-    expect(screen.getByText('URL')).toBeInTheDocument();
-    expect(screen.getByText('Date de création')).toBeInTheDocument();
+    // scroll.x creates duplicate header elements — use getAllByText
+    expect(screen.getAllByText('Icône')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('Nom')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('Type')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('URL')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('Date de création')[0]).toBeInTheDocument();
   });
 
   it('renders integrations and Nouvelle intégration button', () => {
@@ -156,7 +157,7 @@ describe('IntegrationsTable', () => {
   // Story 24.3: Status column tests
   it('renders Statut column header', () => {
     renderWithApp(<IntegrationsTable {...defaultProps} />);
-    expect(screen.getByText('Statut')).toBeInTheDocument();
+    expect(screen.getAllByText('Statut')[0]).toBeInTheDocument();
   });
 
   it('renders Valide badge for status=valid', () => {
@@ -195,7 +196,7 @@ describe('IntegrationsTable', () => {
   // Story 51.4: Health column tests
   it('renders Santé column header', () => {
     renderWithApp(<IntegrationsTable {...defaultProps} />);
-    expect(screen.getByText('Santé')).toBeInTheDocument();
+    expect(screen.getAllByText('Santé')[0]).toBeInTheDocument();
   });
 
   it('affiche badge "Inconnu" (default) pour health_status=undefined', () => {
@@ -488,16 +489,25 @@ describe('IntegrationsTable - Extended coverage 55.6', () => {
     });
   });
 
-  it('truncateUrl — URL plus longue que 40 caractères est tronquée avec ellipse', () => {
+  it('URL — longue URL affichée avec tooltip au survol', async () => {
+    const user = userEvent.setup();
+    const longUrl = 'https://very-long-url-that-exceeds-forty-characters.example.com/api/v1';
     const longUrlItem: IntegrationListItem[] = [
       {
         ...items[0],
-        base_url: 'https://very-long-url-that-exceeds-forty-characters.example.com/api/v1',
+        base_url: longUrl,
       },
     ];
     renderWithApp(<IntegrationsTable {...defaultProps} dataSource={longUrlItem} />);
-    // The URL should be truncated — we check the cell contains the ellipsis character
-    expect(document.body.textContent).toContain('…');
+    // L'URL complète est affichée dans la cellule (avec ellipsis CSS si overflow)
+    expect(document.body.textContent).toContain(longUrl);
+    // Vérifier que le tooltip affiche l'URL complète au survol
+    const urlCell = screen.getByText(longUrl);
+    await user.hover(urlCell);
+    await waitFor(() => {
+      const tooltip = screen.getByRole('tooltip');
+      expect(tooltip).toHaveTextContent(longUrl);
+    }, { timeout: 3000 });
   });
 
   it('auth_flow — affiche le label de flow quand renseigné', () => {

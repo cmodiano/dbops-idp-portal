@@ -13,6 +13,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
+from drf_spectacular.utils import extend_schema, OpenApiParameter
 from reference.models import RefEngine, RefCategory
 from reference.serializers import (
     RefEngineSerializer, RefEngineWriteSerializer,
@@ -26,6 +27,13 @@ from core.permissions import DBOPSProfilePermission
 logger = structlog.get_logger(__name__)
 
 
+@extend_schema(
+    tags=['reference'],
+    summary='Lister les moteurs',
+    parameters=[
+        OpenApiParameter('active_only', bool, description='Si true (défaut), uniquement les moteurs actifs'),
+    ],
+)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def list_engines(request: Request) -> Response:
@@ -59,6 +67,13 @@ def list_engines(request: Request) -> Response:
     return Response({"data": serializer.data})
 
 
+@extend_schema(
+    tags=['reference'],
+    summary='Lister les plateformes',
+    parameters=[
+        OpenApiParameter('active_only', bool, description='Si true (défaut), uniquement les plateformes actives'),
+    ],
+)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def list_platforms(request: Request) -> Response:
@@ -94,6 +109,12 @@ def list_platforms(request: Request) -> Response:
 # ─── Story 31.3: Engine admin endpoint ─────────────────────────────────────
 
 
+@extend_schema(
+    tags=['reference'],
+    summary='Modifier un moteur',
+    request=RefEngineWriteSerializer,
+    responses={200: RefEngineSerializer},
+)
 @api_view(['PATCH'])
 @permission_classes([IsAuthenticated, DBOPSProfilePermission])
 def update_engine(request: Request, pk: int) -> Response:
@@ -127,6 +148,13 @@ def update_engine(request: Request, pk: int) -> Response:
 # ─── Story 2.30: Category endpoints ────────────────────────────────────────
 
 
+@extend_schema(
+    tags=['reference'],
+    summary='Lister les catégories',
+    parameters=[
+        OpenApiParameter('active_only', bool, description='Si true (défaut), uniquement les catégories actives'),
+    ],
+)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def list_categories(request: Request) -> Response:
@@ -151,6 +179,12 @@ def list_categories(request: Request) -> Response:
     return Response({"data": serializer.data})
 
 
+@extend_schema(
+    tags=['reference'],
+    summary='Créer une catégorie',
+    request=RefCategoryWriteSerializer,
+    responses={201: RefCategorySerializer},
+)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, DBOPSProfilePermission])
 def create_category(request: Request) -> Response:
@@ -166,6 +200,12 @@ def create_category(request: Request) -> Response:
     return Response({"data": RefCategorySerializer(category).data}, status=status.HTTP_201_CREATED)
 
 
+@extend_schema(
+    tags=['reference'],
+    summary='Modifier une catégorie',
+    request=RefCategoryWriteSerializer,
+    responses={200: RefCategorySerializer},
+)
 @api_view(['PATCH'])
 @permission_classes([IsAuthenticated, DBOPSProfilePermission])
 def update_category(request: Request, pk: Any) -> Response:

@@ -41,7 +41,7 @@ import { SortableStepCard } from './SortableStepCard';
 
 /** Extended step type with optional temporary id for new steps. */
 export interface WorkflowStepEditable extends Omit<WorkflowStep, 'referenced_action_id'> {
-  referenced_action_id: number | undefined;
+  referenced_action_id?: number | null;
   /** Temporary unique ID for react key and dnd-kit. */
   _tempId?: string;
 }
@@ -106,15 +106,18 @@ export const WorkflowStepsEditor: React.FC<WorkflowStepsEditorProps> = ({
   }, [steps, internalSteps.length]);
 
   // Notify parent of changes (filter out internal fields)
+  // Story 57.13: Include all step types (gate, service_call, etc.) — not just platform with referenced_action_id
   const notifyChange = (newSteps: WorkflowStepEditable[]) => {
     setInternalSteps(newSteps);
     onChange(
-      newSteps
-        .filter((s) => s.referenced_action_id !== undefined && typeof s.referenced_action_id === 'number')
-        .map(({ _tempId: _, ...rest }) => ({
-          ...rest,
-          referenced_action_id: rest.referenced_action_id!,
-        }))
+      newSteps.map(({ _tempId: _, ...rest }) => {
+        const step = { ...rest };
+        // Non-platform steps don't use referenced_action_id
+        if (rest.step_type && rest.step_type !== 'platform') {
+          step.referenced_action_id = null;
+        }
+        return step;
+      })
     );
   };
 
@@ -208,10 +211,13 @@ export const WorkflowStepsEditor: React.FC<WorkflowStepsEditorProps> = ({
     }
   };
 
-  // Expose validation state
+  // Expose validation state (Story 57.13: only platform steps require referenced_action_id)
   useEffect(() => {
     if (internalSteps.length > 0) {
-      const hasIncompleteStep = internalSteps.some((s) => s.referenced_action_id === undefined);
+      const hasIncompleteStep = internalSteps.some((s) => {
+        const stepType = s.step_type ?? 'platform';
+        return stepType === 'platform' && (s.referenced_action_id === undefined || s.referenced_action_id === null);
+      });
       setShowValidation(hasIncompleteStep);
     } else {
       setShowValidation(false);

@@ -16,6 +16,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from rest_framework import serializers
+from drf_spectacular.utils import extend_schema, OpenApiParameter, inline_serializer
+
 from core import feature_flags
 from core.middleware import get_correlation_id
 from core.models import AuditActionType, AuditEntityType, AuditLog, FeatureFlag
@@ -93,6 +96,28 @@ class FeatureFlagUpdateView(APIView):
     """
     permission_classes = [IsAuthenticated, DBOPSProfilePermission]
 
+    @extend_schema(
+        tags=['feature-flags'],
+        summary='Modifier un feature flag',
+        parameters=[
+            OpenApiParameter('flag_key', str, location=OpenApiParameter.PATH, description='Clé du flag (a-z0-9_-)'),
+        ],
+        request=inline_serializer(
+            name='FeatureFlagUpdateRequest',
+            fields={
+                'enabled': serializers.BooleanField(
+                    required=False,
+                    help_text='Activer ou désactiver le flag',
+                ),
+                'rollout_percent': serializers.IntegerField(
+                    required=False,
+                    min_value=0,
+                    max_value=100,
+                    help_text='Pourcentage de rollout (0-100)',
+                ),
+            },
+        ),
+    )
     def patch(self, request: Any, flag_key: str) -> Response:
         if not FLAG_KEY_PATTERN.match(flag_key):
             return Response(

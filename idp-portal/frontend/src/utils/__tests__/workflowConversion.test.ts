@@ -167,6 +167,193 @@ describe('workflowStepsToReactFlow', () => {
   });
 });
 
+describe('workflowStepsToReactFlow — Story 57.13 nouveaux types', () => {
+  it('copie step_type dans le node data (service_call)', () => {
+    const step: WorkflowStep = {
+      order: 1,
+      step_id: 'sc-1',
+      step_type: 'service_call',
+      name: 'Mon service',
+      integration_type: 'servicenow',
+      operation: 'create_change',
+      input_mapping: { param: 'value' },
+      output_mapping: { result: '$.number' },
+      condition: { environment_in: ['PROD'] },
+    };
+    const { nodes } = workflowStepsToReactFlow([step]);
+    const nodeData = nodes.find((n) => n.id === 'sc-1')!.data;
+    expect(nodeData.step_type).toBe('service_call');
+    expect(nodeData.integration_type).toBe('servicenow');
+    expect(nodeData.operation).toBe('create_change');
+    expect(nodeData.output_mapping).toEqual({ result: '$.number' });
+  });
+
+  it('copie step_type dans le node data (evaluation)', () => {
+    const step: WorkflowStep = {
+      order: 1,
+      step_id: 'ev-1',
+      step_type: 'evaluation',
+      name: null,
+      policy_id: 42,
+    };
+    const { nodes } = workflowStepsToReactFlow([step]);
+    const nodeData = nodes.find((n) => n.id === 'ev-1')!.data;
+    expect(nodeData.step_type).toBe('evaluation');
+    expect(nodeData.policy_id).toBe(42);
+  });
+
+  it('copie step_type dans le node data (gate)', () => {
+    const step: WorkflowStep = {
+      order: 1,
+      step_id: 'g-1',
+      step_type: 'gate',
+      name: null,
+      gate_type: 'approval',
+      on_timeout: 'FAIL',
+      timeout: '24h',
+    };
+    const { nodes } = workflowStepsToReactFlow([step]);
+    const nodeData = nodes.find((n) => n.id === 'g-1')!.data;
+    expect(nodeData.step_type).toBe('gate');
+    expect(nodeData.gate_type).toBe('approval');
+    expect(nodeData.timeout).toBe('24h');
+  });
+
+  it('copie step_type dans le node data (http_request)', () => {
+    const step: WorkflowStep = {
+      order: 1,
+      step_id: 'http-1',
+      step_type: 'http_request',
+      name: null,
+      url: 'https://api.exemple.com',
+      method: 'POST',
+      request_timeout: 30,
+    };
+    const { nodes } = workflowStepsToReactFlow([step]);
+    const nodeData = nodes.find((n) => n.id === 'http-1')!.data;
+    expect(nodeData.step_type).toBe('http_request');
+    expect(nodeData.url).toBe('https://api.exemple.com');
+    expect(nodeData.method).toBe('POST');
+  });
+
+  it('backward compat: step sans step_type → platform dans node data', () => {
+    const step: WorkflowStep = {
+      order: 1,
+      step_id: 'p-1',
+      name: 'Step platform',
+      referenced_action_id: 5,
+    };
+    const { nodes } = workflowStepsToReactFlow([step]);
+    const nodeData = nodes.find((n) => n.id === 'p-1')!.data;
+    expect(nodeData.step_type).toBe('platform');
+  });
+});
+
+describe('reactFlowToWorkflowSteps — Story 57.13 round-trips', () => {
+  it('round-trip service_call step', () => {
+    const step: WorkflowStep = {
+      order: 1,
+      step_id: 'sc-1',
+      step_type: 'service_call',
+      name: 'Mon service',
+      integration_type: 'servicenow',
+      operation: 'create_change',
+      input_mapping: { param: 'value' },
+      output_mapping: { result: '$.number' },
+    };
+    const { nodes, edges } = workflowStepsToReactFlow([step]);
+    const result = reactFlowToWorkflowSteps(nodes, edges);
+    expect(result[0].step_type).toBe('service_call');
+    expect(result[0].integration_type).toBe('servicenow');
+    expect(result[0].operation).toBe('create_change');
+    expect(result[0].output_mapping).toEqual({ result: '$.number' });
+    expect(result[0].referenced_action_id).toBeUndefined();
+  });
+
+  it('round-trip evaluation step', () => {
+    const step: WorkflowStep = {
+      order: 1,
+      step_id: 'ev-1',
+      step_type: 'evaluation',
+      name: null,
+      policy_id: 99,
+    };
+    const { nodes, edges } = workflowStepsToReactFlow([step]);
+    const result = reactFlowToWorkflowSteps(nodes, edges);
+    expect(result[0].step_type).toBe('evaluation');
+    expect(result[0].policy_id).toBe(99);
+  });
+
+  it('round-trip gate step', () => {
+    const step: WorkflowStep = {
+      order: 1,
+      step_id: 'g-1',
+      step_type: 'gate',
+      name: null,
+      gate_type: 'maintenance_window',
+      on_timeout: 'SKIP',
+      timeout: '2h',
+    };
+    const { nodes, edges } = workflowStepsToReactFlow([step]);
+    const result = reactFlowToWorkflowSteps(nodes, edges);
+    expect(result[0].step_type).toBe('gate');
+    expect(result[0].gate_type).toBe('maintenance_window');
+    expect(result[0].on_timeout).toBe('SKIP');
+    expect(result[0].timeout).toBe('2h');
+  });
+
+  it('round-trip http_request step', () => {
+    const step: WorkflowStep = {
+      order: 1,
+      step_id: 'h-1',
+      step_type: 'http_request',
+      name: null,
+      url: 'https://api.test.com/v1',
+      method: 'GET',
+      headers: { Authorization: 'Bearer token' },
+      request_timeout: 10,
+    };
+    const { nodes, edges } = workflowStepsToReactFlow([step]);
+    const result = reactFlowToWorkflowSteps(nodes, edges);
+    expect(result[0].step_type).toBe('http_request');
+    expect(result[0].url).toBe('https://api.test.com/v1');
+    expect(result[0].method).toBe('GET');
+    expect(result[0].request_timeout).toBe(10);
+  });
+
+  it('round-trip http_request step préserve input_mapping (params URL)', () => {
+    const step: WorkflowStep = {
+      order: 1,
+      step_id: 'h-2',
+      step_type: 'http_request',
+      name: null,
+      url: 'https://api.test.com/search',
+      method: 'GET',
+      input_mapping: { q: 'query_value', page: '1' },
+      output_mapping: { results: '$.items' },
+    };
+    const { nodes, edges } = workflowStepsToReactFlow([step]);
+    const result = reactFlowToWorkflowSteps(nodes, edges);
+    expect(result[0].step_type).toBe('http_request');
+    expect(result[0].input_mapping).toEqual({ q: 'query_value', page: '1' });
+    expect(result[0].output_mapping).toEqual({ results: '$.items' });
+  });
+
+  it('backward compat: platform step sans step_type → force platform dans result', () => {
+    const nodes: Node[] = [
+      { id: START_NODE_ID, type: 'start', position: { x: 0, y: 0 }, data: {} },
+      {
+        id: 'p-1', type: 'workflowStep', position: { x: 0, y: 120 },
+        data: { action_id: 5, name: 'P1', retry_enabled: false, retry_max_attempts: null, retry_interval_seconds: null, retry_backoff_multiplier: null },
+      },
+      { id: END_NODE_ID, type: 'end', position: { x: 0, y: 300 }, data: {} },
+    ];
+    const result = reactFlowToWorkflowSteps(nodes, []);
+    expect(result[0].step_type).toBe('platform');
+    expect(result[0].referenced_action_id).toBe(5);
+  });
+});
+
 describe('reactFlowToWorkflowSteps', () => {
   it('converts empty arrays to empty steps', () => {
     const result = reactFlowToWorkflowSteps([], []);
@@ -230,5 +417,133 @@ describe('reactFlowToWorkflowSteps', () => {
     expect(roundTripped[0].retry_enabled).toBe(true);
     expect(roundTripped[0].retry_max_attempts).toBe(3);
     expect(roundTripped[1].on_success_step_id).toBeNull();
+  });
+});
+
+// Story 57.16: schedule_execution tests
+describe('workflowStepsToReactFlow — Story 57.16 schedule_execution', () => {
+  it('préserve schedule_config dans le node data', () => {
+    const step: WorkflowStep = {
+      order: 1,
+      step_id: 'sched-1',
+      step_type: 'schedule_execution',
+      name: 'Planifier',
+      referenced_action_id: 56,
+      schedule_config: {
+        schedule_source: 'parameter',
+        schedule_parameter_name: 'maintenance_scheduled_at',
+        inherit_parameters: true,
+        inherit_targets: true,
+        parameter_mapping: { snapshot_id: '$.steps.prepare.output.snapshot_id' },
+      },
+    };
+    const { nodes } = workflowStepsToReactFlow([step]);
+    const nodeData = nodes.find((n) => n.id === 'sched-1')!.data;
+    expect(nodeData.step_type).toBe('schedule_execution');
+    expect(nodeData.schedule_config).toEqual(step.schedule_config);
+    expect(nodeData.action_id).toBe(56);
+  });
+
+  it('schedule_config null → null dans node data', () => {
+    const step: WorkflowStep = {
+      order: 1,
+      step_id: 'sched-2',
+      step_type: 'schedule_execution',
+      name: null,
+      schedule_config: null,
+    };
+    const { nodes } = workflowStepsToReactFlow([step]);
+    const nodeData = nodes.find((n) => n.id === 'sched-2')!.data;
+    expect(nodeData.schedule_config).toBeNull();
+  });
+});
+
+describe('reactFlowToWorkflowSteps — Story 57.16 round-trip schedule_execution', () => {
+  it('round-trip préserve schedule_config pour schedule_execution step', () => {
+    const step: WorkflowStep = {
+      order: 1,
+      step_id: 'sched-1',
+      step_type: 'schedule_execution',
+      name: 'Planifier l\'application',
+      referenced_action_id: 56,
+      schedule_config: {
+        schedule_source: 'parameter',
+        schedule_parameter_name: 'maintenance_scheduled_at',
+        inherit_parameters: true,
+        inherit_targets: true,
+      },
+    };
+    const { nodes, edges } = workflowStepsToReactFlow([step]);
+    const result = reactFlowToWorkflowSteps(nodes, edges);
+    expect(result[0].step_type).toBe('schedule_execution');
+    expect(result[0].referenced_action_id).toBe(56);
+    expect(result[0].schedule_config).toEqual(step.schedule_config);
+  });
+
+  it('round-trip schedule_execution avec fixed_offset', () => {
+    const step: WorkflowStep = {
+      order: 1,
+      step_id: 'sched-2',
+      step_type: 'schedule_execution',
+      name: null,
+      referenced_action_id: 10,
+      schedule_config: {
+        schedule_source: 'fixed_offset',
+        fixed_offset: '+3d',
+        inherit_parameters: false,
+        inherit_targets: false,
+      },
+    };
+    const { nodes, edges } = workflowStepsToReactFlow([step]);
+    const result = reactFlowToWorkflowSteps(nodes, edges);
+    expect(result[0].schedule_config?.schedule_source).toBe('fixed_offset');
+    expect(result[0].schedule_config?.fixed_offset).toBe('+3d');
+  });
+
+  it('round-trip schedule_execution avec recurring pattern', () => {
+    const step: WorkflowStep = {
+      order: 1,
+      step_id: 'sched-3',
+      step_type: 'schedule_execution',
+      name: null,
+      referenced_action_id: 10,
+      schedule_config: {
+        schedule_source: 'recurring',
+        recurring_pattern: { pattern_type: 'daily', pattern_config: {} },
+      },
+    };
+    const { nodes, edges } = workflowStepsToReactFlow([step]);
+    const result = reactFlowToWorkflowSteps(nodes, edges);
+    expect(result[0].schedule_config?.schedule_source).toBe('recurring');
+    expect(result[0].schedule_config?.recurring_pattern?.pattern_type).toBe('daily');
+  });
+
+  it('round-trip schedule_execution avec parameter_mapping complet', () => {
+    const step: WorkflowStep = {
+      order: 1,
+      step_id: 'sched-4',
+      step_type: 'schedule_execution',
+      name: 'Planifier l\'application',
+      referenced_action_id: 56,
+      schedule_config: {
+        schedule_source: 'parameter',
+        schedule_parameter_name: 'maintenance_scheduled_at',
+        inherit_parameters: true,
+        inherit_targets: true,
+        parameter_mapping: {
+          snapshot_id: '$.steps.prepare.output.snapshot_id',
+          env: 'PROD',
+        },
+      },
+    };
+    const { nodes, edges } = workflowStepsToReactFlow([step]);
+    const result = reactFlowToWorkflowSteps(nodes, edges);
+    expect(result[0].schedule_config?.parameter_mapping).toEqual({
+      snapshot_id: '$.steps.prepare.output.snapshot_id',
+      env: 'PROD',
+    });
+    expect(result[0].schedule_config?.inherit_parameters).toBe(true);
+    expect(result[0].schedule_config?.inherit_targets).toBe(true);
+    expect(result[0].referenced_action_id).toBe(56);
   });
 });

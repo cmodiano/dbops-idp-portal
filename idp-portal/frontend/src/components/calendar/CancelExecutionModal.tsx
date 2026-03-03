@@ -5,7 +5,7 @@
  */
 import { Modal, Button, Descriptions, Tag, Typography } from 'antd';
 
-import { ENV_COLORS, ENV_LABELS } from '../../utils/calendarEventUtils';
+import { getEnvironmentHexColor, getEnvironmentLabel } from '../../utils/environmentHelpers';
 import { formatUtcToLocal } from '../../utils/dateFormat';
 import type { ScheduledExecutionListItem } from '../../types/api';
 
@@ -51,8 +51,8 @@ export function CancelExecutionModal({ execution, open, loading, onCancel, onCon
           </Descriptions.Item>
           <Descriptions.Item label="Utilisateur">{execution.user_name}</Descriptions.Item>
           <Descriptions.Item label="Environnement">
-            <Tag color={ENV_COLORS[execution.environment]}>
-              {ENV_LABELS[execution.environment] ?? execution.environment}
+            <Tag color={getEnvironmentHexColor(execution.environment ?? '')}>
+              {getEnvironmentLabel(execution.environment ?? '')}
             </Tag>
           </Descriptions.Item>
         </Descriptions>

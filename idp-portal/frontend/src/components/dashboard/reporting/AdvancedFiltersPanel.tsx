@@ -2,21 +2,21 @@
  * AdvancedFiltersPanel - Advanced filter controls for dashboard.
  * Story 8.4, AC1.
  *
- * Displays horizontal filter controls:
+ * Displays filter controls aligned with CalendarFiltersPanel / ExecutionsFiltersPanel:
  * - Engine (single-select)
  * - Environment (single-select)
  * - Tags (multi-select)
  * - Status (single-select)
  * - Date range picker (from_date / to_date)
- * - Reset button
- * - Active filters count badge
+ * - Reset button with active filter count badge
  */
 
-import { Select, DatePicker, Button, Space, Tag } from 'antd';
+import { Card, Form, Row, Col, Select, DatePicker, Button, Badge, Space, theme } from 'antd';
 import { FilterOutlined, ClearOutlined } from '@ant-design/icons';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
 import type { DashboardFilters, FilterOptions } from '../../../types/api';
+import { getEnvironmentLabel, sortEnvironments } from '../../../utils/environmentHelpers';
 
 const { RangePicker } = DatePicker;
 
@@ -78,6 +78,7 @@ export function AdvancedFiltersPanel({
   loading = false,
   filterOptions,
 }: AdvancedFiltersPanelProps) {
+  const { token } = theme.useToken();
   const activeFiltersCount = countActiveFilters(filters);
 
   // Build options from API or fallback
@@ -86,10 +87,19 @@ export function AdvancedFiltersPanel({
     : DEFAULT_ENGINE_OPTIONS;
 
   const environmentOptions = filterOptions?.environments?.length
-    ? filterOptions.environments.map((e) => ({
-        label: e.charAt(0).toUpperCase() + e.slice(1),
-        value: e,
-      }))
+    ? (() => {
+        const unique = [
+          ...new Set(
+            filterOptions.environments
+              .map((e) => (e || '').toLowerCase().trim())
+              .filter(Boolean),
+          ),
+        ];
+        return sortEnvironments(unique).map((e) => ({
+          label: getEnvironmentLabel(e),
+          value: e,
+        }));
+      })()
     : DEFAULT_ENVIRONMENT_OPTIONS;
 
   const tagOptions = filterOptions?.tags?.length
@@ -144,87 +154,119 @@ export function AdvancedFiltersPanel({
       : null;
 
   return (
-    <Space wrap size="middle" data-testid="advanced-filters-panel">
-      <FilterOutlined style={{ color: '#8c8c8c' }} />
-
-      <Select
-        size="middle"
-        placeholder="Moteur"
-        allowClear
-        value={filters.engine}
-        onChange={handleEngineChange}
-        options={engineOptions}
-        style={{ width: 160 }}
-        disabled={loading}
-        data-testid="filter-engine"
-      />
-
-      <Select
-        size="middle"
-        placeholder="Environnement"
-        allowClear
-        value={filters.environment}
-        onChange={handleEnvironmentChange}
-        options={environmentOptions}
-        style={{ width: 170 }}
-        disabled={loading}
-        data-testid="filter-environment"
-      />
-
-      <Select
-        size="middle"
-        mode="multiple"
-        placeholder="Tags"
-        allowClear
-        value={filters.tags || []}
-        onChange={handleTagsChange}
-        options={tagOptions}
-        style={{ minWidth: 170, maxWidth: 300 }}
-        disabled={loading || tagOptions.length === 0}
-        maxTagCount="responsive"
-        data-testid="filter-tags"
-      />
-
-      <Select
-        size="middle"
-        placeholder="Statut"
-        allowClear
-        value={filters.status}
-        onChange={handleStatusChange}
-        options={STATUS_OPTIONS}
-        style={{ width: 150 }}
-        disabled={loading}
-        data-testid="filter-status"
-      />
-
-      <RangePicker
-        size="middle"
-        value={dateRangeValue}
-        onChange={handleDateRangeChange}
-        format="DD/MM/YYYY"
-        placeholder={['Date début', 'Date fin']}
-        disabled={loading}
-        data-testid="filter-date-range"
-        style={{ width: 260 }}
-      />
-
-      <Button
-        size="middle"
-        icon={<ClearOutlined />}
-        onClick={handleReset}
-        disabled={activeFiltersCount === 0 || loading}
-        data-testid="filter-reset"
-      >
-        Réinitialiser
-      </Button>
-
-      {activeFiltersCount > 0 && (
-        <Tag color="blue" data-testid="active-filters-count">
-          {activeFiltersCount} filtre{activeFiltersCount > 1 ? 's' : ''} actif
-          {activeFiltersCount > 1 ? 's' : ''}
-        </Tag>
-      )}
-    </Space>
+    <Card
+      size="small"
+      title={
+        <Space>
+          <FilterOutlined />
+          Filtres
+          {activeFiltersCount > 0 && (
+            <Badge
+              count={activeFiltersCount}
+              style={{ backgroundColor: token.colorPrimary }}
+              data-testid="active-filters-badge"
+            />
+          )}
+        </Space>
+      }
+      extra={
+        <Button
+          size="middle"
+          icon={<ClearOutlined />}
+          onClick={handleReset}
+          disabled={activeFiltersCount === 0 || loading}
+          data-testid="filter-reset"
+        >
+          Réinitialiser
+        </Button>
+      }
+      style={{ marginBottom: 16 }}
+      data-testid="advanced-filters-panel"
+    >
+      <Form layout="vertical">
+        <Row gutter={16}>
+          <Col xs={24} md={8}>
+            <Form.Item label="Moteur" style={{ marginBottom: 12 }}>
+              <Select
+                size="middle"
+                style={{ width: '100%' }}
+                placeholder="Tous les moteurs"
+                allowClear
+                value={filters.engine}
+                onChange={handleEngineChange}
+                options={engineOptions}
+                disabled={loading}
+                data-testid="filter-engine"
+              />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={8}>
+            <Form.Item label="Environnement" style={{ marginBottom: 12 }}>
+              <Select
+                size="middle"
+                style={{ width: '100%' }}
+                placeholder="Tous les env."
+                allowClear
+                value={filters.environment}
+                onChange={handleEnvironmentChange}
+                options={environmentOptions}
+                disabled={loading}
+                data-testid="filter-environment"
+              />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={8}>
+            <Form.Item label="Tags" style={{ marginBottom: 12 }}>
+              <Select
+                size="middle"
+                style={{ width: '100%' }}
+                mode="multiple"
+                placeholder="Tous les tags"
+                allowClear
+                value={filters.tags || []}
+                onChange={handleTagsChange}
+                options={tagOptions}
+                disabled={loading || tagOptions.length === 0}
+                maxTagCount={2}
+                data-testid="filter-tags"
+              />
+            </Form.Item>
+          </Col>
+        </Row>
+        <Row gutter={16}>
+          <Col xs={24} md={8}>
+            <Form.Item label="Statut" style={{ marginBottom: 12 }}>
+              <Select
+                size="middle"
+                style={{ width: '100%' }}
+                placeholder="Tous les statuts"
+                allowClear
+                value={filters.status}
+                onChange={handleStatusChange}
+                options={STATUS_OPTIONS}
+                disabled={loading}
+                data-testid="filter-status"
+              />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={8}>
+            <Form.Item label="Période" style={{ marginBottom: 12 }}>
+              <RangePicker
+                size="middle"
+                style={{ width: '100%' }}
+                format="DD/MM/YYYY"
+                placeholder={['Date début', 'Date fin']}
+                value={dateRangeValue || undefined}
+                onChange={handleDateRangeChange}
+                disabled={loading}
+                allowClear
+                data-testid="filter-date-range"
+              />
+            </Form.Item>
+          </Col>
+        </Row>
+      </Form>
+    </Card>
   );
 }
 

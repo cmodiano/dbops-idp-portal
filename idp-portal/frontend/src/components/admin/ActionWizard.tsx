@@ -197,9 +197,13 @@ export function ActionWizard({
       setSubmitError('Au moins une étape est requise pour le workflow.');
       return false;
     }
-    const missingAction = workflowSteps.some((s) => !s.referenced_action_id);
+    // Story 57.13: Only platform steps require referenced_action_id; gate/evaluation/etc. have their own requirements
+    const missingAction = workflowSteps.some((s) => {
+      const stepType = s.step_type ?? 'platform';
+      return stepType === 'platform' && !s.referenced_action_id;
+    });
     if (missingAction) {
-      setSubmitError('Chaque étape doit avoir une action sélectionnée.');
+      setSubmitError('Chaque étape de type "Exécuter" doit avoir une action sélectionnée.');
       return false;
     }
     // Story 16.7, AC8: Graph validation — block save on critical errors

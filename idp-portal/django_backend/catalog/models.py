@@ -192,6 +192,12 @@ class Action(models.Model):
     """
     Action model mapping to Oracle ACTIONS_CATALOG table (V002, V017, V019, V022, V027, V031, V036, V046).
     Represents an action or workflow in the catalog.
+
+    Champs dépréciés (ADR-007, Story 57.12) :
+    - change_type_config : remplacé par execution_steps (format step-based, ADR-007).
+      Le wrapper backward-compat Story 57.11 gère la transition automatique.
+    - gate_config : remplacé par step_type=gate dans execution_steps (Story 57.7).
+      Ces champs seront supprimés dans une release future (post-Story 57.17).
     """
     id = models.BigAutoField(primary_key=True, db_column='ID')
     name = models.CharField(max_length=255, unique=True, db_column='NAME')
@@ -217,7 +223,13 @@ class Action(models.Model):
     parameters_schema = OracleJSONField(null=True, blank=True, db_column='PARAMETERS_SCHEMA')
     impact_rules = OracleJSONField(null=True, blank=True, db_column='IMPACT_RULES')
     execution_steps = OracleJSONField(null=True, blank=True, db_column='EXECUTION_STEPS')
+    # DEPRECATED ADR-007 (Story 57.12) — remplacé par execution_steps (format step-based).
+    # Le wrapper backward-compat (_build_change_wrapper_steps, Story 57.11) gère la transition.
+    # Ce champ sera supprimé dans une release future (post-Story 57.17).
     change_type_config = OracleJSONField(null=True, blank=True, db_column='CHANGE_TYPE_CONFIG')
+    # DEPRECATED ADR-007 (Story 57.12) — remplacé par le step_type=gate dans execution_steps.
+    # Aucune utilisation active dans le code runtime (gate géré via Story 57.7).
+    # Ce champ sera supprimé dans une release future (post-Story 57.17).
     # Story 31.6: Gate configuration — integration selection per gate type (e.g., servicenow_change.integration_id)
     gate_config = OracleJSONField(null=True, blank=True, db_column='GATE_CONFIG')
     # Story 31.8: Notification channels configuration (email, teams, page_individual, page_dba)

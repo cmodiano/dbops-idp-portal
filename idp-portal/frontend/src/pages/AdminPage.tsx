@@ -35,7 +35,7 @@ export default function AdminPage() {
   const { effectiveMode } = useTheme();
 
   return (
-    <div style={{ maxWidth: 1400, margin: '0 auto' }}>
+    <div style={{ width: '100%' }}>
       {/* Page Header */}
       <div style={{ marginBottom: 32 }}>
         <Title level={2} style={{ margin: 0, marginBottom: 8 }}>

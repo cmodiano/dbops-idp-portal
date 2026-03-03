@@ -3,26 +3,23 @@
  *
  * Extracted from CalendarPage.tsx to separate data transformation concerns.
  * Transforms ScheduledExecutionListItem → FullCalendar event format.
+ *
+ * Environment colors/labels: use getEnvironmentHexColor and getEnvironmentLabel from
+ * environmentHelpers — supports all inventory values (dev, developpement, staging,
+ * certification, prod, production, etc.).
  */
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
-import type { ScheduledExecutionListItem, ExecutionEnvironment } from '../types/api';
+import type { ScheduledExecutionListItem } from '../types/api';
+import { getEnvironmentHexColor } from './environmentHelpers';
 
 dayjs.extend(utc);
 
-/** Environment color mapping. */
-export const ENV_COLORS: Record<ExecutionEnvironment, string> = {
-  dev: '#1890ff',
-  staging: '#fa8c16',
-  prod: '#f5222d',
-};
+/** @deprecated Use getEnvironmentHexColor(env) for inventory-aware colors. */
+export const ENV_COLORS = { dev: '#3B82F6', staging: '#F97316', prod: '#EF4444' } as const;
 
-/** Environment labels in French. */
-export const ENV_LABELS: Record<ExecutionEnvironment, string> = {
-  dev: 'Développement',
-  staging: 'Staging',
-  prod: 'Production',
-};
+/** @deprecated Use getEnvironmentLabel(env) from environmentHelpers for inventory-aware labels. */
+export const ENV_LABELS = { dev: 'Développement', staging: 'Staging', prod: 'Production' } as const;
 
 /** FullCalendar event with extended props. */
 export interface CalendarEvent {
@@ -50,7 +47,7 @@ export function toUtcIso(dateStr: string): string {
 /** Map scheduled execution to FullCalendar event. */
 export function mapToCalendarEvent(exec: ScheduledExecutionListItem): CalendarEvent {
   const effectiveDate = exec.recurring_pattern?.next_execution_date ?? exec.scheduled_at;
-  const envColor = ENV_COLORS[exec.environment] ?? '#888';
+  const envColor = getEnvironmentHexColor(exec.environment ?? '');
   if (!effectiveDate) {
     return {
       id: String(exec.scheduled_execution_id),
@@ -67,7 +64,8 @@ export function mapToCalendarEvent(exec: ScheduledExecutionListItem): CalendarEv
   const hasTime = effectiveDate.includes('T') && /T\d{1,2}:\d{2}/.test(effectiveDate);
   const startMoment = hasTime ? parsed : parsed.hour(9).minute(0).second(0).millisecond(0);
   const startStr = startMoment.toISOString();
-  const endStr = startMoment.add(1, 'hour').toISOString();
+  // 30 min par défaut : évite qu'un événement à 23h08 déborde visuellement sur le lendemain
+  const endStr = startMoment.add(30, 'minute').toISOString();
 
   return {
     id: String(exec.scheduled_execution_id),

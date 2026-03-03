@@ -21,7 +21,10 @@ import { useCalendarState } from '../hooks/useCalendarState';
 import { useCancelExecution } from '../hooks/useCancelExecution';
 import { useEditExecution } from '../hooks/useEditExecution';
 import { useScheduledExecutions } from '../hooks/useScheduledExecutions';
-import { ENV_COLORS, ENV_LABELS, mapToCalendarEvent } from '../utils/calendarEventUtils';
+import { useEnvironments } from '../hooks/useEnvironments';
+import { useAuth } from '../contexts/AuthContext';
+import { mapToCalendarEvent } from '../utils/calendarEventUtils';
+import { getEnvironmentHexColor } from '../utils/environmentHelpers';
 import type { CalendarEvent } from '../utils/calendarEventUtils';
 import type { ScheduledExecutionFilters } from '../types/api';
 import './CalendarPage.css';
@@ -31,7 +34,9 @@ const { Title, Text } = Typography;
 export function CalendarPage() {
   const { notification } = App.useApp();
   const { token } = theme.useToken();
+  const { user } = useAuth();
   const { filters, applyFilters, resetFilters, activeFilterCount } = useCalendarFilters();
+  const { environmentOptions } = useEnvironments({ enabled: !!user });
 
   const {
     calendarRef,
@@ -58,6 +63,7 @@ export function CalendarPage() {
     if (filters.environment) apiFilters.environment = filters.environment;
     if (filters.engine) apiFilters.engine = filters.engine;
     if (filters.platform) apiFilters.platform = filters.platform;
+    if (filters.status) apiFilters.status = filters.status;
     if (filters.start_date && filters.end_date) {
       apiFilters.scheduled_from = filters.start_date;
       apiFilters.scheduled_to = filters.end_date;
@@ -66,7 +72,7 @@ export function CalendarPage() {
       apiFilters.scheduled_to = dateRange.end;
     }
     fetchScheduled(apiFilters);
-  }, [filters.action_id, filters.environment, filters.engine, filters.platform, filters.start_date, filters.end_date, dateRange, fetchScheduled]);
+  }, [filters.action_id, filters.environment, filters.engine, filters.platform, filters.status, filters.start_date, filters.end_date, dateRange, fetchScheduled]);
 
   useEffect(() => {
     doFetch();
@@ -94,10 +100,13 @@ export function CalendarPage() {
 
   const calendarEvents: CalendarEvent[] = useMemo(() => {
     return executions
-      .filter((exec) => exec.status === 'pending')
       .filter((exec) => exec.recurring_pattern?.next_execution_date ?? exec.scheduled_at)
       .map(mapToCalendarEvent);
   }, [executions]);
+
+  const handleTodayClick = useCallback(() => {
+    calendarRef.current?.getApi().today();
+  }, []);
 
   const handleToggleRecurrence = useCallback(
     async (id: number, newState: boolean) => {
@@ -139,10 +148,14 @@ export function CalendarPage() {
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <Space size="middle" wrap data-testid="calendar-legend">
           <Text type="secondary">Environnement :</Text>
-          {(['dev', 'staging', 'prod'] as const).map((env) => (
-            <Space key={env} size={8}>
-              <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, backgroundColor: ENV_COLORS[env] }} aria-hidden />
-              <span>{ENV_LABELS[env]}</span>
+          {(environmentOptions.length > 0 ? environmentOptions : [
+            { value: 'dev', label: 'Développement' },
+            { value: 'staging', label: 'Staging' },
+            { value: 'prod', label: 'Production' },
+          ]).map((opt) => (
+            <Space key={opt.value} size={8}>
+              <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, backgroundColor: getEnvironmentHexColor(opt.value) }} aria-hidden />
+              <span>{opt.label}</span>
             </Space>
           ))}
         </Space>
@@ -178,6 +191,12 @@ export function CalendarPage() {
             ref={calendarRef}
             plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
             initialView={calendarView}
+            customButtons={{
+              today: {
+                text: 'Aujourd\'hui',
+                click: handleTodayClick,
+              },
+            }}
             headerToolbar={{ left: 'prev,next today', center: 'title', right: '' }}
             locale={frLocale}
             height="auto"

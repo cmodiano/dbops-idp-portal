@@ -22,7 +22,7 @@ describe('useCalendarFilters — coverage', () => {
     vi.clearAllMocks();
   });
 
-  it('initial state: all filters null, activeFilterCount=0, hasActiveFilters=false', () => {
+  it('initial state: filters null except status=pending, activeFilterCount=0, hasActiveFilters=false', () => {
     const { result } = renderHook(() => useCalendarFilters(), { wrapper });
     expect(result.current.filters.action_id).toBeNull();
     expect(result.current.filters.environment).toBeNull();
@@ -30,6 +30,7 @@ describe('useCalendarFilters — coverage', () => {
     expect(result.current.filters.platform).toBeNull();
     expect(result.current.filters.start_date).toBeNull();
     expect(result.current.filters.end_date).toBeNull();
+    expect(result.current.filters.status).toBe('pending');
     expect(result.current.activeFilterCount).toBe(0);
     expect(result.current.hasActiveFilters).toBe(false);
   });
@@ -37,7 +38,7 @@ describe('useCalendarFilters — coverage', () => {
   it('applyFilters updates filters and hasActiveFilters', () => {
     const { result } = renderHook(() => useCalendarFilters(), { wrapper });
     act(() => {
-      result.current.applyFilters({ action_id: 5, environment: 'dev' as never, engine: null, platform: null, start_date: null, end_date: null });
+      result.current.applyFilters({ action_id: 5, environment: 'dev' as never, engine: null, platform: null, start_date: null, end_date: null, status: 'pending' });
     });
     expect(result.current.filters.action_id).toBe(5);
     expect(result.current.filters.environment).toBe('dev');
@@ -48,7 +49,7 @@ describe('useCalendarFilters — coverage', () => {
   it('resetFilters clears all filters', () => {
     const { result } = renderHook(() => useCalendarFilters(), { wrapper });
     act(() => {
-      result.current.applyFilters({ action_id: 5, environment: 'prod' as never, engine: 'AAP', platform: 'ansible', start_date: '2026-01-01', end_date: '2026-01-31' });
+      result.current.applyFilters({ action_id: 5, environment: 'prod' as never, engine: 'AAP', platform: 'ansible', start_date: '2026-01-01', end_date: '2026-01-31', status: 'pending' });
     });
     expect(result.current.activeFilterCount).toBeGreaterThan(0);
     act(() => { result.current.resetFilters(); });
@@ -67,7 +68,7 @@ describe('useCalendarFilters — coverage', () => {
   it('activeFilterCount counts date range as 1', () => {
     const { result } = renderHook(() => useCalendarFilters(), { wrapper });
     act(() => {
-      result.current.applyFilters({ action_id: null, environment: null, engine: null, platform: null, start_date: '2026-01-01', end_date: null });
+      result.current.applyFilters({ action_id: null, environment: null, engine: null, platform: null, start_date: '2026-01-01', end_date: null, status: 'pending' });
     });
     expect(result.current.activeFilterCount).toBe(1);
   });
@@ -76,5 +77,19 @@ describe('useCalendarFilters — coverage', () => {
     const w = makeWrapper('?action_id=not-a-number');
     const { result } = renderHook(() => useCalendarFilters(), { wrapper: w });
     expect(result.current.filters.action_id).toBeNull();
+  });
+
+  it('parses status=executed from URL', () => {
+    const w = makeWrapper('?status=executed');
+    const { result } = renderHook(() => useCalendarFilters(), { wrapper: w });
+    expect(result.current.filters.status).toBe('executed');
+    expect(result.current.activeFilterCount).toBe(1);
+  });
+
+  it('parses status=all from URL', () => {
+    const w = makeWrapper('?status=all');
+    const { result } = renderHook(() => useCalendarFilters(), { wrapper: w });
+    expect(result.current.filters.status).toBeNull();
+    expect(result.current.activeFilterCount).toBe(1);
   });
 });

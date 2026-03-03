@@ -96,7 +96,7 @@ function WorkflowBuilderCanvasInner({
 
   return (
     <div style={{ display: 'flex', height: 700, border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, overflow: 'hidden' }}>
-      <ActionPalette disabled={disabled} />
+      <ActionPalette disabled={disabled} onAddSpecialStep={graph.handleAddSpecialStep} />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         <WorkflowBuilderToolbar
           disabled={disabled}
@@ -151,6 +151,7 @@ function WorkflowBuilderCanvasInner({
         onNodeUpdate={graph.handleNodeUpdate}
         onNodeDelete={graph.handleNodeDelete}
         disabled={disabled}
+        availableStepIds={graph.workflowStepIds}
       />
 
       <ValidationReportPanel

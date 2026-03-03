@@ -143,7 +143,7 @@ export function TargetSelector({
               status={getEnvironmentColor(target.environment)}
               text={
                 <span style={{ fontSize: 11, color: '#8c8c8c' }}>
-                  ({target.environment})
+                  ({getEnvironmentLabel(target.environment ?? '')})
                 </span>
               }
             />

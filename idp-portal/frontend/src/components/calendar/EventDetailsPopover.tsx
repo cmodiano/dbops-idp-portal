@@ -9,7 +9,8 @@ import { Typography, Tag, Space, Descriptions, Button, Switch } from 'antd';
 import { SyncOutlined, ClockCircleOutlined, LinkOutlined } from '@ant-design/icons';
 
 import { useAuth } from '../../contexts/AuthContext';
-import { ENV_COLORS, ENV_LABELS, getDisplayParameters, describePatternType } from '../../utils/calendarEventUtils';
+import { getDisplayParameters, describePatternType } from '../../utils/calendarEventUtils';
+import { getEnvironmentHexColor, getEnvironmentLabel } from '../../utils/environmentHelpers';
 import { formatUtcToLocal } from '../../utils/dateFormat';
 import type { ScheduledExecutionListItem } from '../../types/api';
 
@@ -44,6 +45,8 @@ export function EventDetailsPopover({
   const showExecutionLink =
     execution.status === 'executed' &&
     execution.execution_id != null;
+  // Story 57.17: lien vers l'exécution source (créée via schedule_execution step)
+  const showOriginLink = execution.source_execution_id != null;
   const isDbops = user?.profile?.toLowerCase() === 'dbops';
   const canCancel =
     execution.status === 'pending' &&
@@ -70,8 +73,8 @@ export function EventDetailsPopover({
           )}
         </Descriptions.Item>
         <Descriptions.Item label="Environnement">
-          <Tag color={ENV_COLORS[execution.environment]}>
-            {ENV_LABELS[execution.environment] ?? execution.environment}
+          <Tag color={getEnvironmentHexColor(execution.environment ?? '')}>
+            {getEnvironmentLabel(execution.environment ?? '')}
           </Tag>
         </Descriptions.Item>
         {hasTargets && (
@@ -136,6 +139,16 @@ export function EventDetailsPopover({
           <Descriptions.Item label="Exécution">
             <Link to={`/executions/${execution.execution_id}`} data-testid="link-to-execution">
               <LinkOutlined /> Voir l'exécution
+            </Link>
+          </Descriptions.Item>
+        )}
+        {showOriginLink && (
+          <Descriptions.Item label="Origine">
+            <Link
+              to={`/executions/${execution.source_execution_id}`}
+              data-testid="link-to-source-execution"
+            >
+              <LinkOutlined /> Voir l'exécution source
             </Link>
           </Descriptions.Item>
         )}

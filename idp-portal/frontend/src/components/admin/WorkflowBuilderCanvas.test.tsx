@@ -571,7 +571,7 @@ describe('WorkflowBuilderCanvas Component', () => {
       render(<WorkflowBuilderCanvas steps={[]} onChange={onChange} />);
     });
 
-    expect(screen.getByText('Actions disponibles')).toBeInTheDocument();
+    expect(screen.getByText('Actions (Exécuter)')).toBeInTheDocument();
     expect(screen.getByTestId('react-flow-canvas')).toBeInTheDocument();
     expect(screen.getByTestId('rf-controls')).toBeInTheDocument();
     expect(screen.getByTestId('rf-minimap')).toBeInTheDocument();

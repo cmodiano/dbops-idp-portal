@@ -15,6 +15,7 @@ import { fetchInventoryTargets } from '../services/execution_service';
 import { ApiError } from '../services/api_client';
 import { useAuth } from '../contexts/AuthContext';
 import { getDisplayParameters } from '../utils/calendarEventUtils';
+import { getEnvironmentLabel } from '../utils/environmentHelpers';
 import type { ScheduledExecutionListItem, ExecutionEnvironment, ScheduledExecutionUpdateRequest } from '../types/api';
 
 dayjs.extend(utc);
@@ -71,7 +72,14 @@ export function useEditExecution(
   useEffect(() => {
     if (!editModalVisible || !executionToEdit || !user) return;
     fetchInventoryTargets()
-      .then((items) => setTargetOptions(items.map((t) => ({ label: `${t.name} (${t.environment})`, value: t.name }))))
+      .then((items) =>
+        setTargetOptions(
+          items.map((t) => ({
+            label: `${t.name} (${getEnvironmentLabel(t.environment ?? '')})`,
+            value: t.name,
+          }))
+        )
+      )
       .catch(() => setTargetOptions([]));
   }, [editModalVisible, executionToEdit, user]);
 

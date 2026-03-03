@@ -1398,9 +1398,9 @@ describe('ActionWizard — additional coverage', () => {
       await user.click(nextBtn);
 
       // Should show error about missing action or at least stay on step 2
-      // The error for missing action OR no steps at all would appear
+      // The error for missing action (platform step) OR no steps at all would appear
       await waitFor(() => {
-        const missing = screen.queryAllByText(/Chaque étape doit avoir une action sélectionnée/i);
+        const missing = screen.queryAllByText(/doit avoir une action sélectionnée/i);
         const atLeast = screen.queryAllByText(/Au moins une étape est requise/i);
         const anyError = missing.length > 0 || atLeast.length > 0;
         expect(anyError).toBe(true);

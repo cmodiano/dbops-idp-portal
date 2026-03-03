@@ -128,6 +128,8 @@ export interface ScheduledExecutionListItem {
   correlation_id?: string | null;
   /** HIGH-2 FIX: ID of the effective execution if status=executed (AC10). */
   execution_id?: number | null;
+  /** Story 57.17: ID of the source execution that triggered creation via a schedule_execution step. */
+  source_execution_id?: number | null;
   /** Story 11.7: Recurring pattern info for recurring executions. */
   recurring_pattern?: RecurringPatternResponse | null;
   /** Story 13.6 AC3: Technologie (engine) pour le popover détail. */

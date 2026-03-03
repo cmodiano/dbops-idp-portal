@@ -10,6 +10,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from drf_spectacular.utils import extend_schema, OpenApiParameter
 from catalog.models import Action, ActionStatus
 from core.exceptions import BadRequestError
 from core.permissions import DBOPSProfilePermission
@@ -24,6 +25,13 @@ class AdminAnalyticsView(APIView):
 
     permission_classes = [IsAuthenticated, DBOPSProfilePermission]
 
+    @extend_schema(
+        tags=['dashboard'],
+        summary='Statistiques admin (DBOPS)',
+        parameters=[
+            OpenApiParameter('days', int, description='Période en jours (défaut: 90, max: 3650)'),
+        ],
+    )
     def get(self, request: Request) -> Response:
         days_raw = request.query_params.get("days", "90")
         try:

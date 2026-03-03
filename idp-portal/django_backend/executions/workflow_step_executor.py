@@ -5,6 +5,7 @@ import structlog
 from dataclasses import asdict
 from typing import TYPE_CHECKING, Optional, Any, Dict
 
+from django.db import transaction
 from django.utils import timezone
 
 from executions.models import ExecutionStep, ExecutionStepStatus
@@ -65,6 +66,11 @@ class StepExecutor:
         step_id = step.get('step_id')
         step_name = step.get('name', f"Step {step.get('order', 0)}")
 
+        # Story 57.15: Route par step_type AVANT le check gate_conditions
+        step_type_routing = step.get('step_type', 'platform')
+        if step_type_routing == 'schedule_execution':
+            return self._execute_schedule_step(step, step_order, step_parameters)
+
         logger.info(
             "workflow_step_executing",
             execution_id=self.execution.id,
@@ -115,6 +121,14 @@ class StepExecutor:
                 },
                 correlation_id=self.correlation_id,
             )
+
+            # Story 57.8: Notification approbation requise (on_approval_required)
+            is_approval_gate = any(
+                isinstance(c, dict) and c.get('type') == 'approval_granted'
+                for c in gate_conditions
+            )
+            if is_approval_gate:
+                self._send_approval_notification_if_configured()
 
             return StepResult(
                 outcome=StepOutcome.WAITING,
@@ -592,7 +606,8 @@ class StepExecutor:
                 correlation_id=self.correlation_id,
             )
 
-            # MED-7 FIX: Removed redundant logging (PolicyEvaluator already logs decision)
+            # Story 57.8: Notification approbation requise
+            self._send_approval_notification_if_configured()
 
             return StepResult(
                 outcome=StepOutcome.WAITING,
@@ -630,3 +645,331 @@ class StepExecutor:
                     'auto_approved': True,
                 },
             )
+
+    # -------------------------------------------------------------------------
+    # Story 57.8 — approval notification helper
+    # -------------------------------------------------------------------------
+
+    def _send_approval_notification_if_configured(self) -> None:
+        """
+        Story 57.8: Envoie notification on_approval_required si configurée sur l'action.
+
+        Charge l'action depuis l'exécution, vérifie la notification_config,
+        et envoie via NotificationService en on_commit.
+        """
+        try:
+            from catalog.models import Action  # noqa: PLC0415
+
+            action = Action.objects.filter(id=self.execution.action_id).first()
+            if not action:
+                return
+
+            config = action.notification_config or {}
+            has_approval_notif = any(
+                ch.get("enabled") and "on_approval_required" in (ch.get("conditions") or [])
+                for ch in config.get("channels", [])
+            )
+            if not has_approval_notif:
+                return
+
+            _execution = self.execution
+            _action = action
+            _correlation_id = self.correlation_id
+
+            def _send() -> None:
+                try:
+                    from services.notification_service import NotificationService  # noqa: PLC0415
+                    notif = NotificationService()
+                    notif.notify_execution_event(
+                        execution=_execution,
+                        action=_action,
+                        event="on_approval_required",
+                        correlation_id=_correlation_id,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.error(
+                        "approval_notification_failed",
+                        execution_id=_execution.id,
+                        error=str(exc),
+                        correlation_id=_correlation_id,
+                    )
+
+            transaction.on_commit(_send)
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "approval_notification_setup_failed",
+                execution_id=self.execution.id,
+                error=str(exc),
+                correlation_id=self.correlation_id,
+            )
+
+    # -------------------------------------------------------------------------
+    # Story 57.15 — schedule_execution step handler
+    # -------------------------------------------------------------------------
+
+    def _execute_schedule_step(
+        self,
+        step: Dict[str, Any],
+        step_order: int,
+        step_parameters: Dict[str, Any],
+    ) -> "StepResult":
+        """
+        Handle a step of type 'schedule_execution'.
+
+        Creates a ScheduledExecution via SchedulingService, stores correlation_id,
+        creates audit entry WORKFLOW_STEP_SCHEDULE_CREATED, and returns StepResult.
+
+        Story 57.15 AC #1–#8.
+        """
+        from executions.workflow_runtime import StepResult, StepOutcome  # noqa: PLC0415
+        from executions.scheduling_service import SchedulingService  # noqa: PLC0415
+        from catalog.models import Action  # noqa: PLC0415
+
+        step_id = step.get('step_id')
+        step_name = step.get('name', f"Step {step.get('order', 0)}")
+
+        logger.info(
+            "workflow_schedule_step_executing",
+            execution_id=self.execution.id,
+            step_id=step_id,
+            step_name=step_name,
+            step_order=step_order,
+            correlation_id=self.correlation_id,
+        )
+
+        execution_step = ExecutionStep.objects.create(
+            execution=self.execution,
+            step_order=step_order,
+            step_name=step_name,
+            step_type='schedule_execution',
+            status=ExecutionStepStatus.RUNNING,
+            started_at=timezone.now(),
+        )
+
+        try:
+            schedule_config = step.get('schedule_config', {})
+            referenced_action_id = step.get('referenced_action_id')
+
+            if not referenced_action_id:
+                raise ValueError(f"Workflow schedule step {step_id} missing referenced_action_id")
+
+            try:
+                target_action = Action.objects.get(id=referenced_action_id)
+            except Action.DoesNotExist:
+                raise ValueError(
+                    f"Referenced action {referenced_action_id} not found for schedule step {step_id}"
+                )
+
+            scheduled_at = self._resolve_schedule_date(schedule_config, step_parameters)
+            recurring_pattern_data = self._resolve_recurring_pattern(schedule_config)
+            scheduled_params = self._build_scheduled_parameters(schedule_config, step_parameters, step)
+
+            scheduled_execution = SchedulingService().create_scheduled_execution(
+                user=self.execution.user,
+                action=target_action,
+                environment=self.execution.environment,
+                parameters=scheduled_params,
+                scheduled_at=scheduled_at,
+                recurring_pattern_data=recurring_pattern_data,
+            )
+
+            # Store correlation_id and source_execution_id on the created ScheduledExecution
+            scheduled_execution.correlation_id = self.correlation_id
+            # Story 57.17: stocker l'ID de l'exécution source pour la traçabilité UI
+            scheduled_execution.source_execution_id = self.execution.id
+            scheduled_execution.save()
+
+            # Mark step COMPLETED with output
+            # Story 57.17: enrichir pour la traçabilité UI
+            step_output = {
+                'scheduled_execution_id': scheduled_execution.id,
+                'action_name': target_action.name,
+                'scheduled_at': (
+                    scheduled_execution.scheduled_at.isoformat()
+                    if scheduled_execution.scheduled_at
+                    else None
+                ),
+            }
+            execution_step.status = ExecutionStepStatus.COMPLETED
+            execution_step.completed_at = timezone.now()
+            execution_step.set_output(step_output)
+            execution_step.save()
+
+            # Audit trail
+            AuditService.create_entry(
+                user_id=str(self.execution.user_id),
+                action_type=AuditActionType.WORKFLOW_STEP_SCHEDULE_CREATED,
+                entity_type=AuditEntityType.EXECUTION,
+                entity_id=self.execution.id,
+                details={
+                    'step_id': step_id,
+                    'step_name': step_name,
+                    'step_order': step_order,
+                    'scheduled_execution_id': scheduled_execution.id,
+                    'referenced_action_id': referenced_action_id,
+                    'correlation_id': self.correlation_id,
+                },
+                correlation_id=self.correlation_id,
+            )
+
+            logger.info(
+                "workflow_schedule_step_completed",
+                execution_id=self.execution.id,
+                step_id=step_id,
+                scheduled_execution_id=scheduled_execution.id,
+                correlation_id=self.correlation_id,
+            )
+
+            return StepResult(
+                outcome=StepOutcome.SUCCESS,
+                output=step_output,
+            )
+
+        except Exception as e:  # noqa: BLE001 — catch-all: marks step FAILED
+            execution_step.status = ExecutionStepStatus.FAILED
+            execution_step.completed_at = timezone.now()
+            execution_step.error_message = f"{type(e).__name__}: {str(e)}"
+            execution_step.save()
+
+            logger.error(
+                "workflow_schedule_step_failed",
+                execution_id=self.execution.id,
+                step_id=step_id,
+                error=str(e),
+                error_type=type(e).__name__,
+                correlation_id=self.correlation_id,
+                exc_info=True,
+            )
+
+            return StepResult(
+                outcome=StepOutcome.ERROR,
+                error_message=str(e),
+                error_details={
+                    'step_id': step_id,
+                    'step_name': step_name,
+                    'error_type': type(e).__name__,
+                },
+            )
+
+    def _resolve_schedule_date(self, schedule_config: Dict[str, Any], step_parameters: Dict[str, Any]) -> Any:
+        """
+        Resolve the scheduled_at datetime from schedule_config and step_parameters.
+
+        Story 57.15 AC #2 (parameter), #3 (fixed_offset), #4 (recurring → None).
+        """
+        source = schedule_config.get('schedule_source', 'parameter')
+        if source == 'parameter':
+            param_name = schedule_config.get('schedule_parameter_name', 'scheduled_at')
+            date_str = step_parameters.get(param_name)
+            if not date_str:
+                global_params = self.execution.get_parameters() or {}
+                date_str = global_params.get(param_name)
+            if not date_str:
+                raise ValueError(f"Paramètre '{param_name}' requis pour schedule_source='parameter'")
+            from django.utils.dateparse import parse_datetime  # noqa: PLC0415
+            parsed = parse_datetime(date_str)
+            if not parsed:
+                raise ValueError(f"Format de date invalide pour '{param_name}': {date_str}")
+            return parsed
+        elif source == 'fixed_offset':
+            offset_str = schedule_config.get('fixed_offset', '+1d')
+            return self._parse_fixed_offset(offset_str)
+        elif source == 'recurring':
+            return None
+        else:
+            raise ValueError(f"schedule_source inconnu: {source}")
+
+    def _parse_fixed_offset(self, offset_str: str) -> Any:
+        """
+        Parse a fixed offset string (+Nd/+Nh/+Nw/+Nm) and return now() + offset.
+
+        Story 57.15 AC #3.
+        """
+        import re  # noqa: PLC0415
+        from datetime import timedelta  # noqa: PLC0415
+
+        match = re.match(r'^\+(\d+)([dhwm])$', offset_str)
+        if not match:
+            raise ValueError(f"Format d'offset invalide: {offset_str}. Attendu: +Nd, +Nh, +Nw, +Nm")
+        value = int(match.group(1))
+        unit = match.group(2)
+        deltas = {
+            'd': timedelta(days=value),
+            'h': timedelta(hours=value),
+            'w': timedelta(weeks=value),
+            'm': timedelta(minutes=value),
+        }
+        return timezone.now() + deltas[unit]
+
+    def _resolve_recurring_pattern(self, schedule_config: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Build recurring_pattern_data dict for SchedulingService if schedule_source is 'recurring'.
+
+        Story 57.15 AC #4.
+        """
+        if schedule_config.get('schedule_source') != 'recurring':
+            return None
+        pattern_data = schedule_config.get('recurring_pattern', {})
+        pattern_type = pattern_data.get('pattern_type')
+        pattern_config = pattern_data.get('pattern_config', {})
+        if not pattern_type:
+            raise ValueError("recurring_pattern.pattern_type requis pour schedule_source='recurring'")
+        from executions.utils import calculate_next_execution_date  # noqa: PLC0415
+        next_date = calculate_next_execution_date(pattern_type, pattern_config, timezone.now())
+        return {
+            'pattern_type': pattern_type,
+            'pattern_config': pattern_config,
+            'next_execution_date': next_date,
+        }
+
+    def _build_scheduled_parameters(
+        self,
+        schedule_config: Dict[str, Any],
+        step_parameters: Dict[str, Any],
+        step: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Build the parameters dict for the ScheduledExecution.
+
+        Story 57.15 AC #5 (inherit_parameters) and #6 (parameter_mapping JSONPath).
+        """
+        params: Dict[str, Any] = {}
+
+        if schedule_config.get('inherit_parameters', False):
+            global_params = self.execution.get_parameters() or {}
+            for key, value in global_params.items():
+                if key != 'workflow_step_parameters':
+                    params[key] = value
+
+        mapping = schedule_config.get('parameter_mapping', {})
+        for target_key, source_expr in mapping.items():
+            if isinstance(source_expr, str) and source_expr.startswith('$.'):
+                params[target_key] = self._resolve_jsonpath(source_expr)
+            else:
+                params[target_key] = source_expr
+
+        if step_parameters:
+            schedule_param_name = schedule_config.get('schedule_parameter_name')
+            for key, value in step_parameters.items():
+                if key != schedule_param_name:
+                    params[key] = value
+
+        return params if params else None
+
+    def _resolve_jsonpath(self, expr: str) -> Any:
+        """
+        Resolve a simplified JSONPath expression of the form $.steps.<step_id>.output.<field>.
+
+        Story 57.15 AC #6.
+        """
+        parts = expr.split('.')
+        if len(parts) >= 5 and parts[1] == 'steps' and parts[3] == 'output':
+            step_name = parts[2]
+            field_name = '.'.join(parts[4:])
+            prev_step = ExecutionStep.objects.filter(
+                execution=self.execution, step_name=step_name
+            ).order_by('-step_order').first()
+            if prev_step:
+                output = prev_step.get_output() or {}
+                return output.get(field_name)
+        return None

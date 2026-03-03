@@ -1,26 +1,67 @@
 /**
- * WorkflowStepNode — Custom React Flow node for workflow steps (Story 16.5, AC2; Story 16.6; Story 16.7).
+ * WorkflowStepNode — Custom React Flow node for workflow steps (Story 16.5, AC2; Story 16.6; Story 16.7; Story 57.13).
  *
  * Displays action name, engine/platform icon, retry badge + detailed tooltip
  * with exit paths (success/error), and 3 handles: input (top), success output
  * (bottom-left, green), error output (bottom-right, red).
+ *
+ * Story 57.13: Added step_type badge with color per type (platform, service_call, evaluation, gate, http_request).
+ * Story 57.16: Added schedule_execution step type with schedule_source badge display.
  */
 
 import React, { memo, useMemo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { Badge, Divider, Tooltip, theme } from 'antd';
+import { Badge, Divider, Tag, Tooltip, theme } from 'antd';
 import { CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined, MinusCircleOutlined } from '@ant-design/icons';
+import type { WorkflowStepType, ScheduleStepConfig } from '../../types/api';
+
+// Story 57.13: Color codes and labels per step type
+const STEP_TYPE_COLORS: Record<WorkflowStepType, string> = {
+  platform:           '#1677ff',  // bleu Ant Design Primary
+  service_call:       '#fa8c16',  // orange
+  evaluation:         '#722ed1',  // violet
+  gate:               '#faad14',  // ambre/jaune
+  http_request:       '#13c2c2',  // cyan
+  schedule_execution: '#4f46e5',  // indigo (Story 57.16)
+};
+
+const STEP_TYPE_LABELS: Record<WorkflowStepType, string> = {
+  platform:           'Exécuter',
+  service_call:       'Service',
+  evaluation:         'Évaluer',
+  gate:               'Attendre',
+  http_request:       'HTTP',
+  schedule_execution: 'Planifier', // Story 57.16
+};
+
+const INTEGRATION_LABELS: Record<string, string> = {
+  servicenow: 'ServiceNow',
+  vault: 'HashiCorp Vault',
+  jira: 'Jira',
+};
+
+const OPERATION_LABELS: Record<string, string> = {
+  create_change: 'Créer un change',
+  update_change: 'Mettre à jour le change',
+  close_change: 'Fermer le change',
+  get_change_status: 'Statut du change',
+  cancel_change: 'Annuler le change',
+  get_secret: 'Lire un secret', // pragma: allowlist secret
+  create_issue: 'Créer un ticket',
+  update_issue: 'Mettre à jour le ticket',
+  get_issue: 'Lire le ticket',
+};
 
 export interface WorkflowStepNodeData {
-  action_id: number;
-  action_name: string;
-  action_engine: string;
-  action_platform: string;
+  action_id?: number | null;
+  action_name?: string;
+  action_engine?: string;
+  action_platform?: string;
   name: string | null;
-  retry_enabled: boolean;
-  retry_max_attempts: number | null;
-  retry_interval_seconds: number | null;
-  retry_backoff_multiplier: number | null;
+  retry_enabled?: boolean;
+  retry_max_attempts?: number | null;
+  retry_interval_seconds?: number | null;
+  retry_backoff_multiplier?: number | null;
   /** Validation error/warning for this node */
   validationStatus?: 'error' | 'warning' | null;
   validationMessage?: string | null;
@@ -39,11 +80,67 @@ export interface WorkflowStepNodeData {
   executionStatus?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'SKIPPED';
   /** Story 19.2: Step execution duration (e.g. "1m 30s") */
   executionDuration?: string | null;
+
+  // Story 57.13: step type and type-specific fields
+  step_type?: WorkflowStepType;
+  step_id?: string | null;
+  integration_type?: string | null;
+  operation?: string | null;
+  policy_id?: number | null;
+  policy_name?: string | null;
+  gate_type?: 'maintenance_window' | 'approval' | null;
+  on_timeout?: 'FAIL' | 'SKIP' | null;
+  context_from?: string[] | null;
+  timeout?: string | null;
+  url?: string | null;
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | null;
+  headers?: Record<string, string> | null;
+  request_timeout?: number | null;
+  condition?: { environment_in?: string[] } | null;
+  input_mapping?: Record<string, unknown> | null;
+  output_mapping?: Record<string, string> | null;
+  // === schedule_execution ===
+  /** Story 57.16: Configuration du step de planification. */
+  schedule_config?: ScheduleStepConfig | null;
 }
 
 const WorkflowStepNode: React.FC<NodeProps> = ({ data, selected }) => {
   const { token } = theme.useToken();
   const nodeData = data as unknown as WorkflowStepNodeData;
+
+  const stepType: WorkflowStepType = nodeData.step_type ?? 'platform';
+
+  // Story 57.13: Primary title for non-platform steps
+  const primaryTitle = useMemo(() => {
+    if (stepType === 'platform') {
+      return nodeData.name ?? nodeData.action_name ?? '';
+    }
+    if (stepType === 'service_call') {
+      const integration = nodeData.integration_type
+        ? (INTEGRATION_LABELS[nodeData.integration_type] ?? nodeData.integration_type)
+        : '?';
+      const op = nodeData.operation
+        ? (OPERATION_LABELS[nodeData.operation] ?? nodeData.operation)
+        : '?';
+      return nodeData.name ?? `${integration} — ${op}`;
+    }
+    if (stepType === 'evaluation') {
+      return nodeData.name ?? (nodeData.policy_name ? nodeData.policy_name : `Politique #${nodeData.policy_id ?? '?'}`);
+    }
+    if (stepType === 'gate') {
+      if (nodeData.gate_type === 'maintenance_window') return nodeData.name ?? 'Fenêtre maintenance';
+      if (nodeData.gate_type === 'approval') return nodeData.name ?? 'Approbation';
+      return nodeData.name ?? 'Gate';
+    }
+    if (stepType === 'http_request') {
+      const url = nodeData.url ? nodeData.url.substring(0, 30) : '?';
+      return nodeData.name ?? `${nodeData.method ?? '?'} ${url}${(nodeData.url?.length ?? 0) > 30 ? '…' : ''}`;
+    }
+    if (stepType === 'schedule_execution') {
+      return nodeData.name ?? nodeData.action_name ?? 'Planifier une exécution';
+    }
+    return nodeData.name ?? '';
+  }, [stepType, nodeData]);
 
   // Execution status colors — subtle, professional palette
   const executionBorderColors: Record<string, string> = {
@@ -88,7 +185,7 @@ const WorkflowStepNode: React.FC<NodeProps> = ({ data, selected }) => {
     if (nodeData.executionStatus) {
       return (
         <div style={{ fontSize: 12 }}>
-          <div style={{ marginBottom: 4, fontWeight: 600 }}>{nodeData.name ?? nodeData.action_name}</div>
+          <div style={{ marginBottom: 4, fontWeight: 600 }}>{primaryTitle}</div>
           <div>Statut: {executionStatusLabels[nodeData.executionStatus] ?? nodeData.executionStatus}</div>
           {nodeData.executionDuration && <div>Durée: {nodeData.executionDuration}</div>}
         </div>
@@ -106,7 +203,7 @@ const WorkflowStepNode: React.FC<NodeProps> = ({ data, selected }) => {
         {/* Exit paths section */}
         {hasExitPaths && (
           <>
-            <div style={{ marginBottom: 4, fontWeight: 600 }}>{nodeData.name ?? nodeData.action_name}</div>
+            <div style={{ marginBottom: 4, fontWeight: 600 }}>{primaryTitle}</div>
             <div>
               <CheckCircleOutlined style={{ color: '#52c41a', marginRight: 4 }} />
               Succès → {nodeData.on_success_step_name || nodeData.on_success_step_id || 'Fin'}
@@ -117,8 +214,8 @@ const WorkflowStepNode: React.FC<NodeProps> = ({ data, selected }) => {
             </div>
           </>
         )}
-        {/* Retry section (Story 16.6) */}
-        {hasRetry && (
+        {/* Retry section (Story 16.6) — platform only */}
+        {hasRetry && stepType === 'platform' && (
           <>
             {hasExitPaths && <Divider style={{ margin: '6px 0' }} />}
             <div>Réessai : {nodeData.retry_max_attempts || 3} tentatives max</div>
@@ -128,7 +225,7 @@ const WorkflowStepNode: React.FC<NodeProps> = ({ data, selected }) => {
         )}
       </div>
     );
-  }, [nodeData]);
+  }, [nodeData, primaryTitle, stepType]);
 
   return (
     <Tooltip title={tooltipContent} placement="top">
@@ -145,7 +242,7 @@ const WorkflowStepNode: React.FC<NodeProps> = ({ data, selected }) => {
           transition: 'border-color 0.3s, box-shadow 0.3s, opacity 0.3s',
         }}
         role="img"
-        aria-label={`Étape: ${nodeData.name ?? nodeData.action_name}`}
+        aria-label={`Étape: ${primaryTitle}`}
       >
         <Handle
           type="target"
@@ -155,18 +252,37 @@ const WorkflowStepNode: React.FC<NodeProps> = ({ data, selected }) => {
           aria-label="Entrée"
         />
 
+        {/* Story 57.13: Step type badge */}
+        <Tag
+          color={STEP_TYPE_COLORS[stepType]}
+          style={{ fontSize: 10, padding: '0 4px', marginBottom: 4, display: 'inline-block', lineHeight: '16px' }}
+        >
+          {STEP_TYPE_LABELS[stepType]}
+        </Tag>
+
         <div style={{ fontWeight: 600, marginBottom: 4, fontSize: 13, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {nodeData.name ?? nodeData.action_name}
+          {primaryTitle}
         </div>
-        {nodeData.name && nodeData.name !== nodeData.action_name && (
+        {/* Story 57.16: Badge schedule_source pour schedule_execution */}
+        {stepType === 'schedule_execution' && nodeData.schedule_config?.schedule_source && (
+          <div style={{ fontSize: 11, color: '#4f46e5', marginTop: 2 }}>
+            {nodeData.schedule_config.schedule_source === 'parameter' && 'Paramètre utilisateur'}
+            {nodeData.schedule_config.schedule_source === 'fixed_offset' && `Offset: ${nodeData.schedule_config.fixed_offset ?? '?'}`}
+            {nodeData.schedule_config.schedule_source === 'recurring' && 'Récurrent'}
+          </div>
+        )}
+        {/* Secondary info for platform steps */}
+        {stepType === 'platform' && nodeData.name && nodeData.name !== nodeData.action_name && (
           <div style={{ fontSize: 11, color: token.colorTextSecondary, marginBottom: 2, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {nodeData.action_name}
           </div>
         )}
-        <div style={{ fontSize: 11, color: token.colorTextTertiary }}>
-          {nodeData.action_engine}
-          {nodeData.action_platform ? ` / ${nodeData.action_platform}` : ''}
-        </div>
+        {stepType === 'platform' && (
+          <div style={{ fontSize: 11, color: token.colorTextTertiary }}>
+            {nodeData.action_engine}
+            {nodeData.action_platform ? ` / ${nodeData.action_platform}` : ''}
+          </div>
+        )}
 
         {/* Execution status icon — small, top-right */}
         {nodeData.executionStatus === 'COMPLETED' && (
@@ -182,8 +298,8 @@ const WorkflowStepNode: React.FC<NodeProps> = ({ data, selected }) => {
           <MinusCircleOutlined style={{ position: 'absolute', top: 8, right: 8, color: '#8c8c8c', fontSize: 13 }} />
         )}
 
-        {/* Story 16.6, AC3: Retry badge visible on the node */}
-        {nodeData.retry_enabled && !nodeData.executionStatus && (
+        {/* Story 16.6, AC3: Retry badge visible on the node (platform only) */}
+        {nodeData.retry_enabled && !nodeData.executionStatus && stepType === 'platform' && (
           <Badge
             count={`Réessai: ${nodeData.retry_max_attempts || 3}×`}
             style={{

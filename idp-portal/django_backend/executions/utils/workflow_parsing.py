@@ -9,6 +9,7 @@ from __future__ import annotations
 import structlog
 
 from catalog.models import Action, ActionStatus
+from catalog.validators import validate_schedule_config
 from core.exceptions import BadRequestError, NotFoundError
 from core.middleware import get_correlation_id
 from core.models import AuditActionType, AuditEntityType
@@ -223,6 +224,23 @@ def validate_workflow_referenced_actions(
       - NotFoundError if any referenced action is missing
       - BadRequestError if any referenced action is not published
     """
+    # Story 57.15: Validate schedule_config for schedule_execution steps
+    steps = workflow_action.execution_steps or []
+    if isinstance(steps, list):
+        for step in steps:
+            if not isinstance(step, dict):
+                continue
+            step_type = step.get('step_type', 'platform')
+            if step_type == 'schedule_execution':
+                schedule_config = step.get('schedule_config')
+                if not schedule_config:
+                    raise BadRequestError(
+                        code="MISSING_SCHEDULE_CONFIG",
+                        message=f"Step {step.get('step_id')!r}: schedule_config requis pour step_type='schedule_execution'",
+                        details={"step_id": step.get('step_id')},
+                    )
+                validate_schedule_config(schedule_config)
+
     referenced_action_ids = extract_workflow_referenced_action_ids(workflow_action)
 
     # MEDIUM: Reject workflow with no referenced actions (Story 4.11 edge case)

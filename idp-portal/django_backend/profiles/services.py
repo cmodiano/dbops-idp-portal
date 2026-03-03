@@ -33,7 +33,7 @@ class ProfileService:
         Create a new profile with validation.
 
         Args:
-            profile_data: Dict with profile fields (name, description, ad_group, is_admin, is_auditor)
+            profile_data: Dict with profile fields (name, description, ad_group, is_admin, is_auditor, is_approver)
             user: Optional user instance for audit
 
         Returns:
@@ -51,6 +51,7 @@ class ProfileService:
                 ad_group=profile_data['ad_group'],
                 is_admin=1 if profile_data.get('is_admin', False) else 0,
                 is_auditor=1 if profile_data.get('is_auditor', False) else 0,
+                is_approver=1 if profile_data.get('is_approver', False) else 0,
             )
 
             # Log profile creation
@@ -158,6 +159,8 @@ class ProfileService:
             profile.is_admin = 1 if profile_update_data['is_admin'] else 0
         if 'is_auditor' in profile_update_data:
             profile.is_auditor = 1 if profile_update_data['is_auditor'] else 0
+        if 'is_approver' in profile_update_data:
+            profile.is_approver = 1 if profile_update_data['is_approver'] else 0
         
         try:
             profile.save()

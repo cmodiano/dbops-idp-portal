@@ -81,7 +81,7 @@ export interface ExecutionResponse {
 export type ExecutionStepStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'SKIPPED';
 
 /** Execution step type (Story 4.6). */
-export type ExecutionStepTypeApi = 'vault' | 'servicenow' | 'platform' | 'prerequisite' | 'verification';
+export type ExecutionStepTypeApi = 'vault' | 'servicenow' | 'platform' | 'prerequisite' | 'verification' | 'schedule_execution';
 
 /** Execution step response from GET /executions/{id}/steps (Story 4.6). */
 export interface ExecutionStepResponse {

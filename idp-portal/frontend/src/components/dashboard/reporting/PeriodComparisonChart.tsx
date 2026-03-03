@@ -53,13 +53,7 @@ interface CustomTooltipProps {
 function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   if (!active || !payload?.length) return null;
   return (
-    <div style={{
-      background: 'var(--color-bg-elevated, #fff)',
-      padding: '8px 12px',
-      border: '1px solid var(--color-border-secondary, #d9d9d9)',
-      borderRadius: 4,
-      fontSize: 13,
-    }}>
+    <div style={{ fontSize: 13 }}>
       <div style={{ fontWeight: 600, marginBottom: 4 }}>{label}</div>
       {payload.map((entry, index) => (
         <div key={index} style={{ color: entry.color }}>

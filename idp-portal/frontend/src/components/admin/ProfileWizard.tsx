@@ -35,6 +35,7 @@ interface ProfileWizardValues {
   ad_group: string;
   is_admin: boolean;
   is_auditor: boolean;
+  is_approver: boolean;
   actions_type: ProfileActionsType;
   action_ids: number[];
   tag_patterns: string[];
@@ -90,6 +91,7 @@ export function ProfileWizard({
       ad_group: editProfile.ad_group,
       is_admin: editProfile.is_admin,
       is_auditor: editProfile.is_auditor,
+      is_approver: editProfile.is_approver,
       actions_type: profileActionsPerms.actions_type,
       action_ids: profileActionsPerms.action_ids ?? [],
       tag_patterns: profileActionsPerms.tag_patterns ?? [],
@@ -140,6 +142,7 @@ export function ProfileWizard({
         ad_group: values.ad_group?.trim() ?? '',
         is_admin: values.is_admin,
         is_auditor: values.is_auditor,
+        is_approver: values.is_approver,
       };
 
       // Create or update profile
@@ -215,6 +218,7 @@ export function ProfileWizard({
           ad_group: '',
           is_admin: false,
           is_auditor: false,
+          is_approver: false,
           actions_type: 'all',
           action_ids: [],
           tag_patterns: [],
@@ -248,6 +252,9 @@ export function ProfileWizard({
             </Form.Item>
             <Form.Item name="is_auditor" label="Auditeur" valuePropName="checked">
               <Switch aria-label="Auditeur" />
+            </Form.Item>
+            <Form.Item name="is_approver" label="Approbateur" valuePropName="checked">
+              <Switch aria-label="Approbateur" />
             </Form.Item>
           </Space>
         </div>

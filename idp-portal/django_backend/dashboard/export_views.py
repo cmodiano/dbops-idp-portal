@@ -14,7 +14,7 @@ from django.db.models import Q, Count, QuerySet
 from django.db.models.functions import TruncDate
 from django.http import HttpResponse
 from django.utils import timezone
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import extend_schema, OpenApiParameter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.views import APIView
@@ -112,6 +112,14 @@ class DashboardExportCSVView(APIView):
     @extend_schema(
         tags=["dashboard"],
         summary="Export CSV des statistiques dashboard",
+        parameters=[
+            OpenApiParameter('scope', str, description='mine (défaut) ou all'),
+            OpenApiParameter('start_date', str, description='Date de début (YYYY-MM-DD)'),
+            OpenApiParameter('end_date', str, description='Date de fin (YYYY-MM-DD)'),
+            OpenApiParameter('engine', str, description='Filtrage par technologie'),
+            OpenApiParameter('environment', str, description='Filtrage par environnement'),
+            OpenApiParameter('tags', str, description='Tags (multi-valeur)'),
+        ],
         responses={200: bytes},
     )
     def get(self, request: Request) -> HttpResponse:
@@ -174,6 +182,14 @@ class DashboardExportPDFView(APIView):
     @extend_schema(
         tags=["dashboard"],
         summary="Export PDF des statistiques dashboard",
+        parameters=[
+            OpenApiParameter('scope', str, description='mine (défaut) ou all'),
+            OpenApiParameter('start_date', str, description='Date de début (YYYY-MM-DD)'),
+            OpenApiParameter('end_date', str, description='Date de fin (YYYY-MM-DD)'),
+            OpenApiParameter('engine', str, description='Filtrage par technologie'),
+            OpenApiParameter('environment', str, description='Filtrage par environnement'),
+            OpenApiParameter('tags', str, description='Tags (multi-valeur)'),
+        ],
         responses={200: bytes},
     )
     def get(self, request: Request) -> HttpResponse:

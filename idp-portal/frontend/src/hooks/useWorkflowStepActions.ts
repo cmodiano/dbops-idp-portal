@@ -13,7 +13,7 @@ export interface UseWorkflowStepActionsOptions {
   actionId?: number;
   isWorkflow: boolean;
   currentStep: number;
-  workflowSteps: Array<{ order: number; name: string | null; referenced_action_id: number }>;
+  workflowSteps: Array<{ order: number; name: string | null; referenced_action_id?: number | null }>;
 }
 
 export interface UseWorkflowStepActionsReturn {

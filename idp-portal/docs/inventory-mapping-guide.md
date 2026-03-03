@@ -57,7 +57,7 @@ def normalize_engine_code(ref_engine_code: str) -> str:
 
 ## 3. Configuration InventoryMapper avec engine_type
 
-### 3.1 Mode multi-tables (recommandé)
+### 3.1 Mode multi-table (recommandé)
 
 La configuration `InventoryMapper` permet de mapper la colonne source contenant le type de moteur vers le concept `engine_type` :
 
@@ -95,28 +95,49 @@ La configuration `InventoryMapper` permet de mapper la colonne source contenant 
 }
 ```
 
-La colonne `ENGINE` de la table source `DBOPS_SERVERS` sera exposée comme `engine_type` dans l'API inventaire.
+La colonne mappée vers `engine_type` (ici `ENGINE` dans `DBOPS_SERVERS`) sera exposée dans l'API inventaire. **Note :** Le filtrage par `engine_type` est pris en charge uniquement en mode multi-table. En mode `flat_table`, `_read_servers_flat_fallback()` ne filtre pas par `engine_type` ; les valeurs proviennent de la colonne mappée (ex. `TYPE`) mais le filtrage RBAC par engine_type ne s'applique qu'en mode multi-table.
 
 **Table de jointure `instances` :** la table des instances fait le lien entre serveurs et bases. Elle contient typiquement `SERVER_ID` et `DB_ID` (ou des colonnes de type nom). Les concepts `server_ref` et `db_ref` dans la config mappent vers ces colonnes ; le portail les utilise pour les jointures et pour filtrer (ex. toutes les instances d’un serveur donné).
 
-### 3.2 Requête SQL générée
+### 3.2 Mode une seule table (flat_table)
 
-Avec la configuration ci-dessus, `InventoryMapper.build_select_clause('servers')` produit :
+Si votre inventaire est dans une seule table avec colonnes `NAME`, `ENVIRONMENT`, `TYPE` :
+
+**Limitation :** Le filtrage par `engine_type` n'est pas supporté en mode `flat_table` ; il est uniquement disponible en mode multi-table (via `query_executor._read_entity_from_config` et `mapper.build_where_clause`).
+
+```json
+{
+  "flat_table": {
+    "table": "DBOPS_INVENTORY",
+    "columns": {
+      "name": "NAME",
+      "environment": "ENVIRONMENT",
+      "type": "TYPE"
+    }
+  }
+}
+```
+
+Adaptez les noms de table et colonnes à votre schéma. Le formulaire « Nouvelle intégration » propose des boutons « Exemple multi-table » et « Exemple une table » pour insérer ces modèles.
+
+### 3.3 Requête SQL générée
+
+Avec la configuration multi-table ci-dessus (section 3.1), `InventoryMapper.build_select_clause('servers')` produit :
 
 ```sql
 SELECT SERVER_ID AS id, HOSTNAME AS name, ENV AS environment, ENGINE AS engine_type
 FROM DBOPS_SERVERS
 ```
 
-### 3.3 Responsabilité de la normalisation
+### 3.4 Responsabilité de la normalisation
 
-Les valeurs `engine_type` retournées dépendent **directement** du contenu de la colonne source (`ENGINE` dans l'exemple). La normalisation est la **responsabilité de l'administrateur d'intégration** lors de la configuration :
+Les valeurs `engine_type` retournées dépendent **directement** du contenu de la colonne mappée vers `engine_type` (en mode multi-table, par ex. `ENGINE` ; en mode `flat_table`, souvent `TYPE`). La normalisation est la **responsabilité de l'administrateur d'intégration** lors de la configuration :
 
 - **Option A (recommandée)** — S'assurer que la colonne source contient des valeurs normalisées (`oracle`, `sql_server`, etc.).
 - **Option B** — Créer une vue SQL qui normalise les valeurs avant exposition.
 - **Option C** — Accepter les valeurs telles quelles (le matching case-insensitive absorbe les différences de casse).
 
-### 3.4 Exemple : vue SQL de normalisation
+### 3.5 Exemple : vue SQL de normalisation
 
 Si la source utilise des formats différents (ex. `MSSQL`, `ORA`, `MS SQL Server`), l'administrateur peut créer une vue :
 
