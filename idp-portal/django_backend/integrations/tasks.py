@@ -334,3 +334,27 @@ def health_check_all_integrations() -> None:
         "health_check_all_dispatched",
         count=dispatched_count,
     )
+
+
+@shared_task
+def warmup_vault_secrets_cache() -> dict[str, int]:
+    """Pre-load Vault secrets for all integrations into the in-memory cache.
+
+    Celery Beat task — runs periodically to keep the TTL cache warm so that
+    execution requests hit the cache instead of calling Vault.
+
+    Also callable at worker startup via ``warmup_vault_secrets_cache.delay()``.
+
+    Returns:
+        Dict with counts: {"total", "ok", "errors", "skipped"}.
+    """
+    import os
+
+    enabled = os.getenv("VAULT_CACHE_WARMUP", "true").lower() in ("true", "1")
+    if not enabled:
+        logger.info("vault_cache_warmup_disabled")
+        return {"total": 0, "ok": 0, "errors": 0, "skipped": 0}
+
+    from services.vault_service import warmup_vault_cache
+
+    return warmup_vault_cache()
