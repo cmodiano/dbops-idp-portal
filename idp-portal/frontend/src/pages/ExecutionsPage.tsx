@@ -254,6 +254,23 @@ export default function ExecutionsPage() {
     <div style={{ padding: 24 }}>
       <Title level={2}>Exécutions</Title>
 
+      {canApprove && pendingApprovals.length > 0 && (
+        <Card
+          id="pending-approvals"
+          title={<Space><SafetyCertificateOutlined style={{ color: token.colorWarning }} /><span>Approbations en attente</span><Tag color="warning">{pendingApprovals.length}</Tag></Space>}
+          style={{
+            marginBottom: 24,
+            borderColor: token.colorWarningBorder,
+            boxShadow: `0 2px 8px ${token.colorWarningBorder}`,
+          }}
+          styles={{
+            header: { background: token.colorWarningBg },
+          }}
+        >
+          <PendingApprovalsList executions={pendingApprovals} loading={pendingApprovalsLoading} onActionComplete={handleApprovalComplete} />
+        </Card>
+      )}
+
       <ExecutionsStatSection
         statsData={statsData} statsLoading={statsLoading}
         timeSeriesData={timeSeriesData} timeSeriesLoading={timeSeriesLoading} filters={filters}
@@ -263,16 +280,6 @@ export default function ExecutionsPage() {
         filters={filters} onApplyFilters={applyFilters}
         onResetFilters={resetFilters} activeFilterCount={activeFilterCount} loading={loading}
       />
-
-      {canApprove && pendingApprovals.length > 0 && (
-        <Card
-          id="pending-approvals"
-          title={<Space><SafetyCertificateOutlined style={{ color: token.colorWarning }} /><span>Approbations en attente</span><Tag color="warning">{pendingApprovals.length}</Tag></Space>}
-          style={{ marginBottom: 24, borderColor: token.colorWarning }}
-        >
-          <PendingApprovalsList executions={pendingApprovals} loading={pendingApprovalsLoading} onActionComplete={handleApprovalComplete} />
-        </Card>
-      )}
 
       <ExecutionsTabs activeScope={activeScope} onScopeChange={handleScopeChange} canViewAll={canViewAll} />
 
