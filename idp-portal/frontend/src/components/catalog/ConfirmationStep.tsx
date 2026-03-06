@@ -62,7 +62,8 @@ export const ConfirmationStep = memo(function ConfirmationStep({
   pageMeEnabled,
   onPageMeChange,
 }: ConfirmationStepProps) {
-  const { isBusinessProfile } = useAuth();
+  const { isBusinessProfile, hasTab } = useAuth();
+  const isAdmin = hasTab?.('admin') ?? false;
   const {
     derivedEnvironment,
     currentImpact,
@@ -174,6 +175,7 @@ export const ConfirmationStep = memo(function ConfirmationStep({
           schedulingError={schedulingError}
           submitting={submitting}
           validation={schedulingValidation}
+          isAdmin={isAdmin}
         />
       )}
     </div>

@@ -19,7 +19,6 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from catalog.models import Action, ActionStatus
-from core.auth_utils import get_user_ad_groups
 from core.exceptions import BadRequestError, NotFoundError, ForbiddenError, InvalidStateError
 from core.pagination import paginate_queryset
 from core.middleware import get_correlation_id
@@ -34,7 +33,7 @@ from executions.serializers import (
     RecurringPatternSerializer,
 )
 from core.environment import EnvironmentHelper
-from core.permissions import IsDBAOrDBOPS
+from core.permissions import IsDBAOrDBOPS, is_admin_user
 from executions.scheduling_service import SchedulingService
 from executions.utils import (
     parse_int,
@@ -43,7 +42,6 @@ from executions.utils import (
     validate_environment_against_inventory,
     calculate_next_execution_date,
 )
-from inventory.services import InventoryService, InventoryServiceError, MAX_TARGETS_FOR_RBAC_FILTER
 
 from croniter import croniter, CroniterBadCronError, CroniterBadDateError
 from drf_spectacular.utils import extend_schema, OpenApiParameter, inline_serializer
@@ -187,6 +185,14 @@ class ScheduledExecutionsView(APIView):
         parameters = payload.get("parameters")
         scheduled_at_raw = payload.get("scheduled_at")
         recurring_pattern = payload.get("recurring_pattern")
+
+        # Story 11.11 AC2/AC3: Recurring patterns are restricted to admin users
+        if recurring_pattern and not is_admin_user(request.user):
+            raise ForbiddenError(
+                code="ADMIN_REQUIRED",
+                message="Les exécutions récurrentes sont réservées aux administrateurs",
+                details={},
+            )
 
         if action_id is None or environment is None:
             raise BadRequestError(
@@ -366,37 +372,25 @@ class ScheduledExecutionUpdateView(APIView):
 
     @extend_schema(
         tags=['scheduling'],
-        summary='Modifier une exécution planifiée (PUT)',
+        summary='Modifier la date d\'une exécution planifiée (PUT) — Story 11.11',
+        description='Seule la date est modifiable : scheduled_at (one-time) ou next_execution_date (récurrent).',
         request=inline_serializer(
             name='ScheduledExecutionPutRequest',
             fields={
                 'scheduled_at': serializers.DateTimeField(
                     required=False,
-                    help_text='Date/heure planifiée (ISO 8601)',
+                    help_text='Date/heure planifiée (ISO 8601) — one-time uniquement',
                 ),
-                'environment': serializers.CharField(
+                'next_execution_date': serializers.DateTimeField(
                     required=False,
-                    help_text='Environnement cible',
-                ),
-                'target_names': serializers.ListField(
-                    child=serializers.CharField(),
-                    required=False,
-                    help_text='Liste de noms de targets',
-                ),
-                'parameters': serializers.DictField(
-                    required=False,
-                    help_text='Paramètres d\'exécution',
-                ),
-                'recurring_pattern': serializers.DictField(
-                    required=False,
-                    help_text='Pattern récurrent: {pattern_type, pattern_config}',
+                    help_text='Prochaine date d\'exécution (ISO 8601) — récurrent uniquement',
                 ),
             },
         ),
         responses={200: ScheduledExecutionSerializer},
     )
     def put(self, request: Request, scheduled_execution_id: int) -> Response:
-        """PUT /scheduled-executions/{id} - update pending scheduled execution (Story 13.8, AC4)."""
+        """PUT /scheduled-executions/{id} - update pending scheduled execution date only (Story 11.11, AC1)."""
         try:
             se = ScheduledExecution.objects.select_related("action", "user").select_related("recurringpattern").get(
                 id=scheduled_execution_id
@@ -424,122 +418,64 @@ class ScheduledExecutionUpdateView(APIView):
             )
 
         body = request.data if isinstance(request.data, dict) else {}
-        action = se.action
-        if not action:
-            raise NotFoundError(
-                code="ACTION_NOT_FOUND",
-                message="Action introuvable",
-                details={"action_id": se.action_id},
-            )
 
-        scheduled_at_raw = body.get("scheduled_at")
-        parameters = body.get("parameters")
-        environment = body.get("environment")
-        target_names = body.get("target_names")
-        recurring_pattern_payload = body.get("recurring_pattern")
-        now = timezone.now()
-        se.updated_at = now
+        # Story 11.11 AC1: Only date fields are modifiable — reject forbidden fields
+        FORBIDDEN_FIELDS = {'environment', 'target_names', 'parameters', 'recurring_pattern'}
+        forbidden_present = FORBIDDEN_FIELDS & set(body.keys())
+        if forbidden_present:
+            raise BadRequestError(
+                code="FIELD_NOT_MODIFIABLE",
+                message="Seule la date peut être modifiée (scheduled_at pour one-time, next_execution_date pour récurrent)",
+                details={"forbidden_fields": sorted(forbidden_present)},
+            )
 
         rp = getattr(se, "recurringpattern", None)
-        if scheduled_at_raw is not None and rp is None:
-            scheduled_at = parse_iso_datetime(scheduled_at_raw, name="scheduled_at")
-            if scheduled_at is not None and scheduled_at <= timezone.now().astimezone(UTC):
-                raise BadRequestError(
-                    code="INVALID_SCHEDULED_DATE",
-                    message="scheduled_at doit être dans le futur",
-                    details={"scheduled_at": scheduled_at_raw},
-                )
-            se.scheduled_at = scheduled_at
-
-        if environment is not None:
-            validate_environment_against_inventory(environment, user_id=request.user.id)
-            se.environment = EnvironmentHelper.normalize(environment)
-
-        if target_names is not None:
-            if not isinstance(target_names, list):
-                raise BadRequestError(
-                    code="BAD_REQUEST",
-                    message="target_names doit être une liste",
-                    details={"target_names": target_names},
-                )
-            if len(target_names) == 0:
-                current_params = se.get_parameters() or {}
-                if not isinstance(current_params, dict):
-                    current_params = {}  # type: ignore[unreachable]
-                new_params = {k: v for k, v in current_params.items() if k != "_targets"}
-                new_params["_targets"] = []
-                se.set_parameters(new_params)
-            else:
-                ad_groups = get_user_ad_groups(request.user)
-                inventory_service = InventoryService()
-                try:
-                    allowed_targets, _total, inventory_truncated = inventory_service.list_targets_for_user(
-                        user_id=request.user.id,  # type: ignore[arg-type]
-                        ad_groups=ad_groups,
-                        page=1,
-                        page_size=MAX_TARGETS_FOR_RBAC_FILTER,
-                    )
-                except InventoryServiceError as e:
-                    exec_logger.error(
-                        "inventory_service_error_during_scheduled_update",
-                        error=str(e),
-                        user_id=request.user.id,
-                    )
-                    raise BadRequestError(
-                        code="INVENTORY_UNAVAILABLE",
-                        message="Service inventaire indisponible",
-                        details={"error": str(e)},
-                    )
-                allowed_targets_map = {t["name"]: t for t in allowed_targets}
-                environments_found = set()
-                for name in target_names:
-                    if name not in allowed_targets_map:
-                        raise ForbiddenError(
-                            code="FORBIDDEN",
-                            message=f"Cible non autorisée: {name}",
-                            details={"target_name": name, "inventory_truncated": inventory_truncated},
-                        )
-                    environments_found.add(allowed_targets_map[name]["environment"])
-                if len(environments_found) > 1:
-                    raise BadRequestError(
-                        code="MIXED_ENVIRONMENTS",
-                        message="Les cibles doivent appartenir au même environnement",
-                        details={"environments": list(environments_found)},
-                    )
-                se.environment = EnvironmentHelper.normalize(list(environments_found)[0])
-                current_params = se.get_parameters() or {}
-                if not isinstance(current_params, dict):
-                    current_params = {}  # type: ignore[unreachable]
-                new_params = {**current_params, "_targets": target_names}
-                se.set_parameters(new_params)
-        elif parameters is not None:
-            current_params = se.get_parameters() or {}
-            if not isinstance(current_params, dict):
-                current_params = {}  # type: ignore[unreachable]
-            incoming = parameters if isinstance(parameters, dict) else {}
-            sanitized = {k: v for k, v in incoming.items() if not k.startswith("_")}
-            merged = {**current_params, **sanitized}
-            se.set_parameters(merged)
-
-        if recurring_pattern_payload is not None and rp is not None:
-            pattern_type = (recurring_pattern_payload.get("pattern_type") or "").lower()
-            pattern_config = recurring_pattern_payload.get("pattern_config") or {}
-            next_execution_date = calculate_next_execution_date(
-                pattern_type, pattern_config, timezone.now()
-            )
-            rp.pattern_type = pattern_type
-            rp.set_pattern_config(pattern_config)
-            rp.next_execution_date = next_execution_date
-            rp.updated_at = now
-            rp.save(update_fields=["pattern_type", "pattern_config", "next_execution_date", "updated_at"])
-
+        now = timezone.now()
+        se.updated_at = now
         update_fields = ["updated_at"]
-        if scheduled_at_raw is not None and rp is None:
-            update_fields.append("scheduled_at")
-        if environment is not None or target_names is not None:
-            update_fields.extend(["environment", "parameters"])
-        elif parameters is not None:
-            update_fields.append("parameters")
+
+        if rp is None:
+            # One-time: reject next_execution_date (wrong field for this type)
+            if "next_execution_date" in body:
+                raise BadRequestError(
+                    code="FIELD_NOT_APPLICABLE",
+                    message="next_execution_date n'est pas applicable pour une exécution one-time. Utilisez scheduled_at.",
+                    details={},
+                )
+            # One-time: update scheduled_at
+            scheduled_at_raw = body.get("scheduled_at")
+            if scheduled_at_raw is not None:
+                scheduled_at = parse_iso_datetime(scheduled_at_raw, name="scheduled_at")
+                if scheduled_at is not None and scheduled_at <= timezone.now().astimezone(UTC):
+                    raise BadRequestError(
+                        code="INVALID_SCHEDULED_DATE",
+                        message="scheduled_at doit être dans le futur",
+                        details={"scheduled_at": scheduled_at_raw},
+                    )
+                se.scheduled_at = scheduled_at
+                update_fields.append("scheduled_at")
+        else:
+            # Recurring: reject scheduled_at (wrong field for this type)
+            if "scheduled_at" in body:
+                raise BadRequestError(
+                    code="FIELD_NOT_APPLICABLE",
+                    message="scheduled_at n'est pas applicable pour une exécution récurrente. Utilisez next_execution_date.",
+                    details={},
+                )
+            # Recurring: update next_execution_date
+            next_exec_raw = body.get("next_execution_date")
+            if next_exec_raw is not None:
+                next_exec = parse_iso_datetime(next_exec_raw, name="next_execution_date")
+                if next_exec is not None and next_exec <= timezone.now().astimezone(UTC):
+                    raise BadRequestError(
+                        code="INVALID_SCHEDULED_DATE",
+                        message="next_execution_date doit être dans le futur",
+                        details={"next_execution_date": next_exec_raw},
+                    )
+                rp.next_execution_date = next_exec
+                rp.updated_at = now
+                rp.save(update_fields=["next_execution_date", "updated_at"])
+
         se.save(update_fields=list(dict.fromkeys(update_fields)))
 
         se = ScheduledExecution.objects.select_related("action").select_related("recurringpattern").get(

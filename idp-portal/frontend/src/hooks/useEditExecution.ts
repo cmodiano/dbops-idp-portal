@@ -1,22 +1,18 @@
 /**
- * useEditExecution Hook — Story 26.6 AC3
+ * useEditExecution Hook — Story 26.6 AC3, Story 11.11 AC4
  *
- * Extracted from CalendarPage.tsx. Manages edit modal state, form instance,
- * target options loading, and API call for scheduled execution updates.
+ * Manages edit modal state and API call for scheduled execution date updates.
+ * Story 11.11: Only date field is editable (scheduled_at for one-time, next_execution_date for recurring).
  */
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { App, Form } from 'antd';
 import type { FormInstance } from 'antd';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 
 import { updateScheduledExecution } from '../services/scheduled_execution_service';
-import { fetchInventoryTargets } from '../services/execution_service';
 import { ApiError } from '../services/api_client';
-import { useAuth } from '../contexts/AuthContext';
-import { getDisplayParameters } from '../utils/calendarEventUtils';
-import { getEnvironmentLabel } from '../utils/environmentHelpers';
-import type { ScheduledExecutionListItem, ExecutionEnvironment, ScheduledExecutionUpdateRequest } from '../types/api';
+import type { ScheduledExecutionListItem, ScheduledExecutionUpdateRequest } from '../types/api';
 
 dayjs.extend(utc);
 
@@ -25,7 +21,6 @@ export interface UseEditExecutionReturn {
   editModalVisible: boolean;
   editLoading: boolean;
   editForm: FormInstance;
-  targetOptions: { label: string; value: string }[];
   openEditModal: (exec: ScheduledExecutionListItem) => void;
   closeEditModal: () => void;
   submitEdit: () => Promise<void>;
@@ -36,31 +31,27 @@ export function useEditExecution(
   onClosePopover?: () => void,
 ): UseEditExecutionReturn {
   const { notification } = App.useApp();
-  const { user } = useAuth();
   const [editForm] = Form.useForm();
 
   const [executionToEdit, setExecutionToEdit] = useState<ScheduledExecutionListItem | null>(null);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
-  const [targetOptions, setTargetOptions] = useState<{ label: string; value: string }[]>([]);
 
   const openEditModal = useCallback((exec: ScheduledExecutionListItem) => {
     setExecutionToEdit(exec);
     setEditModalVisible(true);
-    const targets = (exec.parameters?._targets as string[] | undefined) ?? [];
-    const rp = exec.recurring_pattern;
-    const pc = rp?.pattern_config as { hour?: number; minute?: number; day_of_week?: number; cron_expression?: string } | undefined;
-    editForm.setFieldsValue({
-      scheduled_at: exec.scheduled_at ? dayjs.utc(exec.scheduled_at) : undefined,
-      parameters_json: JSON.stringify(getDisplayParameters(exec.parameters ?? null), null, 2),
-      target_names: Array.isArray(targets) ? targets : [],
-      environment: exec.environment,
-      pattern_type: rp?.pattern_type ?? 'daily',
-      pattern_hour: pc?.hour ?? 0,
-      pattern_minute: pc?.minute ?? 0,
-      pattern_day_of_week: pc?.day_of_week ?? 1,
-      cron_expression: pc?.cron_expression ?? '',
-    });
+    const isRecurring = !!exec.recurring_pattern;
+    if (isRecurring) {
+      editForm.setFieldsValue({
+        next_execution_date: exec.recurring_pattern?.next_execution_date
+          ? dayjs.utc(exec.recurring_pattern.next_execution_date)
+          : undefined,
+      });
+    } else {
+      editForm.setFieldsValue({
+        scheduled_at: exec.scheduled_at ? dayjs.utc(exec.scheduled_at) : undefined,
+      });
+    }
   }, [editForm]);
 
   const closeEditModal = useCallback(() => {
@@ -68,72 +59,22 @@ export function useEditExecution(
     setExecutionToEdit(null);
   }, []);
 
-  // Load target options when edit modal opens
-  useEffect(() => {
-    if (!editModalVisible || !executionToEdit || !user) return;
-    fetchInventoryTargets()
-      .then((items) =>
-        setTargetOptions(
-          items.map((t) => ({
-            label: `${t.name} (${getEnvironmentLabel(t.environment ?? '')})`,
-            value: t.name,
-          }))
-        )
-      )
-      .catch(() => setTargetOptions([]));
-  }, [editModalVisible, executionToEdit, user]);
-
   const submitEdit = useCallback(async () => {
     if (!executionToEdit) return;
     try {
       const values = await editForm.validateFields();
-      const payload: ScheduledExecutionUpdateRequest = {};
       const isRecurring = !!executionToEdit.recurring_pattern;
+      const payload: ScheduledExecutionUpdateRequest = {};
 
-      if (!isRecurring && values.scheduled_at) {
+      if (isRecurring && values.next_execution_date) {
+        payload.next_execution_date = values.next_execution_date.utc().format();
+      } else if (!isRecurring && values.scheduled_at) {
         payload.scheduled_at = values.scheduled_at.utc().format();
-      }
-      if (values.parameters_json) {
-        try {
-          const parsed = JSON.parse(values.parameters_json as string);
-          if (parsed && typeof parsed === 'object') {
-            const existing = executionToEdit.parameters ?? {};
-            payload.parameters = { ...existing, ...parsed };
-          }
-        } catch {
-          // keep existing params if JSON invalid
-        }
-      }
-      if (values.target_names != null && Array.isArray(values.target_names)) {
-        payload.target_names = values.target_names;
-      }
-      if (payload.target_names == null && values.environment) {
-        payload.environment = values.environment as ExecutionEnvironment;
-      }
-      if (isRecurring && values.pattern_type) {
-        const patternType = values.pattern_type as 'daily' | 'weekly' | 'cron';
-        if (patternType === 'cron' && values.cron_expression) {
-          payload.recurring_pattern = { pattern_type: 'cron', pattern_config: { cron_expression: values.cron_expression } };
-        } else if (patternType === 'daily') {
-          payload.recurring_pattern = {
-            pattern_type: 'daily',
-            pattern_config: { hour: values.pattern_hour ?? 0, minute: values.pattern_minute ?? 0 },
-          };
-        } else if (patternType === 'weekly') {
-          payload.recurring_pattern = {
-            pattern_type: 'weekly',
-            pattern_config: {
-              day_of_week: values.pattern_day_of_week ?? 1,
-              hour: values.pattern_hour ?? 0,
-              minute: values.pattern_minute ?? 0,
-            },
-          };
-        }
       }
 
       setEditLoading(true);
       await updateScheduledExecution(executionToEdit.scheduled_execution_id, payload);
-      notification.success({ title: 'Succès', description: 'Exécution planifiée modifiée avec succès' });
+      notification.success({ message: 'Succès', description: 'Exécution planifiée modifiée avec succès' });
       setEditModalVisible(false);
       setExecutionToEdit(null);
       onClosePopover?.();
@@ -145,23 +86,14 @@ export function useEditExecution(
       const msg = (err as Error).message ?? '';
       const errorBody = apiErr?.responseBody?.error;
       const description = (errorBody?.message ?? msg) || "Une erreur est survenue lors de la modification";
-      if (status === 400 && errorBody?.details && typeof errorBody.details === 'object') {
-        const details = errorBody.details as Record<string, unknown>;
-        editForm.setFields(
-          Object.entries(details).map(([name, value]) => ({
-            name,
-            errors: [typeof value === 'string' ? value : JSON.stringify(value)],
-          }))
-        );
-      }
       if (status === 403) {
-        notification.error({ title: 'Permission refusée', description: "Vous n'avez pas la permission de modifier cette exécution planifiée" });
+        notification.error({ message: 'Permission refusée', description: "Vous n'avez pas la permission de modifier cette exécution planifiée" });
       } else if (status === 404) {
-        notification.error({ title: 'Erreur', description: 'Exécution planifiée introuvable' });
+        notification.error({ message: 'Erreur', description: 'Exécution planifiée introuvable' });
       } else if (status === 400) {
-        notification.error({ title: 'Erreur de validation', description });
+        notification.error({ message: 'Erreur de validation', description });
       } else {
-        notification.error({ title: 'Erreur', description });
+        notification.error({ message: 'Erreur', description });
       }
     } finally {
       setEditLoading(false);
@@ -173,7 +105,6 @@ export function useEditExecution(
     editModalVisible,
     editLoading,
     editForm,
-    targetOptions,
     openEditModal,
     closeEditModal,
     submitEdit,

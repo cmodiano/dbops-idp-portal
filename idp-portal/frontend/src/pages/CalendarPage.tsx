@@ -92,7 +92,6 @@ export function CalendarPage() {
     editModalVisible,
     editLoading,
     editForm,
-    targetOptions,
     openEditModal,
     closeEditModal,
     submitEdit,
@@ -253,7 +252,6 @@ export function CalendarPage() {
         open={editModalVisible}
         loading={editLoading}
         form={editForm}
-        targetOptions={targetOptions}
         onCancel={closeEditModal}
         onSubmit={submitEdit}
       />

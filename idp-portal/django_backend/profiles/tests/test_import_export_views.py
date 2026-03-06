@@ -34,11 +34,7 @@ class TestProfileImportExportViews(TestCase):
             profile='dba'
         )
         
-        # Story 56.7: SAML string path uses DB lookup — create DBOPS Profile with is_admin=1
-        # so Profile.objects.filter(name__iexact='dbops').first() returns an admin profile
-        Profile.objects.create(name='DBOPS', is_admin=1, ad_group='GRP-DBOPS')
-        # AC5: DBA has is_admin=0 in DB — regular_user(profile='dba') must be denied via DB flag
-        Profile.objects.create(name='DBA', is_admin=0, ad_group='GRP-DBA')
+        # Profile records (DBOPS, DBA) are created by conftest._ensure_admin_profiles
 
         # Create test profile
         self.profile = Profile.objects.create(
