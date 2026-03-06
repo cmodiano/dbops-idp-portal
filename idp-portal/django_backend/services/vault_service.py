@@ -635,7 +635,9 @@ def warmup_vault_cache() -> dict[str, int]:
     seen: set[tuple[str, int | None]] = set()
 
     for row in integrations:
-        dedup_key = (row.credential_ref, row.secret_service_id)
+        if row.credential_ref is None:
+            continue
+        dedup_key: tuple[str, int | None] = (row.credential_ref, row.secret_service_id)
         if dedup_key in seen:
             stats["skipped"] += 1
             continue
