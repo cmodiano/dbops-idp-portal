@@ -16,6 +16,7 @@ from catalog.models import ActionStatus, ActionItemType, ActionEngine, ActionPla
 from catalog.services import CatalogService
 from reference.models import RefEngine
 from integrations.models import IntegrationTypeCatalogue, IntegrationRole
+from profiles.models import Profile
 from tests.factories import UserFactory
 
 
@@ -53,6 +54,10 @@ class TestBusinessRulePoliciesAPI(TestCase):
 
     def setUp(self):
         """Set up test data."""
+        Profile.objects.get_or_create(
+            name='DBOPS',
+            defaults={'ad_group': 'CN=DBOPS,OU=Groups,DC=example,DC=com', 'is_admin': 1, 'is_auditor': 0},
+        )
         self.client = APIClient()
 
         # Create reference data

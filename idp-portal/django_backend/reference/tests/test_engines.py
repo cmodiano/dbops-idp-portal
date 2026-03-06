@@ -9,12 +9,21 @@ from rest_framework import status
 
 from reference.models import RefEngine
 from idp_auth.models import User
+from profiles.models import Profile
 
 
 class RefEngineAdminPatchTests(APITestCase):
     """Tests for PATCH /api/v1/admin/engines/{pk}/ (AC6)."""
 
     def setUp(self):
+        Profile.objects.get_or_create(
+            name='DBOPS',
+            defaults={'ad_group': 'CN=DBOPS,OU=Groups,DC=example,DC=com', 'is_admin': 1, 'is_auditor': 0},
+        )
+        Profile.objects.get_or_create(
+            name='DBA',
+            defaults={'ad_group': 'CN=DBA,OU=Groups,DC=example,DC=com', 'is_admin': 0, 'is_auditor': 0},
+        )
         self.dbops_user = User.objects.create(username='dbops', profile='DBOPS')
         self.regular_user = User.objects.create(username='regular', profile='DBA')
         self.engine = RefEngine.objects.create(
@@ -130,6 +139,14 @@ class RefEngineListAPIIconUrlTests(APITestCase):
     """Tests for icon_url exposure in GET /api/v1/reference/engines/ (AC2, AC4)."""
 
     def setUp(self):
+        Profile.objects.get_or_create(
+            name='DBOPS',
+            defaults={'ad_group': 'CN=DBOPS,OU=Groups,DC=example,DC=com', 'is_admin': 1, 'is_auditor': 0},
+        )
+        Profile.objects.get_or_create(
+            name='DBA',
+            defaults={'ad_group': 'CN=DBA,OU=Groups,DC=example,DC=com', 'is_admin': 0, 'is_auditor': 0},
+        )
         self.user = User.objects.create(username='testuser', profile='DBA')
         self.client.force_authenticate(self.user)
 

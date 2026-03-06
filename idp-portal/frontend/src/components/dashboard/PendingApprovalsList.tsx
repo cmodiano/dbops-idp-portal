@@ -20,9 +20,113 @@ import { usePendingApprovals } from '../../hooks/usePendingApprovals';
 import { getEnvironmentBadgeColor } from '../../utils/executionRenderers';
 import { getEnvironmentLabel } from '../../utils/environmentHelpers';
 import { STYLE_TOKENS } from '../../theme/styleTokens';
+import { humanizeKey, formatParamValue, partitionParameters, ENV_CONFIG_LABELS, IMPACT_LEVEL_LABELS } from './approvalContextUtils';
 
 const { Text } = Typography;
 const { TextArea } = Input;
+
+// === ApprovalContext component (Story 58.6, AC4) ===
+
+interface ApprovalContextProps {
+  parameters: Record<string, unknown> | null;
+  targets?: { target_type: string; target_id: string; target_name: string }[];
+  compact?: boolean;
+}
+
+function ApprovalContext({ parameters, targets, compact }: ApprovalContextProps) {
+  const { targets: paramTargets, envConfig, stepParams, businessParams } = partitionParameters(parameters);
+
+  // Use targets prop (rich objects) first, fallback to _targets from parameters
+  const hasRichTargets = targets && targets.length > 0;
+  const hasFallbackTargets = !hasRichTargets && paramTargets.length > 0;
+  const hasBusinessParams = Object.keys(businessParams).length > 0;
+  const hasStepParams = stepParams && Object.keys(stepParams).length > 0;
+  const hasEnvConfig = envConfig && Object.keys(envConfig).length > 0;
+  const hasAnyContent = hasRichTargets || hasFallbackTargets || hasBusinessParams || hasStepParams || hasEnvConfig;
+
+  if (!hasAnyContent) {
+    return <Text type="secondary" style={{ fontStyle: 'italic', fontSize: compact ? 12 : undefined }}>Aucun paramètre</Text>;
+  }
+
+  const containerStyle = compact
+    ? { fontSize: 12 }
+    : { padding: 8, background: '#f5f5f5', borderRadius: 4, fontSize: 12 };
+
+  const formatEnvConfigValue = (key: string, value: unknown): string => {
+    if (key === 'impact_level' && typeof value === 'string') {
+      return IMPACT_LEVEL_LABELS[value] || humanizeKey(value);
+    }
+    return formatParamValue(value);
+  };
+
+  return (
+    <div style={containerStyle}>
+      {/* Targets section */}
+      {hasRichTargets && (
+        <div style={{ marginBottom: 4 }}>
+          <Text strong style={{ fontSize: 12 }}>Cibles :</Text>{' '}
+          {targets!.map(t => (
+            <Tag key={`${t.target_type ?? 'target'}-${t.target_id}`} style={{ marginBottom: 2 }}>{t.target_name || t.target_id}</Tag>
+          ))}
+        </div>
+      )}
+      {hasFallbackTargets && (
+        <div style={{ marginBottom: 4 }}>
+          <Text strong style={{ fontSize: 12 }}>Cibles :</Text>{' '}
+          {paramTargets.map(name => (
+            <Tag key={name} style={{ marginBottom: 2 }}>{name}</Tag>
+          ))}
+        </div>
+      )}
+
+      {/* Business parameters */}
+      {hasBusinessParams && (
+        <div style={{ marginBottom: 4 }}>
+          <Text strong style={{ fontSize: 12 }}>Paramètres :</Text>
+          {Object.entries(businessParams).map(([k, v]) => (
+            <div key={k} style={{ fontSize: 12, paddingLeft: compact ? 0 : 8 }}>
+              <Text type="secondary">{humanizeKey(k)} :</Text> {formatParamValue(v)}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Workflow step parameters */}
+      {hasStepParams && (
+        <div style={{ marginBottom: 4 }}>
+          <Text strong style={{ fontSize: 12 }}>Paramètres par étape :</Text>
+          {Object.entries(stepParams!).map(([stepOrder, stepData]) => {
+            const params = stepData && typeof stepData === 'object' && 'parameters' in stepData
+              ? (stepData as { parameters: Record<string, unknown> }).parameters
+              : null;
+            return (
+            <div key={stepOrder} style={{ fontSize: 12, paddingLeft: compact ? 0 : 8 }}>
+              <Text type="secondary">Étape {stepOrder} :</Text>
+              {params && Object.entries(params).map(([pk, pv]) => (
+                <div key={pk} style={{ paddingLeft: compact ? 8 : 16 }}>
+                  {humanizeKey(pk)} : {formatParamValue(pv)}
+                </div>
+              ))}
+            </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Env config */}
+      {hasEnvConfig && (
+        <div>
+          <Text strong style={{ fontSize: 12 }}>Configuration :</Text>
+          {Object.entries(envConfig!).map(([k, v]) => (
+            <div key={k} style={{ fontSize: 12, paddingLeft: compact ? 0 : 8 }}>
+              <Text type="secondary">{ENV_CONFIG_LABELS[k] || humanizeKey(k)} :</Text> {formatEnvConfigValue(k, v)}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface PendingApprovalsListProps {
   executions: ExecutionResponse[];
@@ -102,7 +206,7 @@ export function PendingApprovalsList({
       key: 'environment',
       render: (env: string | null) => (
         <Tag color={getEnvironmentBadgeColor(env)}>
-          {(env ?? '').toUpperCase()}
+          {getEnvironmentLabel(env ?? '')}
         </Tag>
       ),
     },
@@ -111,22 +215,7 @@ export function PendingApprovalsList({
       key: 'context',
       render: (_: unknown, record: ExecutionResponse) => (
         <Space orientation="vertical" size={2} style={{ fontSize: 12 }}>
-          {record.parameters && Object.keys(record.parameters).length > 0 ? (
-            <div>
-              {Object.entries(record.parameters).map(([k, v]) => (
-                <div key={k}><Text type="secondary">{k}:</Text> {typeof v === 'object' && v !== null ? JSON.stringify(v) : String(v)}</div>
-              ))}
-            </div>
-          ) : (
-            <Text type="secondary" style={{ fontStyle: 'italic' }}>Aucun paramètre</Text>
-          )}
-          {record.targets && record.targets.length > 0 ? (
-            <div>
-              {record.targets.map(t => (
-                <Tag key={`${t.target_type ?? 'target'}-${t.target_id}`} style={{ marginBottom: 2 }}>{t.target_name || t.target_id}</Tag>
-              ))}
-            </div>
-          ) : null}
+          <ApprovalContext parameters={record.parameters} targets={record.targets} compact />
         </Space>
       ),
     },
@@ -208,24 +297,7 @@ export function PendingApprovalsList({
             <p style={{ color: '#666', fontSize: 13 }}>
               L'exécution sera lancée immédiatement après approbation.
             </p>
-            {selectedExecution.parameters && Object.keys(selectedExecution.parameters).length > 0 && (
-              <div style={{ marginBottom: 8, padding: 8, background: '#f5f5f5', borderRadius: 4 }}>
-                <Text strong style={{ fontSize: 12 }}>Paramètres :</Text>
-                {Object.entries(selectedExecution.parameters).map(([k, v]) => (
-                  <div key={k} style={{ fontSize: 12 }}>
-                    <Text type="secondary">{k}:</Text> {typeof v === 'object' && v !== null ? JSON.stringify(v) : String(v)}
-                  </div>
-                ))}
-              </div>
-            )}
-            {selectedExecution.targets && selectedExecution.targets.length > 0 && (
-              <div style={{ marginBottom: 8 }}>
-                <Text strong style={{ fontSize: 12 }}>Targets :</Text>{' '}
-                {selectedExecution.targets.map(t => (
-                  <Tag key={`${t.target_type ?? 'target'}-${t.target_id}`}>{t.target_name || t.target_id}</Tag>
-                ))}
-              </div>
-            )}
+            <ApprovalContext parameters={selectedExecution.parameters} targets={selectedExecution.targets} />
           </div>
         )}
         <TextArea
@@ -262,24 +334,7 @@ export function PendingApprovalsList({
             <p style={{ color: '#666', fontSize: 13 }}>
               Le demandeur sera notifié du refus.
             </p>
-            {selectedExecution.parameters && Object.keys(selectedExecution.parameters).length > 0 && (
-              <div style={{ marginBottom: 8, padding: 8, background: '#f5f5f5', borderRadius: 4 }}>
-                <Text strong style={{ fontSize: 12 }}>Paramètres :</Text>
-                {Object.entries(selectedExecution.parameters).map(([k, v]) => (
-                  <div key={k} style={{ fontSize: 12 }}>
-                    <Text type="secondary">{k}:</Text> {typeof v === 'object' && v !== null ? JSON.stringify(v) : String(v)}
-                  </div>
-                ))}
-              </div>
-            )}
-            {selectedExecution.targets && selectedExecution.targets.length > 0 && (
-              <div style={{ marginBottom: 8 }}>
-                <Text strong style={{ fontSize: 12 }}>Targets :</Text>{' '}
-                {selectedExecution.targets.map(t => (
-                  <Tag key={`${t.target_type ?? 'target'}-${t.target_id}`}>{t.target_name || t.target_id}</Tag>
-                ))}
-              </div>
-            )}
+            <ApprovalContext parameters={selectedExecution.parameters} targets={selectedExecution.targets} />
           </div>
         )}
         <TextArea

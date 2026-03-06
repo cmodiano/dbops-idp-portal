@@ -404,15 +404,15 @@ class TestUserDataIsolation:
         assert isolation_setup['exec_b'].id in exec_ids
         assert isolation_setup['exec_a'].id not in exec_ids
 
-    def test_dba_user_can_see_all_executions(self, isolation_setup):
-        """DBA user with scope=all sees all executions."""
+    def test_dba_user_scope_all_falls_back_to_mine(self, isolation_setup):
+        """DBA (is_admin=0) with scope=all gets only own executions (AC3 data isolation)."""
         client = make_auth_client(isolation_setup['token_a'])
         response = client.get('/api/v1/executions/?scope=all')
         assert response.status_code == status.HTTP_200_OK
         data = response.json()['data']
         exec_ids = [e['id'] for e in data]
         assert isolation_setup['exec_a'].id in exec_ids
-        assert isolation_setup['exec_b'].id in exec_ids
+        assert isolation_setup['exec_b'].id not in exec_ids
 
     def test_dbops_user_can_see_all_executions(self, isolation_setup):
         """DBOPS user with scope=all sees all executions."""

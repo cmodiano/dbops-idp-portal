@@ -12,6 +12,7 @@ from rest_framework.test import APIClient
 
 from catalog.models import Action, ActionStatus, ActionMutex
 from idp_auth.models import User
+from profiles.models import Profile
 
 
 @pytest.mark.django_db
@@ -19,6 +20,10 @@ class TestStory255AdminMutexAPI(TestCase):
     """Task 4.3: Admin API CRUD tests for mutex rules."""
 
     def setUp(self):
+        Profile.objects.get_or_create(
+            name='DBOPS',
+            defaults={'ad_group': 'CN=DBOPS,OU=Groups,DC=example,DC=com', 'is_admin': 1, 'is_auditor': 0},
+        )
         self.client = APIClient()
         self.user = User.objects.create(username='admin_mutex_user', profile='DBOPS')
         self.client.force_authenticate(user=self.user)

@@ -16,13 +16,19 @@ from catalog.validation import (
 )
 from reference.models import RefEngine
 from integrations.models import IntegrationTypeCatalogue, IntegrationRole
+from profiles.models import Profile
 from tests.factories import UserFactory
+
 
 class CatalogValidationTests(TestCase):
     """Tests for catalog validation against reference tables."""
 
     def setUp(self):
         """Set up test data."""
+        Profile.objects.get_or_create(
+            name='DBOPS',
+            defaults={'ad_group': 'CN=DBOPS,OU=Groups,DC=example,DC=com', 'is_admin': 1, 'is_auditor': 0},
+        )
         self.client = APIClient()
         self.user = UserFactory(
             username='testuser',

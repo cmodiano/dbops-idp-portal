@@ -15,6 +15,7 @@ from rest_framework import status as http_status
 from catalog.serializers import ActionSerializer, ActionCreateSerializer
 from integrations.models import IntegrationRole
 from reference.models import RefEngine
+from profiles.models import Profile
 from tests.factories import (
     UserFactory,
     ActionFactory,
@@ -270,6 +271,10 @@ class TestActionPlatformIntegrationE2E(TestCase):
 
     def setUp(self):
         """Set up reference data and API client."""
+        Profile.objects.get_or_create(
+            name='DBOPS',
+            defaults={'ad_group': 'CN=DBOPS,OU=Groups,DC=example,DC=com', 'is_admin': 1, 'is_auditor': 0},
+        )
         self.client = APIClient()
         self.dbops_user = UserFactory(username='dbops_user', profile='DBOPS')
         self.client.force_authenticate(user=self.dbops_user)

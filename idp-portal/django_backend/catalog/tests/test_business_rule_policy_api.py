@@ -8,6 +8,7 @@ from rest_framework.test import APIClient
 from tests.factories import UserFactory
 from catalog.models import BusinessRulePolicy, Action
 from core.models import AuditLog, AuditActionType
+from profiles.models import Profile
 
 
 VALID_POLICY_JSON = {
@@ -50,6 +51,10 @@ class TestBusinessRulePolicyAPI(TestCase):
     """Tests for CRUD operations on BusinessRulePolicy (AC#4, AC#9)."""
 
     def setUp(self):
+        Profile.objects.get_or_create(
+            name='DBOPS',
+            defaults={'ad_group': 'CN=DBOPS,OU=Groups,DC=example,DC=com', 'is_admin': 1, 'is_auditor': 0},
+        )
         self.client = APIClient()
         self.admin_user = UserFactory(username='admin_brp', profile='DBOPS')
         self.regular_user = UserFactory(username='regular_brp', profile='readonly')
@@ -218,6 +223,10 @@ class TestActionWithBusinessRulePolicy(TestCase):
     """Tests for Action model with FK business_rule_policy_id (AC#5, AC#9)."""
 
     def setUp(self):
+        Profile.objects.get_or_create(
+            name='DBOPS',
+            defaults={'ad_group': 'CN=DBOPS,OU=Groups,DC=example,DC=com', 'is_admin': 1, 'is_auditor': 0},
+        )
         self.client = APIClient()
         self.user = UserFactory(username='action_brp_user', profile='DBOPS')
         self.client.force_authenticate(user=self.user)

@@ -11,6 +11,7 @@ from rest_framework import status
 from idp_auth.models import User
 from integrations.models import Integration, IntegrationStatus, IntegrationTypeCatalogue
 from core.models import AuditLog, AuditActionType
+from profiles.models import Profile
 
 
 @pytest.mark.django_db
@@ -18,6 +19,10 @@ class TestValidateEndpoint(TestCase):
     """Tests for GET /admin/integrations/{id}/validate."""
 
     def setUp(self):
+        Profile.objects.get_or_create(
+            name='DBOPS',
+            defaults={'ad_group': 'CN=DBOPS,OU=Groups,DC=example,DC=com', 'is_admin': 1, 'is_auditor': 0},
+        )
         self.client = APIClient()
         self.user = User.objects.create(username='dbops_user', profile='dbops')
         self.client.force_authenticate(user=self.user)
@@ -106,6 +111,10 @@ class TestValidateAllEndpoint(TestCase):
     """Tests for POST /admin/integrations/validate-all."""
 
     def setUp(self):
+        Profile.objects.get_or_create(
+            name='DBOPS',
+            defaults={'ad_group': 'CN=DBOPS,OU=Groups,DC=example,DC=com', 'is_admin': 1, 'is_auditor': 0},
+        )
         self.client = APIClient()
         self.user = User.objects.create(username='dbops_user', profile='dbops')
         self.client.force_authenticate(user=self.user)
