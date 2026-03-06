@@ -740,3 +740,167 @@ class TestSingleton:
         assert svc1 is svc2
 
         vs._vault_service = None  # Clean up
+
+
+# ---------------------------------------------------------------------------
+# Multi-instance registry (get_vault_service_for_integration)
+# ---------------------------------------------------------------------------
+
+class TestVaultServiceRegistry:
+    """Test multi-instance VaultService registry."""
+
+    @patch("services.vault_service.requests.Session")
+    def test_registry_returns_same_instance_for_same_id(self, mock_session_cls):
+        mock_session_cls.return_value = MagicMock()
+
+        import services.vault_service as vs
+        vs._vault_service_registry.clear()
+
+        with patch.dict("os.environ", {"VAULT_TOKEN": "test"}, clear=False):
+            svc1 = vs.get_vault_service_for_integration(
+                vault_addr="http://vault:8200",
+                instance_id="42",
+            )
+            svc2 = vs.get_vault_service_for_integration(
+                vault_addr="http://vault:8200",
+                instance_id="42",
+            )
+
+        assert svc1 is svc2
+        vs._vault_service_registry.clear()
+
+    @patch("services.vault_service.requests.Session")
+    def test_registry_creates_different_instance_for_different_id(self, mock_session_cls):
+        mock_session_cls.return_value = MagicMock()
+
+        import services.vault_service as vs
+        vs._vault_service_registry.clear()
+
+        with patch.dict("os.environ", {"VAULT_TOKEN": "test"}, clear=False):
+            svc1 = vs.get_vault_service_for_integration(
+                vault_addr="http://vault-a:8200",
+                instance_id="1",
+            )
+            svc2 = vs.get_vault_service_for_integration(
+                vault_addr="http://vault-b:8200",
+                instance_id="2",
+            )
+
+        assert svc1 is not svc2
+        assert svc1.instance_id == "1"
+        assert svc2.instance_id == "2"
+        vs._vault_service_registry.clear()
+
+    @patch("services.vault_service.requests.Session")
+    def test_registry_cache_persists_across_calls(self, mock_session_cls):
+        """Verify the bug fix: cache entries persist because VaultService is reused."""
+        mock_session = MagicMock()
+        mock_session_cls.return_value = mock_session
+        mock_session.get.return_value = _vault_response(200, {"token": "cached-val"})
+
+        import services.vault_service as vs
+        vs._vault_service_registry.clear()
+
+        with patch.dict("os.environ", {"VAULT_TOKEN": "test"}, clear=False):
+            svc = vs.get_vault_service_for_integration(
+                vault_addr="http://vault:8200",
+                instance_id="99",
+            )
+            # First call: cache miss → Vault call
+            svc.get_secret("vault:secret/data/app#token")
+            assert mock_session.get.call_count == 1
+
+            # Get same instance again (simulates next request)
+            svc2 = vs.get_vault_service_for_integration(
+                vault_addr="http://vault:8200",
+                instance_id="99",
+            )
+            # Second call: cache hit → no Vault call
+            svc2.get_secret("vault:secret/data/app#token")
+            assert mock_session.get.call_count == 1  # Still 1
+
+        vs._vault_service_registry.clear()
+
+
+# ---------------------------------------------------------------------------
+# warmup_vault_cache
+# ---------------------------------------------------------------------------
+
+class TestWarmupVaultCache:
+    """Test warmup_vault_cache pre-loading."""
+
+    @patch("services.vault_service.resolve_credential")
+    def test_warmup_resolves_vault_credentials(self, mock_resolve):
+        """warmup_vault_cache calls resolve_credential for each vault: integration."""
+        from collections import namedtuple
+
+        Row = namedtuple("Row", ["id", "credential_ref", "secret_service_id"])
+        mock_qs = [
+            Row(id=1, credential_ref="vault:secret/data/app1#token", secret_service_id=None),
+            Row(id=2, credential_ref="vault:secret/data/app2#password", secret_service_id=None),
+        ]
+
+        with patch("services.vault_service.Integration") as MockIntegration:
+            MockIntegration.objects.filter.return_value.exclude.return_value.values_list.return_value = mock_qs
+
+            from services.vault_service import warmup_vault_cache
+            stats = warmup_vault_cache()
+
+        assert stats["total"] == 2
+        assert stats["ok"] == 2
+        assert stats["errors"] == 0
+        assert mock_resolve.call_count == 2
+
+    @patch("services.vault_service.resolve_credential")
+    def test_warmup_deduplicates_same_credential_ref(self, mock_resolve):
+        """Duplicate credential_ref + secret_service_id are skipped."""
+        from collections import namedtuple
+
+        Row = namedtuple("Row", ["id", "credential_ref", "secret_service_id"])
+        mock_qs = [
+            Row(id=1, credential_ref="vault:secret/data/shared#token", secret_service_id=None),
+            Row(id=2, credential_ref="vault:secret/data/shared#token", secret_service_id=None),
+            Row(id=3, credential_ref="vault:secret/data/other#key", secret_service_id=None),
+        ]
+
+        with patch("services.vault_service.Integration") as MockIntegration:
+            MockIntegration.objects.filter.return_value.exclude.return_value.values_list.return_value = mock_qs
+
+            from services.vault_service import warmup_vault_cache
+            stats = warmup_vault_cache()
+
+        assert stats["total"] == 3
+        assert stats["ok"] == 2
+        assert stats["skipped"] == 1
+        assert mock_resolve.call_count == 2
+
+    @patch("services.vault_service.resolve_credential", side_effect=Exception("vault down"))
+    def test_warmup_continues_on_error(self, mock_resolve):
+        """Warmup is best-effort: errors are counted but don't stop processing."""
+        from collections import namedtuple
+
+        Row = namedtuple("Row", ["id", "credential_ref", "secret_service_id"])
+        mock_qs = [
+            Row(id=1, credential_ref="vault:secret/data/app1#token", secret_service_id=None),
+            Row(id=2, credential_ref="vault:secret/data/app2#token", secret_service_id=None),
+        ]
+
+        with patch("services.vault_service.Integration") as MockIntegration:
+            MockIntegration.objects.filter.return_value.exclude.return_value.values_list.return_value = mock_qs
+
+            from services.vault_service import warmup_vault_cache
+            stats = warmup_vault_cache()
+
+        assert stats["total"] == 2
+        assert stats["errors"] == 2
+        assert stats["ok"] == 0
+
+    def test_warmup_no_integrations(self):
+        """No vault integrations → early return with zero counts."""
+        with patch("services.vault_service.Integration") as MockIntegration:
+            MockIntegration.objects.filter.return_value.exclude.return_value.values_list.return_value = []
+
+            from services.vault_service import warmup_vault_cache
+            stats = warmup_vault_cache()
+
+        assert stats["total"] == 0

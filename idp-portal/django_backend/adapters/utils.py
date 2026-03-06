@@ -46,7 +46,7 @@ def resolve_credential(
     if not credential_ref.startswith("vault:"):
         return credential_ref
 
-    from services.vault_service import VaultService, get_vault_service
+    from services.vault_service import get_vault_service, get_vault_service_for_integration
 
     # Story 27.11: Determine which Vault instance to use
     if integration and getattr(integration, 'secret_service_id', None):
@@ -69,7 +69,7 @@ def resolve_credential(
             )
 
         vault_config = vault_integration.get_config() or {}
-        vault_service = VaultService(
+        vault_service = get_vault_service_for_integration(
             vault_addr=vault_integration.base_url,
             vault_namespace=vault_config.get("namespace"),
             instance_id=str(vault_integration.id),
