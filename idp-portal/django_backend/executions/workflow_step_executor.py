@@ -153,7 +153,7 @@ class StepExecutor:
             execution=self.execution,
             step_order=step_order,
             step_name=step_name,
-            step_type='platform',  # Default type for now
+            step_type=step_type_routing,  # Code Review: use actual step_type instead of hardcoded 'platform'
             status=ExecutionStepStatus.RUNNING,
             started_at=timezone.now(),
         )

@@ -344,6 +344,16 @@ class ApproveExecutionView(APIView):
     @extend_schema(
         tags=["executions"],
         summary="Approuver une exécution en attente",
+        request=inline_serializer(
+            name='ApproveExecutionRequest',
+            fields={
+                'comment': serializers.CharField(
+                    required=False,
+                    allow_blank=True,
+                    help_text='Commentaire optionnel',
+                ),
+            },
+        ),
         responses={200: ExecutionSerializer},
     )
     @transaction.atomic
@@ -414,6 +424,8 @@ class ApproveExecutionView(APIView):
 
         old_status = execution.status
         correlation_id = get_correlation_id()
+        # Code Review: capture optional approval comment for audit trail (parity with reject)
+        approval_comment = (request.data or {}).get("comment", "") or ""
         user_id = (
             str(request.user.id)
             if request.user and hasattr(request.user, "id")
@@ -443,6 +455,7 @@ class ApproveExecutionView(APIView):
                 "action_name": execution.action.name if execution.action else None,
                 "previous_status": old_status,
                 "new_status": ExecutionStatus.RUNNING,
+                "approval_comment": approval_comment or None,
             },
             correlation_id=correlation_id,
         )
