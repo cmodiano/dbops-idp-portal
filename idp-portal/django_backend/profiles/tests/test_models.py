@@ -9,13 +9,20 @@ class ProfileModelTest(TestCase):
 
     def test_create_profile(self):
         """Test creating a profile."""
-        profile = Profile.objects.create(
+        profile, _ = Profile.objects.get_or_create(
             name='DBA',
-            description='Database Administrator',
-            ad_group='GRP-IDP-DBA',
-            is_admin=1,
-            is_auditor=0
+            defaults={
+                'description': 'Database Administrator',
+                'ad_group': 'GRP-IDP-DBA',
+                'is_admin': 1,
+                'is_auditor': 0,
+            }
         )
+        profile.description = 'Database Administrator'
+        profile.ad_group = 'GRP-IDP-DBA'
+        profile.is_admin = 1
+        profile.is_auditor = 0
+        profile.save()
         self.assertEqual(profile.name, 'DBA')
         self.assertEqual(profile.ad_group, 'GRP-IDP-DBA')
         self.assertEqual(profile.is_admin, 1)

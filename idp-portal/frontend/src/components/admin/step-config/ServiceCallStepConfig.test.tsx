@@ -1,11 +1,17 @@
 /**
- * Tests for ServiceCallStepConfig — Story 57.20, Task 6.
- * Verifies MappingHelpPopover integration, updated placeholders, and validation warnings.
+ * Tests for ServiceCallStepConfig — Story 57.20, Task 6 + Story 16.9 (notification).
+ * Verifies MappingHelpPopover integration, updated placeholders, validation warnings,
+ * and notification integration_type support.
  */
 
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ServiceCallStepConfig } from './ServiceCallStepConfig';
+import {
+  SERVICE_CALL_OPERATIONS,
+  INTEGRATION_LABELS,
+  OPERATION_LABELS,
+} from './serviceCallConstants';
 
 const baseData = {
   name: null,
@@ -100,5 +106,74 @@ describe('ServiceCallStepConfig — validation warnings (Story 57.20, AC5)', () 
       <ServiceCallStepConfig data={dataWithPlain} onUpdate={vi.fn()} availableStepOptions={steps} />
     );
     expect(screen.queryByTestId('input-mapping-editor-warning')).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Story 16.9 — notification comme integration_type
+// ---------------------------------------------------------------------------
+
+describe('serviceCallConstants — notification (Story 16.9, AC6-7)', () => {
+  it('SERVICE_CALL_OPERATIONS inclut notification avec 3 opérations', () => {
+    expect(SERVICE_CALL_OPERATIONS.notification).toEqual([
+      'send_email',
+      'send_teams',
+      'notify_execution_event',
+    ]);
+  });
+
+  it('INTEGRATION_LABELS.notification est "Notification"', () => {
+    expect(INTEGRATION_LABELS.notification).toBe('Notification');
+  });
+
+  it('OPERATION_LABELS contient les libellés notification', () => {
+    expect(OPERATION_LABELS.send_email).toBe('Envoyer un email');
+    expect(OPERATION_LABELS.send_teams).toBe('Envoyer un message Teams');
+    expect(OPERATION_LABELS.notify_execution_event).toBe("Notifier un événement d'exécution");
+  });
+
+  it('non-régression: servicenow, vault, jira toujours présents dans les constantes', () => {
+    expect(SERVICE_CALL_OPERATIONS.servicenow).toBeDefined();
+    expect(SERVICE_CALL_OPERATIONS.vault).toBeDefined();
+    expect(SERVICE_CALL_OPERATIONS.jira).toBeDefined();
+    expect(INTEGRATION_LABELS.servicenow).toBe('ServiceNow');
+    expect(INTEGRATION_LABELS.vault).toBe('HashiCorp Vault');
+    expect(INTEGRATION_LABELS.jira).toBe('Jira');
+  });
+});
+
+describe('ServiceCallStepConfig — notification integration_type (Story 16.9, AC6-7)', () => {
+  const notificationBase = {
+    ...baseData,
+    integration_type: 'notification',
+    operation: 'send_email',
+  };
+
+  it('affiche "Notification" comme libellé du type d\'intégration sélectionné', () => {
+    render(<ServiceCallStepConfig data={notificationBase} onUpdate={vi.fn()} />);
+    expect(screen.getByText('Notification')).toBeInTheDocument();
+  });
+
+  it('affiche "Envoyer un email" comme libellé de l\'opération send_email', () => {
+    render(<ServiceCallStepConfig data={notificationBase} onUpdate={vi.fn()} />);
+    expect(screen.getByText('Envoyer un email')).toBeInTheDocument();
+  });
+
+  it('affiche "Envoyer un message Teams" quand send_teams est sélectionné', () => {
+    const data = { ...notificationBase, operation: 'send_teams' };
+    render(<ServiceCallStepConfig data={data} onUpdate={vi.fn()} />);
+    expect(screen.getByText('Envoyer un message Teams')).toBeInTheDocument();
+  });
+
+  it("affiche \"Notifier un événement d'exécution\" quand notify_execution_event est sélectionné", () => {
+    const data = { ...notificationBase, operation: 'notify_execution_event' };
+    render(<ServiceCallStepConfig data={data} onUpdate={vi.fn()} />);
+    expect(screen.getByText("Notifier un événement d'exécution")).toBeInTheDocument();
+  });
+
+  it('non-régression: servicenow + create_change toujours fonctionnel', () => {
+    render(<ServiceCallStepConfig data={baseData} onUpdate={vi.fn()} />);
+    expect(screen.getByText('ServiceNow')).toBeInTheDocument();
+    expect(screen.getByText('Créer un change')).toBeInTheDocument();
   });
 });

@@ -20,28 +20,43 @@ class TestProfileResolution(TestCase):
 
     def setUp(self):
         """Set up test profiles and permissions."""
-        # Create profiles with AD groups
-        self.profile_dba = Profile.objects.create(
+        # Create profiles with AD groups (use get_or_create as conftest may have created them)
+        self.profile_dba, _ = Profile.objects.get_or_create(
             name='DBA',
-            description='Database Administrator',
-            ad_group='CN=DBA-Team,OU=Groups,DC=corp,DC=example,DC=com',
-            is_admin=0,
-            is_auditor=0
+            defaults={
+                'description': 'Database Administrator',
+                'ad_group': 'CN=DBA-Team,OU=Groups,DC=corp,DC=example,DC=com',
+                'is_admin': 0,
+                'is_auditor': 0,
+            }
         )
-        self.profile_dbops = Profile.objects.create(
+        # Ensure ad_group is set for this test's lookup
+        self.profile_dba.ad_group = 'CN=DBA-Team,OU=Groups,DC=corp,DC=example,DC=com'
+        self.profile_dba.save()
+
+        self.profile_dbops, _ = Profile.objects.get_or_create(
             name='DBOPS',
-            description='Database Operations (Admin)',
-            ad_group='CN=DBOPS-Team,OU=Groups,DC=corp,DC=example,DC=com',
-            is_admin=1,
-            is_auditor=0
+            defaults={
+                'description': 'Database Operations (Admin)',
+                'ad_group': 'CN=DBOPS-Team,OU=Groups,DC=corp,DC=example,DC=com',
+                'is_admin': 1,
+                'is_auditor': 0,
+            }
         )
-        self.profile_auditor = Profile.objects.create(
+        self.profile_dbops.ad_group = 'CN=DBOPS-Team,OU=Groups,DC=corp,DC=example,DC=com'
+        self.profile_dbops.save()
+
+        self.profile_auditor, _ = Profile.objects.get_or_create(
             name='AUDITOR',
-            description='Audit Team',
-            ad_group='CN=Auditors,OU=Groups,DC=corp,DC=example,DC=com',
-            is_admin=0,
-            is_auditor=1
+            defaults={
+                'description': 'Audit Team',
+                'ad_group': 'CN=Auditors,OU=Groups,DC=corp,DC=example,DC=com',
+                'is_admin': 0,
+                'is_auditor': 1,
+            }
         )
+        self.profile_auditor.ad_group = 'CN=Auditors,OU=Groups,DC=corp,DC=example,DC=com'
+        self.profile_auditor.save()
 
         # Create integration and action for permission testing
         self.integration = Integration.objects.create(
