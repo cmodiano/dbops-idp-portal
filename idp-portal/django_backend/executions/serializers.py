@@ -20,7 +20,7 @@ class ExecutionTargetSerializer(serializers.Serializer):
             "target_type": obj.target_type,
             "target_id": obj.target_id,
             "target_name": obj.target_name,
-            "target_metadata": obj.get_target_metadata(),
+            "target_metadata": obj.get_target_metadata() or {},
         }
 
 

@@ -23,6 +23,9 @@ class PaginationResult(TypedDict):
 
 
 # Story 26.11 (AC1): Utilitaire pagination réutilisable
+MAX_PAGE_SIZE = 1000  # Code Review: prevent unbounded queries via limit=999999
+
+
 def paginate_queryset(
     queryset: QuerySet,
     offset: int,
@@ -65,6 +68,8 @@ def paginate_queryset(
         raise ValueError(f"offset must be >= 0, got {offset}")
     if limit <= 0:
         raise ValueError(f"limit must be > 0, got {limit}")
+    # Code Review: cap limit to prevent unbounded queries
+    limit = min(limit, MAX_PAGE_SIZE)
 
     total = queryset.count()
     page = (offset // limit) + 1
