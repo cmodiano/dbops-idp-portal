@@ -5,7 +5,7 @@ Code Review Fix: Added correlation_id extraction and proper entity_id tracking.
 
 import hashlib
 import structlog
-from django.db.models.signals import post_save
+from django.db.models.signals import pre_save, post_save
 from django.dispatch import receiver
 
 from core.models import AuditActionType, AuditEntityType
@@ -14,6 +14,34 @@ from core.middleware import get_correlation_id
 from integrations.models import Integration, IntegrationTypeCatalogue, IntegrationAction
 
 logger = structlog.get_logger(__name__)
+
+# Story 61.4 — Champs audités pour le diff avant/après
+_AUDITED_TYPE_FIELDS = ('name', 'description', 'version', 'is_active', 'integration_role')
+_AUDITED_ACTION_FIELDS = ('action_label', 'description', 'is_active', 'required_params', 'optional_params', 'response_format')
+
+
+@receiver(pre_save, sender=IntegrationTypeCatalogue)
+def capture_old_values_type_catalogue(sender, instance, raw, **kwargs):
+    """Capture l'état avant modification pour le diff d'audit (Story 61.4)."""
+    if raw or instance._state.adding:
+        instance._pre_save_old = None
+        return
+    try:
+        instance._pre_save_old = IntegrationTypeCatalogue.objects.get(pk=instance.pk)
+    except IntegrationTypeCatalogue.DoesNotExist:
+        instance._pre_save_old = None
+
+
+@receiver(pre_save, sender=IntegrationAction)
+def capture_old_values_integration_action(sender, instance, raw, **kwargs):
+    """Capture l'état avant modification pour le diff d'audit (Story 61.4)."""
+    if raw or instance._state.adding:
+        instance._pre_save_old = None
+        return
+    try:
+        instance._pre_save_old = IntegrationAction.objects.get(pk=instance.pk)
+    except IntegrationAction.DoesNotExist:
+        instance._pre_save_old = None
 
 
 def _get_user_id_from_context() -> str:
@@ -51,18 +79,32 @@ def audit_integration_type_catalogue(sender, instance, created, raw, **kwargs):
     # A dev-time collision detection test validates uniqueness of current codes.
     entity_id = int(hashlib.md5(instance.code.encode(), usedforsecurity=False).hexdigest()[:8], 16) % (10**9)
 
+    details = {
+        'code': instance.code,
+        'name': instance.name,
+        'version': instance.version,
+        'is_active': instance.is_active,
+    }
+
+    # Story 61.4 — Ajouter changes uniquement lors d'une mise à jour
+    if not created:
+        old = getattr(instance, '_pre_save_old', None)
+        changes = {}
+        if old is not None:
+            for field in _AUDITED_TYPE_FIELDS:
+                old_val = getattr(old, field)
+                new_val = getattr(instance, field)
+                if old_val != new_val:
+                    changes[field] = {"old": old_val, "new": new_val}
+        details['changes'] = changes
+
     try:
         AuditService.create_entry(
             user_id=_get_user_id_from_context(),  # Fix Issue #1
             action_type=action_type,
             entity_type=AuditEntityType.INTEGRATION_TYPE_CATALOGUE,
             entity_id=entity_id,  # Fix Issue #2
-            details={
-                'code': instance.code,
-                'name': instance.name,
-                'version': instance.version,
-                'is_active': instance.is_active,
-            },
+            details=details,
             correlation_id=get_correlation_id(),  # Fix Issue #3
         )
     except Exception as exc:  # noqa: BLE001 — logged-and-reraised: SOC1 compliance requires audit trail, re-raise to prevent save
@@ -86,18 +128,32 @@ def audit_integration_action(sender, instance, created, raw, **kwargs):
         AuditActionType.INTEGRATION_ACTION_CREATED if created
         else AuditActionType.INTEGRATION_ACTION_UPDATED
     )
+    details = {
+        'integration_type_code': instance.integration_type_id,
+        'action_code': instance.action_code,
+        'action_label': instance.action_label,
+        'is_active': instance.is_active,
+    }
+
+    # Story 61.4 — Ajouter changes uniquement lors d'une mise à jour
+    if not created:
+        old = getattr(instance, '_pre_save_old', None)
+        changes = {}
+        if old is not None:
+            for field in _AUDITED_ACTION_FIELDS:
+                old_val = getattr(old, field)
+                new_val = getattr(instance, field)
+                if old_val != new_val:
+                    changes[field] = {"old": old_val, "new": new_val}
+        details['changes'] = changes
+
     try:
         AuditService.create_entry(
             user_id=_get_user_id_from_context(),  # Fix Issue #1
             action_type=action_type,
             entity_type=AuditEntityType.INTEGRATION_ACTION,
             entity_id=instance.id or 0,
-            details={
-                'integration_type_code': instance.integration_type_id,
-                'action_code': instance.action_code,
-                'action_label': instance.action_label,
-                'is_active': instance.is_active,
-            },
+            details=details,
             correlation_id=get_correlation_id(),  # Fix Issue #3
         )
     except Exception as exc:  # noqa: BLE001 — logged-and-reraised: SOC1 compliance requires audit trail, re-raise to prevent save
