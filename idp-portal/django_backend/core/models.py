@@ -110,6 +110,8 @@ class AuditActionType(models.TextChoices):
     # Story 64.2: IaC Config Sync - Tags and Feature Flags
     CONFIG_SYNC_TAGS_IMPORT = 'CONFIG_SYNC_TAGS_IMPORT', 'Config Sync - Tags Import'
     CONFIG_SYNC_FEATURE_FLAGS_IMPORT = 'CONFIG_SYNC_FEATURE_FLAGS_IMPORT', 'Config Sync - Feature Flags Import'
+    # Story 64.3: IaC Config Sync - Integration Type Catalogue
+    CONFIG_SYNC_INTEGRATION_TYPE_IMPORT = 'CONFIG_SYNC_INTEGRATION_TYPE_IMPORT', 'Config Sync - Integration Type Import'
     # Additional types added in later migrations (V028-V035, V039-V041)
     # Note: Full list would include all types from migrations, but base types are sufficient for model
 
