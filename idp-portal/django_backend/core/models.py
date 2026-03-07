@@ -60,6 +60,8 @@ class AuditActionType(models.TextChoices):
     API_KEY_TOKEN_EXCHANGE = 'API_KEY_TOKEN_EXCHANGE', 'API Key Token Exchange'  # pragma: allowlist secret
     # Story 49.3: Service account LDAP login
     SERVICE_LOGIN = 'SERVICE_LOGIN', 'Service Account Login'
+    # Story 59.6 SEC-6: Dev bypass authentication audit type
+    AUTH_DEV_BYPASS_LOGIN = 'AUTH_DEV_BYPASS_LOGIN', 'Dev Bypass Authentication'
     FAVORITE_ADDED = 'FAVORITE_ADDED', 'Favorite Added'
     FAVORITE_REMOVED = 'FAVORITE_REMOVED', 'Favorite Removed'
     # Story 16.4: Retry audit types

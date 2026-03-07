@@ -10,6 +10,8 @@ from django.conf import settings
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 
+from core.models import AuditActionType, AuditEntityType
+from core.services import AuditService
 from idp_auth.jwt_utils import verify_token
 from idp_auth.models import User
 
@@ -56,13 +58,12 @@ class JWTAuthentication(BaseAuthentication):
         is_mock_token = token == 'dev-mock-token-for-testing'
         
         if is_dev_bypass and is_mock_token:
-            # SEC-7: Guard — log CRITICAL if dev bypass is active with DEBUG=False (production)
+            # SEC-6: Block completely in production — return None instead of creating dev-user.
+            # Returning None means DRF will treat the request as unauthenticated (401 if auth required).
             if not settings.DEBUG:
-                logger.critical(
-                    "SECURITY ALERT: AUTH_DEV_BYPASS is enabled in production mode "
-                    "(DEBUG=False). This creates a critical security vulnerability."
-                )
-            # Get or create dev user (same as SAMLLoginView dev bypass)
+                return None
+
+            # DEBUG=True (dev mode only): Get or create dev user
             dev_user, _ = User.objects.get_or_create(
                 username="dev-user",
                 defaults={
@@ -71,6 +72,21 @@ class JWTAuthentication(BaseAuthentication):
                 },
             )
             dev_user.ad_groups = ["dbops"]  # type: ignore[attr-defined]  # runtime RBAC attr
+
+            # SEC-6: Create audit entry for dev bypass authentication (traceability)
+            try:
+                AuditService.create_entry(
+                    user_id=str(dev_user.id),
+                    action_type=AuditActionType.AUTH_DEV_BYPASS_LOGIN,
+                    entity_type=AuditEntityType.USER,
+                    entity_id=dev_user.id,
+                    details={'username': 'dev-user', 'debug': True, 'bypass_method': 'mock_token'},
+                    ip_address=request.META.get('REMOTE_ADDR'),
+                )
+            except Exception:  # noqa: BLE001
+                # Audit failure must never block authentication in dev mode
+                logger.warning("auth_dev_bypass_audit_failed", username="dev-user")
+
             return (dev_user, None)
 
         # Verify token
