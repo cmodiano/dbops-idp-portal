@@ -9,13 +9,20 @@ class ProfileModelTest(TestCase):
 
     def test_create_profile(self):
         """Test creating a profile."""
-        profile = Profile.objects.create(
+        profile, _ = Profile.objects.get_or_create(
             name='DBA',
-            description='Database Administrator',
-            ad_group='GRP-IDP-DBA',
-            is_admin=1,
-            is_auditor=0
+            defaults={
+                'description': 'Database Administrator',
+                'ad_group': 'GRP-IDP-DBA',
+                'is_admin': 1,
+                'is_auditor': 0,
+            }
         )
+        profile.description = 'Database Administrator'
+        profile.ad_group = 'GRP-IDP-DBA'
+        profile.is_admin = 1
+        profile.is_auditor = 0
+        profile.save()
         self.assertEqual(profile.name, 'DBA')
         self.assertEqual(profile.ad_group, 'GRP-IDP-DBA')
         self.assertEqual(profile.is_admin, 1)
@@ -25,21 +32,21 @@ class ProfileModelTest(TestCase):
 
     def test_profile_unique_name(self):
         """Test that profile name must be unique."""
-        Profile.objects.create(
-            name='DBA',
-            ad_group='GRP-IDP-DBA'
+        Profile.objects.get_or_create(
+            name='UniqueTest',
+            defaults={'ad_group': 'GRP-IDP-UT'}
         )
         with self.assertRaises(Exception):  # IntegrityError
             Profile.objects.create(
-                name='DBA',
-                ad_group='GRP-IDP-DBA-2'
+                name='UniqueTest',
+                ad_group='GRP-IDP-UT-2'
             )
 
     def test_profile_str(self):
         """Test Profile __str__ method."""
-        profile = Profile.objects.create(
+        profile, _ = Profile.objects.get_or_create(
             name='DBA',
-            ad_group='GRP-IDP-DBA'
+            defaults={'ad_group': 'GRP-IDP-DBA'}
         )
         self.assertEqual(str(profile), 'DBA')
 
@@ -48,12 +55,13 @@ class ProfileModelTest(TestCase):
         Story 30.16 AC3: Test is_admin_bool property conversion (Oracle NUMBER(1) → Python bool).
         Validates INCON-4 intentional IntegerField with boolean property wrapper.
         """
-        profile = Profile.objects.create(
+        profile, _ = Profile.objects.get_or_create(
             name='DBA',
-            ad_group='GRP-IDP-DBA',
-            is_admin=1,
-            is_auditor=0
+            defaults={'ad_group': 'GRP-IDP-DBA', 'is_admin': 1, 'is_auditor': 0}
         )
+        profile.is_admin = 1
+        profile.is_auditor = 0
+        profile.save()
         # Test property conversion
         self.assertIsInstance(profile.is_admin_bool, bool)
         self.assertTrue(profile.is_admin_bool)
@@ -69,12 +77,13 @@ class ProfileModelTest(TestCase):
         """
         Story 30.16 AC3: Test is_auditor_bool property edge cases.
         """
-        profile = Profile.objects.create(
+        profile, _ = Profile.objects.get_or_create(
             name='AUDITOR',
-            ad_group='GRP-IDP-AUDITOR',
-            is_admin=0,
-            is_auditor=1
+            defaults={'ad_group': 'GRP-IDP-AUDITOR', 'is_admin': 0, 'is_auditor': 1}
         )
+        profile.is_auditor = 1
+        profile.is_admin = 0
+        profile.save()
         self.assertTrue(profile.is_auditor_bool)
         self.assertFalse(profile.is_admin_bool)
 
@@ -136,9 +145,9 @@ class ProfileActionPermissionModelTest(TestCase):
 
     def setUp(self):
         """Set up test data."""
-        self.profile = Profile.objects.create(
+        self.profile, _ = Profile.objects.get_or_create(
             name='DBA',
-            ad_group='GRP-IDP-DBA'
+            defaults={'ad_group': 'GRP-IDP-DBA'}
         )
 
     def test_create_profile_action_permission(self):
@@ -172,9 +181,9 @@ class ProfileTargetPermissionModelTest(TestCase):
 
     def setUp(self):
         """Set up test data."""
-        self.profile = Profile.objects.create(
+        self.profile, _ = Profile.objects.get_or_create(
             name='DBA',
-            ad_group='GRP-IDP-DBA'
+            defaults={'ad_group': 'GRP-IDP-DBA'}
         )
 
     def test_create_profile_target_permission(self):

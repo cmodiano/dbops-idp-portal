@@ -5,18 +5,14 @@
 import { Collapse, Form, Typography } from 'antd';
 import type {
   ActionDetail,
-  ChangeTypeConfigEntry,
   ExecutionStep,
-  GateConfig,
   NotificationConfig,
 } from '../../types/api';
 import type { RemediationRuleDefinition } from './RemediationRulesEditor';
 import { StepsEditor } from './StepsEditor';
-import { ChangeTypeConfig } from './ChangeTypeConfig';
 import { RemediationRulesEditor } from './RemediationRulesEditor';
 import { BusinessRulePolicySelector } from './BusinessRulePolicySelector';
 import { NotificationConfigSection } from './NotificationConfigSection';
-import SectionHelp from '../common/SectionHelp';
 import { platformCodeToStepType } from '../../utils/integrationHelpers';
 
 const { Text } = Typography;
@@ -26,10 +22,6 @@ type IntegrationLike = { id: number; type: string; name: string };
 export interface ActionFormCollapseSectionsProps {
   executionSteps: ExecutionStep[];
   setExecutionSteps: (steps: ExecutionStep[]) => void;
-  changeTypeConfig: Record<string, ChangeTypeConfigEntry>;
-  setChangeTypeConfig: (config: Record<string, ChangeTypeConfigEntry>) => void;
-  gateConfig: GateConfig | null;
-  setGateConfig: (config: GateConfig | null) => void;
   remediationRules: RemediationRuleDefinition[];
   setRemediationRules: (rules: RemediationRuleDefinition[]) => void;
   businessRulePolicyId: number | null;
@@ -44,10 +36,6 @@ export interface ActionFormCollapseSectionsProps {
 export function ActionFormCollapseSections({
   executionSteps,
   setExecutionSteps,
-  changeTypeConfig,
-  setChangeTypeConfig,
-  gateConfig,
-  setGateConfig,
   remediationRules,
   setRemediationRules,
   businessRulePolicyId,
@@ -85,19 +73,6 @@ export function ActionFormCollapseSections({
                   value={executionSteps}
                   onChange={setExecutionSteps}
                   integrationId={watchedIntegrationId}
-                />
-              </Form.Item>
-
-              <Form.Item
-                label={<span>Gates et Changement ServiceNow par environnement <SectionHelp topicId="action-form-changement-servicenow" /></span>}
-                tooltip="Deux parties : (1) Gates — conditions d'exécution (autorisé, plage maintenance, approbation) ; (2) Changement ServiceNow (requis, modèle/template ID, change type)."
-                style={{ marginBottom: 16 }}
-              >
-                <ChangeTypeConfig
-                  value={changeTypeConfig}
-                  onChange={setChangeTypeConfig}
-                  gateConfig={gateConfig}
-                  onGateConfigChange={setGateConfig}
                 />
               </Form.Item>
             </>

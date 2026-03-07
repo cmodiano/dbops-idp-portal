@@ -1,22 +1,18 @@
 /**
  * WizardStep3ImpactChangement — Étape 3 du wizard (Impact & Changement) extraite de ActionWizard (Story 33.5, Task 5).
- * Contient : règles d'impact, niveau par défaut, changeTypeConfig, règles métier, notifications.
+ * Contient : règles d'impact, niveau par défaut, règles métier, notifications.
  */
 import { Form, Select, Space } from 'antd';
 import type {
   ActionDetail,
-  ChangeTypeConfigEntry,
-  GateConfig,
   ImpactLevel,
   ImpactRuleDefinition,
   NotificationConfig,
 } from '../../types/api';
 import { ImpactRulesEditor } from './ImpactRulesEditor';
-import { ChangeTypeConfig } from './ChangeTypeConfig';
 import { BusinessRulePolicySelector } from './BusinessRulePolicySelector';
 import { NotificationConfigSection } from './NotificationConfigSection';
 import { ImpactLevelsLegend } from './ImpactLevelsLegend';
-import SectionHelp from '../common/SectionHelp';
 import { platformCodeToStepType } from '../../utils/integrationHelpers';
 
 type IntegrationLike = { id: number; type: string; name: string };
@@ -28,10 +24,6 @@ export interface WizardStep3ImpactChangementProps {
   setImpactRulesList: (list: ImpactRuleDefinition[]) => void;
   defaultImpactLevel: ImpactLevel | null;
   setDefaultImpactLevel: (level: ImpactLevel | null) => void;
-  changeTypeConfig: Record<string, ChangeTypeConfigEntry>;
-  setChangeTypeConfig: (config: Record<string, ChangeTypeConfigEntry>) => void;
-  gateConfig: GateConfig | null;
-  setGateConfig: (config: GateConfig | null) => void;
   businessRulePolicyId: number | null;
   setBusinessRulePolicyId: (id: number | null) => void;
   notificationConfig: NotificationConfig | null;
@@ -42,16 +34,12 @@ export interface WizardStep3ImpactChangementProps {
 }
 
 export function WizardStep3ImpactChangement({
-  isWorkflow,
+  isWorkflow: _isWorkflow,
   isReadOnly,
   impactRulesList,
   setImpactRulesList,
   defaultImpactLevel,
   setDefaultImpactLevel,
-  changeTypeConfig,
-  setChangeTypeConfig,
-  gateConfig,
-  setGateConfig,
   businessRulePolicyId,
   setBusinessRulePolicyId,
   notificationConfig,
@@ -93,21 +81,6 @@ export function WizardStep3ImpactChangement({
           ]}
         />
       </Form.Item>
-
-      {/* Only show change config for actions, not workflows */}
-      {!isWorkflow && (
-        <Form.Item
-          label={<span>Gates et Changement ServiceNow par environnement <SectionHelp topicId="action-form-changement-servicenow" /></span>}
-          tooltip="Deux parties : (1) Gates — conditions d'exécution (autorisé, plage maintenance, approbation) ; (2) Changement ServiceNow (requis, modèle/template ID, change type)."
-        >
-          <ChangeTypeConfig
-            value={changeTypeConfig}
-            onChange={isReadOnly ? () => {} : setChangeTypeConfig}
-            gateConfig={gateConfig}
-            onGateConfigChange={isReadOnly ? undefined : setGateConfig}
-          />
-        </Form.Item>
-      )}
 
       {/* Story 28.4: Règles métier — sélecteur prédéfini (filtré par plateforme) */}
       <Form.Item

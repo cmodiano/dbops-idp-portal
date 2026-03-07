@@ -213,6 +213,24 @@ elif _purge_logs_interval:
 else:
     _purge_logs_schedule = crontab(hour=3, minute=0)
 
+# Vault secrets cache warmup — keeps the per-worker TTL cache primed so that
+# execution requests hit the cache instead of calling Vault.
+# Default interval = VAULT_CACHE_TTL (or 300s) to refresh just before expiry.
+# Environment variables:
+#   CELERY_BEAT_VAULT_WARMUP_INTERVAL: seconds (default: VAULT_CACHE_TTL or 300)
+#   VAULT_CACHE_WARMUP: "true"/"false" — enable/disable warmup (default: true)
+try:
+    _vault_warmup_schedule = float(
+        os.getenv('CELERY_BEAT_VAULT_WARMUP_INTERVAL', os.getenv('VAULT_CACHE_TTL', '300'))
+    )
+except ValueError:
+    _vault_warmup_schedule = 300.0
+
+app.conf.beat_schedule['warmup-vault-secrets-cache'] = {
+    'task': 'integrations.tasks.warmup_vault_secrets_cache',
+    'schedule': _vault_warmup_schedule,
+}
+
 app.conf.beat_schedule['purge-old-platform-logs'] = {
     'task': 'executions.tasks.purge_old_platform_logs',
     'schedule': _purge_logs_schedule,

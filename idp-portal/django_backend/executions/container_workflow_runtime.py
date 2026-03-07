@@ -158,70 +158,7 @@ class ContainerWorkflowRuntime:
             return []
         steps = sorted(steps, key=lambda s: s.get('order', 0))
 
-        # Story 57.11 — Backward compatibility wrapper
-        # Si l'action n'a pas de steps ET a change_type_config ET n'est pas une exécution enfant
-        # → générer le workflow implicite [create-change] → [execute-action] → [close-change]
-        if not steps and self.action.change_type_config and not self.execution.parent_execution_id:
-            logger.info(
-                "container_workflow_backward_compat_wrapper_applied",
-                execution_id=self.execution.id,
-                action_id=self.action.id,
-                correlation_id=self.correlation_id,
-            )
-            steps = self._build_change_wrapper_steps()
-
         return steps
-
-    def _build_change_wrapper_steps(self) -> List[Dict[str, Any]]:
-        """
-        Story 57.11 — Génère un workflow implicite [create-change]→[execute-action]→[close-change]
-        pour les actions avec change_type_config mais sans execution_steps.
-        """
-        config = self.action.change_type_config or {}
-        return [
-            {
-                "order": 1,
-                "step_id": "create-change",
-                "step_type": "service_call",
-                "name": "Créer change ServiceNow",
-                "integration_type": "servicenow",
-                "operation": "create_change",
-                "input_mapping": {
-                    "short_description": f"IDP Portal — {self.action.name}"[:160],
-                    "change_type": config.get("model", "standard"),
-                    "category": config.get("category", ""),
-                    "assignment_group": config.get("assignment_group", ""),
-                },
-                "output_mapping": {
-                    "change_number": "$.number",
-                    "sys_id": "$.sys_id",
-                },
-                "on_success_step_id": "execute-action",
-            },
-            {
-                "order": 2,
-                "step_id": "execute-action",
-                "step_type": "platform",
-                "name": self.action.name,
-                "referenced_action_id": self.action.id,
-                "on_success_step_id": "close-change",
-            },
-            {
-                "order": 3,
-                "step_id": "close-change",
-                "step_type": "service_call",
-                "name": "Fermer change ServiceNow",
-                "integration_type": "servicenow",
-                "operation": "close_change",
-                "input_mapping": {
-                    "change_id": "{{ steps['create-change']['change_number'] }}",
-                    "close_code": "successful",
-                },
-                "output_mapping": {
-                    "closed": "$.closed",
-                },
-            },
-        ]
 
     def _get_step_parameters(self, step: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -667,6 +604,8 @@ class ContainerWorkflowRuntime:
             parent_step.status = ExecutionStepStatus.FAILED
             parent_step.completed_at = timezone.now()
             parent_step.save()
+            # Do not re-raise: return FAILED so _execute_workflow_steps can finalize
+            # (mark parent FAILED, audit, return terminal status) instead of bypassing
             return ExecutionStatus.FAILED
 
         # Protocole WAITING pour gate steps (story 57.7)
@@ -680,6 +619,11 @@ class ContainerWorkflowRuntime:
             parent_step.status = ExecutionStepStatus.WAITING
             # NE PAS SET completed_at — step est en attente
             parent_step.save()
+
+            # Story 58.3: broadcast step_update pour que la vue d'exécution s'actualise en temps réel
+            from executions.utils.websocket_broadcast import broadcast_step_update  # noqa: PLC0415
+            broadcast_step_update(self.execution.id, parent_step)
+
             logger.info(
                 "container_workflow_gate_step_waiting",
                 step_name=step_name,

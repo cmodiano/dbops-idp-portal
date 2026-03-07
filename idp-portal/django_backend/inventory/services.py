@@ -16,6 +16,7 @@ from __future__ import annotations
 from typing import Any, cast
 
 import structlog
+from django.conf import settings as django_settings
 from cachetools import TTLCache
 from django.db import connection  # noqa: F401 — backward compat: 90+ tests patch inventory.services.connection
 from django.db.models import QuerySet
@@ -134,7 +135,7 @@ class InventoryService:
                      page_size: int = 25) -> tuple[list[dict], int]:
         """
         List targets from the configured source.
-        AC1: Uses integration if configured, AC2: Falls back to DBOPS_INVENTORY.
+        AC1: Uses integration if configured, AC2: Falls back to configurable schema (default: DBOPS_INVENTORY).
 
         Args:
             environment: Optional environment filter (dev, staging, prod)
@@ -161,10 +162,11 @@ class InventoryService:
                 )
                 return cast("tuple[list[dict], int]", result)
 
-        # Fallback: DBOPS_INVENTORY synonym
+        # Fallback: schéma configurable via INVENTORY_FALLBACK_SCHEMA
+        fallback_schema = getattr(django_settings, 'INVENTORY_FALLBACK_SCHEMA', 'DBOPS_INVENTORY')
         logger.info(
             "using_fallback_inventory",
-            fallback="DBOPS_INVENTORY",
+            fallback=fallback_schema,
             correlation_id=correlation_id
         )
         return cast("tuple[list[dict], int]", self._list_targets_from_fallback(
@@ -297,9 +299,10 @@ class InventoryService:
     def _list_targets_from_fallback(self, environment: str | None = None,
                                      search: str | None = None, target_type: str | None = None,
                                      page: int = 1, page_size: int = 25) -> tuple[list[dict[str, Any]], int]:
-        """List targets from DBOPS_INVENTORY fallback."""
+        """List targets from configurable fallback schema (default: DBOPS_INVENTORY)."""
+        fallback_schema = getattr(django_settings, 'INVENTORY_FALLBACK_SCHEMA', 'DBOPS_INVENTORY')
         return self.query_executor.read_oracle_inventory(
-            'DBOPS_INVENTORY',
+            fallback_schema,
             environment, search, target_type, page, page_size
         )
 

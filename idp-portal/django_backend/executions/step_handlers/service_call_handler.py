@@ -22,6 +22,7 @@ logger = structlog.get_logger(__name__)
 
 # Opérations autorisées par service (liste positive = défense en profondeur).
 # Les méthodes _* sont toujours bloquées même si absentes de ce dict.
+# SYNC: serviceCallConstants.ts#SERVICE_CALL_OPERATIONS
 _ALLOWED_OPERATIONS: dict[str, frozenset[str]] = {
     "servicenow": frozenset({
         "create_change", "update_change", "close_change",
@@ -33,7 +34,13 @@ _ALLOWED_OPERATIONS: dict[str, frozenset[str]] = {
     "jira": frozenset({
         "create_issue", "update_issue", "get_issue",
     }),
+    "notification": frozenset({
+        "send_email", "send_teams", "notify_execution_event",
+    }),
 }
+
+# Types qui n'ont pas de record Integration en base (instanciation directe sans base_url ni credentials).
+_CREDENTIAL_FREE_TYPES: frozenset[str] = frozenset({"notification"})
 
 
 class ServiceCallHandler:
@@ -114,41 +121,45 @@ class ServiceCallHandler:
         )
 
         # Résolution de l'intégration
-        integration_service = IntegrationService()
-        integration_id = step_config.get("integration_id")
-        integration = None
+        if integration_type in _CREDENTIAL_FREE_TYPES:
+            # Types sans record Integration en base (ex: notification) — instanciation directe
+            service = get_service_client(integration_type)
+        else:
+            integration_service = IntegrationService()
+            integration_id = step_config.get("integration_id")
+            integration = None
 
-        if integration_id:
-            integration = integration_service.get_by_id(integration_id)
-            if not integration or integration.type != integration_type:
-                logger.warning(
-                    "service_call_integration_id_mismatch",
-                    integration_id=integration_id,
-                    expected_type=integration_type,
+            if integration_id:
+                integration = integration_service.get_by_id(integration_id)
+                if not integration or integration.type != integration_type:
+                    logger.warning(
+                        "service_call_integration_id_mismatch",
+                        integration_id=integration_id,
+                        expected_type=integration_type,
+                    )
+                    integration = None
+
+            if not integration:
+                # Fallback : première intégration active du bon type
+                integration = integration_service.get_by_type(integration_type)
+
+            if not integration:
+                raise ServiceUnavailableError(
+                    code="SERVICE_INTEGRATION_MISSING",
+                    message=(
+                        f"No integration of type '{integration_type}' found. "
+                        "Configure an integration in Admin > Intégrations."
+                    ),
+                    details={"integration_type": integration_type, "execution_id": execution.id},
                 )
-                integration = None
 
-        if not integration:
-            # Fallback : première intégration active du bon type
-            integration = integration_service.get_by_type(integration_type)
-
-        if not integration:
-            raise ServiceUnavailableError(
-                code="SERVICE_INTEGRATION_MISSING",
-                message=(
-                    f"No integration of type '{integration_type}' found. "
-                    "Configure an integration in Admin > Intégrations."
-                ),
-                details={"integration_type": integration_type, "execution_id": execution.id},
+            # Instanciation du service via ServiceRegistry
+            auth_headers = build_auth_headers(integration, correlation_id)
+            service = get_service_client(
+                integration_type,
+                base_url=integration.base_url,
+                auth_headers=auth_headers,
             )
-
-        # Instanciation du service via ServiceRegistry
-        auth_headers = build_auth_headers(integration, correlation_id)
-        service = get_service_client(
-            integration_type,
-            base_url=integration.base_url,
-            auth_headers=auth_headers,
-        )
 
         # Validation de l'opération : exiger une méthode callable publique
         method = getattr(service, operation, None)
@@ -164,7 +175,23 @@ class ServiceCallHandler:
 
         # Appel de l'opération
         try:
-            result = method(**resolved_params)
+            if integration_type == "notification" and operation == "notify_execution_event":
+                # Injection des objets contextuels (non mappables depuis input_mapping).
+                # SÉCURITÉ : filtrer resolved_params pour empêcher le surécrasement des clés
+                # contextuelles (execution, action, correlation_id) via input_mapping utilisateur.
+                _protected_keys = frozenset({"execution", "action", "correlation_id"})
+                _user_params = {k: v for k, v in resolved_params.items() if k not in _protected_keys}
+                result = method(
+                    execution=execution,
+                    action=execution.action,
+                    correlation_id=correlation_id,
+                    **_user_params,
+                )
+            else:
+                # Note: send_email et send_teams capturent toutes les exceptions en interne
+                # (best-effort). En cas d'échec, la méthode retourne None et le step sera
+                # marqué comme réussi. Les erreurs sont visibles uniquement dans les logs.
+                result = method(**resolved_params)
         except Exception:  # noqa: BLE001
             logger.error(
                 "service_call_handler_error",

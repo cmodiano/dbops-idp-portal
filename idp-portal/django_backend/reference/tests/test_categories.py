@@ -9,6 +9,7 @@ from rest_framework import status
 
 from reference.models import RefCategory
 from idp_auth.models import User
+from profiles.models import Profile
 
 
 class RefCategoryModelTests(TestCase):
@@ -98,6 +99,14 @@ class RefCategoriesCRUDAPITests(TestCase):
     """Tests for POST/PATCH/DELETE /api/v1/admin/categories (Task 14.3, 14.4)."""
 
     def setUp(self):
+        Profile.objects.get_or_create(
+            name='DBOPS',
+            defaults={'ad_group': 'CN=DBOPS,OU=Groups,DC=example,DC=com', 'is_admin': 1, 'is_auditor': 0},
+        )
+        Profile.objects.get_or_create(
+            name='DBA',
+            defaults={'ad_group': 'CN=DBA,OU=Groups,DC=example,DC=com', 'is_admin': 0, 'is_auditor': 0},
+        )
         self.client = APIClient()
         self.dbops_user = User.objects.create(username='dbops', profile='DBOPS')
         self.regular_user = User.objects.create(username='regular', profile='DBA')
@@ -116,6 +125,7 @@ class RefCategoriesCRUDAPITests(TestCase):
         self.assertTrue(RefCategory.objects.filter(code='backup').exists())
 
     def test_create_requires_dbops(self):
+        """DBA (is_admin=0) gets 403 on admin endpoints."""
         self.client.force_authenticate(user=self.regular_user)
         response = self.client.post('/api/v1/admin/categories/', {
             'code': 'test', 'label': 'Test', 'display_order': 0, 'is_active': 1,
@@ -152,6 +162,7 @@ class RefCategoriesCRUDAPITests(TestCase):
         self.assertEqual(response.data['data']['display_order'], 55)
 
     def test_update_requires_dbops(self):
+        """DBA gets 403 on admin endpoints."""
         cat = RefCategory.objects.create(code='backup', label='Sauvegarde', display_order=50, is_active=1)
         self.client.force_authenticate(user=self.regular_user)
         response = self.client.patch(f'/api/v1/admin/categories/{cat.id}/', {
@@ -193,6 +204,14 @@ class ActionSerializerCategoryValidationTests(TestCase):
     """Tests for ActionSerializer.validate_category (Task 14.5)."""
 
     def setUp(self):
+        Profile.objects.get_or_create(
+            name='DBOPS',
+            defaults={'ad_group': 'CN=DBOPS,OU=Groups,DC=example,DC=com', 'is_admin': 1, 'is_auditor': 0},
+        )
+        Profile.objects.get_or_create(
+            name='DBA',
+            defaults={'ad_group': 'CN=DBA,OU=Groups,DC=example,DC=com', 'is_admin': 0, 'is_auditor': 0},
+        )
         self.client = APIClient()
         self.user = User.objects.create(username='dbops', profile='DBOPS')
         self.client.force_authenticate(user=self.user)

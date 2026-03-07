@@ -31,6 +31,8 @@ class TestProfileTargetPermissionsAPIWithExclusion(TestCase):
         self.user.profile = 'dbops'
         self.client.force_authenticate(user=self.user)
         
+        # Profile DBOPS is created by conftest._ensure_admin_profiles
+
         # Create admin profile for user
         self.admin_profile = Profile.objects.create(
             name="Admin Profile",

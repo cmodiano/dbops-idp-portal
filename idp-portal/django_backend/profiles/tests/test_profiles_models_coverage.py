@@ -22,10 +22,14 @@ class TestFindByAdGroupsMissingBranches(TestCase):
     """Cover the uncovered branches of ProfileManager.find_by_ad_groups."""
 
     def setUp(self):
-        self.profile = Profile.objects.create(
+        self.profile, _ = Profile.objects.get_or_create(
             name='DBA',
-            ad_group='GRP-IDP-DBA',
+            defaults={'ad_group': 'GRP-IDP-DBA'},
         )
+        # Ensure ad_group matches what this test expects
+        if self.profile.ad_group != 'GRP-IDP-DBA':
+            self.profile.ad_group = 'GRP-IDP-DBA'
+            self.profile.save()
 
     # --- line 44: falsy raw value (None) in the list ---
     def test_falsy_none_in_list_is_skipped(self):
@@ -85,9 +89,9 @@ class TestProfileActionPermissionStrAndErrorPaths(TestCase):
     """Cover __str__ and JSON-decode error paths for ProfileActionPermission."""
 
     def setUp(self):
-        self.profile = Profile.objects.create(
+        self.profile, _ = Profile.objects.get_or_create(
             name='DBA',
-            ad_group='GRP-IDP-DBA',
+            defaults={'ad_group': 'GRP-IDP-DBA'},
         )
         self.permission = ProfileActionPermission.objects.create(
             profile=self.profile,
@@ -126,9 +130,9 @@ class TestProfileTargetPermissionStrAndErrorPaths(TestCase):
     """Cover __str__ and JSON-decode error paths for ProfileTargetPermission."""
 
     def setUp(self):
-        self.profile = Profile.objects.create(
+        self.profile, _ = Profile.objects.get_or_create(
             name='DBA',
-            ad_group='GRP-IDP-DBA',
+            defaults={'ad_group': 'GRP-IDP-DBA'},
         )
         self.permission = ProfileTargetPermission.objects.create(
             profile=self.profile,

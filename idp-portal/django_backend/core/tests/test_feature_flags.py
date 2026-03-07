@@ -34,7 +34,8 @@ def api_client():
 
 @pytest.fixture
 def db_user(db):
-    return UserFactory.create(profile='DBA')
+    """Non-admin user for tests that require authenticated but denied access."""
+    return UserFactory.create(profile='business')
 
 
 @pytest.fixture

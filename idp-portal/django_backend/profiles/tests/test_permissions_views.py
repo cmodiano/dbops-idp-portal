@@ -26,18 +26,20 @@ class TestProfilePermissionsViews(TestCase):
         self.mock_list_envs = patcher.start()
         self.addCleanup(patcher.stop)
 
+        # Profile records (DBOPS, DBA) created by conftest._ensure_admin_profiles
+
         # Create DBOPS user
         self.dbops_user = User.objects.create(
             username='dbops_user',
             profile='dbops'
         )
-        
+
         # Create non-DBOPS user
         self.regular_user = User.objects.create(
             username='regular_user',
             profile='dba'
         )
-        
+
         # Create test profile
         self.profile = Profile.objects.create(
             name='Test Profile',

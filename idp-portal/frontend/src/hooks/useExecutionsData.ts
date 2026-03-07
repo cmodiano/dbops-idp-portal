@@ -42,6 +42,8 @@ const PAGE_SIZE = 25;
 const OBSERVER_POLL_INTERVAL_MS = 10_000;
 /** Slower interval when no running executions, so new executions from other users appear in the list. */
 const BACKGROUND_POLL_INTERVAL_MS = 30_000;
+/** Pending approvals list polling interval (Story 58.5 — AC1, AC3). */
+const APPROVAL_LIST_POLL_INTERVAL_MS = 30_000;
 
 export interface UseExecutionsDataReturn {
   // Executions
@@ -110,6 +112,8 @@ export const useExecutionsData = (
   const activeScopeRef = useRef(activeScope);
   const isRefreshingRef = useRef(false);
   const refetchSilentRef = useRef<(() => Promise<void>) | null>(null);
+  const loadPendingApprovalsRef = useRef<(() => Promise<void>) | null>(null);
+  const isLoadingApprovalsRef = useRef(false);
   const hasRunningRef = useRef(false);
 
   useEffect(() => { currentPageRef.current = currentPage; }, [currentPage]);
@@ -185,8 +189,12 @@ export const useExecutionsData = (
 
     const timeoutIdRef = { current: scheduleNext() };
 
+    // Story 58.5 — AC2: reload pending approvals on tab focus
     const handleVisibility = () => {
-      if (!document.hidden) refetchSilentRef.current?.();
+      if (!document.hidden) {
+        refetchSilentRef.current?.();
+        loadPendingApprovalsRef.current?.();
+      }
     };
     document.addEventListener('visibilitychange', handleVisibility);
 
@@ -214,20 +222,39 @@ export const useExecutionsData = (
   }, [activeScope, filters]);
 
   // Pending approvals (Story 8.8)
+  // Loading state is only set during initial load (not during polling/visibility refetches)
+  // to avoid flashing a spinner every 30s (Story 58.5 review fix).
   const loadPendingApprovals = useCallback(async () => {
-    if (!canApprove) return;
-    setPendingApprovalsLoading(true);
+    if (!canApprove || isLoadingApprovalsRef.current) return;
+    isLoadingApprovalsRef.current = true;
     try {
       const response = await listPendingApprovals(50, 0);
       setPendingApprovals(response.data);
     } catch {
       setPendingApprovals([]);
     } finally {
-      setPendingApprovalsLoading(false);
+      isLoadingApprovalsRef.current = false;
     }
   }, [canApprove]);
 
-  useEffect(() => { loadPendingApprovals(); }, [loadPendingApprovals]);
+  useEffect(() => { loadPendingApprovalsRef.current = loadPendingApprovals; }, [loadPendingApprovals]);
+
+  // Initial load with loading indicator (subsequent polls are silent)
+  useEffect(() => {
+    setPendingApprovalsLoading(true);
+    loadPendingApprovals().finally(() => setPendingApprovalsLoading(false));
+  }, [loadPendingApprovals]);
+
+  // Story 58.5 — Poll pending approvals list every 30s (AC1, AC3)
+  useEffect(() => {
+    if (!canApprove) return;
+    const intervalId = setInterval(() => {
+      if (!document.hidden) {
+        loadPendingApprovals();
+      }
+    }, APPROVAL_LIST_POLL_INTERVAL_MS);
+    return () => clearInterval(intervalId);
+  }, [canApprove, loadPendingApprovals]);
 
   // Integration icons
   useEffect(() => {

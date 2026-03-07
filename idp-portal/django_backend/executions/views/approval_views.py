@@ -12,6 +12,7 @@ import structlog
 from django.db import connection, transaction
 from django.db.models import Q
 from django.utils import timezone
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -21,8 +22,9 @@ from core.exceptions import BadRequestError, NotFoundError
 from core.middleware import get_correlation_id
 from core.models import AuditActionType, AuditEntityType
 from core.pagination import paginate_queryset
-from core.permissions import IsDBAOrDBOPS
+from core.permissions import IsDBAOrDBOPS, is_admin_user
 from core.services import AuditService
+from profiles.models import Profile
 from executions.models import (
     Execution,
     ExecutionStatus,
@@ -39,6 +41,77 @@ from rest_framework import serializers
 from drf_spectacular.utils import extend_schema, OpenApiParameter, inline_serializer
 
 logger = structlog.get_logger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Helpers Story 58.4 — approver permission check
+# ---------------------------------------------------------------------------
+
+
+def _get_user_profile_ids(user: User) -> set[int]:
+    """Retourne les IDs de profils de l'utilisateur.
+
+    Chemin 1 : Profile ORM direct
+    Chemin 2 : M2M profiles
+    Chemin 3 : ad_groups → Profile.objects.find_by_ad_groups()
+    """
+    profile_ids: set[int] = set()
+    # Chemin 1
+    profile_val = getattr(user, 'profile', None)
+    if profile_val and hasattr(profile_val, 'id'):
+        profile_ids.add(profile_val.id)
+    # Chemin 2
+    if hasattr(user, 'profiles'):
+        for p in user.profiles.all():
+            profile_ids.add(p.id)
+    # Chemin 3
+    if hasattr(user, 'ad_groups'):
+        ad_groups = user.ad_groups or []
+        for p in Profile.objects.find_by_ad_groups(ad_groups):
+            profile_ids.add(p.id)
+    return profile_ids
+
+
+def _is_user_approver(user: User) -> bool:
+    """Vérifie si l'utilisateur a au moins un profil avec is_approver=True.
+
+    Chemin 1 : Profile ORM direct
+    Chemin 2 : M2M profiles
+    Chemin 3 : ad_groups → Profile.objects.find_by_ad_groups()
+    """
+    # Chemin 1
+    profile_val = getattr(user, 'profile', None)
+    if profile_val and hasattr(profile_val, 'is_approver_bool') and profile_val.is_approver_bool:
+        return True
+    # Chemin 2
+    if hasattr(user, 'profiles'):
+        for p in user.profiles.all():
+            if getattr(p, 'is_approver_bool', False):
+                return True
+    # Chemin 3
+    if hasattr(user, 'ad_groups'):
+        ad_groups = user.ad_groups or []
+        for p in Profile.objects.find_by_ad_groups(ad_groups):
+            if p.is_approver_bool:
+                return True
+    return False
+
+
+def _check_approver_permission(user: User, step_config: dict) -> bool:
+    """Vérifie si l'utilisateur peut approuver ce step (Story 58.4 AC3).
+
+    Logique :
+    - Si step_config contient approver_profile_ids non vide :
+        → True si l'utilisateur a au moins un profil dans la liste
+    - Sinon (fallback) :
+        → True si l'utilisateur a au moins un profil avec is_approver=True
+    """
+    approver_profile_ids = step_config.get('approver_profile_ids') or []
+    if approver_profile_ids:
+        user_profile_ids = _get_user_profile_ids(user)
+        return bool(user_profile_ids & set(approver_profile_ids))
+    # Fallback : tout profil is_approver=True
+    return _is_user_approver(user)
 
 
 # ---------------------------------------------------------------------------
@@ -227,6 +300,7 @@ class PendingApprovalsView(APIView):
         # Le filtre pk__in=Subquery ne produit pas de doublons.
         qs = (
             Execution.objects.select_related("action", "user", "action__integration")
+            .prefetch_related("targets")  # Story 58.2: évite N+1 pour ExecutionTargetSerializer
             .filter(Q(status=ExecutionStatus.PENDING_APPROVAL) | run_filter)
             .order_by("-created_at")
         )
@@ -251,13 +325,15 @@ class PendingApprovalsView(APIView):
 
 
 class ApproveExecutionView(APIView):
-    """POST /executions/{id}/approve — Approuver une exécution en attente (DBA/DBOPS only).
+    """POST /executions/{id}/approve — Approuver une exécution en attente.
 
     Story 33.4 (DIP): uses _execution_service_class + get_execution_service() so
     tests can override the service class without monkey-patching.
+    Story 58.4 AC3/AC5: permission granulaire — admin requis pour PENDING_APPROVAL,
+    _check_approver_permission pour step gate.
     """
 
-    permission_classes = [IsAuthenticated, IsDBAOrDBOPS]
+    permission_classes = [IsAuthenticated]  # Story 58.4: permission vérifiée en interne
 
     _execution_service_class: type[ExecutionService] = ExecutionService
 
@@ -268,6 +344,16 @@ class ApproveExecutionView(APIView):
     @extend_schema(
         tags=["executions"],
         summary="Approuver une exécution en attente",
+        request=inline_serializer(
+            name='ApproveExecutionRequest',
+            fields={
+                'comment': serializers.CharField(
+                    required=False,
+                    allow_blank=True,
+                    help_text='Commentaire optionnel',
+                ),
+            },
+        ),
         responses={200: ExecutionSerializer},
     )
     @transaction.atomic
@@ -280,6 +366,10 @@ class ApproveExecutionView(APIView):
             step = _find_first_waiting_approval_step(execution_id)
             if step is not None:
                 _validate_approval_gate_step(step)
+                # Story 58.4 AC3: check approver permission for step gate path
+                step_config = _get_step_config(step)
+                if not _check_approver_permission(cast(User, request.user), step_config):
+                    raise PermissionDenied("Vous n'avez pas les permissions pour approuver ce step")
                 correlation_id = get_correlation_id()
                 user_id = (
                     str(request.user.id)
@@ -292,7 +382,6 @@ class ApproveExecutionView(APIView):
                 step.status = ExecutionStepStatus.COMPLETED
                 step.completed_at = timezone.now()
                 step.save()
-                step_config = _get_step_config(step)
                 on_success_step_id = step_config.get("on_success_step_id")
                 if on_success_step_id:
                     transaction.on_commit(
@@ -329,8 +418,14 @@ class ApproveExecutionView(APIView):
                 return Response({"data": ExecutionStepSerializer(step).data})
             raise  # Re-raise original BadRequestError si aucun step WAITING trouvé
 
+        # AC5: Legacy PENDING_APPROVAL → conserver la restriction admin (Story 58.4)
+        if not is_admin_user(request.user):
+            raise PermissionDenied("Seuls les administrateurs peuvent approuver une exécution PENDING_APPROVAL")
+
         old_status = execution.status
         correlation_id = get_correlation_id()
+        # Code Review: capture optional approval comment for audit trail (parity with reject)
+        approval_comment = (request.data or {}).get("comment", "") or ""
         user_id = (
             str(request.user.id)
             if request.user and hasattr(request.user, "id")
@@ -360,6 +455,7 @@ class ApproveExecutionView(APIView):
                 "action_name": execution.action.name if execution.action else None,
                 "previous_status": old_status,
                 "new_status": ExecutionStatus.RUNNING,
+                "approval_comment": approval_comment or None,
             },
             correlation_id=correlation_id,
         )
@@ -399,13 +495,15 @@ class ApproveExecutionView(APIView):
 
 
 class RejectExecutionView(APIView):
-    """POST /executions/{id}/reject — Rejeter une exécution en attente (DBA/DBOPS only).
+    """POST /executions/{id}/reject — Rejeter une exécution en attente.
 
     Story 33.4 (DIP): uses _execution_service_class + get_execution_service() so
     tests can override the service class without monkey-patching.
+    Story 58.4 AC3/AC5: permission granulaire — admin requis pour PENDING_APPROVAL,
+    _check_approver_permission pour step gate.
     """
 
-    permission_classes = [IsAuthenticated, IsDBAOrDBOPS]
+    permission_classes = [IsAuthenticated]  # Story 58.4: permission vérifiée en interne
 
     _execution_service_class: type[ExecutionService] = ExecutionService
 
@@ -431,7 +529,71 @@ class RejectExecutionView(APIView):
     @transaction.atomic
     def post(self, request: Request, execution_id: int) -> Response:
         # Code Review 30.1: Atomic transaction + row-level locking to prevent race conditions
-        execution = _get_and_validate_pending_execution(execution_id)
+        # ADR-007 backward compat (Story 58.1): if execution not PENDING_APPROVAL, try step gate
+        try:
+            execution = _get_and_validate_pending_execution(execution_id)
+        except BadRequestError:
+            step = _find_first_waiting_approval_step(execution_id)
+            if step is not None:
+                _validate_approval_gate_step(step)
+                # Story 58.4 AC3: check approver permission for step gate path
+                step_config = _get_step_config(step)
+                if not _check_approver_permission(cast(User, request.user), step_config):
+                    raise PermissionDenied("Vous n'avez pas les permissions pour rejeter ce step")
+                rejection_reason = (request.data or {}).get("rejection_reason", "")
+                correlation_id = get_correlation_id()
+                user_id = (
+                    str(request.user.id)
+                    if request.user and hasattr(request.user, "id")
+                    else "unknown"
+                )
+                step.status = ExecutionStepStatus.FAILED
+                step.completed_at = timezone.now()
+                step.approval_comment = rejection_reason or ""
+                step.save()
+                on_error_step_id = step_config.get("on_error_step_id")
+                if on_error_step_id:
+                    transaction.on_commit(
+                        lambda: resume_container_workflow_from_gate.apply_async(
+                            args=[execution_id, on_error_step_id]
+                        )
+                    )
+                else:
+                    exec_ = step.execution
+                    if exec_.status == ExecutionStatus.RUNNING:
+                        exec_.status = ExecutionStatus.FAILED
+                        exec_.completed_at = timezone.now()
+                        exec_.error_message = rejection_reason or "Step approval rejected"
+                        exec_.save()
+                AuditService.create_entry(
+                    user_id=user_id,
+                    action_type=AuditActionType.EXECUTION_REJECTED,
+                    entity_type=AuditEntityType.EXECUTION,
+                    entity_id=execution_id,
+                    details={
+                        "step_id": step.id,
+                        "step_name": step.step_name,
+                        "on_error_step_id": on_error_step_id,
+                        "rejection_reason": rejection_reason or None,
+                        "via_legacy_endpoint": True,
+                    },
+                    correlation_id=correlation_id,
+                )
+                logger.info(
+                    "step_rejected_via_legacy_endpoint",
+                    step_id=step.id,
+                    execution_id=execution_id,
+                    user_id=user_id,
+                    correlation_id=correlation_id,
+                )
+                execution = step.execution
+                execution.refresh_from_db()
+                return Response({"data": ExecutionSerializer(execution).data})
+            raise  # Re-raise original BadRequestError si aucun step WAITING trouvé
+
+        # AC5: Legacy PENDING_APPROVAL → conserver la restriction admin (Story 58.4)
+        if not is_admin_user(request.user):
+            raise PermissionDenied("Seuls les administrateurs peuvent rejeter une exécution PENDING_APPROVAL")
 
         rejection_reason = (request.data or {}).get("rejection_reason", "")
 
@@ -489,9 +651,9 @@ class RejectExecutionView(APIView):
 
 
 class ApproveStepView(APIView):
-    """POST /executions/{id}/steps/{step_id}/approve/ — Story 57.8."""
+    """POST /executions/{id}/steps/{step_id}/approve/ — Story 57.8, 58.4."""
 
-    permission_classes = [IsAuthenticated, IsDBAOrDBOPS]
+    permission_classes = [IsAuthenticated]  # Story 58.4: permission granulaire via _check_approver_permission
 
     @extend_schema(
         tags=["executions"],
@@ -513,6 +675,11 @@ class ApproveStepView(APIView):
         step = _get_step_or_404(execution_id, step_id)
         _validate_approval_gate_step(step)
 
+        # Story 58.4 AC3: vérifier la permission granulaire via approver_profile_ids
+        step_config = _get_step_config(step)
+        if not _check_approver_permission(cast(User, request.user), step_config):
+            raise PermissionDenied("Vous n'avez pas les permissions pour approuver ce step")
+
         correlation_id = get_correlation_id()
         user_id = (
             str(request.user.id)
@@ -526,8 +693,6 @@ class ApproveStepView(APIView):
         step.status = ExecutionStepStatus.COMPLETED
         step.completed_at = timezone.now()
         step.save()
-
-        step_config = _get_step_config(step)
         on_success_step_id = step_config.get("on_success_step_id")
 
         if on_success_step_id:
@@ -570,9 +735,9 @@ class ApproveStepView(APIView):
 
 
 class RejectStepView(APIView):
-    """POST /executions/{id}/steps/{step_id}/reject/ — Story 57.8."""
+    """POST /executions/{id}/steps/{step_id}/reject/ — Story 57.8, 58.4."""
 
-    permission_classes = [IsAuthenticated, IsDBAOrDBOPS]
+    permission_classes = [IsAuthenticated]  # Story 58.4: permission granulaire via _check_approver_permission
 
     @extend_schema(
         tags=["executions"],
@@ -594,6 +759,11 @@ class RejectStepView(APIView):
         step = _get_step_or_404(execution_id, step_id)
         _validate_approval_gate_step(step)
 
+        # Story 58.4 AC3: vérifier la permission granulaire via approver_profile_ids
+        step_config = _get_step_config(step)
+        if not _check_approver_permission(cast(User, request.user), step_config):
+            raise PermissionDenied("Vous n'avez pas les permissions pour rejeter ce step")
+
         correlation_id = get_correlation_id()
         user_id = (
             str(request.user.id)
@@ -606,7 +776,6 @@ class RejectStepView(APIView):
         step.approval_comment = request.data.get("comment", "") or ""
         step.save()
 
-        step_config = _get_step_config(step)
         on_error_step_id = step_config.get("on_error_step_id")
 
         if on_error_step_id:

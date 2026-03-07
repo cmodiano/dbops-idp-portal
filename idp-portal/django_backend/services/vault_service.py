@@ -551,6 +551,12 @@ class VaultService(IHealthCheckable):
 _vault_service: VaultService | None = None
 _vault_service_lock = RLock()
 
+# Story 27.11 fix: Registry of VaultService instances for multi-instance support.
+# Without this, a new VaultService (and empty cache) was created on every call
+# for integrations with secret_service_id, making the TTL cache useless.
+_vault_service_registry: dict[str, VaultService] = {}
+_vault_registry_lock = RLock()
+
 
 def get_vault_service() -> VaultService:
     """Get or create the module-level VaultService singleton."""
@@ -560,3 +566,108 @@ def get_vault_service() -> VaultService:
             if _vault_service is None:
                 _vault_service = VaultService()
     return _vault_service
+
+
+def get_vault_service_for_integration(
+    vault_addr: str,
+    vault_namespace: str | None = None,
+    instance_id: str = "",
+) -> VaultService:
+    """Get or create a VaultService for a specific Vault integration.
+
+    Reuses existing instances by instance_id so their TTL cache persists
+    across calls. Without this, each resolve_credential() call for a
+    multi-instance Vault created a brand-new VaultService with an empty cache.
+    """
+    key = instance_id or vault_addr
+    svc = _vault_service_registry.get(key)
+    if svc is not None:
+        return svc
+
+    with _vault_registry_lock:
+        # Double-check under lock
+        svc = _vault_service_registry.get(key)
+        if svc is not None:
+            return svc
+
+        svc = VaultService(
+            vault_addr=vault_addr,
+            vault_namespace=vault_namespace,
+            instance_id=instance_id,
+        )
+        _vault_service_registry[key] = svc
+        logger.info(
+            "vault_service_registry_created",
+            instance_id=instance_id,
+            vault_addr=vault_addr,
+        )
+        return svc
+
+
+def warmup_vault_cache() -> dict[str, int]:
+    """Pre-load Vault secrets for all integrations into the in-memory cache.
+
+    Queries all Integration rows whose credential_ref starts with ``vault:``
+    and resolves each one so the VaultService TTL cache is primed.
+
+    Returns:
+        Dict with counts: {"total": N, "ok": N, "errors": N, "skipped": N}
+    """
+    from integrations.models import Integration
+
+    stats = {"total": 0, "ok": 0, "errors": 0, "skipped": 0}
+
+    integrations = (
+        Integration.objects
+        .filter(credential_ref__startswith="vault:")
+        .exclude(type="vault")
+        .values_list("id", "credential_ref", "secret_service_id", named=True)
+    )
+
+    stats["total"] = len(integrations)
+
+    if stats["total"] == 0:
+        logger.info("vault_cache_warmup_skip", reason="no vault credential_refs found")
+        return stats
+
+    # Deduplicate by credential_ref + secret_service_id to avoid fetching the same
+    # secret multiple times (e.g., shared credentials across integrations).
+    seen: set[tuple[str, int | None]] = set()
+
+    for row in integrations:
+        if row.credential_ref is None:
+            continue
+        dedup_key: tuple[str, int | None] = (row.credential_ref, row.secret_service_id)
+        if dedup_key in seen:
+            stats["skipped"] += 1
+            continue
+        seen.add(dedup_key)
+
+        try:
+            if row.secret_service_id:
+                # Multi-instance Vault: need full Integration object for resolve_credential
+                integration_obj = Integration.objects.get(id=row.id)
+                _warmup_single(row.credential_ref, integration=integration_obj)
+            else:
+                _warmup_single(row.credential_ref)
+            stats["ok"] += 1
+        except Exception:  # noqa: BLE001 — warmup is best-effort
+            stats["errors"] += 1
+            logger.warning(
+                "vault_cache_warmup_error",
+                integration_id=row.id,
+                exc_info=True,
+            )
+
+    logger.info("vault_cache_warmup_done", **stats)
+    return stats
+
+
+def _warmup_single(
+    credential_ref: str,
+    integration: Any | None = None,
+) -> None:
+    """Resolve a single credential_ref to prime the cache."""
+    from adapters.utils import resolve_credential
+
+    resolve_credential(credential_ref, correlation_id="warmup", integration=integration)

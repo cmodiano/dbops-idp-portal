@@ -36,10 +36,6 @@ const defaultProps: WizardStep3ImpactChangementProps = {
   setImpactRulesList: vi.fn(),
   defaultImpactLevel: null,
   setDefaultImpactLevel: vi.fn(),
-  changeTypeConfig: {},
-  setChangeTypeConfig: vi.fn(),
-  gateConfig: null,
-  setGateConfig: vi.fn(),
   businessRulePolicyId: null,
   setBusinessRulePolicyId: vi.fn(),
   notificationConfig: null,
@@ -67,16 +63,6 @@ describe('WizardStep3ImpactChangement', () => {
   it('affiche le sélecteur de niveau d\'impact par défaut', () => {
     renderWithForm();
     expect(screen.getByText(/Niveau d'impact par défaut/i)).toBeInTheDocument();
-  });
-
-  it('affiche la section Gates et ServiceNow pour une action', () => {
-    renderWithForm();
-    expect(screen.getByText(/Gates et Changement ServiceNow/i)).toBeInTheDocument();
-  });
-
-  it('masque la section ServiceNow pour un workflow', () => {
-    renderWithForm({ ...defaultProps, isWorkflow: true });
-    expect(screen.queryByText(/Gates et Changement ServiceNow/i)).not.toBeInTheDocument();
   });
 
   it('affiche les sections Règles métier et Notifications', () => {

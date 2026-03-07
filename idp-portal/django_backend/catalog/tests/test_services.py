@@ -83,7 +83,6 @@ class TestCatalogService(TestCase):
             'execution_steps': [
                 {'step_order': 1, 'step_name': 'Step 1', 'step_type': 'manual'}
             ],
-            'change_type_config': {'type': 'standard'},
             'remediation_rules': {'enabled': True}
         }
 
@@ -93,7 +92,6 @@ class TestCatalogService(TestCase):
         self.assertEqual(action.parameters_schema['type'], 'object')
         self.assertEqual(action.impact_rules['DEV']['level'], 'low')
         self.assertEqual(len(action.execution_steps), 1)
-        self.assertEqual(action.change_type_config['type'], 'standard')
         self.assertTrue(action.remediation_rules['enabled'])
 
     def test_list_all_with_filters(self):

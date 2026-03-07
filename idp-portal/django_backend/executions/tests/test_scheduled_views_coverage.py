@@ -231,7 +231,8 @@ class TestScheduledExecutionsPost(TestCase):
 
     def test_both_scheduled_at_and_recurring_pattern_returns_400(self, mock_svc_cls, mock_validate):
         mock_validate.return_value = None
-        resp = self._post(self.dba_user, {
+        admin_user = UserFactory(profile="DBOPS")
+        resp = self._post(admin_user, {
             "action_id": self.action.id,
             "environment": "dev",
             "scheduled_at": _future(),
@@ -314,11 +315,12 @@ class TestScheduledExecutionsPost(TestCase):
     def test_create_with_recurring_pattern_returns_201(self, mock_calc, mock_cid, mock_svc_cls, mock_validate):
         mock_validate.return_value = None
         mock_calc.return_value = timezone.now() + timedelta(days=1)
-        se = self._make_se()
+        admin_user = UserFactory(profile="DBOPS")
+        se = ScheduledExecutionFactory(user=admin_user, action=self.action)
         mock_svc = MagicMock()
         mock_svc.create_scheduled_execution.return_value = se
         mock_svc_cls.return_value = mock_svc
-        resp = self._post(self.dba_user, {
+        resp = self._post(admin_user, {
             "action_id": self.action.id,
             "environment": "dev",
             "recurring_pattern": {"pattern_type": "daily", "pattern_config": {"time": "02:00"}},
@@ -510,29 +512,28 @@ class TestScheduledExecutionUpdatePut(TestCase):
         resp = self._put(self.dba_user, se.id, {"scheduled_at": _past()})
         self.assertEqual(resp.status_code, 400)
 
-    # --- mise à jour environment --------------------------------------------
+    # --- Story 11.11 AC1: forbidden field updates return 400 ----------------
 
     def test_put_update_environment(self, mock_validate):
+        """Story 11.11 AC1: environment is not modifiable via PUT → 400."""
         mock_validate.return_value = None
         se = self._se()
         resp = self._put(self.dba_user, se.id, {"environment": "prod"})
-        self.assertEqual(resp.status_code, 200)
-
-    # --- mise à jour parameters ---------------------------------------------
+        self.assertEqual(resp.status_code, 400)
 
     def test_put_update_parameters(self, mock_validate):
+        """Story 11.11 AC1: parameters is not modifiable via PUT → 400."""
         mock_validate.return_value = None
         se = self._se()
         resp = self._put(self.dba_user, se.id, {"parameters": {"key": "value"}})
-        self.assertEqual(resp.status_code, 200)
-
-    # --- target_names = [] (vide) -------------------------------------------
+        self.assertEqual(resp.status_code, 400)
 
     def test_put_target_names_empty_list(self, mock_validate):
+        """Story 11.11 AC1: target_names is not modifiable via PUT → 400."""
         mock_validate.return_value = None
         se = self._se()
         resp = self._put(self.dba_user, se.id, {"target_names": []})
-        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.status_code, 400)
 
     # --- target_names pas une liste -----------------------------------------
 
@@ -542,77 +543,41 @@ class TestScheduledExecutionUpdatePut(TestCase):
         resp = self._put(self.dba_user, se.id, {"target_names": "not-a-list"})
         self.assertEqual(resp.status_code, 400)
 
-    # --- target_names non vide : cible non autorisée ------------------------
+    # --- Story 11.11 AC1: target_names is forbidden in PUT ------------------
 
-    @patch("executions.views.scheduled_views.InventoryService")
-    @patch("executions.views.scheduled_views.get_user_ad_groups", return_value=[])
-    def test_put_target_names_forbidden_target(self, mock_ad, mock_inv_cls, mock_validate):
+    def test_put_target_names_forbidden_field(self, mock_validate):
+        """Story 11.11 AC1: target_names is not modifiable via PUT → 400."""
         mock_validate.return_value = None
-        mock_inv = MagicMock()
-        mock_inv.list_targets_for_user.return_value = ([], 0, False)
-        mock_inv_cls.return_value = mock_inv
         se = self._se()
         resp = self._put(self.dba_user, se.id, {"target_names": ["forbidden-host"]})
-        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(resp.status_code, 400)
 
-    # --- target_names : cibles d'environnements mixtes ----------------------
-
-    @patch("executions.views.scheduled_views.InventoryService")
-    @patch("executions.views.scheduled_views.get_user_ad_groups", return_value=[])
-    def test_put_target_names_mixed_environments(self, mock_ad, mock_inv_cls, mock_validate):
+    def test_put_target_names_mixed_environments_forbidden(self, mock_validate):
+        """Story 11.11 AC1: target_names is not modifiable via PUT → 400."""
         mock_validate.return_value = None
-        mock_inv = MagicMock()
-        mock_inv.list_targets_for_user.return_value = (
-            [
-                {"name": "host-dev", "environment": "dev"},
-                {"name": "host-prod", "environment": "prod"},
-            ],
-            2,
-            False,
-        )
-        mock_inv_cls.return_value = mock_inv
         se = self._se()
         resp = self._put(self.dba_user, se.id, {"target_names": ["host-dev", "host-prod"]})
         self.assertEqual(resp.status_code, 400)
 
-    # --- target_names : succès avec un seul environnement ------------------
-
-    @patch("executions.views.scheduled_views.InventoryService")
-    @patch("executions.views.scheduled_views.get_user_ad_groups", return_value=[])
-    def test_put_target_names_success(self, mock_ad, mock_inv_cls, mock_validate):
+    def test_put_target_names_success_forbidden(self, mock_validate):
+        """Story 11.11 AC1: target_names is not modifiable via PUT → 400."""
         mock_validate.return_value = None
-        mock_inv = MagicMock()
-        mock_inv.list_targets_for_user.return_value = (
-            [{"name": "host-dev", "environment": "dev"}],
-            1,
-            False,
-        )
-        mock_inv_cls.return_value = mock_inv
         se = self._se()
         resp = self._put(self.dba_user, se.id, {"target_names": ["host-dev"]})
-        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.status_code, 400)
 
-    # --- InventoryServiceError ----------------------------------------------
-
-    @patch("executions.views.scheduled_views.InventoryService")
-    @patch("executions.views.scheduled_views.get_user_ad_groups", return_value=[])
-    def test_put_inventory_service_error(self, mock_ad, mock_inv_cls, mock_validate):
-        from inventory.services import InventoryServiceError
-
+    def test_put_inventory_service_error_forbidden(self, mock_validate):
+        """Story 11.11 AC1: target_names is not modifiable via PUT → 400."""
         mock_validate.return_value = None
-        mock_inv = MagicMock()
-        mock_inv.list_targets_for_user.side_effect = InventoryServiceError("down")
-        mock_inv_cls.return_value = mock_inv
         se = self._se()
         resp = self._put(self.dba_user, se.id, {"target_names": ["some-host"]})
         self.assertEqual(resp.status_code, 400)
 
-    # --- recurring_pattern present : mise à jour ----------------------------
+    # --- Story 11.11 AC1: recurring_pattern is forbidden in PUT -------------
 
-    @patch("executions.views.scheduled_views.calculate_next_execution_date")
-    def test_put_update_recurring_pattern(self, mock_calc, mock_validate):
+    def test_put_update_recurring_pattern(self, mock_validate):
+        """Story 11.11 AC1: recurring_pattern is not modifiable via PUT → 400."""
         mock_validate.return_value = None
-        mock_calc.return_value = timezone.now() + timedelta(days=1)
         se = self._se()
         RecurringPatternFactory(scheduled_execution=se, pattern_type="daily", is_active=1)
         resp = self._put(self.dba_user, se.id, {
@@ -621,7 +586,7 @@ class TestScheduledExecutionUpdatePut(TestCase):
                 "pattern_config": {"day_of_week": 1, "time": "03:00"},
             }
         })
-        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.status_code, 400)
 
 
 # ===========================================================================

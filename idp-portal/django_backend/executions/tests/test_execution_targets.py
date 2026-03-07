@@ -416,10 +416,10 @@ class ExecutionTargetSerializerUnitTest(TestCase):
         self.assertEqual(data['target_metadata'], {'env': 'dev'})
 
     def test_serializer_null_metadata(self):
-        """ExecutionTargetSerializer handles null metadata."""
+        """ExecutionTargetSerializer handles null metadata (returns empty dict)."""
         target = ExecutionTarget.objects.create(
             execution=self.execution, target_type=TargetType.DATABASE,
             target_id='db-01', target_name='db-01',
         )
         data = ExecutionTargetSerializer(target).data
-        self.assertIsNone(data['target_metadata'])
+        self.assertEqual(data['target_metadata'], {})

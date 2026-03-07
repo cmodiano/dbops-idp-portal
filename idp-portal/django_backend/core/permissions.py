@@ -14,102 +14,153 @@ import structlog
 
 logger = structlog.get_logger(__name__)
 
-# Shared admin profile names (DBA/DBOPS) for view-level and filter-level checks
+# Legacy constant kept for backward compatibility (not used internally anymore).
+# Story 56.7: Déprécié — plus utilisé pour les permissions. Conservé pour compatibilité éventuelle.
 _ADMIN_PROFILES = {'dbops', 'dba', 'dba_applicatif', 'dba_infrastructure'}
 
 
-def is_admin_user(user: Any) -> bool:
+def _normalize_profile_names(raw: Any) -> set[str]:
+    """Normalise une valeur brute (str ou iterable) en set de noms de profils.
+
+    Si raw est une chaîne, la split sur virgules et trim. Sinon itère sur raw.
+    Retourne un set de chaînes normalisées (strip + lower).
     """
-    Check if user has an admin DBA/DBOPS profile (profile string, profiles M2M, or ad_groups).
+    if isinstance(raw, str):
+        raw_items = [s.strip() for s in raw.split(',') if s.strip()]
+    else:
+        raw_items = [str(item).strip() for item in raw if str(item).strip()]
+    return {item.lower() for item in raw_items}
 
-    Reusable without a request object. Used by IsDBAOrDBOPS.has_permission and by
-    executions.utils.filters for scope=all admin check.
+
+def _get_admin_profile_names() -> set[str]:
+    """Résout le set de noms de profils admin depuis settings (configurable).
+
+    Story 56.4: Utilise ADMIN_PROFILE_NAMES si défini, sinon fallback vers _ADMIN_PROFILES
+    pour la compatibilité.
+
+    Story 56.7: Déprécié — plus utilisé pour les permissions. Conservé pour compatibilité éventuelle.
     """
-    if not user or not getattr(user, 'is_authenticated', False):
-        return False
+    raw = getattr(settings, 'ADMIN_PROFILE_NAMES', _ADMIN_PROFILES)
+    return _normalize_profile_names(raw)
 
-    # Check via user.profile attribute (SAML string)
-    profile_str = getattr(user, 'profile', None)
-    if profile_str and isinstance(profile_str, str) and profile_str.lower() in _ADMIN_PROFILES:
-        return True
 
-    # Check via user.profiles M2M relation (Profile model)
-    if hasattr(user, 'profiles'):
-        for profile in user.profiles.all():
-            if hasattr(profile, 'name') and profile.name.lower() in _ADMIN_PROFILES:
-                return True
+def _get_dbops_profile_names() -> set[str]:
+    """Résout le set de noms de profils DBOPS (admin endpoints only).
 
-    # Check via ad_groups → Profile resolution
-    if hasattr(user, 'ad_groups'):
-        ad_groups = user.ad_groups or []
-        if not isinstance(ad_groups, list):
-            ad_groups = []
+    Story 15.2 AC2: DBA doit être refusé sur les endpoints admin.
+
+    Story 56.7: Déprécié — plus utilisé pour les permissions. Conservé pour compatibilité éventuelle.
+    """
+    raw = getattr(settings, 'DBOPS_PROFILE_NAMES', {'dbops'})
+    return _normalize_profile_names(raw)
+
+
+def _resolve_user_profiles(user: Any) -> list['Profile']:
+    """Résout la liste des profils ORM d'un utilisateur.
+
+    Story 56.7 : Ordre canonique — ad_groups > M2M > profile string > profile objet.
+    Retourne une liste vide si aucun profil résolu (DB indisponible, profil inconnu, etc.).
+    """
+    # Chemin 1 : ad_groups → Profile.objects.find_by_ad_groups()
+    ad_groups = getattr(user, 'ad_groups', None) or []
+    if not isinstance(ad_groups, list):
+        ad_groups = []
+    if ad_groups:
         try:
-            for profile in Profile.objects.find_by_ad_groups(ad_groups):
-                if profile.name.lower() in _ADMIN_PROFILES:
-                    return True
+            return list(Profile.objects.find_by_ad_groups(ad_groups))
         except OperationalError as e:
             logger.warning(
-                "profile_db_unavailable_dba_check",
+                "profile_db_unavailable_admin_check",
                 user_id=getattr(user, 'id', None),
                 error=str(e),
                 error_type=type(e).__name__,
                 exc_info=True,
             )
+            return []
 
-    return False
+    # Chemin 2 : M2M profiles
+    if hasattr(user, 'profiles'):
+        try:
+            return list(user.profiles.all())
+        except OperationalError as e:
+            logger.warning(
+                "profile_db_unavailable_admin_check",
+                user_id=getattr(user, 'id', None),
+                error=str(e),
+                error_type=type(e).__name__,
+                exc_info=True,
+            )
+            return []
+
+    # Chemin 3 : profile string → DB lookup
+    profile_val = getattr(user, 'profile', None)
+    if isinstance(profile_val, str) and profile_val.strip():
+        try:
+            p = Profile.objects.filter(name__iexact=profile_val.strip()).first()
+            return [p] if p else []
+        except OperationalError as e:
+            logger.warning(
+                "profile_db_unavailable_admin_check",
+                user_id=getattr(user, 'id', None),
+                error=str(e),
+                error_type=type(e).__name__,
+                exc_info=True,
+            )
+            return []
+
+    # Chemin 4 : profile objet ORM direct
+    if profile_val is not None and hasattr(profile_val, 'is_admin_bool'):
+        return [profile_val]
+
+    return []
 
 
-class IsDBAOrDBOPS(permissions.BasePermission):
+def is_admin_user(user: Any) -> bool:
     """
-    Permission DRF permettant l'accès aux utilisateurs ayant un profil admin DBA/DBOPS.
+    Check if user has an admin profile (profile string, profiles M2M, or ad_groups).
 
-    Story 26.8 — Remplace le pattern fragile `_is_dba_or_dbops()` (startswith dangerous).
+    Story 56.7: Fully flag-based — uses Profile.is_admin_bool for all auth paths.
+    Ordre canonique : ad_groups > M2M > profile string (DB lookup) > profile ORM direct.
 
-    Profils autorisés (liste exhaustive) :
-    - dbops
-    - dba
-    - dba_applicatif
-    - dba_infrastructure
+    Reusable without a request object. Used by IsAdminUser.has_permission and by
+    executions.utils.filters for scope=all admin check.
+    """
+    if not user or not getattr(user, 'is_authenticated', False):
+        return False
+    profiles = _resolve_user_profiles(user)
+    return any(getattr(p, 'is_admin_bool', False) for p in profiles)
+
+
+class IsAdminUser(permissions.BasePermission):
+    """
+    Permission DRF : accès aux utilisateurs avec profil admin (is_admin=1).
+
+    Story 56.7: Fully flag-based — utilise Profile.is_admin_bool pour tous les chemins.
+    Story 56.4: Renommé depuis IsDBAOrDBOPS.
+    Story 26.8: Remplace le pattern fragile _is_dba_or_dbops().
 
     Utilisation :
-    - View-level : `permission_classes = [IsAuthenticated, IsDBAOrDBOPS]`
+    - View-level : `permission_classes = [IsAuthenticated, IsAdminUser]`
     - Object-level : `has_object_permission()` vérifie ownership OU admin
 
     Voir aussi :
-    - `DBOPSProfilePermission` : permission stricte DBOPS uniquement (admin endpoints)
+    - `AdminProfilePermission` : permission pour endpoints admin (avec superuser fallback)
     - Pour pattern owner-or-admin : utiliser `has_object_permission()` directement (Story 26.12)
-
-    Exemples :
-        # View-level permission (requiert DBA/DBOPS pour tous GET/POST/etc.)
-        class AdminOnlyView(APIView):
-            permission_classes = [IsAuthenticated, IsDBAOrDBOPS]
-
-        # Object-level permission (owner peut lire, DBA/DBOPS peut tout)
-        class ExecutionDetailView(APIView):
-            permission_classes = [IsAuthenticated, IsDBAOrDBOPS]
-
-            def get(self, request, execution_id):
-                execution = get_object_or_404(Execution, pk=execution_id)
-                self.check_object_permissions(request, execution)
-                # ...
     """
-
-    ADMIN_PROFILES = _ADMIN_PROFILES
 
     def has_permission(self, request: Any, view: Any) -> bool:
         """
-        Check view-level permission : user a-t-il un profil admin DBA/DBOPS ?
+        Check view-level permission : user a-t-il un profil admin ?
 
         Returns:
-            True si utilisateur authentifié avec profil dans ADMIN_PROFILES.
+            True si utilisateur authentifié avec profil admin.
             False sinon.
         """
         return is_admin_user(request.user)
 
     def has_object_permission(self, request: Any, view: Any, obj: Any) -> bool:
         """
-        Check object-level permission : user est-il owner OU admin DBA/DBOPS ?
+        Check object-level permission : user est-il owner OU admin ?
 
         Utilisé pour pattern "owner peut lire/modifier, admin peut tout".
 
@@ -136,69 +187,33 @@ class IsDBAOrDBOPS(permissions.BasePermission):
         return False
 
 
-class DBOPSProfilePermission(permissions.BasePermission):
+class AdminProfilePermission(permissions.BasePermission):
     """
-    Permission class that requires DBOPS profile.
+    Permission class that requires an admin profile for admin endpoints.
 
-    Story 22.1 CRIT-1: Fixed AttributeError from non-existent service.get_profiles_by_ad_groups()
-    by using Profile.objects.find_by_ad_groups() directly.
+    Story 56.7: Fully flag-based — uses Profile.is_admin_bool for all auth paths.
+    Story 15.2 AC2: DBA is DENIED on admin endpoints (profiles, integrations, actions,
+    analytics). Only DBOPS (or profiles with is_admin=1) can access these.
+    The distinction between DBA (is_admin=0) and DBOPS (is_admin=1) comes from the DB.
 
-    Story 22.2 CRIT-2: Superuser fallback is now conditional on ALLOW_SUPERUSER_FALLBACK setting.
-    Default is False (fail-secure). Set to True only in development for bootstrapping/convenience.
+    Story 56.4: Renommé depuis DBOPSProfilePermission.
+    Story 22.1 CRIT-1: Uses Profile.objects.find_by_ad_groups() directly.
+    Story 22.2 CRIT-2: Superuser fallback conditional on ALLOW_SUPERUSER_FALLBACK setting.
     """
 
     def has_permission(self, request: Any, view: Any) -> bool:
-        """Check if user has DBOPS profile."""
+        """Check if user has an admin profile (is_admin=1 in DB)."""
         if not request.user or not request.user.is_authenticated:
             return False
 
-        # Check if user has DBOPS profile via profile attribute
-        if hasattr(request.user, 'profile'):
-            profile = request.user.profile
-            if isinstance(profile, str) and profile.lower() == 'dbops':
-                return True
-            elif hasattr(profile, 'name') and profile.name.lower() == 'dbops':
-                return True
-
-        # Check via user's profiles relation (M2M through Profile model)
-        if hasattr(request.user, 'profiles'):
-            profiles = request.user.profiles.all()
-            for p in profiles:
-                if hasattr(p, 'name') and p.name.lower() == 'dbops':
-                    return True
-
-        # Check via ad_groups (user may have DBOPS via AD group membership)
-        if hasattr(request.user, 'ad_groups'):
-            ad_groups = request.user.ad_groups
-            # Normalize ad_groups to list (handle None, string, or non-list values)
-            if ad_groups is None:
-                ad_groups = []
-            elif not isinstance(ad_groups, list):
-                ad_groups = []
-
-            # Resolve profiles from AD groups via ProfileManager (Story 22.1: CRIT-1 fix)
-            try:
-                for profile in Profile.objects.find_by_ad_groups(ad_groups):
-                    if profile.name.lower() == 'dbops':
-                        return True
-            except OperationalError as e:
-                # AC#6 Justification: Catch OperationalError specifically for DB connectivity issues.
-                # This handles cases where the database is temporarily unavailable (network issues,
-                # connection pool exhausted, DB maintenance). We prefer to deny access (safe denial)
-                # rather than allowing unrestricted access when we cannot verify permissions.
-                # Story 17.6: Avoid broad Exception catches that mask bugs like AttributeError.
-                logger.warning(
-                    "profile_db_unavailable_dbops_check",
-                    user_id=getattr(request.user, 'id', None),
-                    error=str(e),
-                    error_type=type(e).__name__,
-                    exc_info=True,
-                )
+        profiles = _resolve_user_profiles(request.user)
+        if any(getattr(p, 'is_admin_bool', False) for p in profiles):
+            return True
 
         # Story 22.2 CRIT-2: Conditional superuser fallback (executed ONLY if all profile checks above returned False).
         # This fallback exists for development/bootstrapping convenience ONLY.
         # Controlled by settings.ALLOW_SUPERUSER_FALLBACK (default: False = fail-secure).
-        # In production, superusers MUST have an explicit DBOPS profile.
+        # In production, superusers MUST have an explicit admin profile.
         # WARNING: Enabling this in production bypasses RBAC for superusers — violates
         # principle of least privilege and SOC1 compliance requirements.
         if getattr(settings, 'ALLOW_SUPERUSER_FALLBACK', False) and request.user.is_superuser:
@@ -222,3 +237,9 @@ class OptionalUserPermission(permissions.BasePermission):
     def has_permission(self, request: Any, view: Any) -> bool:
         """Allow all users (authenticated or anonymous)."""
         return True
+
+
+# Aliases backward-compatible (Story 56.4)
+# Les fichiers consommateurs existants continuent de fonctionner sans modification.
+DBOPSProfilePermission = AdminProfilePermission
+IsDBAOrDBOPS = IsAdminUser

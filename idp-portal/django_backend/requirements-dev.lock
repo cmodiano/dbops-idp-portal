@@ -10,6 +10,7 @@ asgiref==3.11.1
     #   daphne
     #   django
     #   django-cors-headers
+    #   types-channels
 attrs==25.4.0
     # via
     #   jsonschema
@@ -104,6 +105,7 @@ django-stubs==5.2.9
     # via
     #   idp-portal-backend (pyproject.toml)
     #   djangorestframework-stubs
+    #   types-channels
 django-stubs-ext==5.2.9
     # via django-stubs
 djangorestframework==3.16.1
@@ -329,6 +331,8 @@ twisted==25.5.0
 txaio==25.12.2
     # via autobahn
 types-cachetools==6.2.0.20251022
+    # via idp-portal-backend (pyproject.toml)
+types-channels==4.3.0.20250822
     # via idp-portal-backend (pyproject.toml)
 types-pyyaml==6.0.12.20250915
     # via

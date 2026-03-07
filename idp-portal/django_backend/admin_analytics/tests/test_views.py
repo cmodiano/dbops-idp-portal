@@ -22,6 +22,7 @@ class TestAdminAnalyticsViewPermissions:
     def setup_method(self):
         self.client = APIClient()
         self.integration = IntegrationFactory.create()
+        # Profile records are created by conftest._ensure_admin_profiles (autouse fixture)
 
     def test_dbops_user_gets_200(self):
         """Utilisateur DBOPS → 200."""
@@ -64,6 +65,7 @@ class TestAdminAnalyticsViewDaysParam:
 
     def setup_method(self):
         self.client = APIClient()
+        # Profile records are created by conftest._ensure_admin_profiles (autouse fixture)
         self.user = UserFactory.create(profile='DBOPS')
         self.client.force_authenticate(user=self.user)
 
@@ -111,6 +113,7 @@ class TestAdminAnalyticsViewResponseStructure:
 
     def setup_method(self):
         self.client = APIClient()
+        # Profile records are created by conftest._ensure_admin_profiles (autouse fixture)
         self.user = UserFactory.create(profile='DBOPS')
         self.integration = IntegrationFactory.create()
         self.client.force_authenticate(user=self.user)

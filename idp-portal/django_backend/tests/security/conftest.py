@@ -70,34 +70,43 @@ def sec_business_user(db):
 @pytest.fixture
 def sec_profile_dbops(db):
     """DBOPS profile with admin flag."""
-    return Profile.objects.create(
+    profile, _ = Profile.objects.get_or_create(
         name='DBOPS',
-        ad_group='CN=DBOPS,OU=Groups,DC=corp,DC=com',
-        is_admin=1,
-        is_auditor=0,
+        defaults={
+            'ad_group': 'CN=DBOPS,OU=Groups,DC=corp,DC=com',
+            'is_admin': 1,
+            'is_auditor': 0,
+        },
     )
+    return profile
 
 
 @pytest.fixture
 def sec_profile_dba(db):
     """DBA profile."""
-    return Profile.objects.create(
+    profile, _ = Profile.objects.get_or_create(
         name='DBA',
-        ad_group='CN=DBA,OU=Groups,DC=corp,DC=com',
-        is_admin=0,
-        is_auditor=0,
+        defaults={
+            'ad_group': 'CN=DBA,OU=Groups,DC=corp,DC=com',
+            'is_admin': 0,
+            'is_auditor': 0,
+        },
     )
+    return profile
 
 
 @pytest.fixture
 def sec_profile_business(db):
     """Client Business profile."""
-    return Profile.objects.create(
+    profile, _ = Profile.objects.get_or_create(
         name='client_business',
-        ad_group='CN=Business,OU=Groups,DC=corp,DC=com',
-        is_admin=0,
-        is_auditor=0,
+        defaults={
+            'ad_group': 'CN=Business,OU=Groups,DC=corp,DC=com',
+            'is_admin': 0,
+            'is_auditor': 0,
+        },
     )
+    return profile
 
 
 # ============================================================================

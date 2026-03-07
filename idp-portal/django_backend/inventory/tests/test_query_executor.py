@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from django.db import DatabaseError, InterfaceError
+from django.test import override_settings
 
 from inventory.query_executor import (
     InventoryQueryExecutor,
@@ -566,3 +567,78 @@ class TestAdditionalBranches:
                           side_effect=InventoryServiceError("existing error")):
             with pytest.raises(InventoryServiceError, match="existing error"):
                 executor.read_distinct_environments()
+
+
+# ---------------------------------------------------------------------------
+# Story 56.1 — Tests INVENTORY_FALLBACK_SCHEMA configurable (AC3, AC4)
+# ---------------------------------------------------------------------------
+
+class TestFallbackSchemaConfig:
+    """AC3 : _read_servers_flat_fallback + AC4 : read_distinct_environments fallback."""
+
+    def _make_cursor_with_rows(self, rows):
+        mock_cursor = MagicMock()
+        mock_cursor.__enter__ = MagicMock(return_value=mock_cursor)
+        mock_cursor.__exit__ = MagicMock(return_value=False)
+        mock_cursor.fetchall.return_value = rows
+        return mock_cursor
+
+    # --- AC3 : _read_servers_flat_fallback ---
+
+    @override_settings(INVENTORY_FALLBACK_SCHEMA='MY_SCHEMA')
+    def test_read_servers_flat_fallback_uses_custom_schema(self):
+        """AC3 : _read_servers_flat_fallback passe MY_SCHEMA à read_oracle_inventory."""
+        executor = _make_executor()
+        with patch.object(executor, 'read_oracle_inventory', return_value=([], 0)) as mock_inv:
+            executor._read_servers_flat_fallback('dev')
+
+        mock_inv.assert_called_once()
+        call_kwargs = mock_inv.call_args
+        # Premier argument positionnel = table_or_synonym
+        assert call_kwargs[0][0] == 'MY_SCHEMA'
+
+    def test_read_servers_flat_fallback_uses_default_dbops_schema(self):
+        """AC3 (défaut) : sans setting custom, DBOPS_INVENTORY est utilisé."""
+        executor = _make_executor()
+        with patch.object(executor, 'read_oracle_inventory', return_value=([], 0)) as mock_inv:
+            executor._read_servers_flat_fallback()
+
+        mock_inv.assert_called_once()
+        call_kwargs = mock_inv.call_args
+        assert call_kwargs[0][0] == 'DBOPS_INVENTORY'
+
+    # --- AC4 : read_distinct_environments fallback ---
+
+    @override_settings(INVENTORY_FALLBACK_SCHEMA='MY_SCHEMA')
+    def test_read_distinct_environments_fallback_uses_custom_schema(self):
+        """AC4 : read_distinct_environments fallback utilise MY_SCHEMA dans la SQL."""
+        executor = _make_executor()
+        captured_sqls = []
+
+        def capture_exec_env_query(sql, corr, tag):
+            captured_sqls.append(sql)
+            return []
+
+        with patch.object(executor, '_get_inventory_mapper', return_value=None), \
+             patch.object(executor, '_exec_env_query', side_effect=capture_exec_env_query):
+            executor.read_distinct_environments()
+
+        assert len(captured_sqls) == 1
+        assert 'MY_SCHEMA' in captured_sqls[0]
+        assert 'DBOPS_INVENTORY' not in captured_sqls[0]
+
+    def test_read_distinct_environments_fallback_uses_default_dbops_schema(self):
+        """AC4 (défaut) : sans setting custom, SQL fallback utilise DBOPS_INVENTORY."""
+        executor = _make_executor()
+        captured_sqls = []
+
+        def capture_exec_env_query(sql, corr, tag):
+            captured_sqls.append(sql)
+            return []
+
+        with patch.object(executor, '_get_inventory_mapper', return_value=None), \
+             patch.object(executor, '_exec_env_query', side_effect=capture_exec_env_query):
+            executor.read_distinct_environments()
+
+        assert len(captured_sqls) == 1
+        assert 'DBOPS_INVENTORY' in captured_sqls[0]

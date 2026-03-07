@@ -36,6 +36,14 @@ export interface ExecutionCreateResponse {
   error_message?: string | null;
 }
 
+/** Execution target (Story 25.1, Story 58.2). */
+export interface ExecutionTarget {
+  target_type: string;
+  target_id: string;
+  target_name: string;
+  target_metadata: Record<string, unknown> | null;
+}
+
 /** Execution record (Story 4.1; Story 7.4: approval fields; Story 9.2: remediation; Story 9.9: enrichment). */
 export interface ExecutionResponse {
   id: number;
@@ -75,10 +83,12 @@ export interface ExecutionResponse {
   integration_name?: string | null;
   /** Story 9.9 AC6: Integration icon URL from INTEGRATIONS. */
   integration_icon?: string | null;
+  /** Story 25.1/58.2: Targets sélectionnés pour cette exécution. */
+  targets?: ExecutionTarget[];
 }
 
-/** Execution step status (Story 4.6). */
-export type ExecutionStepStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'SKIPPED';
+/** Execution step status (Story 4.6, Story 58.3: WAITING ajouté). */
+export type ExecutionStepStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'SKIPPED' | 'WAITING';
 
 /** Execution step type (Story 4.6). */
 export type ExecutionStepTypeApi = 'vault' | 'servicenow' | 'platform' | 'prerequisite' | 'verification' | 'schedule_execution';

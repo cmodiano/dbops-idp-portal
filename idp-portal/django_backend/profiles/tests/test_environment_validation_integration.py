@@ -117,7 +117,10 @@ class TestProfileEnvironmentValidationViews:
         """Set up test data."""
         self.client = APIClient()
         self.user = User.objects.create(username='dbops_user', profile='dbops')
-        self.profile = Profile.objects.create(name='Test Profile', ad_group='GRP-TEST')
+        # Profile DBOPS is created by conftest._ensure_admin_profiles (autouse fixture)
+        self.profile, _ = Profile.objects.get_or_create(
+            name='Test Profile', defaults={'ad_group': 'GRP-TEST'}
+        )
         self.client.force_authenticate(user=self.user)
 
     def test_put_actions_invalid_environment_http_400(self, mocker):

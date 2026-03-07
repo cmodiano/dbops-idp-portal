@@ -38,6 +38,8 @@ export interface SchedulingPanelProps {
   schedulingError: string | null;
   submitting: boolean;
   validation: UseSchedulingValidationReturn;
+  /** Story 11.11 AC5: If false, recurring options (daily/weekly/cron) are hidden. */
+  isAdmin?: boolean;
 }
 
 export const SchedulingPanel = memo(function SchedulingPanel({
@@ -46,6 +48,7 @@ export const SchedulingPanel = memo(function SchedulingPanel({
   schedulingError,
   submitting,
   validation,
+  isAdmin = true,
 }: SchedulingPanelProps) {
   const {
     schedulingType,
@@ -111,10 +114,15 @@ export const SchedulingPanel = memo(function SchedulingPanel({
           disabled={submitting}
         >
           <Radio value="one-time">Une seule fois</Radio>
-          <Radio value="daily">Tous les jours</Radio>
-          <Radio value="weekly">Toutes les semaines</Radio>
-          <Radio value="cron">Avancé (cron)</Radio>
+          {isAdmin && <Radio value="daily">Tous les jours</Radio>}
+          {isAdmin && <Radio value="weekly">Toutes les semaines</Radio>}
+          {isAdmin && <Radio value="cron">Avancé (cron)</Radio>}
         </Radio.Group>
+        {!isAdmin && (
+          <Tooltip title="Les exécutions récurrentes sont réservées aux administrateurs">
+            <InfoCircleOutlined style={{ color: '#8c8c8c', marginLeft: 8, cursor: 'help' }} />
+          </Tooltip>
+        )}
       </Form.Item>
 
       {schedulingType === 'one-time' && (

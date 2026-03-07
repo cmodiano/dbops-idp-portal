@@ -994,7 +994,7 @@ describe('ExecutionsPage', () => {
       });
     });
 
-    it('StatCards are displayed BEFORE pending approvals section (AC1)', async () => {
+    it('Pending approvals section is displayed BEFORE StatCards (AC1)', async () => {
       mockAuthSession('DBA');
       vi.mocked(executionService.listPendingApprovals).mockResolvedValue({
         data: [
@@ -1025,15 +1025,15 @@ describe('ExecutionsPage', () => {
         expect(screen.getByText('Approbations en attente')).toBeInTheDocument();
       });
 
-      // Check DOM order: StatCards should appear before pending approvals
+      // Check DOM order: pending approvals should appear before StatCards
       const statsCard = screen.getByText('Exécutions du jour').closest('.ant-card');
       const approvalsSection = document.getElementById('pending-approvals');
 
-      if (statsCard && approvalsSection) {
-        // Compare positions - stats should come before approvals
-        const statsPosition = statsCard.compareDocumentPosition(approvalsSection);
-        expect(statsPosition & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      }
+      expect(statsCard).not.toBeNull();
+      expect(approvalsSection).not.toBeNull();
+      // Compare positions - approvals should come before stats
+      const approvalsPosition = approvalsSection!.compareDocumentPosition(statsCard!);
+      expect(approvalsPosition & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
     it('shows loading skeleton while stats are loading (AC5)', async () => {

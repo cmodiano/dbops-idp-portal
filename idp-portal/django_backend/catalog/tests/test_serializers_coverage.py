@@ -145,13 +145,6 @@ class TestActionSerializerCoverage(TestCase):
         result = ActionSerializer().validate_parameters_schema(None)
         self.assertIsNone(result)
 
-    def test_validate_gate_config_not_none(self):
-        """Lignes 330-333 — gate_config non None déclenche validate_gate_config."""
-        s = ActionSerializer()
-        # Empty dict should pass validation
-        result = s.validate_gate_config(None)
-        self.assertIsNone(result)
-
     def test_validate_notification_config_not_none(self):
         """Lignes 337-340 — notification_config non None."""
         s = ActionSerializer()
@@ -292,12 +285,6 @@ class TestActionCreateSerializerCoverage(TestCase):
         result = s.validate_category(None)
         self.assertIsNone(result)
 
-    def test_validate_gate_config_none_returns_none(self):
-        """ActionCreateSerializer.validate_gate_config with None."""
-        s = ActionCreateSerializer()
-        result = s.validate_gate_config(None)
-        self.assertIsNone(result)
-
     def test_validate_notification_config_none_returns_none(self):
         """ActionCreateSerializer.validate_notification_config with None."""
         s = ActionCreateSerializer()
@@ -355,12 +342,6 @@ class TestActionCreateSerializerCoverage(TestCase):
         s = ActionCreateSerializer()
         # None value should return None
         result = s.validate_notification_config(None)
-        self.assertIsNone(result)
-
-    def test_validate_gate_config_not_none_triggers_validator(self):
-        """Lignes 533-536 — gate_config non None déclenche validate."""
-        s = ActionCreateSerializer()
-        result = s.validate_gate_config(None)
         self.assertIsNone(result)
 
 
@@ -704,15 +685,6 @@ class TestActionSerializerBusinessRulePolicyName(TestCase):
 class TestActionSerializerValidatorsNonNone(TestCase):
     """Lignes 331-332, 338-339, 345-346 — validators appelés avec valeur non-None."""
 
-    def test_validate_gate_config_calls_validator(self):
-        """Lignes 331-332 — gate_config non-None déclenche validate_gate_config."""
-        from unittest.mock import patch
-        s = ActionSerializer()
-        with patch('catalog.validators.validate_gate_config') as mock_validate:
-            result = s.validate_gate_config({'key': 'value'})
-            mock_validate.assert_called_once_with({'key': 'value'})
-        self.assertEqual(result, {'key': 'value'})
-
     def test_validate_notification_config_calls_validator(self):
         """Lignes 338-339 — notification_config non-None déclenche validate_notification_config."""
         from unittest.mock import patch
@@ -781,8 +753,6 @@ class TestActionSerializerToInternalValue(TestCase):
             'parameters_schema': schema,
             'impact_rules': {'level': 'low'},
             'execution_steps': [],
-            'change_type_config': {'type': 'standard'},
-            'gate_config': None,
             'notification_config': None,
             'remediation_rules': None,
             'business_rule_policies': None,
@@ -805,19 +775,10 @@ class TestActionCreateSerializerValidateCategoryDB(TestCase):
         self.assertIn('Invalid category', str(cm.exception.detail))
 
 
-# ─── Tests ActionCreateSerializer.validate_gate/notification non-None ─────────
+# ─── Tests ActionCreateSerializer.validate_notification non-None ──────────────
 
 class TestActionCreateSerializerValidatorsNonNone(TestCase):
-    """Lignes 534-535, 541-542 — validators appelés avec valeur non-None."""
-
-    def test_validate_gate_config_non_none_calls_validator(self):
-        """Lignes 534-535 — gate_config non-None déclenche validate_gate_config."""
-        from unittest.mock import patch
-        s = ActionCreateSerializer()
-        with patch('catalog.validators.validate_gate_config') as mock_validate:
-            result = s.validate_gate_config({'key': 'val'})
-            mock_validate.assert_called_once_with({'key': 'val'})
-        self.assertEqual(result, {'key': 'val'})
+    """Lignes 541-542 — validators appelés avec valeur non-None."""
 
     def test_validate_notification_config_non_none_calls_validator(self):
         """Lignes 541-542 — notification_config non-None déclenche validate."""

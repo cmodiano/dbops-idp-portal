@@ -41,7 +41,7 @@ class Profile(models.Model):
     name = models.CharField(max_length=255, unique=True)
     description = models.CharField(max_length=4000, null=True)
     ad_group = models.CharField(max_length=512)  # Ex: "CN=DBA-DEV,OU=Groups,DC=corp"
-    is_admin = models.IntegerField(default=0)    # 1 = profil admin (DBOPS)
+    is_admin = models.IntegerField(default=0)    # 1 = profil admin (is_admin_bool = True)
     is_auditor = models.IntegerField(default=0)  # 1 = profil auditeur
 ```
 
@@ -100,62 +100,54 @@ Liste des environnements autorisés pour l'exécution:
 
 ## Permissions DRF
 
-### DBOPSProfilePermission
+### AdminProfilePermission
+
+> **Note :** `DBOPSProfilePermission` est un alias maintenu pour la rétrocompatibilité. Utiliser désormais `AdminProfilePermission` (nom canonique depuis story 56.4).
+
+`AdminProfilePermission` (dans `core/permissions.py`) restreint l'accès aux endpoints admin (profiles, integrations, actions, analytics) aux seuls profils avec `is_admin=1` en base de données. Tous les chemins d'authentification utilisent désormais `Profile.is_admin_bool` — il n'y a plus de comparaison par nom de profil.
+
+**Story 56.7** : Le chemin SAML string utilise désormais un DB lookup (`Profile.objects.filter(name__iexact=...)`) au lieu de `DBOPS_PROFILE_NAMES`. La distinction DBA/DBOPS provient maintenant exclusivement de la base de données (`is_admin=0` pour DBA, `is_admin=1` pour DBOPS).
+
+**Ordre canonique de résolution (Story 56.7) :**
+1. `user.ad_groups` → `Profile.objects.find_by_ad_groups()` → `any(p.is_admin_bool)`
+2. `user.profiles` (M2M si présent) → `any(p.is_admin_bool)`
+3. `user.profile` (string) → `Profile.objects.filter(name__iexact=...).first()` → `is_admin_bool`
+4. `user.profile` (objet Profile ORM) → `is_admin_bool` direct
+
+En cas d'`OperationalError` DB, l'accès est refusé (fail-secure) et un log structuré `profile_db_unavailable_admin_check` est émis.
 
 ```python
-class DBOPSProfilePermission(permissions.BasePermission):
+class AdminProfilePermission(permissions.BasePermission):
     """
-    Permission pour les endpoints admin.
-    Requiert le profil DBOPS (vérifié via multiple méthodes).
+    Permission class that requires an admin profile (is_admin=1 in DB).
+
+    Story 56.7: Fully flag-based — uses Profile.is_admin_bool for all auth paths.
+    Story 15.2 AC2: DBA (is_admin=0) est refusé sur les endpoints admin.
+    Seul DBOPS (ou tout profil avec is_admin=1) peut y accéder.
     """
 
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
 
-        # Méthode 1: Vérifier via attribut profile (string ou objet)
-        if hasattr(request.user, 'profile'):
-            profile = request.user.profile
-            if isinstance(profile, str):
-                if profile.lower() == 'dbops':
-                    return True
-            elif hasattr(profile, 'name') and profile.name.lower() == 'dbops':
-                return True
-            elif hasattr(profile, 'code') and profile.code.lower() == 'dbops':
-                return True
+        profiles = _resolve_user_profiles(request.user)
+        if any(getattr(p, 'is_admin_bool', False) for p in profiles):
+            return True
 
-        # Méthode 2: Vérifier via relation M2M profiles
-        if hasattr(request.user, 'profiles'):
-            for p in request.user.profiles.all():
-                if getattr(p, 'code', '').lower() == 'dbops':
-                    return True
-                if getattr(p, 'name', '').lower() == 'dbops':
-                    return True
-
-        # Méthode 3: Vérifier via AD groups et ProfileService
-        if hasattr(request.user, 'ad_groups'):
-            ad_groups = request.user.ad_groups if isinstance(request.user.ad_groups, list) else []
-            try:
-                from profiles.services import ProfileService
-                service = ProfileService()
-                for profile in service.get_profiles_by_ad_groups(ad_groups):
-                    if profile.code.lower() == 'dbops':
-                        return True
-            except Exception:
-                pass
-
-        # Fallback: superuser (développement/admin)
-        if request.user.is_superuser:
+        # Fallback superuser : uniquement si ALLOW_SUPERUSER_FALLBACK=True (défaut: False)
+        if getattr(settings, 'ALLOW_SUPERUSER_FALLBACK', False) and request.user.is_superuser:
             return True
 
         return False
 ```
 
+> **Note :** `ADMIN_PROFILE_NAMES` et `DBOPS_PROFILE_NAMES` dans `settings.py` sont **dépréciés** (Story 56.7). Ils ne sont plus utilisés par `core/permissions.py`. Conservés pour compatibilité avec d'éventuels outils externes.
+
 **Utilisation dans ViewSet:**
 
 ```python
 class ActionViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated, DBOPSProfilePermission]
+    permission_classes = [IsAuthenticated, AdminProfilePermission]
 ```
 
 ### OptionalUserPermission
@@ -402,7 +394,7 @@ Des DBAs qui travaillent sur **SQL** et **Oracle** appartiennent à deux groupes
 │  ┌────────────────────────────────────────────────────────────────┐  │
 │  │  1. Permission classes check (DRF)                              │  │
 │  │     - IsAuthenticated                                           │  │
-│  │     - DBOPSProfilePermission (admin) OR OptionalUserPermission  │  │
+│  │     - AdminProfilePermission (admin) OR OptionalUserPermission  │  │
 │  └────────────────────────────────────────────────────────────────┘  │
 │  ┌────────────────────────────────────────────────────────────────┐  │
 │  │  2. _get_cumulative_permissions_for_user()                      │  │

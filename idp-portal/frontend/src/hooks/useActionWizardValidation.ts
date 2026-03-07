@@ -1,18 +1,15 @@
 /**
  * useActionWizardValidation — Logique de validation extraite de ActionWizard::handleSave (Story 33.5, Task 6).
  * Factorisation avec useActionFormValidation via les helpers partagés validateParameterList,
- * validateImpactRulesList et validateChangeTypeConfig.
+ * validateImpactRulesList.
  */
 import type {
-  ChangeTypeConfigEntry,
-  GateConfig,
   ImpactRuleDefinition,
   ParameterDefinition,
 } from '../types/api';
 import {
   validateParameterList,
   validateImpactRulesList,
-  validateChangeTypeConfig,
 } from './useActionFormValidation';
 
 type IntegrationLike = { id: number; type: string; name: string };
@@ -21,9 +18,6 @@ export interface ActionWizardValidationParams {
   isWorkflowSave: boolean;
   parameterList: ParameterDefinition[];
   impactRulesList: ImpactRuleDefinition[];
-  changeTypeConfig: Record<string, ChangeTypeConfigEntry>;
-  snIntegrationOptions: { value: number; label: string }[];
-  gateConfig: GateConfig | null;
   aapTemplateId: number | undefined;
   integrationId: number | undefined;
   getIntegrationById: (id: number) => IntegrationLike | undefined;
@@ -43,9 +37,6 @@ export function useActionWizardValidation({ validateWorkflowSteps }: UseActionWi
       isWorkflowSave,
       parameterList,
       impactRulesList,
-      changeTypeConfig,
-      snIntegrationOptions,
-      gateConfig,
       aapTemplateId,
       integrationId,
       getIntegrationById,
@@ -66,10 +57,6 @@ export function useActionWizardValidation({ validateWorkflowSteps }: UseActionWi
     // Validation des règles d'impact (factorisation)
     const impactError = validateImpactRulesList(impactRulesList);
     if (impactError) return impactError;
-
-    // Validation changeTypeConfig + ServiceNow (factorisation)
-    const changeTypeError = validateChangeTypeConfig(changeTypeConfig, snIntegrationOptions, gateConfig);
-    if (changeTypeError) return changeTypeError;
 
     // Validation template AAP
     if (integrationId) {

@@ -5,11 +5,13 @@
  * input request_timeout, éditeur output_mapping, condition.
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Divider, Input, InputNumber, Select, Typography } from 'antd';
 import type { WorkflowStepNodeData } from '../WorkflowStepNode';
 import { KeyValueEditor } from './KeyValueEditor';
 import { ConditionConfig } from './ConditionConfig';
+import { MappingHelpPopover } from './MappingHelpPopover';
+import { useInputMappingWarnings } from '../../../hooks/useInputMappingWarnings';
 
 const { Text } = Typography;
 
@@ -19,13 +21,27 @@ export interface HttpRequestStepConfigProps {
   data: WorkflowStepNodeData;
   onUpdate: (updates: Partial<WorkflowStepNodeData>) => void;
   disabled?: boolean;
+  /** Story 57.20: Step options with readable labels for MappingHelpPopover. */
+  availableStepOptions?: { value: string; label: string }[];
 }
 
 export const HttpRequestStepConfig: React.FC<HttpRequestStepConfigProps> = ({
   data,
   onUpdate,
   disabled = false,
+  availableStepOptions,
 }) => {
+  // Filtrer le step courant de la liste des étapes disponibles (AC4: "étapes précédentes")
+  const filteredStepOptions = useMemo(
+    () => availableStepOptions?.filter((s) => s.value !== data.step_id),
+    [availableStepOptions, data.step_id],
+  );
+
+  const inputMappingWarnings = useInputMappingWarnings(
+    data.input_mapping as Record<string, string> | null,
+    filteredStepOptions,
+  );
+
   return (
     <div data-testid="http-request-step-config">
       {/* URL */}
@@ -96,30 +112,29 @@ export const HttpRequestStepConfig: React.FC<HttpRequestStepConfigProps> = ({
 
       {/* Params — stockés dans input_mapping pour http_request */}
       <div style={{ marginBottom: 12 }}>
-        <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
-          Paramètres de requête (params)
-        </Text>
         <KeyValueEditor
+          label="Paramètres de requête (params)"
+          helpContent={<MappingHelpPopover type="input" availableSteps={filteredStepOptions} />}
           value={data.input_mapping as Record<string, string> | null}
           onChange={(v) => onUpdate({ input_mapping: v })}
           disabled={disabled}
           keyPlaceholder="Paramètre"
-          valuePlaceholder="Valeur"
+          valuePlaceholder="{{ steps.<step_id>.<champ> }}"
           data-testid="params-editor"
+          warnings={inputMappingWarnings}
         />
       </div>
 
       {/* Output mapping */}
       <div style={{ marginBottom: 12 }}>
-        <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
-          Mapping de sortie (output_mapping — JSONPath)
-        </Text>
         <KeyValueEditor
+          label="Mapping de sortie (output_mapping)"
+          helpContent={<MappingHelpPopover type="output" stepType="http_request" />}
           value={data.output_mapping ?? null}
           onChange={(v) => onUpdate({ output_mapping: v })}
           disabled={disabled}
           keyPlaceholder="Variable"
-          valuePlaceholder="$.chemin.jsonpath"
+          valuePlaceholder="$.chemin.vers.champ"
           data-testid="output-mapping-editor"
         />
       </div>

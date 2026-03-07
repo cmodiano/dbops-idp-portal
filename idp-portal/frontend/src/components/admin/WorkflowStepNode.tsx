@@ -12,7 +12,7 @@
 import React, { memo, useMemo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Badge, Divider, Tag, Tooltip, theme } from 'antd';
-import { CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined, MinusCircleOutlined } from '@ant-design/icons';
+import { CheckCircleOutlined, CloseCircleOutlined, HourglassOutlined, LoadingOutlined, MinusCircleOutlined } from '@ant-design/icons';
 import type { WorkflowStepType, ScheduleStepConfig } from '../../types/api';
 
 // Story 57.13: Color codes and labels per step type
@@ -76,8 +76,8 @@ export interface WorkflowStepNodeData {
   isStartNode?: boolean;
   isEndNode?: boolean;
 
-  /** Story 19.2: Execution status for read-only visualization (optional, backward compatible) */
-  executionStatus?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'SKIPPED';
+  /** Story 19.2: Execution status for read-only visualization (optional, backward compatible). Story 58.3: WAITING ajouté. */
+  executionStatus?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'SKIPPED' | 'WAITING';
   /** Story 19.2: Step execution duration (e.g. "1m 30s") */
   executionDuration?: string | null;
 
@@ -91,6 +91,7 @@ export interface WorkflowStepNodeData {
   gate_type?: 'maintenance_window' | 'approval' | null;
   on_timeout?: 'FAIL' | 'SKIP' | null;
   context_from?: string[] | null;
+  approver_profile_ids?: number[] | null;
   timeout?: string | null;
   url?: string | null;
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | null;
@@ -149,6 +150,7 @@ const WorkflowStepNode: React.FC<NodeProps> = ({ data, selected }) => {
     FAILED: '#cf1322',    // Slightly muted red (ant design red-7)
     SKIPPED: '#8c8c8c',
     PENDING: token.colorBorderSecondary,
+    WAITING: '#d46b08',   // Story 58.3: orange foncé — en attente d'approbation (gate)
   };
 
   const borderColor =
@@ -179,6 +181,7 @@ const WorkflowStepNode: React.FC<NodeProps> = ({ data, selected }) => {
       COMPLETED: 'Terminé',
       FAILED: 'Échoué',
       SKIPPED: 'Annulé',
+      WAITING: "En attente d'approbation", // Story 58.3
     };
 
     // Story 19.2: Execution mode tooltip (takes priority when executionStatus is present)
@@ -238,7 +241,7 @@ const WorkflowStepNode: React.FC<NodeProps> = ({ data, selected }) => {
           minWidth: 200,
           position: 'relative',
           boxShadow: boxShadowNode,
-          opacity: nodeData.executionStatus === 'SKIPPED' ? 0.6 : nodeData.executionStatus === 'PENDING' ? 0.7 : 1,
+          opacity: nodeData.executionStatus === 'SKIPPED' ? 0.6 : nodeData.executionStatus === 'PENDING' ? 0.7 : 1, // WAITING = 1 (Story 58.3: pleine opacité car en cours d'attente)
           transition: 'border-color 0.3s, box-shadow 0.3s, opacity 0.3s',
         }}
         role="img"
@@ -296,6 +299,9 @@ const WorkflowStepNode: React.FC<NodeProps> = ({ data, selected }) => {
         )}
         {nodeData.executionStatus === 'SKIPPED' && (
           <MinusCircleOutlined style={{ position: 'absolute', top: 8, right: 8, color: '#8c8c8c', fontSize: 13 }} />
+        )}
+        {nodeData.executionStatus === 'WAITING' && (
+          <HourglassOutlined style={{ position: 'absolute', top: 8, right: 8, color: '#d46b08', fontSize: 13 }} />
         )}
 
         {/* Story 16.6, AC3: Retry badge visible on the node (platform only) */}

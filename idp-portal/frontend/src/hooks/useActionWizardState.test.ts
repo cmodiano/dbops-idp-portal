@@ -62,7 +62,7 @@ describe('useActionWizardState', () => {
 
   it('handleUpdateActionSteps appelle updateActionSteps avec le payload', async () => {
     const { result } = renderHook(() => useActionWizardState({ open: true }));
-    const payload = { steps: [], change_type_config: null };
+    const payload = { steps: [] };
 
     await result.current.handleUpdateActionSteps(1, payload);
 

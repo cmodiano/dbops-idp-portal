@@ -21,7 +21,7 @@ from executions.models import (
 )
 from executions.services import ExecutionService
 from executions.views.approval_views import ApproveExecutionView, RejectExecutionView
-from tests.factories import ActionFactory, ExecutionFactory, IntegrationFactory, UserFactory
+from tests.factories import ActionFactory, ExecutionFactory, ExecutionTargetFactory, IntegrationFactory, UserFactory
 
 
 # ---------------------------------------------------------------------------
@@ -85,6 +85,35 @@ class TestPendingApprovalsViewExtra(TestCase):
         client.force_authenticate(user=business)
         response = client.get("/api/v1/executions/pending-approvals/")
         self.assertEqual(response.status_code, 403)
+
+    # Story 58.2: AC5 — targets présents dans la réponse sérialisée (prefetch_related)
+    def test_list_response_includes_targets(self):
+        """Vérifier que targets est présent dans la réponse sérialisée (AC5 Story 58.2)."""
+        execution = ExecutionFactory(
+            action=self.action,
+            user=self.admin,
+            status=ExecutionStatus.PENDING_APPROVAL,
+            environment="prod",
+        )
+        ExecutionTargetFactory(
+            execution=execution,
+            target_type="SERVER",
+            target_id="srv-prod-01",
+            target_name="oracle-prod-01",
+        )
+
+        response = self.client.get("/api/v1/executions/pending-approvals/")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertIn("data", body)
+        self.assertEqual(len(body["data"]), 1)
+        exec_data = body["data"][0]
+        self.assertIn("targets", exec_data)
+        self.assertEqual(len(exec_data["targets"]), 1)
+        target = exec_data["targets"][0]
+        self.assertEqual(target["target_id"], "srv-prod-01")
+        self.assertEqual(target["target_name"], "oracle-prod-01")
+        self.assertEqual(target["target_type"], "SERVER")
 
     # Story 57.12: RUNNING + step WAITING approval_granted → apparaît dans la liste
     def test_list_includes_running_with_waiting_approval_step(self):

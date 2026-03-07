@@ -154,7 +154,7 @@ Chaque app Django suit cette structure:
 | `services.py` | `AuditService` (create_entry, list, export CSV/PDF) |
 | `exceptions.py` | `NotFoundError`, `BadRequestError`, `InvalidStateError`, `custom_exception_handler` |
 | `pagination.py` | `CustomPageNumberPagination` |
-| `permissions.py` | `DBOPSProfilePermission`, `OptionalUserPermission` |
+| `permissions.py` | `AdminProfilePermission`, `OptionalUserPermission` (alias: `DBOPSProfilePermission`) |
 | `rbac.py` | Helpers RBAC |
 | `middleware.py` | `CorrelationIdMiddleware`, `RequestResponseLoggingMiddleware`, `SecurityHeadersMiddleware` |
 | `views.py` | `health_check` |

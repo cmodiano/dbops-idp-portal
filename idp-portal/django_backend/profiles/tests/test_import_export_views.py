@@ -34,6 +34,8 @@ class TestProfileImportExportViews(TestCase):
             profile='dba'
         )
         
+        # Profile records (DBOPS, DBA) are created by conftest._ensure_admin_profiles
+
         # Create test profile
         self.profile = Profile.objects.create(
             name='Existing Profile',

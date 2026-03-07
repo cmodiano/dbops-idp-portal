@@ -553,12 +553,15 @@ class TestNonSuperuserDBOPSAccessViaADGroup(TestCase):
         """Set up DBOPS profile and non-superuser with AD group."""
         self.client = APIClient()
 
-        # Create the DBOPS profile in DB (ad_group matches the AD group name)
-        self.profile_dbops = Profile.objects.create(
+        # Create/get the DBOPS profile in DB (ad_group matches the AD group name)
+        self.profile_dbops, _ = Profile.objects.get_or_create(
             name='DBOPS',
-            ad_group='GRP-IDP-DBOPS',
-            is_admin=1,
+            defaults={'ad_group': 'GRP-IDP-DBOPS', 'is_admin': 1},
         )
+        # Ensure ad_group matches what this test expects
+        if self.profile_dbops.ad_group != 'GRP-IDP-DBOPS':
+            self.profile_dbops.ad_group = 'GRP-IDP-DBOPS'
+            self.profile_dbops.save()
 
         # Create a non-superuser
         self.user = User.objects.create(

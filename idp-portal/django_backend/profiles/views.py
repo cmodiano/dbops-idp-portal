@@ -26,7 +26,7 @@ from profiles.serializers import (
 from profiles.cache import invalidate_permissions_cache
 from profiles.services import ProfileService
 from profiles.services_export_import import export_profiles_yaml, import_profiles_yaml
-from core.permissions import DBOPSProfilePermission
+from core.permissions import AdminProfilePermission
 from core.exceptions import NotFoundError, InvalidStateError
 
 
@@ -44,7 +44,7 @@ class ProfileViewSet(viewsets.ViewSet):
     Story 33.4 (DIP): uses _profile_service_class + get_profile_service() so
     tests can override the service class without monkey-patching.
     """
-    permission_classes = [IsAuthenticated, DBOPSProfilePermission]
+    permission_classes = [IsAuthenticated, AdminProfilePermission]
 
     _profile_service_class: type[ProfileService] = ProfileService
 
@@ -106,9 +106,13 @@ class ProfileViewSet(viewsets.ViewSet):
         return ProfileSerializer
 
     def list(self, request: Request) -> Response:
-        """GET /admin/profiles - List all profiles."""
+        """GET /admin/profiles - List all profiles. Supports ?is_approver=true filter (Story 58.4 AC4)."""
         service = self.get_profile_service()
-        profiles = service.list_all()
+        is_approver_param = request.query_params.get('is_approver', '').lower()
+        if is_approver_param == 'true':
+            profiles = service.list_approvers()
+        else:
+            profiles = service.list_all()
         serializer = ProfileListSerializer(profiles, many=True)
         return Response({"data": serializer.data})
 
@@ -268,7 +272,7 @@ class ProfileViewSet(viewsets.ViewSet):
 
 class ProfileExportView(APIView):
     """APIView for GET /admin/profiles/export - Export profiles as YAML."""
-    permission_classes = [IsAuthenticated, DBOPSProfilePermission]
+    permission_classes = [IsAuthenticated, AdminProfilePermission]
 
     @extend_schema(tags=['profiles'], summary='Exporter les profils en YAML')
     def get(self, request: Request) -> Any:
@@ -282,7 +286,7 @@ class ProfileExportView(APIView):
 
 class ProfileImportView(APIView):
     """APIView for POST /admin/profiles/import - Import profiles from YAML."""
-    permission_classes = [IsAuthenticated, DBOPSProfilePermission]
+    permission_classes = [IsAuthenticated, AdminProfilePermission]
     parser_classes = [MultiPartParser]
 
     @extend_schema(

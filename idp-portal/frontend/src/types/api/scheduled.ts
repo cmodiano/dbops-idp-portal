@@ -57,18 +57,12 @@ export interface ScheduledExecutionCreateRequest {
   page_me?: boolean;
 }
 
-/** Request to update a scheduled execution (Story 13.8, AC4). */
+/** Request to update a scheduled execution (Story 11.11 AC1: date only). */
 export interface ScheduledExecutionUpdateRequest {
   /** ISO 8601 datetime (UTC) for one-time executions. */
   scheduled_at?: string | null;
-  /** Execution parameters (merged with existing; include _targets if targets changed). */
-  parameters?: Record<string, unknown> | null;
-  /** Environment (when not using targets). */
-  environment?: ExecutionEnvironment;
-  /** Target names (validated against RBAC; stored in parameters._targets). */
-  target_names?: string[];
-  /** Recurring pattern (for recurring executions). */
-  recurring_pattern?: RecurringPatternRequest | null;
+  /** ISO 8601 datetime (UTC) for recurring executions (next execution date). */
+  next_execution_date?: string | null;
 }
 
 /** Response from POST /scheduled-executions (Story 11.5, 11.7). */

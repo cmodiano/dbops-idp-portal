@@ -384,7 +384,7 @@ class ValidateEnvironmentAgainstInventoryTests(TestCase):
 class EnvironmentConfigLookupAdvancedTests(TestCase):
     """
     Story 21.3, Task 4: Tests for _get_env_config_case_insensitive.
-    Case-insensitive lookup, impact_rules fallback, change_type_config fallback.
+    Case-insensitive lookup, impact_rules fallback.
     """
 
     def _get_helper(self):
@@ -490,34 +490,6 @@ class EnvironmentConfigLookupAdvancedTests(TestCase):
 
         result = helper(impact_rules, 'lab')
         self.assertEqual(result.get('impact_level'), 'LOW')
-
-    # -- Task 4.6: change_type_config fallback --
-
-    def test_change_type_config_lab_no_config_returns_empty(self):
-        """No change_type_config for 'lab' → returns {} (no change required)."""
-        helper = self._get_helper()
-        change_type_config = {
-            'PROD': {'required': True, 'change_model_code': 'PRD-001'},
-            'STAGING': {'required': True, 'change_model_code': 'STG-001'},
-        }
-
-        result = helper(change_type_config, 'lab')
-        self.assertEqual(result, {})
-
-        # Application code default behavior:
-        change_required = result.get('required', False)
-        self.assertFalse(change_required)
-
-    def test_change_type_config_lab_with_config(self):
-        """change_type_config with 'lab' → returns config."""
-        helper = self._get_helper()
-        change_type_config = {
-            'lab': {'required': False},
-            'PROD': {'required': True, 'change_model_code': 'PRD-001'},
-        }
-
-        result = helper(change_type_config, 'lab')
-        self.assertEqual(result, {'required': False})
 
     def test_whitespace_trimmed_in_lookup(self):
         """Keys and env values are trimmed before comparison."""

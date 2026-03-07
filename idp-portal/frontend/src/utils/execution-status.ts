@@ -20,6 +20,7 @@ export const STEP_STATUS_COLOR: Record<ExecutionStepStatus, string> = {
   COMPLETED: '#10B981',
   FAILED: '#EF4444',
   SKIPPED: '#9CA3AF',
+  WAITING: '#FA8C16', // Story 58.3: orange — en attente d'approbation (gate)
 };
 
 /**
@@ -57,6 +58,7 @@ export const STEP_STATUS_BADGE_CONFIG: Record<ExecutionStepStatus | 'CANCELLED',
   FAILED: { color: 'error', label: 'Échoué' },
   SKIPPED: { color: 'default', label: 'Ignoré' },
   CANCELLED: { color: 'default', label: 'Annulé' },
+  WAITING: { color: 'warning', label: 'En attente d\'approbation' }, // Story 58.3
 };
 
 /**

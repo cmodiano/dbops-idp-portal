@@ -168,6 +168,35 @@ describe('useWebSocket', () => {
     expect(result.current.isAuthenticated).toBe(true);
   });
 
+  it('Story 58.3 AC#3: reSyncState is called on auth_success', async () => {
+    vi.clearAllMocks();
+    vi.mocked(executionService.getExecution).mockResolvedValue(mockExecution);
+    vi.mocked(executionService.getExecutionSteps).mockResolvedValue([mockStep]);
+
+    renderHook(() => useWebSocket(1));
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const callsBefore = vi.mocked(executionService.getExecutionSteps).mock.calls.length;
+
+    const ws = MockWebSocket.instances[0];
+    act(() => {
+      ws.simulateOpen();
+    });
+
+    await act(async () => {
+      ws.simulateMessage({ type: 'auth_success' });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // reSyncState déclenché sur auth_success → getExecutionSteps appelé une fois de plus
+    expect(vi.mocked(executionService.getExecutionSteps).mock.calls.length).toBeGreaterThan(callsBefore);
+  });
+
   it('updates steps on step_update message', async () => {
     const { result } = renderHook(() => useWebSocket(1));
 
@@ -341,5 +370,91 @@ describe('useWebSocket', () => {
     });
 
     expect(result.current.steps.some((s) => s.step_order === 2)).toBe(true);
+  });
+
+  // -----------------------------------------------------------------------
+  // Story 58.3 — WAITING step via WebSocket
+  // -----------------------------------------------------------------------
+
+  it('Story 58.3: step_update WAITING adds step to empty steps array', async () => {
+    vi.mocked(executionService.getExecutionSteps).mockResolvedValue([]);
+    const { result } = renderHook(() => useWebSocket(1));
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const ws = MockWebSocket.instances[0];
+    act(() => {
+      ws.simulateMessage({
+        type: 'step_update',
+        data: {
+          step_order: 1,
+          step_name: 'Approbation initiale',
+          step_type: 'gate',
+          status: 'WAITING',
+        },
+      });
+    });
+
+    expect(result.current.steps).toHaveLength(1);
+    expect(result.current.steps[0].status).toBe('WAITING');
+    expect(result.current.steps[0].step_name).toBe('Approbation initiale');
+  });
+
+  it('Story 58.3: step_type from WS message is preserved in merged step', async () => {
+    vi.mocked(executionService.getExecutionSteps).mockResolvedValue([]);
+    const { result } = renderHook(() => useWebSocket(1));
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const ws = MockWebSocket.instances[0];
+    act(() => {
+      ws.simulateMessage({
+        type: 'step_update',
+        data: {
+          step_order: 1,
+          step_name: 'Gate Step',
+          step_type: 'gate',
+          status: 'WAITING',
+        },
+      });
+    });
+
+    expect(result.current.steps[0].step_type).toBe('gate');
+  });
+
+  it('Story 58.3: step_update WAITING updates existing step status', async () => {
+    const existingStep: ExecutionStepResponse = {
+      ...mockStep,
+      status: 'PENDING',
+      step_type: 'platform',
+    };
+    vi.mocked(executionService.getExecutionSteps).mockResolvedValue([existingStep]);
+    const { result } = renderHook(() => useWebSocket(1));
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const ws = MockWebSocket.instances[0];
+    act(() => {
+      ws.simulateMessage({
+        type: 'step_update',
+        data: {
+          step_order: 1,
+          step_name: 'Step 1',
+          step_type: 'gate',
+          status: 'WAITING',
+        },
+      });
+    });
+
+    const step = result.current.steps.find((s) => s.step_order === 1);
+    expect(step?.status).toBe('WAITING');
+    // step_type from message takes priority (Story 58.3 fix)
+    expect(step?.step_type).toBe('gate');
   });
 });

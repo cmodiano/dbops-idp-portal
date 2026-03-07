@@ -105,7 +105,7 @@ export function useWebSocket(executionId: number | null): UseWebSocketResult {
             type: string;
             execution_id?: number;
             user_id?: string;
-            data?: { step_order?: number; step_name?: string; status?: string; started_at?: string | null; completed_at?: string | null };
+            data?: { step_order?: number; step_name?: string; status?: string; step_type?: string; started_at?: string | null; completed_at?: string | null }; // Story 58.3: step_type ajouté
             status?: string;
             error_message?: string;
           };
@@ -116,6 +116,8 @@ export function useWebSocket(executionId: number | null): UseWebSocketResult {
             if (isMountedRef.current) {
               setIsAuthenticated(true);
             }
+            // Story 58.3 AC#3: re-sync sur auth_success — couvre les steps créés entre onopen et auth
+            reSyncState(executionId);
             return;
           }
 
@@ -131,7 +133,7 @@ export function useWebSocket(executionId: number | null): UseWebSocketResult {
                 execution_id: executionId!,
                 step_order: d.step_order ?? base?.step_order ?? 0,
                 step_name: d.step_name ?? base?.step_name ?? '',
-                step_type: base?.step_type ?? 'platform',
+                step_type: (d.step_type as ExecutionStepResponse['step_type']) ?? base?.step_type ?? 'platform', // Story 58.3: lire step_type depuis le message WS en priorité
                 status: (d.status as ExecutionStepResponse['status']) ?? base?.status ?? 'PENDING',
                 started_at: d.started_at ?? base?.started_at ?? null,
                 completed_at: d.completed_at ?? base?.completed_at ?? null,

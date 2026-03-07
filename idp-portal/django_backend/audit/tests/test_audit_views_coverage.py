@@ -119,7 +119,7 @@ class TestIsAuditor:
     def test_user_with_non_list_ad_groups_and_profile_name(self):
         """ad_groups non-list + profile renseigné → construit [profile_name] et cherche."""
         from profiles.models import Profile
-        Profile.objects.create(name="AUDIT", is_auditor=1)
+        Profile.objects.get_or_create(name="AUDIT", defaults={"is_auditor": 1, "ad_group": "CN=Audit"})
 
         user = MagicMock()
         user.is_authenticated = True
@@ -133,7 +133,7 @@ class TestIsAuditor:
     def test_user_ad_groups_list_with_auditor_profile(self):
         """ad_groups liste non vide → appelle find_by_ad_groups, retourne True si is_auditor=1."""
         from profiles.models import Profile
-        Profile.objects.create(name="AUDIT", is_auditor=1)
+        Profile.objects.get_or_create(name="AUDIT", defaults={"is_auditor": 1, "ad_group": "CN=Audit"})
 
         user = MagicMock()
         user.is_authenticated = True
@@ -145,7 +145,7 @@ class TestIsAuditor:
     def test_user_ad_groups_list_without_auditor_profile_returns_false(self):
         """ad_groups liste mais aucun profil is_auditor=1 → False."""
         from profiles.models import Profile
-        Profile.objects.create(name="DBA", is_auditor=0)
+        Profile.objects.get_or_create(name="DBA", defaults={"is_auditor": 0, "ad_group": "CN=DBA"})
 
         user = MagicMock()
         user.is_authenticated = True

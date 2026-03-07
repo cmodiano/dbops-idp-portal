@@ -1,6 +1,5 @@
 """
 Story 28.1: business_rule_policies validation tests (AC7).
-Story 31.6: gate_config validation tests (AC#5).
 Story 39.3: validate_gate_conditions and validate_notification_config tests (AC#1).
 
 Tests for validate_business_rule_policies:
@@ -10,11 +9,6 @@ Tests for validate_business_rule_policies:
 - Invalid policy data rejected
 - null/empty allowed
 - Empty on_step_output array allowed
-
-Tests for validate_gate_config:
-- Valid gate_config passes
-- Invalid integration raises error
-- Wrong type integration raises error
 
 Tests for validate_gate_conditions:
 - Not a list raises ValidationError
@@ -48,7 +42,6 @@ from rest_framework.exceptions import ValidationError
 
 from catalog.validators import (
     validate_business_rule_policies,
-    validate_gate_config,
     validate_gate_conditions,
     validate_notification_config,
 )
@@ -478,68 +471,6 @@ class TestBusinessRulePoliciesEdgeCases:
 
 
 # ============================================================================
-# Story 31.6: gate_config validation tests
-# ============================================================================
-
-class TestValidateGateConfigBasic:
-    """Story 31.6: gate_config basic validation (AC#5)."""
-
-    def test_none_passes(self):
-        """None gate_config passes validation."""
-        validate_gate_config(None)
-
-    def test_empty_dict_passes(self):
-        """Empty dict passes validation."""
-        validate_gate_config({})
-
-    def test_not_dict_raises(self):
-        """Non-dict value raises ValidationError."""
-        with pytest.raises(ValidationError, match="objet JSON"):
-            validate_gate_config("invalid")
-
-    def test_servicenow_change_none_passes(self):
-        """servicenow_change=None passes."""
-        validate_gate_config({"servicenow_change": None})
-
-    def test_servicenow_change_not_dict_raises(self):
-        """servicenow_change as string raises error."""
-        with pytest.raises(ValidationError, match="objet"):
-            validate_gate_config({"servicenow_change": "invalid"})
-
-    def test_integration_id_none_passes(self):
-        """integration_id=None passes."""
-        validate_gate_config({"servicenow_change": {"integration_id": None}})
-
-    def test_integration_id_not_int_raises(self):
-        """integration_id as string raises error."""
-        with pytest.raises(ValidationError, match="entier"):
-            validate_gate_config({"servicenow_change": {"integration_id": "abc"}})
-
-
-@pytest.mark.django_db
-class TestValidateGateConfigIntegration:
-    """Story 31.6: gate_config integration validation (AC#5)."""
-
-    def test_validate_gate_config_valid(self):
-        """5.8: Valid gate_config with existing servicenow integration passes."""
-        from tests.factories import IntegrationFactory
-        integration = IntegrationFactory(type='servicenow', name='SN Valid')
-        validate_gate_config({"servicenow_change": {"integration_id": integration.id}})
-
-    def test_validate_gate_config_invalid_integration(self):
-        """5.9: Non-existent integration raises ValidationError."""
-        with pytest.raises(ValidationError, match="introuvable"):
-            validate_gate_config({"servicenow_change": {"integration_id": 99999}})
-
-    def test_validate_gate_config_wrong_type(self):
-        """5.10: Integration of wrong type raises ValidationError."""
-        from tests.factories import IntegrationFactory
-        integration = IntegrationFactory(type='aap', name='AAP Wrong Type')
-        with pytest.raises(ValidationError, match="servicenow"):
-            validate_gate_config({"servicenow_change": {"integration_id": integration.id}})
-
-
-# ============================================================================
 # Story 39.3: validate_gate_conditions tests (AC#1)
 # ============================================================================
 
@@ -701,6 +632,7 @@ class TestValidateNotificationConfig:
                 {"type": "email", "enabled": True, "conditions": ["on_failure", "on_success"]},
                 {"type": "teams", "enabled": False, "webhook_url_ref": "vault:secret/teams"},
                 {"type": "page_dba", "conditions": ["always"]},
+                {"type": "page_oncall", "conditions": ["on_failure"]},  # Epic 56 — nouveau type recommandé
             ],
             "page_individual_enabled": False
         })
@@ -725,3 +657,11 @@ class TestValidateNotificationConfig:
     def test_teams_empty_webhook_passes(self):
         """webhook_url_ref vide → pas de validation URL → pas d'erreur."""
         validate_notification_config({"channels": [{"type": "teams", "webhook_url_ref": ""}]})
+
+    def test_page_oncall_channel_type_passes(self):
+        """AC6 (Epic 56) : type page_oncall → validation passe sans erreur."""
+        validate_notification_config({"channels": [{"type": "page_oncall", "conditions": ["on_failure"]}]})
+
+    def test_page_dba_channel_type_still_passes(self):
+        """AC7 (Epic 56) : type page_dba reste valide (backward compat)."""
+        validate_notification_config({"channels": [{"type": "page_dba", "conditions": ["on_failure"]}]})

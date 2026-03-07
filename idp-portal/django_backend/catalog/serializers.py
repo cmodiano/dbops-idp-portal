@@ -264,15 +264,6 @@ class ActionSerializer(ActionFieldValidationMixin, serializers.ModelSerializer):
         required=False, allow_null=True,
         help_text="Étapes d'exécution pour workflows (array d'objets avec order, referenced_action_id, etc.)"
     )
-    change_type_config = serializers.JSONField(
-        required=False, allow_null=True,
-        help_text="Configuration du type de changement pour l'audit SOC1"
-    )
-    # Story 31.6: Gate configuration (integration selection per gate type)
-    gate_config = serializers.JSONField(
-        required=False, allow_null=True,
-        help_text="Configuration des gates : sélection d'intégration par type de gate (ex: servicenow_change.integration_id)"
-    )
     # Story 31.8: Notification channels configuration (email, teams, page)
     notification_config = serializers.JSONField(
         required=False, allow_null=True,
@@ -325,13 +316,6 @@ class ActionSerializer(ActionFieldValidationMixin, serializers.ModelSerializer):
         """Story 23.5 + 37.4: Validate inventory_type and inventory_value_column in parameters_schema."""
         return validate_parameters_schema_inventory(value)
 
-    def validate_gate_config(self, value: Any) -> Any:
-        """Story 31.6: Validate gate_config schema."""
-        if value is not None:
-            from catalog.validators import validate_gate_config
-            validate_gate_config(value)
-        return value
-
     def validate_notification_config(self, value: Any) -> Any:
         """Story 31.8: Validate notification_config schema."""
         if value is not None:
@@ -375,7 +359,7 @@ class ActionSerializer(ActionFieldValidationMixin, serializers.ModelSerializer):
             'parameters_schema', 'impact_rules', 'default_impact_level',
             'status', 'created_by', 'created_at', 'updated_at',
             'tags', 'documentation_md', 'remediation_rules',
-            'execution_steps', 'change_type_config', 'gate_config', 'notification_config', 'workflow_steps',
+            'execution_steps', 'notification_config', 'workflow_steps',
             # Story 28.1: business_rule_policies
             'business_rule_policies',
             # Story 28.4: FK to predefined business rule policy
@@ -517,7 +501,7 @@ class ActionSerializer(ActionFieldValidationMixin, serializers.ModelSerializer):
         
         # Store JSON fields as-is (will be converted by model setters)
         json_fields = ['parameters_schema', 'impact_rules', 'execution_steps',
-                      'change_type_config', 'gate_config', 'notification_config',
+                      'notification_config',
                       'remediation_rules', 'business_rule_policies']
         for field in json_fields:
             if field in data:
@@ -560,17 +544,8 @@ class ActionCreateSerializer(ActionFieldValidationMixin, serializers.Serializer)
         allow_null=True
     )
     documentation_md = serializers.CharField(max_length=100_000, required=False, allow_null=True)
-    # Story 31.6: Gate configuration — validated via field-level validate_gate_config
-    gate_config = serializers.JSONField(required=False, allow_null=True)
     # Story 31.8: Notification channels configuration
     notification_config = serializers.JSONField(required=False, allow_null=True)
-
-    def validate_gate_config(self, value: Any) -> Any:
-        """Story 31.6: Validate gate_config schema."""
-        if value is not None:
-            from catalog.validators import validate_gate_config
-            validate_gate_config(value)
-        return value
 
     def validate_notification_config(self, value: Any) -> Any:
         """Story 31.8: Validate notification_config schema."""
@@ -625,8 +600,6 @@ class ActionListSerializer(serializers.ModelSerializer):
 
     tags = serializers.SerializerMethodField()
     execution_count = serializers.SerializerMethodField()
-    # Story 31.6 (Task 2.4): gate_config exposed in list view
-    gate_config = serializers.JSONField(read_only=True, allow_null=True)
     # Story 31.8: notification_config exposed in list view
     notification_config = serializers.JSONField(read_only=True, allow_null=True)
 
@@ -636,8 +609,6 @@ class ActionListSerializer(serializers.ModelSerializer):
             'id', 'name', 'description', 'item_type', 'category', 'engine', 'platform',
             'status', 'created_by', 'created_at', 'updated_at',
             'tags', 'execution_count',
-            # Story 31.6: gate configuration
-            'gate_config',
             # Story 31.8: notification configuration
             'notification_config',
             # Story 18.1: soft-delete fields for admin list

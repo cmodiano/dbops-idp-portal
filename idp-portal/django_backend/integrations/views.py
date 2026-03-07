@@ -17,7 +17,7 @@ from integrations.serializers import (
 )
 from integrations.services import IntegrationService
 from integrations.validation_service import IntegrationValidationService
-from core.permissions import DBOPSProfilePermission
+from core.permissions import AdminProfilePermission
 from core.exceptions import NotFoundError, InvalidStateError
 from core.models import AuditActionType, AuditEntityType
 from core.services import AuditService
@@ -44,7 +44,7 @@ class IntegrationViewSet(viewsets.ViewSet):
     """
     ViewSet for integrations CRUD operations.
     """
-    permission_classes = [IsAuthenticated, DBOPSProfilePermission]
+    permission_classes = [IsAuthenticated, AdminProfilePermission]
     
     def list(self, request):
         """
@@ -401,7 +401,7 @@ class IntegrationViewSet(viewsets.ViewSet):
                 }),
             }),
             401: OpenApiResponse(description='Authentication required'),
-            403: OpenApiResponse(description='Insufficient permissions (DBOPS/DBA profile required)'),
+            403: OpenApiResponse(description='Insufficient permissions (admin profile required)'),
             404: OpenApiResponse(description='Integration not found'),
         },
     )

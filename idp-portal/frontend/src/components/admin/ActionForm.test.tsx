@@ -5,8 +5,6 @@ import { ActionForm } from './ActionForm';
 import type { ActionDetail } from '../../types/api';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 
-import { updateActionSteps } from '../../services/admin_service';
-
 // Mock the admin_service module (Story 2.6: getTags, updateActionTags). Story 2.14: updateActionRbac removed.
 vi.mock('../../services/admin_service', () => ({
   updateActionSteps: vi.fn().mockResolvedValue({}),
@@ -200,7 +198,6 @@ describe('ActionForm', () => {
           },
         ],
         workflow_steps: null,
-        change_type_config: null,
       };
 
       await act(async () => {
@@ -250,7 +247,6 @@ describe('ActionForm', () => {
       updated_at: null,
       execution_steps: null,
       workflow_steps: null,
-      change_type_config: null,
       tags: [],
     };
 
@@ -337,35 +333,6 @@ describe('ActionForm', () => {
       });
     });
 
-    it('save sends change_type_config in new format (Story 2.24)', async () => {
-      const user = userEvent.setup();
-      const editWithSteps: ActionDetail = {
-        ...mockEditAction,
-        execution_steps: [
-          {
-            order: 1,
-            name: 'Step',
-            type: 'prerequisite',
-            connector_type: 'none',
-            conditional_environments: null,
-          },
-        ],
-        change_type_config: { DEV: { required: false }, PROD: { required: true, change_model_code: '1516B' } },
-      };
-      await act(async () => {
-        render(<ActionForm {...defaultProps} editAction={editWithSteps} />);
-      });
-      await user.click(screen.getByText('Enregistrer'));
-
-      await waitFor(() => {
-        expect(vi.mocked(updateActionSteps)).toHaveBeenCalled();
-      });
-      const call = vi.mocked(updateActionSteps).mock.calls[0];
-      const payload = call[1];
-      expect(payload.change_type_config).toBeDefined();
-      expect(payload.change_type_config!.PROD).toEqual(expect.objectContaining({ required: true, change_model_code: '1516B' }));
-      expect(payload.change_type_config!.DEV).toEqual(expect.objectContaining({ required: false }));
-    });
   });
 
   describe('Story 2.17: Parameters visual editor (AC4, AC5)', () => {
@@ -396,7 +363,6 @@ describe('ActionForm', () => {
           },
         ],
         workflow_steps: null,
-        change_type_config: null,
       };
 
       await act(async () => {
@@ -449,7 +415,6 @@ describe('ActionForm', () => {
           },
         ],
         workflow_steps: null,
-        change_type_config: null,
       };
       await act(async () => {
         render(<ActionForm {...defaultProps} editAction={editWithTwoParams} />);
@@ -498,7 +463,6 @@ describe('ActionForm', () => {
           },
         ],
         workflow_steps: null,
-        change_type_config: null,
       };
 
       await act(async () => {
@@ -532,86 +496,6 @@ describe('ActionForm', () => {
         const eleveIndicators = screen.getAllByText('Élevé');
         expect(eleveIndicators.length).toBeGreaterThanOrEqual(1);
       });
-    });
-  });
-
-  describe('Story 2.24: ChangeTypeConfig per env (required + change_model_code)', () => {
-    it('blocks submit when required=true for PROD but code is empty', async () => {
-      const user = userEvent.setup();
-      const editAction: ActionDetail = {
-        id: 1,
-        name: 'Test Action',
-        description: 'Test description',
-        item_type: 'action',
-        engine: 'Oracle',
-        platform: 'AAP',
-        integration_id: 1,
-        parameters_schema: null,
-        impact_rules: null,
-        default_impact_level: null,
-        status: 'draft',
-        created_by: 1,
-        created_at: '2026-01-01T00:00:00Z',
-        updated_at: null,
-        execution_steps: [
-          { order: 1, name: 'Step', type: 'prerequisite', connector_type: 'none', conditional_environments: null },
-        ],
-        workflow_steps: null,
-        change_type_config: { PROD: { required: true, change_model_code: '' } },
-        tags: [],
-      };
-
-      await act(async () => {
-        render(<ActionForm {...defaultProps} editAction={editAction} />);
-      });
-
-      const collapseHeader = screen.getByText(/etapes d'execution/i);
-      await user.click(collapseHeader);
-
-      await user.click(screen.getByText('Enregistrer'));
-
-      await waitFor(() => {
-        expect(screen.getByText(/Le modèle \/ Template ID est obligatoire pour PROD/i)).toBeInTheDocument();
-      });
-      expect(mockOnSubmit).not.toHaveBeenCalled();
-    });
-
-    it('blocks submit when required=true but code is non-alphanumeric', async () => {
-      const user = userEvent.setup();
-      const editAction: ActionDetail = {
-        id: 1,
-        name: 'Test Action',
-        description: 'Test description',
-        item_type: 'action',
-        engine: 'Oracle',
-        platform: 'AAP',
-        integration_id: 1,
-        parameters_schema: null,
-        impact_rules: null,
-        default_impact_level: null,
-        status: 'draft',
-        created_by: 1,
-        created_at: '2026-01-01T00:00:00Z',
-        updated_at: null,
-        execution_steps: [
-          { order: 1, name: 'Step', type: 'prerequisite', connector_type: 'none', conditional_environments: null },
-        ],
-        workflow_steps: null,
-        change_type_config: { PROD: { required: true, change_model_code: '1516 B' } },  // space is not allowed
-        tags: [],
-      };
-
-      await act(async () => {
-        render(<ActionForm {...defaultProps} editAction={editAction} />);
-      });
-
-      await user.click(screen.getByText('Enregistrer'));
-
-      // Should show error and block submit (message contains "alphanumérique")
-      await waitFor(() => {
-        expect(screen.getByText(/modèle \/ Template ID pour PROD/i)).toBeInTheDocument();
-      });
-      expect(mockOnSubmit).not.toHaveBeenCalled();
     });
   });
 
@@ -694,7 +578,6 @@ describe('ActionForm — coverage extension', () => {
       updated_at: null,
       execution_steps: [{ order: 1, name: 'Step', type: 'prerequisite' as const, connector_type: 'none' as const, conditional_environments: null }],
       workflow_steps: null,
-      change_type_config: null,
       tags: [],
     };
 
@@ -736,7 +619,6 @@ describe('ActionForm — coverage extension', () => {
       updated_at: null,
       execution_steps: [{ order: 1, name: 'Step', type: 'prerequisite' as const, connector_type: 'none' as const, conditional_environments: null }],
       workflow_steps: null,
-      change_type_config: null,
       tags: [],
     };
 
@@ -749,39 +631,6 @@ describe('ActionForm — coverage extension', () => {
     await waitFor(() => {
       // Should show the generic error message (caught by outer catch)
       expect(screen.queryByText(/Generic network error/i) || screen.queryByText(/erreur/i)).toBeTruthy();
-    });
-  });
-
-  it('renders CTC action with change_type_config correctly', async () => {
-    // Verify the form renders for an action that has change_type_config but no steps
-    const editAction = {
-      id: 5,
-      name: 'CTC Only',
-      description: 'CTC only action',
-      item_type: 'action' as const,
-      engine: 'Oracle',
-      platform: 'AAP',
-      integration_id: 1,
-      parameters_schema: null,
-      impact_rules: null,
-      default_impact_level: null,
-      status: 'draft' as const,
-      created_by: 1,
-      created_at: '2026-01-01T00:00:00Z',
-      updated_at: null,
-      execution_steps: [], // Empty steps
-      workflow_steps: null,
-      change_type_config: { DEV: { required: false, allowed: true } },
-      tags: [],
-    };
-
-    await act(async () => {
-      render(<ActionForm {...defaultProps} editAction={editAction} />);
-    });
-
-    // Verify the form renders with the CTC action data
-    await waitFor(() => {
-      expect(screen.getAllByText('CTC Only').length).toBeGreaterThan(0);
     });
   });
 
@@ -839,7 +688,6 @@ describe('ActionForm — coverage extension', () => {
       updated_at: null,
       execution_steps: [{ order: 1, name: 'Step', type: 'prerequisite', connector_type: 'none', conditional_environments: null }],
       workflow_steps: null,
-      change_type_config: null,
       tags: [],
     };
 

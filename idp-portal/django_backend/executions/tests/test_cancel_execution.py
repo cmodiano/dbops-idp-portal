@@ -88,13 +88,13 @@ class TestCancelExecutionByAdmin:
         assert execution.status == ExecutionStatus.CANCELLED
 
     def test_cancel_by_dba_admin(self):
-        """DBA profile user can also cancel another user's execution."""
-        dba_admin = UserFactory.create(profile='dba', username='dba_admin')
+        """DBOPS profile user can cancel another user's execution."""
+        dbops_admin = UserFactory.create(profile='DBOPS', username='dbops_admin')
         execution = ExecutionFactory.create(
             action=self.action, user=self.owner,
             status=ExecutionStatus.SUBMITTED, environment='dev',
         )
-        self.client.force_authenticate(user=dba_admin)
+        self.client.force_authenticate(user=dbops_admin)
         url = f'/api/v1/executions/{execution.id}/cancel/'
         response = self.client.patch(url)
 

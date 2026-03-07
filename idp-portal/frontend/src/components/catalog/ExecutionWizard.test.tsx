@@ -131,12 +131,17 @@ const mockAction: CatalogActionDetail = {
   status: 'published',
   created_at: '2026-01-29T00:00:00Z',
   tags: ['oracle', 'provisioning'],
-  change_type_config: {
-    DEVELOPPEMENT: { required: false, change_model_code: null },
-    CERTIFICATION: { required: false, change_model_code: null },
-    PRODUCTION: { required: true, change_model_code: 'CHG001' },
-  },
   execution_count: 5,
+  execution_steps: [
+    {
+      order: 1,
+      step_id: 'create-change',
+      step_type: 'service_call',
+      integration_type: 'servicenow',
+      operation: 'create_change',
+      condition: { environment_in: ['production'] },
+    },
+  ],
   // Story 13.2: Set to false to test legacy environment selection behavior
   requires_target: false,
 };
@@ -1587,7 +1592,6 @@ describe('ExecutionWizard — coverage extras', () => {
       status: 'published',
       created_at: '2026-01-01T00:00:00Z',
       tags: [],
-      change_type_config: null,
       execution_count: 0,
       requires_target: false,
     } as unknown as CatalogActionDetail;

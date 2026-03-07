@@ -162,10 +162,10 @@ class TestDashboardExportCSV:
         assert cd.endswith('.csv"')
 
     def test_csv_permissions_dba_ok(self):
-        """Permissions DBA → HTTP 200."""
+        """Permissions DBOPS (admin) → HTTP 200."""
         _create_test_data(self.admin, self.integration)
-        dba = UserFactory.create(profile="DBA", username="dba_export_csv")
-        self.client.force_authenticate(user=dba)
+        dbops = UserFactory.create(profile="DBOPS", username="dbops_export_csv")
+        self.client.force_authenticate(user=dbops)
 
         response = self.client.get(self.URL)
 
@@ -284,10 +284,10 @@ class TestDashboardExportPDF:
         assert cd.endswith('.pdf"')
 
     def test_pdf_permissions_dba_ok(self):
-        """Permissions DBA → HTTP 200."""
+        """Permissions DBOPS (admin) → HTTP 200."""
         _create_test_data(self.admin, self.integration)
-        dba = UserFactory.create(profile="DBA", username="dba_export_pdf")
-        self.client.force_authenticate(user=dba)
+        dbops = UserFactory.create(profile="DBOPS", username="dbops_export_pdf")
+        self.client.force_authenticate(user=dbops)
 
         response = self.client.get(self.URL)
 

@@ -16,6 +16,52 @@ from django.core.mail import send_mail
 
 logger = structlog.get_logger(__name__)
 
+# Keys whose values must be masked in notifications (Story 58.2)
+_SENSITIVE_PARAM_KEYS = frozenset(
+    k.lower() for k in ("password", "token", "secret", "api_key", "apikey")
+)
+_MAX_PARAM_VALUE_LEN = 64
+
+
+def _format_params_for_notification(execution: Any) -> str:
+    """Story 58.2: Formate parameters et targets pour inclusion dans notifications on_approval_required."""
+    parts = []
+    params = execution.get_parameters() if hasattr(execution, "get_parameters") else getattr(execution, "parameters", None)
+    if params is not None:
+        if isinstance(params, dict):
+            safe_pairs = []
+            for k, v in params.items():
+                key_lower = str(k).lower()
+                if key_lower in _SENSITIVE_PARAM_KEYS:
+                    safe_pairs.append(f"{k}=***")
+                else:
+                    if isinstance(v, (dict, list)):
+                        raw = f"[{type(v).__name__}]"
+                    else:
+                        raw = str(v) if v is not None else ""
+                        if len(raw) > _MAX_PARAM_VALUE_LEN:
+                            raw = raw[:_MAX_PARAM_VALUE_LEN] + "..."
+                    safe_pairs.append(f"{k}={raw}")
+            if safe_pairs:
+                parts.append(f"Paramètres: {', '.join(safe_pairs)}")
+        else:
+            # Non-dict (list, string, etc.): safe summary only
+            tname = type(params).__name__
+            length = len(params) if hasattr(params, "__len__") else "?"
+            parts.append(f"Paramètres: [{tname}, len={length}]")
+    try:
+        targets = list(execution.targets.all())
+        if targets:
+            target_names = ", ".join(t.target_name or t.target_id for t in targets)
+            parts.append(f"Targets: {target_names}")
+    except Exception as e:  # noqa: BLE001 — best-effort: target access must not break notification
+        logger.warning(
+            "notification_target_access_failed",
+            error_type=type(e).__name__,
+            error=str(e),
+        )
+    return " | ".join(parts) if parts else ""
+
 
 class NotificationService:
     """Service de notification multi-destinations (email, Teams, page)."""
@@ -128,20 +174,24 @@ class NotificationService:
                 correlation_id=correlation_id,
             )
 
-    def send_page_dba(
+    def send_page_oncall(
         self,
-        api_url: str,
         message: str,
         action_name: str,
         execution_id: int,
         level: str,
         correlation_id: str | None = None,
+        api_url: str | None = None,
     ) -> None:
-        """Appelle l'API interne de page DBA on-call."""
-        effective_url = api_url or getattr(settings, "PAGE_DBA_API_URL", "")
+        """Appelle l'API interne de page on-call (agnostique). Epic 56."""
+        effective_url = (
+            api_url
+            or getattr(settings, "PAGE_ONCALL_API_URL", "")
+            or getattr(settings, "PAGE_DBA_API_URL", "")
+        )
         if not effective_url:
             logger.warning(
-                "page_dba_not_configured",
+                "page_oncall_not_configured",
                 correlation_id=correlation_id,
             )
             return
@@ -156,16 +206,19 @@ class NotificationService:
             response.raise_for_status()
             logger.info(
                 "notification_sent",
-                destination_type="page_dba",
+                destination_type="page_oncall",
                 correlation_id=correlation_id,
             )
-        except Exception as exc:  # noqa: BLE001 — best-effort-non-critical: page DBA notification failure must not break caller
+        except Exception as exc:  # noqa: BLE001 — best-effort-non-critical: page on-call notification failure must not break caller
             logger.error(
                 "notification_failed",
-                destination_type="page_dba",
+                destination_type="page_oncall",
                 error=type(exc).__name__,
                 correlation_id=correlation_id,
             )
+
+    # Backward compatibility alias — Epic 56
+    send_page_dba = send_page_oncall
 
     def notify(self, destination_type: str, **kwargs: Any) -> None:
         """Dispatch vers la méthode de destination appropriée."""
@@ -173,7 +226,8 @@ class NotificationService:
             "email": self.send_email,
             "teams": self.send_teams,
             "page_individual": self.send_page_individual,
-            "page_dba": self.send_page_dba,
+            "page_oncall": self.send_page_oncall,
+            "page_dba": self.send_page_oncall,  # Backward compat alias — Epic 56
         }
         handler = dispatch.get(destination_type)
         if handler is None:
@@ -232,13 +286,22 @@ class NotificationService:
                 if recipient == "requester":
                     recipient = getattr(execution.user, "email", "") or ""
                 if recipient:
+                    if event == "on_approval_required":
+                        context_str = _format_params_for_notification(execution)
+                        body = (
+                            f"Approbation requise pour l'action '{action.name}' "
+                            f"dans l'environnement '{env}' (exécution {execution.id})."
+                            + (f"\n{context_str}" if context_str else "")
+                        )
+                    else:
+                        body = (
+                            f"Exécution {execution.id} pour l'action '{action.name}' "
+                            f"dans l'environnement '{env}' : {event.replace('_', ' ')}."
+                        )
                     self.send_email(
                         recipient_email=recipient,
                         subject=f"[IDP Portal] {action.name} — {event_label}",
-                        body=(
-                            f"Exécution {execution.id} pour l'action '{action.name}' "
-                            f"dans l'environnement '{env}' : {event.replace('_', ' ')}."
-                        ),
+                        body=body,
                         correlation_id=correlation_id,
                     )
 
@@ -246,18 +309,26 @@ class NotificationService:
                 webhook_url = channel.get("webhook_url_ref", "")
                 # Vault resolution hors scope (v1 : URLs directes uniquement)
                 if webhook_url and not webhook_url.startswith("vault:"):
+                    if event == "on_approval_required":
+                        context_str = _format_params_for_notification(execution)
+                        message = (
+                            f"Action '{action.name}' [{env}] : approbation requise (exécution {execution.id})"
+                            + (f"\n{context_str}" if context_str else "")
+                        )
+                    else:
+                        message = (
+                            f"Action '{action.name}' [{env}] : "
+                            f"{event.replace('_', ' ')} (exécution {execution.id})"
+                        )
                     self.send_teams(
                         webhook_url=webhook_url,
                         title=f"[IDP Portal] {action.name} — {event_label}",
-                        message=(
-                            f"Action '{action.name}' [{env}] : "
-                            f"{event.replace('_', ' ')} (exécution {execution.id})"
-                        ),
+                        message=message,
                         color=event_color,
                         correlation_id=correlation_id,
                     )
 
-            elif ch_type == "page_dba" and can_page:
+            elif ch_type in ("page_oncall", "page_dba") and can_page:
                 api_url = channel.get("api_url", "")
                 page_event_labels = {
                     "on_success": "a réussi",
@@ -265,7 +336,7 @@ class NotificationService:
                     "on_approval_required": "attend une approbation",
                 }
                 page_event_label = page_event_labels.get(event, event.replace("_", " "))
-                self.send_page_dba(
+                self.send_page_oncall(
                     api_url=api_url,
                     message=(
                         f"Action critique '{action.name}' [{env}] "

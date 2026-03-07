@@ -6,16 +6,11 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 
 import { useEditExecution } from '../useEditExecution';
 import { updateScheduledExecution } from '../../services/scheduled_execution_service';
-import { fetchInventoryTargets } from '../../services/execution_service';
 import { ApiError } from '../../services/api_client';
 import type { ScheduledExecutionListItem } from '../../types/api';
 
 vi.mock('../../services/scheduled_execution_service', () => ({
   updateScheduledExecution: vi.fn(),
-}));
-
-vi.mock('../../services/execution_service', () => ({
-  fetchInventoryTargets: vi.fn(),
 }));
 
 const mockValidateFields = vi.fn();
@@ -82,7 +77,6 @@ describe('useEditExecution', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(updateScheduledExecution).mockResolvedValue({} as never);
-    vi.mocked(fetchInventoryTargets).mockResolvedValue([]);
     mockValidateFields.mockResolvedValue({
       scheduled_at: { utc: () => ({ format: () => '2026-03-15T10:00:00Z' }) },
       target_names: ['server1'],
@@ -98,7 +92,7 @@ describe('useEditExecution', () => {
     expect(result.current.executionToEdit).toBeNull();
     expect(result.current.editModalVisible).toBe(false);
     expect(result.current.editLoading).toBe(false);
-    expect(result.current.targetOptions).toEqual([]);
+    expect(result.current.editLoading).toBe(false);
   });
 
   it('openEditModal should set execution, show modal and initialize form', () => {
@@ -153,22 +147,14 @@ describe('useEditExecution', () => {
     expect(result.current.editModalVisible).toBe(false);
   });
 
-  it('should load target options when modal opens', async () => {
-    vi.mocked(fetchInventoryTargets).mockResolvedValue([
-      { name: 'server1', environment: 'dev' } as never,
-      { name: 'server2', environment: 'prod' } as never,
-    ]);
-
+  it('should show modal when opening edit', () => {
     const { result } = renderEditHook();
 
     act(() => {
       result.current.openEditModal(makeExec());
     });
 
-    await waitFor(() => {
-      expect(result.current.targetOptions).toHaveLength(2);
-    });
-    expect(result.current.targetOptions[0].value).toBe('server1');
+    expect(result.current.editModalVisible).toBe(true);
   });
 
   it('submitEdit should call API and onSuccess on success', async () => {
@@ -203,7 +189,7 @@ describe('useEditExecution', () => {
 
     await waitFor(() => {
       expect(mockNotification.error).toHaveBeenCalledWith(
-        expect.objectContaining({ title: 'Permission refusée' })
+        expect.objectContaining({ message: 'Permission refusée' })
       );
     });
   });
@@ -331,7 +317,7 @@ describe('useEditExecution', () => {
     act(() => { result.current.submitEdit(); });
     await waitFor(() => {
       expect(mockNotification.error).toHaveBeenCalledWith(
-        expect.objectContaining({ title: 'Erreur' }),
+        expect.objectContaining({ message: 'Erreur' }),
       );
     });
   });

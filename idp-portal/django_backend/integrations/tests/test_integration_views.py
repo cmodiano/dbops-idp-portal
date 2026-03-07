@@ -20,8 +20,10 @@ class TestIntegrationViewSet(TestCase):
     
     def setUp(self):
         """Set up test data."""
+        from conftest import ensure_admin_profiles
+        ensure_admin_profiles()
         self.client = APIClient()
-        
+
         # Create DBOPS user (required for admin endpoints)
         self.dbops_user = User.objects.create(
             username='dbops_user',
@@ -361,6 +363,8 @@ class TestAAPTemplatesEndpoint(TestCase):
     """Tests for GET /admin/integrations/{id}/aap-templates/ — Story 31.5."""
 
     def setUp(self):
+        from conftest import ensure_admin_profiles
+        ensure_admin_profiles()
         self.client = APIClient()
         self.dbops_user = User.objects.create(username='dbops_tpl', profile='dbops')
         self.aap_integration = Integration.objects.create(

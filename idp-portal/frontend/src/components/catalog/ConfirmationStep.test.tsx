@@ -49,7 +49,6 @@ const mockAction = {
   default_impact_level: 'low' as ImpactLevel,
   status: 'published' as const,
   requires_target: false,
-  change_type_config: {},
   execution_count: 0,
   tags: [],
   is_favorite: false,
@@ -208,6 +207,79 @@ describe('ConfirmationStep - Story 21.5', () => {
 
       expect(screen.getByText('Qa')).toBeInTheDocument();
     });
+  });
+});
+
+describe('ConfirmationStep - Story 57.18 isChangeRequired derivation', () => {
+  it('shows Pre-approuve when action has no execution_steps', () => {
+    render(
+      <TestWrapper contextValue={{ ...defaultWizardContext, derivedEnvironment: 'prod', environmentsCache: [] }}>
+        <ConfirmationStep {...defaultProps} />
+      </TestWrapper>
+    );
+    expect(screen.getByText('Pre-approuve')).toBeInTheDocument();
+  });
+
+  it('shows CAB requis when action has servicenow create_change step', () => {
+    const actionWithChange = {
+      ...mockAction,
+      execution_steps: [
+        { order: 1, step_id: 'create-change', step_type: 'service_call', integration_type: 'servicenow', operation: 'create_change', name: 'Create change' },
+        { order: 2, step_id: 'execute', step_type: 'platform', name: 'Execute' },
+      ],
+    } as unknown as ConfirmationStepProps['action'];
+    render(
+      <TestWrapper contextValue={{ ...defaultWizardContext, derivedEnvironment: 'prod', environmentsCache: [] }}>
+        <ConfirmationStep {...defaultProps} action={actionWithChange} />
+      </TestWrapper>
+    );
+    expect(screen.getByText('CAB requis')).toBeInTheDocument();
+  });
+
+  it('shows CAB requis when environment_in includes current environment (case-insensitive)', () => {
+    const actionWithEnvCondition = {
+      ...mockAction,
+      execution_steps: [
+        { order: 1, step_id: 'create-change', step_type: 'service_call', integration_type: 'servicenow', operation: 'create_change', name: 'Create change', condition: { environment_in: ['PROD', 'STAGING'] } },
+      ],
+    } as unknown as ConfirmationStepProps['action'];
+    render(
+      <TestWrapper contextValue={{ ...defaultWizardContext, derivedEnvironment: 'prod', environmentsCache: [] }}>
+        <ConfirmationStep {...defaultProps} action={actionWithEnvCondition} />
+      </TestWrapper>
+    );
+    expect(screen.getByText('CAB requis')).toBeInTheDocument();
+  });
+
+  it('shows Pre-approuve when environment_in does NOT include current environment', () => {
+    const actionWithOtherEnv = {
+      ...mockAction,
+      execution_steps: [
+        { order: 1, step_id: 'create-change', step_type: 'service_call', integration_type: 'servicenow', operation: 'create_change', name: 'Create change', condition: { environment_in: ['PROD'] } },
+      ],
+    } as unknown as ConfirmationStepProps['action'];
+    render(
+      <TestWrapper contextValue={{ ...defaultWizardContext, derivedEnvironment: 'dev', environmentsCache: [] }}>
+        <ConfirmationStep {...defaultProps} action={actionWithOtherEnv} />
+      </TestWrapper>
+    );
+    expect(screen.getByText('Pre-approuve')).toBeInTheDocument();
+  });
+
+  it('shows Pre-approuve when steps exist but none are servicenow create_change', () => {
+    const actionWithOtherSteps = {
+      ...mockAction,
+      execution_steps: [
+        { order: 1, step_id: 'gate-1', step_type: 'gate', name: 'Approval gate' },
+        { order: 2, step_id: 'exec', step_type: 'platform', name: 'Execute action' },
+      ],
+    } as unknown as ConfirmationStepProps['action'];
+    render(
+      <TestWrapper contextValue={{ ...defaultWizardContext, derivedEnvironment: 'prod', environmentsCache: [] }}>
+        <ConfirmationStep {...defaultProps} action={actionWithOtherSteps} />
+      </TestWrapper>
+    );
+    expect(screen.getByText('Pre-approuve')).toBeInTheDocument();
   });
 });
 

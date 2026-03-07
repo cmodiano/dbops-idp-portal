@@ -122,7 +122,7 @@ def _broadcast_execution_update(
 ) -> None:
     """Broadcast status and log updates to the execution's WebSocket group."""
     try:
-        from channels.layers import get_channel_layer  # type: ignore[import-untyped]
+        from channels.layers import get_channel_layer
         from asgiref.sync import async_to_sync
 
         channel_layer = get_channel_layer()

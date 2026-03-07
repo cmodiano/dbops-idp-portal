@@ -17,8 +17,10 @@ class TestUploadIconView(TestCase):
     
     def setUp(self):
         """Set up test data."""
+        from conftest import ensure_admin_profiles
+        ensure_admin_profiles()
         self.client = APIClient()
-        
+
         # Create DBOPS user (required for admin endpoints)
         self.dbops_user = User.objects.create(
             username='dbops_user',

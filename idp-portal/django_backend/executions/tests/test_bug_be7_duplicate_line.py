@@ -40,7 +40,7 @@ class TestDuplicateLineRemoved(TestCase):
         self.client.force_authenticate(user=self.user)
 
     def test_put_environment_assigned_correctly(self, mock_validate):
-        """PUT with environment=prod → se.environment == 'prod' (assigned correctly)."""
+        """PUT with environment + target_names → 400 FIELD_NOT_MODIFIABLE."""
         mock_validate.return_value = None
         future = timezone.now() + timedelta(days=1)
         se = ScheduledExecution.objects.create(
@@ -55,12 +55,10 @@ class TestDuplicateLineRemoved(TestCase):
             {'environment': 'prod', 'target_names': []},
             format='json',
         )
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        se.refresh_from_db()
-        self.assertEqual(se.environment, 'prod')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_put_environment_staging_with_empty_targets(self, mock_validate):
-        """PUT with target_names=[] and environment=staging → se.environment == 'staging'."""
+        """PUT with environment + target_names → 400 FIELD_NOT_MODIFIABLE."""
         mock_validate.return_value = None
         future = timezone.now() + timedelta(days=1)
         se = ScheduledExecution.objects.create(
@@ -75,6 +73,4 @@ class TestDuplicateLineRemoved(TestCase):
             {'environment': 'staging', 'target_names': []},
             format='json',
         )
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        se.refresh_from_db()
-        self.assertEqual(se.environment, 'staging')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)

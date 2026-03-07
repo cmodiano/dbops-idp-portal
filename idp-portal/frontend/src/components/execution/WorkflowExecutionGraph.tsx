@@ -58,6 +58,7 @@ const STATUS_COLORS = {
   FAILED: '#ff4d4f',
   PENDING: '#8c8c8c',
   SKIPPED: '#8c8c8c',
+  WAITING: '#d46b08', // Story 58.3: orange foncé — en attente d'approbation (gate), distinct de RUNNING
   SELECTED: '#faad14', // Story 19.3 AC7: Golden border for selected node — pas d'équivalent dans execution-status.ts
 } as const;
 
@@ -104,6 +105,8 @@ function getNodeStyle(status: ExecutionStepStatus | undefined): React.CSSPropert
       return { opacity: 1 };
     case 'SKIPPED':
       return { opacity: 0.6 };
+    case 'WAITING': // Story 58.3: gate en attente d'approbation
+      return { opacity: 1 };
     default: // PENDING
       return { opacity: 0.7 };
   }
@@ -360,6 +363,10 @@ function WorkflowExecutionGraphInner({
           <Space size={8}>
             <Badge color={STATUS_COLORS.PENDING} />
             <Text type="secondary">À venir / Annulé</Text>
+          </Space>
+          <Space size={8}>
+            <Badge color={STATUS_COLORS.WAITING} />
+            <Text type="secondary">En attente d&apos;approbation</Text>
           </Space>
         </Space>
       </Card>

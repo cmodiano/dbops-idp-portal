@@ -5,13 +5,15 @@
  * éditeur input_mapping, condition.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Divider, Select, Spin, Typography } from 'antd';
 import type { WorkflowStepNodeData } from '../WorkflowStepNode';
 import type { BusinessRulePolicyListItem } from '../../../types/api';
 import { getBusinessRulePolicies } from '../../../services/business_rules_service';
 import { KeyValueEditor } from './KeyValueEditor';
 import { ConditionConfig } from './ConditionConfig';
+import { MappingHelpPopover } from './MappingHelpPopover';
+import { useInputMappingWarnings } from '../../../hooks/useInputMappingWarnings';
 import logger from '../../../services/logger';
 
 const { Text } = Typography;
@@ -20,13 +22,27 @@ export interface EvaluationStepConfigProps {
   data: WorkflowStepNodeData;
   onUpdate: (updates: Partial<WorkflowStepNodeData>) => void;
   disabled?: boolean;
+  /** Story 57.20: Step options with readable labels for MappingHelpPopover. */
+  availableStepOptions?: { value: string; label: string }[];
 }
 
 export const EvaluationStepConfig: React.FC<EvaluationStepConfigProps> = ({
   data,
   onUpdate,
   disabled = false,
+  availableStepOptions,
 }) => {
+  // Filtrer le step courant de la liste des étapes disponibles (AC4: "étapes précédentes")
+  const filteredStepOptions = useMemo(
+    () => availableStepOptions?.filter((s) => s.value !== data.step_id),
+    [availableStepOptions, data.step_id],
+  );
+
+  const inputMappingWarnings = useInputMappingWarnings(
+    data.input_mapping as Record<string, string> | null,
+    filteredStepOptions,
+  );
+
   const [policies, setPolicies] = useState<BusinessRulePolicyListItem[]>([]);
   const [loadingPolicies, setLoadingPolicies] = useState(false);
   const [policiesError, setPoliciesError] = useState<string | null>(null);
@@ -85,16 +101,16 @@ export const EvaluationStepConfig: React.FC<EvaluationStepConfigProps> = ({
 
       {/* Input mapping */}
       <div style={{ marginBottom: 12 }}>
-        <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
-          Mapping d'entrée (input_mapping)
-        </Text>
         <KeyValueEditor
+          label="Mapping d'entrée (input_mapping)"
+          helpContent={<MappingHelpPopover type="input" availableSteps={filteredStepOptions} />}
           value={data.input_mapping as Record<string, string> | null}
           onChange={(v) => onUpdate({ input_mapping: v })}
           disabled={disabled}
           keyPlaceholder="Paramètre"
-          valuePlaceholder="Valeur / expression"
+          valuePlaceholder="{{ steps.<step_id>.<champ> }}"
           data-testid="input-mapping-editor"
+          warnings={inputMappingWarnings}
         />
       </div>
 

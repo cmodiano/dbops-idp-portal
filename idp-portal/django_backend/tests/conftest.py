@@ -189,11 +189,10 @@ def sample_tags(db):
 @pytest.fixture
 def sample_profile(db):
     """Standard DBA profile with permissions."""
-    profile = ProfileFactory.create(
+    from profiles.models import Profile
+    profile, _ = Profile.objects.get_or_create(
         name='DBA',
-        ad_group='CN=DBA,OU=Groups,DC=example,DC=com',
-        is_admin=0,
-        is_auditor=0
+        defaults={'ad_group': 'CN=DBA,OU=Groups,DC=example,DC=com', 'is_admin': 0, 'is_auditor': 0},
     )
     return profile
 
@@ -201,11 +200,10 @@ def sample_profile(db):
 @pytest.fixture
 def sample_profile_admin(db):
     """Admin DBOPS profile with full permissions."""
-    profile = ProfileFactory.create(
+    from profiles.models import Profile
+    profile, _ = Profile.objects.get_or_create(
         name='DBOPS',
-        ad_group='CN=DBOPS,OU=Groups,DC=example,DC=com',
-        is_admin=1,
-        is_auditor=0
+        defaults={'ad_group': 'CN=DBOPS,OU=Groups,DC=example,DC=com', 'is_admin': 1, 'is_auditor': 0},
     )
     return profile
 
@@ -213,11 +211,10 @@ def sample_profile_admin(db):
 @pytest.fixture
 def sample_profile_auditor(db):
     """Auditor profile with read-only access."""
-    profile = ProfileFactory.create(
+    from profiles.models import Profile
+    profile, _ = Profile.objects.get_or_create(
         name='AUDITOR',
-        ad_group='CN=Auditors,OU=Groups,DC=example,DC=com',
-        is_admin=0,
-        is_auditor=1
+        defaults={'ad_group': 'CN=Auditors,OU=Groups,DC=example,DC=com', 'is_admin': 0, 'is_auditor': 1},
     )
     return profile
 

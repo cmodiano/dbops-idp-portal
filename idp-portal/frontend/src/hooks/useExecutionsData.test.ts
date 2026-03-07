@@ -378,3 +378,103 @@ describe('useExecutionsData — coverage extras', () => {
     expect(result.current.executions[0].completed_at).toBe('2026-01-01T12:00:00Z');
   });
 });
+
+// ── Story 58.5 — Propagation approbations entre fenêtres ────────────────────
+
+describe('useExecutionsData — Story 58.5 : polling approbations', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    mockListExecutions.mockResolvedValue(makeListResponse([]));
+    mockFetchStats.mockResolvedValue({ executions_jour: 0, taux_succes_pct: 0, executions_en_cours: 0, executions_en_erreur: 0 });
+    mockFetchTimeSeries.mockResolvedValue([]);
+    mockListPending.mockResolvedValue(makeListResponse([]));
+    mockActorSync.mockReset();
+    Object.defineProperty(document, 'hidden', { value: false, configurable: true });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.clearAllMocks();
+    Object.defineProperty(document, 'hidden', { value: false, configurable: true });
+  });
+
+  it('58.5-1 — loadPendingApprovals est appelé périodiquement quand canApprove=true (AC1)', async () => {
+    mockListPending.mockResolvedValue(makeListResponse([makeExecution(10, 'PENDING_APPROVAL', 42)]));
+
+    renderHook(() => useExecutionsData(defaultFilters, true));
+
+    // Attendre le chargement initial
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(0);
+    const initialCalls = mockListPending.mock.calls.length;
+    expect(initialCalls).toBeGreaterThanOrEqual(1); // appel initial au mount
+
+    // Avancer de 30s → polling déclenché
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(mockListPending.mock.calls.length).toBeGreaterThan(initialCalls);
+
+    // Avancer de 30s supplémentaires → un autre appel
+    const afterFirstPoll = mockListPending.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(mockListPending.mock.calls.length).toBeGreaterThan(afterFirstPoll);
+  });
+
+  it('58.5-2 — loadPendingApprovals n\'est PAS pollé quand canApprove=false (AC3)', async () => {
+    renderHook(() => useExecutionsData(defaultFilters, false));
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mockListPending).not.toHaveBeenCalled(); // pas d'appel initial non plus
+
+    // Avancer de 60s → aucun appel polling
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(mockListPending).not.toHaveBeenCalled();
+  });
+
+  it('58.5-3 — loadPendingApprovals est appelé sur visibilitychange quand canApprove=true (AC2)', async () => {
+    mockListPending.mockResolvedValue(makeListResponse([]));
+
+    renderHook(() => useExecutionsData(defaultFilters, true));
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(0);
+    const callsBefore = mockListPending.mock.calls.length;
+
+    // Simuler tab hidden → visible
+    Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Pas d'appel quand hidden
+    const callsAfterHidden = mockListPending.mock.calls.length;
+    expect(callsAfterHidden).toBe(callsBefore);
+
+    // Retour visible → appel immédiat
+    Object.defineProperty(document, 'hidden', { value: false, configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(mockListPending.mock.calls.length).toBeGreaterThan(callsBefore);
+  });
+
+  it('58.5-4 — le polling s\'arrête quand l\'onglet est caché (AC3)', async () => {
+    mockListPending.mockResolvedValue(makeListResponse([]));
+    // Start with tab visible
+    Object.defineProperty(document, 'hidden', { value: false, configurable: true });
+
+    renderHook(() => useExecutionsData(defaultFilters, true));
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Verify polling works when visible
+    const callsBeforePoll = mockListPending.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(mockListPending.mock.calls.length).toBeGreaterThan(callsBeforePoll);
+
+    // Tab becomes hidden → polling ticks should be skipped
+    Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+    const callsBeforeHidden = mockListPending.mock.calls.length;
+
+    // Avancer de 60s avec tab hidden → pas de polling
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(mockListPending.mock.calls.length).toBe(callsBeforeHidden);
+  });
+});

@@ -96,38 +96,93 @@ class TestSendPageIndividual:
         mock_post.assert_not_called()
 
 
-class TestSendPageDba:
-    """Tests pour send_page_dba()."""
+class TestSendPageOncall:
+    """Tests pour send_page_oncall() — Epic 56 (ex-send_page_dba)."""
 
     def setup_method(self) -> None:
         self.service = NotificationService()
 
     @patch("services.notification_service.httpx.post")
-    def test_send_page_dba_ok(self, mock_post: MagicMock) -> None:
-        """send_page_dba appelle l'API avec le bon payload."""
+    def test_send_page_oncall_ok(self, mock_post: MagicMock) -> None:
+        """AC2 : send_page_oncall appelle l'API avec le bon payload."""
         mock_response = MagicMock(status_code=200)
         mock_response.raise_for_status = MagicMock()
         mock_post.return_value = mock_response
 
-        self.service.send_page_dba(
-            api_url="http://page-api/dba",
-            message="DBA Alert", action_name="Test", execution_id=42, level="critical",
+        self.service.send_page_oncall(
+            api_url="http://page-api/oncall",
+            message="Oncall Alert", action_name="Test", execution_id=42, level="critical",
         )
         mock_post.assert_called_once()
+        call_url = mock_post.call_args.args[0]
+        assert call_url == "http://page-api/oncall"
         payload = mock_post.call_args.kwargs["json"]
         assert payload["level"] == "critical"
         assert payload["execution_id"] == 42
 
     @patch("services.notification_service.httpx.post")
-    def test_send_page_dba_not_configured(self, mock_post: MagicMock) -> None:
-        """Si api_url est vide et PAGE_DBA_API_URL aussi, ne pas appeler."""
+    def test_send_page_oncall_uses_page_oncall_url_setting(self, mock_post: MagicMock) -> None:
+        """AC3 : PAGE_ONCALL_API_URL est prioritaire sur PAGE_DBA_API_URL."""
+        mock_response = MagicMock(status_code=200)
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
         with patch("services.notification_service.settings") as mock_settings:
-            mock_settings.PAGE_DBA_API_URL = ""
-            self.service.send_page_dba(
+            mock_settings.PAGE_ONCALL_API_URL = "http://page-oncall-api/alert"
+            mock_settings.PAGE_DBA_API_URL = "http://page-dba-api/alert"
+            self.service.send_page_oncall(
                 api_url="",
-                message="DBA Alert", action_name="Test", execution_id=42, level="critical",
+                message="Alert", action_name="Test", execution_id=42, level="critical",
+            )
+
+        mock_post.assert_called_once()
+        call_url = mock_post.call_args.args[0]
+        assert call_url == "http://page-oncall-api/alert"
+
+    @patch("services.notification_service.httpx.post")
+    def test_send_page_oncall_falls_back_to_page_dba_url(self, mock_post: MagicMock) -> None:
+        """AC4 : PAGE_DBA_API_URL utilisé si PAGE_ONCALL_API_URL est vide."""
+        mock_response = MagicMock(status_code=200)
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        with patch("services.notification_service.settings") as mock_settings:
+            mock_settings.PAGE_ONCALL_API_URL = ""
+            mock_settings.PAGE_DBA_API_URL = "http://page-dba-api/alert"
+            self.service.send_page_oncall(
+                api_url="",
+                message="Alert", action_name="Test", execution_id=42, level="critical",
+            )
+
+        mock_post.assert_called_once()
+        call_url = mock_post.call_args.args[0]
+        assert call_url == "http://page-dba-api/alert"
+
+    @patch("services.notification_service.httpx.post")
+    def test_send_page_oncall_not_configured(self, mock_post: MagicMock) -> None:
+        """AC3/4 : Aucun URL configuré → pas d'appel httpx."""
+        with patch("services.notification_service.settings") as mock_settings:
+            mock_settings.PAGE_ONCALL_API_URL = ""
+            mock_settings.PAGE_DBA_API_URL = ""
+            self.service.send_page_oncall(
+                api_url="",
+                message="Alert", action_name="Test", execution_id=42, level="critical",
             )
         mock_post.assert_not_called()
+
+    def test_send_page_dba_alias_works(self) -> None:
+        """AC5 : send_page_dba() est un alias de send_page_oncall() — même fonction sous-jacente."""
+        assert self.service.send_page_dba.__func__ is self.service.send_page_oncall.__func__
+
+    @patch("services.notification_service.httpx.post")
+    def test_send_page_oncall_failure_non_blocking(self, mock_post: MagicMock) -> None:
+        """Une exception dans send_page_oncall ne doit pas se propager."""
+        mock_post.side_effect = Exception("Connection error")
+        # Ne lève pas d'exception
+        self.service.send_page_oncall(
+            api_url="http://page-api/oncall",
+            message="Alert", action_name="Test", execution_id=42, level="critical",
+        )
 
 
 class TestNotifyExecutionEvent:
@@ -249,7 +304,7 @@ class TestNotifyExecutionEvent:
             mock_page.assert_not_called()
 
     def test_page_dba_in_prod_critical(self) -> None:
-        """Page DBA envoyé si env == prod, level == critical, conditions match."""
+        """AC1 : Page DBA envoyé si env == prod, level == critical, conditions match."""
         config = {
             "channels": [
                 {"type": "page_dba", "enabled": True, "conditions": ["on_failure"],
@@ -264,9 +319,9 @@ class TestNotifyExecutionEvent:
             impact_rules={"prod": {"level": "critical"}},
         )
 
-        with patch.object(self.service, "send_page_dba") as mock_dba:
+        with patch.object(self.service, "send_page_oncall") as mock_oncall:
             self.service.notify_execution_event(execution, action, "on_failure")
-            mock_dba.assert_called_once()
+            mock_oncall.assert_called_once()
 
     def test_page_dba_not_in_staging(self) -> None:
         """Page DBA NON envoyé si env != prod."""
@@ -283,9 +338,49 @@ class TestNotifyExecutionEvent:
             impact_rules={"staging": {"level": "critical"}},
         )
 
-        with patch.object(self.service, "send_page_dba") as mock_dba:
+        with patch.object(self.service, "send_page_oncall") as mock_oncall:
             self.service.notify_execution_event(execution, action, "on_failure")
-            mock_dba.assert_not_called()
+            mock_oncall.assert_not_called()
+
+    def test_page_oncall_channel_type_dispatches(self) -> None:
+        """AC2 : type page_oncall → send_page_oncall appelé."""
+        config = {
+            "channels": [
+                {"type": "page_oncall", "enabled": True, "conditions": ["on_failure"],
+                 "api_url": "http://oncall-api"},
+            ],
+            "page_individual_enabled": False,
+        }
+        execution = self._make_execution(env="prod")
+        action = self._make_action(
+            notification_config=config,
+            impact_level="critical",
+            impact_rules={"prod": {"level": "critical"}},
+        )
+
+        with patch.object(self.service, "send_page_oncall") as mock_oncall:
+            self.service.notify_execution_event(execution, action, "on_failure")
+        mock_oncall.assert_called_once()
+
+    def test_page_dba_channel_type_still_dispatches(self) -> None:
+        """AC1 : type page_dba → send_page_oncall appelé (alias rétrocompatible)."""
+        config = {
+            "channels": [
+                {"type": "page_dba", "enabled": True, "conditions": ["on_failure"],
+                 "api_url": "http://dba-api"},
+            ],
+            "page_individual_enabled": False,
+        }
+        execution = self._make_execution(env="prod")
+        action = self._make_action(
+            notification_config=config,
+            impact_level="critical",
+            impact_rules={"prod": {"level": "critical"}},
+        )
+
+        with patch.object(self.service, "send_page_oncall") as mock_oncall:
+            self.service.notify_execution_event(execution, action, "on_failure")
+        mock_oncall.assert_called_once()
 
     def test_teams_webhook_called(self) -> None:
         """Teams webhook appelé si conditions correspondent."""
@@ -370,6 +465,151 @@ class TestNotifyExecutionEvent:
             mock_email.assert_called_once()
             assert mock_email.call_args.kwargs["recipient_email"] == "requester@example.com"
 
+    # ─── Story 58.2: on_approval_required enrichment ──────────────────────────
+
+    def _make_approval_execution(self, params: dict | None = None, targets: list | None = None) -> MagicMock:
+        """Exécution mock avec parameters et targets pour on_approval_required."""
+        execution = self._make_execution(env="prod")
+        execution.get_parameters.return_value = params or {}
+        mock_targets = [MagicMock(target_name=t["target_name"], target_id=t["target_id"]) for t in (targets or [])]
+        execution.targets.all.return_value = mock_targets
+        return execution
+
+    def test_on_approval_required_email_includes_parameters(self) -> None:
+        """Story 58.2 AC6: email pour on_approval_required inclut les paramètres."""
+        config = {
+            "channels": [
+                {"type": "email", "enabled": True, "conditions": ["on_approval_required"], "recipient": "dba@corp.com"},
+            ],
+        }
+        execution = self._make_approval_execution(params={"pdb_name": "TESTDB"})
+        action = self._make_action(notification_config=config)
+
+        with patch.object(self.service, "send_email") as mock_send:
+            self.service.notify_execution_event(execution, action, "on_approval_required")
+            mock_send.assert_called_once()
+            body = mock_send.call_args.kwargs["body"]
+            assert "pdb_name=TESTDB" in body
+
+    def test_on_approval_required_email_includes_targets(self) -> None:
+        """Story 58.2 AC6: email pour on_approval_required inclut les targets."""
+        config = {
+            "channels": [
+                {"type": "email", "enabled": True, "conditions": ["on_approval_required"], "recipient": "dba@corp.com"},
+            ],
+        }
+        execution = self._make_approval_execution(
+            params={},
+            targets=[{"target_name": "oracle-prod-01", "target_id": "srv-01"}],
+        )
+        action = self._make_action(notification_config=config)
+
+        with patch.object(self.service, "send_email") as mock_send:
+            self.service.notify_execution_event(execution, action, "on_approval_required")
+            body = mock_send.call_args.kwargs["body"]
+            assert "oracle-prod-01" in body
+
+    def test_on_approval_required_email_no_params_no_context(self) -> None:
+        """Story 58.2 AC3/AC6: email sans paramètres ni targets — pas de crash."""
+        config = {
+            "channels": [
+                {"type": "email", "enabled": True, "conditions": ["on_approval_required"], "recipient": "dba@corp.com"},
+            ],
+        }
+        execution = self._make_approval_execution(params={}, targets=[])
+        action = self._make_action(notification_config=config)
+
+        with patch.object(self.service, "send_email") as mock_send:
+            self.service.notify_execution_event(execution, action, "on_approval_required")
+            mock_send.assert_called_once()
+            body = mock_send.call_args.kwargs["body"]
+            assert "approbation requise" in body.lower() or "approbation" in body.lower()
+
+    def test_on_approval_required_params_list_does_not_raise(self) -> None:
+        """Robustness: get_parameters() returning a list must not raise."""
+        config = {
+            "channels": [
+                {"type": "email", "enabled": True, "conditions": ["on_approval_required"], "recipient": "dba@corp.com"},
+            ],
+        }
+        execution = self._make_approval_execution(params={}, targets=[])
+        execution.get_parameters.return_value = ["item1", "item2"]
+        action = self._make_action(notification_config=config)
+
+        with patch.object(self.service, "send_email") as mock_send:
+            self.service.notify_execution_event(execution, action, "on_approval_required")
+            mock_send.assert_called_once()
+            body = mock_send.call_args.kwargs["body"]
+            assert "approbation requise" in body.lower() or "approbation" in body.lower()
+
+    def test_on_approval_required_params_string_does_not_raise(self) -> None:
+        """Robustness: get_parameters() returning a string must not raise."""
+        config = {
+            "channels": [
+                {"type": "email", "enabled": True, "conditions": ["on_approval_required"], "recipient": "dba@corp.com"},
+            ],
+        }
+        execution = self._make_approval_execution(params={}, targets=[])
+        execution.get_parameters.return_value = "raw_string"
+        action = self._make_action(notification_config=config)
+
+        with patch.object(self.service, "send_email") as mock_send:
+            self.service.notify_execution_event(execution, action, "on_approval_required")
+            mock_send.assert_called_once()
+            body = mock_send.call_args.kwargs["body"]
+            assert "approbation requise" in body.lower() or "approbation" in body.lower()
+
+    def test_on_approval_required_teams_includes_parameters(self) -> None:
+        """Story 58.2 AC6: Teams pour on_approval_required inclut les paramètres."""
+        config = {
+            "channels": [
+                {"type": "teams", "enabled": True, "conditions": ["on_approval_required"],
+                 "webhook_url_ref": "http://teams.webhook/hook"},
+            ],
+        }
+        execution = self._make_approval_execution(params={"pdb_name": "TESTDB"})
+        action = self._make_action(notification_config=config)
+
+        with patch.object(self.service, "send_teams") as mock_teams:
+            self.service.notify_execution_event(execution, action, "on_approval_required")
+            mock_teams.assert_called_once()
+            message = mock_teams.call_args.kwargs["message"]
+            assert "pdb_name" in message or "TESTDB" in message
+
+    def test_on_approval_required_teams_includes_targets(self) -> None:
+        """Story 58.2 AC6: Teams pour on_approval_required inclut les targets."""
+        config = {
+            "channels": [
+                {"type": "teams", "enabled": True, "conditions": ["on_approval_required"],
+                 "webhook_url_ref": "http://teams.webhook/hook"},
+            ],
+        }
+        execution = self._make_approval_execution(
+            targets=[{"target_name": "oracle-prod-01", "target_id": "srv-01"}],
+        )
+        action = self._make_action(notification_config=config)
+
+        with patch.object(self.service, "send_teams") as mock_teams:
+            self.service.notify_execution_event(execution, action, "on_approval_required")
+            message = mock_teams.call_args.kwargs["message"]
+            assert "oracle-prod-01" in message
+
+    def test_on_success_email_body_not_modified(self) -> None:
+        """Story 58.2: le corps email pour on_success n'est PAS enrichi avec params/targets."""
+        config = {
+            "channels": [
+                {"type": "email", "enabled": True, "conditions": ["on_success"], "recipient": "dba@corp.com"},
+            ],
+        }
+        execution = self._make_approval_execution(params={"pdb_name": "TESTDB"})
+        action = self._make_action(notification_config=config)
+
+        with patch.object(self.service, "send_email") as mock_send:
+            self.service.notify_execution_event(execution, action, "on_success")
+            body = mock_send.call_args.kwargs["body"]
+            # Body ne contient pas le format enrichi avec "approbation requise"
+            assert "approbation requise" not in body.lower()
+
 
 class TestNotify:
     """Tests pour la méthode dispatch notify()."""
@@ -386,6 +626,32 @@ class TestNotify:
     def test_notify_unknown_type(self) -> None:
         """notify avec type inconnu ne lève pas d'exception."""
         self.service.notify("unknown_type")
+
+    @patch("services.notification_service.httpx.post")
+    def test_notify_dispatches_page_oncall(self, mock_post: MagicMock) -> None:
+        """notify('page_oncall', ...) dispatche vers send_page_oncall."""
+        mock_response = MagicMock(status_code=200)
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+        self.service.notify(
+            "page_oncall",
+            api_url="http://api/oncall", message="Alert", action_name="Test",
+            execution_id=1, level="critical",
+        )
+        mock_post.assert_called_once()
+
+    @patch("services.notification_service.httpx.post")
+    def test_notify_dispatches_page_dba(self, mock_post: MagicMock) -> None:
+        """notify('page_dba', ...) dispatche vers send_page_oncall (backward compat — Epic 56)."""
+        mock_response = MagicMock(status_code=200)
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+        self.service.notify(
+            "page_dba",
+            api_url="http://api/dba", message="Alert", action_name="Test",
+            execution_id=1, level="critical",
+        )
+        mock_post.assert_called_once()
 
 
 class TestServiceFactory:

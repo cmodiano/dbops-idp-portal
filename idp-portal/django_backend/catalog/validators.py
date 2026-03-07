@@ -1,7 +1,6 @@
 """
 Validators for catalog app.
 Story 25.2: gate_conditions validation for execution steps.
-Story 25.4: change_type_config validation (allowed, requires_maintenance_window, requires_approval).
 Story 28.1: business_rule_policies validation for step output policies.
 """
 
@@ -89,142 +88,10 @@ def validate_gate_conditions(gate_conditions: list) -> None:
         raise ValidationError(errors)
 
 
-def validate_change_type_config(change_type_config: dict | None) -> None:
-    """
-    Validate change_type_config per-environment structure (Story 25.4).
-
-    Per-env keys: change_type, template_id, required, change_model_code,
-    requires_maintenance_window, requires_approval, allowed.
-
-    Rules:
-    - Each env value must be a dict
-    - allowed: must be bool if present (default: true if absent)
-    - requires_maintenance_window, requires_approval: must be bool if present
-    - If required=true for an env, change_model_code must be non-empty and alphanumeric (max 50)
-
-    Raises:
-        ValidationError: If any validation rule fails
-    """
-    if change_type_config is None:
-        return
-    if not isinstance(change_type_config, dict):
-        # Defensive: prevent persisting invalid JSON that would later crash execution validation.
-        raise ValidationError(
-            "change_type_config doit être un objet JSON (mapping d'environnements vers configuration)"
-        )
-
-    for env_key, env_value in change_type_config.items():
-        # Skip non-dict values (legacy flat format e.g. {'type': 'standard'})
-        if not isinstance(env_value, dict):
-            continue
-
-        # required: bool if present
-        if 'required' in env_value:
-            val = env_value['required']
-            if not isinstance(val, bool):
-                raise ValidationError(
-                    f"change_type_config.{env_key}.required: doit être un booléen (true/false)"
-                )
-
-        # allowed: bool if present
-        if 'allowed' in env_value:
-            val = env_value['allowed']
-            if not isinstance(val, bool):
-                raise ValidationError(
-                    f"change_type_config.{env_key}.allowed: doit être un booléen (true/false)"
-                )
-
-        # change_type, template_id: strings if present (Story 25.4 AC2)
-        for field, max_len in (('change_type', 50), ('template_id', 100)):
-            if field in env_value:
-                val = env_value[field]
-                if val is None:
-                    continue
-                if not isinstance(val, str):
-                    raise ValidationError(
-                        f"change_type_config.{env_key}.{field}: doit être une chaîne"
-                    )
-                if len(val.strip()) > max_len:
-                    raise ValidationError(
-                        f"change_type_config.{env_key}.{field}: max {max_len} caractères"
-                    )
-
-        # requires_maintenance_window, requires_approval: bool if present
-        for field in ('requires_maintenance_window', 'requires_approval'):
-            if field in env_value:
-                val = env_value[field]
-                if not isinstance(val, bool):
-                    raise ValidationError(
-                        f"change_type_config.{env_key}.{field}: doit être un booléen (true/false)"
-                    )
-
-        # required=true → change_model_code required, alphanumeric, max 50
-        if env_value.get('required') is True:
-            code = env_value.get('change_model_code')
-            if not code or not str(code).strip():
-                raise ValidationError(
-                    f"change_type_config.{env_key}: change_model_code obligatoire quand required=true"
-                )
-            code_str = str(code).strip()
-            if not re.fullmatch(r'[A-Za-z0-9]+', code_str):
-                raise ValidationError(
-                    f"change_type_config.{env_key}: change_model_code doit être alphanumérique"
-                )
-            if len(code_str) > 50:
-                raise ValidationError(
-                    f"change_type_config.{env_key}: change_model_code max 50 caractères"
-                )
-
-
-def validate_gate_config(gate_config: dict | None) -> None:
-    """
-    Validate gate_config JSON structure (Story 31.6).
-
-    Structure: {"servicenow_change": {"integration_id": <int>}}
-
-    Rules:
-    - gate_config must be a dict (or None)
-    - servicenow_change.integration_id must reference an existing integration of type 'servicenow'
-
-    Raises:
-        ValidationError: If validation fails
-    """
-    if gate_config is None:
-        return
-    if not isinstance(gate_config, dict):
-        raise ValidationError("gate_config doit être un objet JSON")
-
-    sn_change = gate_config.get('servicenow_change')
-    if sn_change is None:
-        return
-    if not isinstance(sn_change, dict):
-        raise ValidationError("gate_config.servicenow_change doit être un objet")
-
-    integration_id = sn_change.get('integration_id')
-    if integration_id is None:
-        return
-
-    if not isinstance(integration_id, int):
-        raise ValidationError("gate_config.servicenow_change.integration_id doit être un entier")
-
-    from integrations.models import Integration
-    try:
-        integration = Integration.objects.get(id=integration_id)
-    except Integration.DoesNotExist:
-        raise ValidationError(
-            f"gate_config.servicenow_change.integration_id: intégration {integration_id} introuvable"
-        )
-
-    if integration.type != 'servicenow':
-        raise ValidationError(
-            f"gate_config.servicenow_change.integration_id: l'intégration {integration_id} "
-            f"est de type '{integration.type}', attendu 'servicenow'"
-        )
-
 
 # Story 31.8: Valid notification channel types and conditions
 # Story 57.8: on_approval_required — when a workflow step is waiting for approval
-VALID_CHANNEL_TYPES = ('email', 'teams', 'page_dba')
+VALID_CHANNEL_TYPES = ('email', 'teams', 'page_dba', 'page_oncall')  # page_dba conservé — backward compat (Epic 56)
 VALID_CONDITIONS = ('on_failure', 'on_success', 'always', 'on_approval_required')
 
 
@@ -234,7 +101,7 @@ def validate_notification_config(notification_config: dict | None) -> None:
 
     Structure:
         {
-            "channels": [{"type": "email"|"teams"|"page_dba", "enabled": bool, "conditions": [...], ...}],
+            "channels": [{"type": "email"|"teams"|"page_oncall"|"page_dba", "enabled": bool, "conditions": [...], ...}],
             "page_individual_enabled": bool
         }
 

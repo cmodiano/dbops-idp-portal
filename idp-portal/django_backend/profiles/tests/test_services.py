@@ -366,9 +366,11 @@ class TestProfileServiceCumulativePermissions(TestCase):
 
     def test_cumulative_single_profile_all(self):
         """Test cumulative permissions with a single 'all' profile."""
-        profile = Profile.objects.create(
-            name='DBA', ad_group='GRP-DBA', is_admin=1
+        profile, _ = Profile.objects.get_or_create(
+            name='DBA', defaults={'ad_group': 'GRP-DBA', 'is_admin': 1}
         )
+        profile.ad_group = 'GRP-DBA'
+        profile.save()
         ProfileActionPermission.objects.create(
             profile=profile, permission_type='ALL'
         )

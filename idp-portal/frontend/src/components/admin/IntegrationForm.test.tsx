@@ -1771,14 +1771,10 @@ describe('IntegrationForm - Extended coverage 55.6', () => {
     const user = userEvent.setup();
     renderWithApp(<IntegrationForm {...defaultProps} onSubmit={mockSubmitEntities} />);
 
-    // Select inventory_db type
-    const select = screen.getByRole('combobox', { name: /Type d'intégration/ });
-    await user.click(select);
-    const option = await screen.findByTitle('Inventory DB');
-    await user.click(option);
+    await selectType(user, /Type d'intégration/, 'Inventory DB');
 
-    await user.type(screen.getByLabelText(/^Nom/), 'Inventory Entities');
-    await user.type(screen.getByLabelText(/URL de base/), 'https://inv.example.com');
+    fireEvent.change(screen.getByLabelText(/^Nom/), { target: { value: 'Inventory Entities' } });
+    fireEvent.change(screen.getByLabelText(/URL de base/), { target: { value: 'https://inv.example.com' } });
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Config JSON avancé/)).toBeInTheDocument();
@@ -1803,8 +1799,8 @@ describe('IntegrationForm - Extended coverage 55.6', () => {
           config: expect.objectContaining({ entities: expect.any(Object) }),
         })
       );
-    }, { timeout: 10000 });
-  }, 15000);
+    });
+  });
 
   it('inventory_db — config_advanced avec clé "flat_table" → soumet config.flat_table (ligne 88 branch)', async () => {
     const typesWithInventory6 = [
@@ -1843,19 +1839,16 @@ describe('IntegrationForm - Extended coverage 55.6', () => {
     const user = userEvent.setup();
     renderWithApp(<IntegrationForm {...defaultProps} onSubmit={mockSubmitFlatTable} />);
 
-    const select = screen.getByRole('combobox', { name: /Type d'intégration/ });
-    await user.click(select);
-    const option = await screen.findByTitle('Inventory DB');
-    await user.click(option);
+    await selectType(user, /Type d'intégration/, 'Inventory DB');
 
-    await user.type(screen.getByLabelText(/^Nom/), 'Inventory FlatTable');
-    await user.type(screen.getByLabelText(/URL de base/), 'https://inv2.example.com');
+    fireEvent.change(screen.getByLabelText(/^Nom/), { target: { value: 'Inventory FlatTable' } });
+    fireEvent.change(screen.getByLabelText(/URL de base/), { target: { value: 'https://inv2.example.com' } });
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Config JSON avancé/)).toBeInTheDocument();
     });
 
-    const flatTableConfig = JSON.stringify({ flat_table: { table: 'INVENTORY', schema: 'PUBLIC' } });
+    const flatTableConfig = JSON.stringify({ flat_table: { table: 'INVENTORY', schema: 'PUBLIC', columns: { name: 'NAME', environment: 'ENV' } } });
     fireEvent.change(screen.getByLabelText(/Config JSON avancé/), {
       target: { value: flatTableConfig },
     });
@@ -1869,8 +1862,8 @@ describe('IntegrationForm - Extended coverage 55.6', () => {
           config: expect.objectContaining({ flat_table: expect.any(Object) }),
         })
       );
-    }, { timeout: 10000 });
-  }, 15000);
+    });
+  });
 
   it('handleSubmit — onSubmit throw erreur non-validation → re-throw (ligne 102)', async () => {
     const networkError = new Error('Network error');
@@ -1885,15 +1878,15 @@ describe('IntegrationForm - Extended coverage 55.6', () => {
     renderWithApp(<IntegrationForm {...defaultProps} onSubmit={mockSubmitThrow} />);
 
     await selectType(user, /Type d'intégration/, 'Ansible Automation Platform');
-    await user.type(screen.getByLabelText(/^Nom/), 'AAP Re-throw');
-    await user.type(screen.getByLabelText(/URL de base/), 'https://aap.example.com');
+    fireEvent.change(screen.getByLabelText(/^Nom/), { target: { value: 'AAP Re-throw' } });
+    fireEvent.change(screen.getByLabelText(/URL de base/), { target: { value: 'https://aap.example.com' } });
 
     await user.click(screen.getByRole('button', { name: /Créer/i }));
 
     // onSubmit must have been called — the rejection path (line 102: throw e) is executed
     await waitFor(() => {
       expect(mockSubmitThrow).toHaveBeenCalled();
-    }, { timeout: 10000 });
+    });
 
     // Allow async rejection to settle
     await new Promise<void>((resolve) => setTimeout(resolve, 100));
@@ -1903,5 +1896,5 @@ describe('IntegrationForm - Extended coverage 55.6', () => {
 
     process.off('unhandledRejection', unhandledRejectionSuppressor);
     consoleErrorSpy.mockRestore();
-  }, 15000);
+  });
 });

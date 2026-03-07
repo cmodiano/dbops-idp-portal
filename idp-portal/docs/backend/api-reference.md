@@ -194,7 +194,7 @@ Header `Retry-After` présent. Attendre 1 minute.
 
 ### Catalogue (Admin)
 
-**Permission requise:** `DBOPSProfilePermission` (profil DBOPS)
+**Permission requise:** `AdminProfilePermission` (alias: `DBOPSProfilePermission` pour rétrocompatibilité)
 
 | Méthode | Endpoint | Description |
 |---------|----------|-------------|
@@ -243,7 +243,7 @@ Header `Retry-After` présent. Attendre 1 minute.
 
 ### Profils (Admin)
 
-**Permission requise:** `DBOPSProfilePermission`
+**Permission requise:** `AdminProfilePermission`
 
 | Méthode | Endpoint | Description |
 |---------|----------|-------------|

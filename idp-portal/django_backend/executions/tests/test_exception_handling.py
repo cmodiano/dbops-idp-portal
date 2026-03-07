@@ -261,14 +261,13 @@ class TestCorePermissionsExceptionLogging:
     """Story 17.6: Core permissions has exception logging."""
 
     def test_core_permissions_has_exception_logging_pattern(self):
-        """Core permissions module contains Story 17.6 exception logging patterns."""
+        """Core permissions module contains exception logging patterns."""
         import core.permissions
         import inspect
 
         source = inspect.getsource(core.permissions)
 
-        # Verify the Story 17.6 pattern exists (flexible matching after refactoring)
-        assert "Story 17.6" in source
+        # Verify exception logging patterns exist (flexible matching after refactoring)
         assert "logger.warning" in source
         assert "exc_info=True" in source or "exc_info" in source
         assert "error_type" in source

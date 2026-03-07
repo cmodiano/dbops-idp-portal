@@ -4,7 +4,6 @@ import {
   useActionFormValidation,
   validateParameterList,
   validateImpactRulesList,
-  validateChangeTypeConfig,
 } from './useActionFormValidation';
 import type { ActionFormValidationParams } from './useActionFormValidation';
 
@@ -13,9 +12,6 @@ const baseParams: ActionFormValidationParams = {
   executionSteps: [],
   parameterList: [],
   impactRulesList: [],
-  changeTypeConfig: {},
-  snIntegrationOptions: [],
-  gateConfig: null,
 };
 
 // ─── validateParameterList ────────────────────────────────────────────────────
@@ -85,47 +81,6 @@ describe('validateImpactRulesList', () => {
   });
 });
 
-// ─── validateChangeTypeConfig ─────────────────────────────────────────────────
-
-describe('validateChangeTypeConfig', () => {
-  it('retourne null si aucune entrée requise', () => {
-    const config = { PROD: { required: false } };
-    expect(validateChangeTypeConfig(config, [], null)).toBeNull();
-  });
-
-  it('retourne erreur si required=true sans intégration SN sélectionnée', () => {
-    const config = { PROD: { required: true, change_model_code: 'CHG001' } };
-    const snOptions = [{ value: 1, label: 'SN-PROD' }];
-    const error = validateChangeTypeConfig(config, snOptions, null);
-    expect(error).toMatch(/intégration ServiceNow doit être sélectionnée/);
-  });
-
-  it('retourne erreur si template_id vide quand required=true', () => {
-    const config = { PROD: { required: true, template_id: '' } };
-    const error = validateChangeTypeConfig(config, [], null);
-    expect(error).toMatch(/obligatoire pour PROD/);
-  });
-
-  it('retourne erreur si code non alphanumérique', () => {
-    const config = { PROD: { required: true, template_id: 'CHG @001!' } };
-    const error = validateChangeTypeConfig(config, [], null);
-    expect(error).toMatch(/alphanumérique/);
-  });
-
-  it('retourne erreur si code > 50 caractères', () => {
-    const config = { PROD: { required: true, template_id: 'A'.repeat(51) } };
-    const error = validateChangeTypeConfig(config, [], null);
-    expect(error).toMatch(/50 caractères/);
-  });
-
-  it('retourne null pour une config valide avec gateConfig SN', () => {
-    const config = { PROD: { required: true, template_id: 'CHG_TPL_001' } };
-    const snOptions = [{ value: 1, label: 'SN-PROD' }];
-    const gateConfig = { servicenow_change: { integration_id: 1 } };
-    expect(validateChangeTypeConfig(config, snOptions, gateConfig)).toBeNull();
-  });
-});
-
 // ─── useActionFormValidation ──────────────────────────────────────────────────
 
 describe('useActionFormValidation', () => {
@@ -185,15 +140,4 @@ describe('useActionFormValidation', () => {
     expect(error).toMatch(/Deux règles d'impact utilisent l'environnement "DEV"/);
   });
 
-  it('retourne erreur si changeTypeConfig sans intégration SN', () => {
-    const { result } = renderHook(() => useActionFormValidation());
-    const params = {
-      ...baseParams,
-      changeTypeConfig: { PROD: { required: true, template_id: 'CHG001' } },
-      snIntegrationOptions: [{ value: 1, label: 'SN-PROD' }],
-      gateConfig: null,
-    };
-    const error = result.current.validateForm(params);
-    expect(error).toMatch(/intégration ServiceNow/);
-  });
 });

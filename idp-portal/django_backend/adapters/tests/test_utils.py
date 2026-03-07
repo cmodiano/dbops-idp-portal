@@ -389,6 +389,7 @@ class TestResolveCredential:
 
         fake_vault_module = MagicMock()
         fake_vault_module.get_vault_service = MagicMock()
+        fake_vault_module.get_vault_service_for_integration = MagicMock(return_value=mock_vault_service_instance)
         fake_vault_module.VaultService = MagicMock(return_value=mock_vault_service_instance)
 
         import sys

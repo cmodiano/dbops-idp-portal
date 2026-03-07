@@ -66,6 +66,7 @@ export function workflowStepsToReactFlow(
       gate_type: step.gate_type ?? null,
       on_timeout: step.on_timeout ?? null,
       context_from: step.context_from ?? null,
+      approver_profile_ids: step.approver_profile_ids ?? null,
       timeout: step.timeout ?? null,
       url: step.url ?? null,
       method: step.method ?? null,
@@ -257,6 +258,7 @@ export function reactFlowToWorkflowSteps(
         gate_type: data.gate_type ?? null,
         on_timeout: data.on_timeout ?? null,
         context_from: data.context_from ?? null,
+        approver_profile_ids: data.approver_profile_ids ?? null,
         timeout: data.timeout ?? null,
       };
     }

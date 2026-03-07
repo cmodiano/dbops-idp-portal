@@ -3,8 +3,9 @@ Tests for InventoryService.
 Story 13.1 - Service tests with mocked external sources.
 """
 
+import structlog
 from unittest.mock import patch, MagicMock
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from inventory.services import InventoryService, InventoryServiceError
 from integrations.models import Integration, IntegrationType
@@ -106,6 +107,7 @@ class InventoryServiceFallbackTests(TestCase):
         # Verify SQL was called
         mock_cursor.execute.assert_called()
 
+    @override_settings(INVENTORY_FALLBACK_SCHEMA='DBOPS_INVENTORY')
     @patch('inventory.services.connection')
     def test_fallback_error_raises_exception(self, mock_connection):
         """Test fallback raises InventoryServiceError on Oracle errors."""
@@ -118,6 +120,55 @@ class InventoryServiceFallbackTests(TestCase):
 
         self.assertIn("ORA-00942", str(context.exception))
         self.assertIn("DBOPS_INVENTORY", str(context.exception))
+
+    @override_settings(INVENTORY_FALLBACK_SCHEMA='AUTOMATION_INVENTORY')
+    @patch('inventory.services.connection')
+    def test_fallback_uses_custom_schema(self, mock_connection):
+        """AC1 : INVENTORY_FALLBACK_SCHEMA configurable — schéma custom utilisé."""
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = (1,)
+        mock_cursor.fetchall.return_value = [('custom-srv-01', 'DEV', 'SERVER')]
+        mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
+
+        targets, total = self.service.list_targets()
+
+        self.assertEqual(total, 1)
+        # Vérifier que SQL utilise AUTOMATION_INVENTORY et non DBOPS_INVENTORY
+        call_args = [str(c) for c in mock_cursor.execute.call_args_list]
+        self.assertTrue(any('AUTOMATION_INVENTORY' in s for s in call_args))
+        self.assertFalse(any('DBOPS_INVENTORY' in s for s in call_args))
+
+    @override_settings(INVENTORY_FALLBACK_SCHEMA='DBOPS_INVENTORY')
+    @patch('inventory.services.connection')
+    def test_fallback_uses_default_dbops_schema(self, mock_connection):
+        """AC2 : INVENTORY_FALLBACK_SCHEMA='DBOPS_INVENTORY' → schéma DBOPS_INVENTORY utilisé."""
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = (1,)
+        mock_cursor.fetchall.return_value = [('srv-01', 'DEV', 'SERVER')]
+        mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
+
+        targets, total = self.service.list_targets()
+
+        self.assertEqual(total, 1)
+        # Vérifier que SQL utilise DBOPS_INVENTORY par défaut
+        call_args = [str(c) for c in mock_cursor.execute.call_args_list]
+        self.assertTrue(any('DBOPS_INVENTORY' in s for s in call_args))
+
+    @override_settings(INVENTORY_FALLBACK_SCHEMA='AUTOMATION_INVENTORY')
+    @patch('inventory.services.connection')
+    def test_fallback_log_reflects_actual_schema(self, mock_connection):
+        """AC5 : Le log using_fallback_inventory contient la valeur réelle du setting."""
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = (0,)
+        mock_cursor.fetchall.return_value = []
+        mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
+
+        with structlog.testing.capture_logs() as cap_logs:
+            self.service.list_targets()
+
+        fallback_events = [e for e in cap_logs if e.get('event') == 'using_fallback_inventory']
+        self.assertTrue(len(fallback_events) > 0)
+        self.assertEqual(fallback_events[0].get('fallback'), 'AUTOMATION_INVENTORY')
 
 
 class InventoryServiceDBSchemaTests(TestCase):

@@ -11,6 +11,7 @@ from catalog.models import Tag, ActionStatus, ActionItemType, ActionEngine, Acti
 from catalog.services import CatalogService
 from reference.models import RefEngine
 from integrations.models import IntegrationTypeCatalogue, IntegrationRole
+from profiles.models import Profile
 from tests.factories import UserFactory
 
 
@@ -20,6 +21,14 @@ class TestAdminActionViewSet(TestCase):
 
     def setUp(self):
         """Set up test data."""
+        Profile.objects.get_or_create(
+            name='DBOPS',
+            defaults={'ad_group': 'CN=DBOPS,OU=Groups,DC=example,DC=com', 'is_admin': 1, 'is_auditor': 0},
+        )
+        Profile.objects.get_or_create(
+            name='DBA',
+            defaults={'ad_group': 'CN=DBA,OU=Groups,DC=example,DC=com', 'is_admin': 0, 'is_auditor': 0},
+        )
         self.client = APIClient()
 
         # Create reference data (required for serializer validation)
@@ -32,7 +41,7 @@ class TestAdminActionViewSet(TestCase):
             profile='dbops'
         )
 
-        # Create non-DBOPS user
+        # Create non-admin user (DBA has is_admin=0, denied on admin endpoints)
         self.regular_user = UserFactory(
             username='regular_user',
             profile='dba'
@@ -60,7 +69,7 @@ class TestAdminActionViewSet(TestCase):
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_create_action_requires_dbops_profile(self):
-        """Test POST /admin/actions requires DBOPS profile."""
+        """Test POST /admin/actions requires DBOPS profile; DBA (is_admin=0) gets 403."""
         self.client.force_authenticate(user=self.regular_user)
         response = self.client.post('/api/v1/admin/actions/', self.action_data, format='json')
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)

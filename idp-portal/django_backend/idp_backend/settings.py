@@ -565,11 +565,33 @@ JWT_REFRESH_TOKEN_EXPIRE_HOURS = int(os.getenv('JWT_REFRESH_TOKEN_EXPIRE_HOURS',
 AUTH_DEV_BYPASS = os.getenv('AUTH_DEV_BYPASS', 'False').lower() == 'true'
 
 # Story 22.2 CRIT-2: Superuser fallback control for RBAC bypass
-# Controls whether Django superusers can bypass DBOPS profile requirement.
-# When False (default): superusers WITHOUT a DBOPS profile are DENIED access (fail-secure)
-# When True (dev only): superusers WITHOUT a DBOPS profile are granted access with WARNING log
+# Story 56.4: Updated — controls bypass of admin profile requirement (is_admin=1), not just DBOPS.
+# Controls whether Django superusers can bypass the admin profile requirement.
+# When False (default): superusers WITHOUT an admin profile are DENIED access (fail-secure)
+# When True (dev only): superusers WITHOUT an admin profile are granted access with WARNING log
 # SECURITY: Must be False in production to enforce principle of least privilege
 ALLOW_SUPERUSER_FALLBACK = os.getenv('ALLOW_SUPERUSER_FALLBACK', 'false').lower() == 'true'
+
+# Story 56.4 — Décorrélation DBOPS/DBA : noms de profils admin configurables
+# ADMIN_PROFILE_NAMES : profils "admin" au sens large (DBA + DBOPS) — utilisé par IsAdminUser
+# pour scope=all, approbations, etc. DBA peut voir exécutions, catalogue, dashboard.
+# DBOPS_PROFILE_NAMES : profils autorisés sur les endpoints admin (profiles, integrations,
+# actions, analytics, feature flags). DBA est explicitement exclu — seul DBOPS (ou équivalent)
+# peut gérer ces ressources. Modifier pour ajouter des profils sans changer le code.
+# Env vars: ADMIN_PROFILE_NAMES, DBOPS_PROFILE_NAMES (comma-separated, e.g. "dbops,dba")
+# Déprécié (Story 56.7) — conservé pour référence, non utilisé par core/permissions.py (chemin SAML string → DB lookup désormais)
+def _parse_profile_names_env(env_key: str, default: set[str]) -> set[str]:
+    raw = os.getenv(env_key, "")
+    if not raw:
+        return default
+    return {s.strip().lower() for s in raw.split(",") if s.strip()}
+
+
+ADMIN_PROFILE_NAMES = _parse_profile_names_env(
+    "ADMIN_PROFILE_NAMES",
+    {"dbops", "dba", "dba_applicatif", "dba_infrastructure"},
+)
+DBOPS_PROFILE_NAMES = _parse_profile_names_env("DBOPS_PROFILE_NAMES", {"dbops"})
 
 # Application environment
 APP_ENV = os.getenv('APP_ENV', 'development')
@@ -710,7 +732,9 @@ SERVICENOW_VERIFY_TLS = os.getenv('SERVICENOW_VERIFY_TLS', 'true').lower() == 't
 # Story 31.8: Notification service configuration
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'idp-portal@example.com')
 PAGE_INDIVIDUAL_API_URL = os.getenv('PAGE_INDIVIDUAL_API_URL', '')
-PAGE_DBA_API_URL = os.getenv('PAGE_DBA_API_URL', '')
+# Epic 56 — Décorrélation : canal page on-call (agnostique)
+PAGE_ONCALL_API_URL = os.getenv('PAGE_ONCALL_API_URL', '')
+PAGE_DBA_API_URL = os.getenv('PAGE_DBA_API_URL', '')  # Backward compat — alias page_oncall
 
 # Story 57.5 — ADR-007 http_request SSRF allowlist
 # Comma-separated list of allowed hostnames for http_request workflow steps.
@@ -721,3 +745,6 @@ ALLOWED_HTTP_REQUEST_HOSTS: list[str] = [
     h.strip().lower() for h in _allowed_http_hosts_env.split(',') if h.strip()
 ]
 del _allowed_http_hosts_env
+
+# Epic 56 — Décorrélation : schéma/synonyme Oracle fallback pour l'inventaire
+INVENTORY_FALLBACK_SCHEMA = os.getenv('INVENTORY_FALLBACK_SCHEMA', 'DBOPS_INVENTORY')

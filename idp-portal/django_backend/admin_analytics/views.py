@@ -13,21 +13,21 @@ from rest_framework.views import APIView
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from catalog.models import Action, ActionStatus
 from core.exceptions import BadRequestError
-from core.permissions import DBOPSProfilePermission
+from core.permissions import AdminProfilePermission
 from executions.models import Execution
 
 
 class AdminAnalyticsView(APIView):
     """
     GET /api/v1/admin/analytics?days=90
-    Story 8.2 - Admin analytics dashboard for DBOPS.
+    Story 8.2 - Admin analytics dashboard for admin users.
     """
 
-    permission_classes = [IsAuthenticated, DBOPSProfilePermission]
+    permission_classes = [IsAuthenticated, AdminProfilePermission]
 
     @extend_schema(
         tags=['dashboard'],
-        summary='Statistiques admin (DBOPS)',
+        summary='Statistiques admin',
         parameters=[
             OpenApiParameter('days', int, description='Période en jours (défaut: 90, max: 3650)'),
         ],
