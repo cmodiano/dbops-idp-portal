@@ -249,3 +249,104 @@ describe('AuditEntryDrawer — coverage extras', () => {
     expect(screen.getByText("Détail d'audit")).toBeInTheDocument();
   });
 });
+
+// ─── Story 61.9 — Section Modifications ──────────────────────────────────────
+describe('Story 61.9 — Section Modifications', () => {
+  const integrationUpdatedEntry: AuditExecutionEntry = {
+    ...actionEntry,
+    action_type: 'INTEGRATION_UPDATED',
+    entity_type: 'integration',
+    details: {
+      name: 'Mon Intégration',
+      changes: {
+        base_url: { old: 'https://old.example.com', new: 'https://new.example.com' },
+        credential_ref: { old: '***', new: '***' },
+      },
+    },
+  };
+
+  it('test_modifications_section_shown_when_changes_present — section affichée si changes non vide', () => {
+    render(<AuditEntryDrawer {...defaultProps} entry={integrationUpdatedEntry} />);
+    expect(screen.getByText('Modifications')).toBeInTheDocument();
+    expect(screen.getByText('base_url')).toBeInTheDocument();
+    expect(screen.getByText('https://old.example.com')).toBeInTheDocument();
+    expect(screen.getByText('https://new.example.com')).toBeInTheDocument();
+    expect(screen.getAllByText('***').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('test_modifications_section_hidden_when_no_changes — section absente si pas de changes', () => {
+    const noChangesEntry = { ...integrationUpdatedEntry, details: { name: 'Mon Intégration' } };
+    render(<AuditEntryDrawer {...defaultProps} entry={noChangesEntry} />);
+    expect(screen.queryByText('Modifications')).not.toBeInTheDocument();
+  });
+
+  it('test_modifications_section_hidden_when_changes_empty — section absente si changes vide', () => {
+    const emptyChanges = { ...integrationUpdatedEntry, details: { changes: {} } };
+    render(<AuditEntryDrawer {...defaultProps} entry={emptyChanges} />);
+    expect(screen.queryByText('Modifications')).not.toBeInTheDocument();
+  });
+
+  it('test_changes_key_excluded_from_details_section — changes absent de la section Détails', () => {
+    render(<AuditEntryDrawer {...defaultProps} entry={integrationUpdatedEntry} />);
+    // La section Détails doit exister (name est présent) mais ne doit pas afficher "changes" comme clé brute
+    const detailsCards = screen.getAllByText('Détails');
+    expect(detailsCards.length).toBeGreaterThanOrEqual(1);
+    // "changes" ne doit pas apparaître comme label de ligne dans Détails
+    const changesLabels = screen.queryAllByText('changes');
+    expect(changesLabels.length).toBe(0);
+  });
+
+  it('test_modifications_section_absent_for_execution_entity — pas de section Modifications pour execution', () => {
+    const execWithChanges: AuditExecutionEntry = {
+      ...executionEntry,
+      details: { ...executionEntry.details, changes: { status: { old: 'RUNNING', new: 'COMPLETED' } } },
+    };
+    render(<AuditEntryDrawer {...defaultProps} entry={execWithChanges} />);
+    expect(screen.queryByText('Modifications')).not.toBeInTheDocument();
+  });
+
+  it('test_null_undefined_values_display_as_dash — valeurs null/undefined affichées comme — (AC4)', () => {
+    const nullValueEntry: AuditExecutionEntry = {
+      ...integrationUpdatedEntry,
+      details: {
+        changes: {
+          field_with_null: { old: null, new: 'new_value' },
+          field_with_undefined: { old: undefined, new: null },
+        },
+      },
+    };
+    render(<AuditEntryDrawer {...defaultProps} entry={nullValueEntry} />);
+    expect(screen.getByText('Modifications')).toBeInTheDocument();
+    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(3);
+    expect(screen.getByText('new_value')).toBeInTheDocument();
+  });
+
+  it('test_object_values_rendered_as_json_pre — valeurs objets affichées en JSON dans pre (AC5)', () => {
+    const objectValueEntry: AuditExecutionEntry = {
+      ...integrationUpdatedEntry,
+      details: {
+        changes: {
+          config: { old: { host: 'old-host' }, new: { host: 'new-host' } },
+        },
+      },
+    };
+    render(<AuditEntryDrawer {...defaultProps} entry={objectValueEntry} />);
+    expect(screen.getByText('Modifications')).toBeInTheDocument();
+    expect(screen.getByText(/"old-host"/)).toBeInTheDocument();
+    expect(screen.getByText(/"new-host"/)).toBeInTheDocument();
+  });
+
+  it('test_masked_values_displayed_as_is — valeurs masquées *** affichées telles quelles (AC3)', () => {
+    const maskedEntry: AuditExecutionEntry = {
+      ...integrationUpdatedEntry,
+      details: {
+        changes: {
+          credential_ref: { old: '***', new: '***' },
+        },
+      },
+    };
+    render(<AuditEntryDrawer {...defaultProps} entry={maskedEntry} />);
+    expect(screen.getByText('Modifications')).toBeInTheDocument();
+    expect(screen.getAllByText('***').length).toBeGreaterThanOrEqual(2);
+  });
+});

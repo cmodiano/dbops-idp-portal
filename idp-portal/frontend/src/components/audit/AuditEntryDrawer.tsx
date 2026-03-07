@@ -8,7 +8,7 @@
  * Extrait de AuditPage.tsx.
  */
 
-import { Typography, Drawer, Card, Descriptions, Tag, Skeleton, Alert, Divider } from 'antd';
+import { Typography, Drawer, Card, Descriptions, Tag, Skeleton, Alert, Divider, Table } from 'antd';
 import { ExecutionTimeline } from '../execution/ExecutionTimeline';
 import type {
   AuditExecutionEntry,
@@ -46,6 +46,19 @@ export interface AuditEntryDrawerProps {
   loading: boolean;
   error: string | null;
   onClose: () => void;
+}
+
+/** Renders a change value: null/undefined → '—', object → <pre>JSON</pre>, else String(v). */
+function renderChangeValue(v: unknown): React.ReactNode {
+  if (v === null || v === undefined) return '—';
+  if (typeof v === 'object') {
+    return (
+      <pre style={{ margin: 0, fontSize: 11, whiteSpace: 'pre-wrap' }}>
+        {JSON.stringify(v, null, 2)}
+      </pre>
+    );
+  }
+  return String(v);
 }
 
 export function AuditEntryDrawer({
@@ -115,10 +128,31 @@ export function AuditEntryDrawer({
             )}
           </Descriptions>
 
+          {/* Modifications section for non-execution entries with changes (Story 61.9) */}
+          {entry.entity_type !== 'execution' && entry.details?.changes && Object.keys(entry.details.changes).length > 0 && (
+            <Card title="Modifications" size="small" style={{ marginBottom: 24 }}>
+              <Table
+                dataSource={Object.entries(entry.details.changes).map(([field, vals]) => ({
+                  key: field,
+                  field,
+                  old: vals.old,
+                  new: vals.new,
+                }))}
+                columns={[
+                  { title: 'Champ', dataIndex: 'field', key: 'field' },
+                  { title: 'Avant', dataIndex: 'old', key: 'old', render: renderChangeValue },
+                  { title: 'Après', dataIndex: 'new', key: 'new', render: renderChangeValue },
+                ]}
+                pagination={false}
+                size="small"
+              />
+            </Card>
+          )}
+
           {/* Details for non-execution entries (action, integration, profile, user, etc.) */}
           {entry.entity_type !== 'execution' && (() => {
             const filteredDetails = entry.details
-              ? Object.entries(entry.details).filter(([, v]) => v !== null && v !== undefined && v !== '')
+              ? Object.entries(entry.details).filter(([k, v]) => k !== 'changes' && v !== null && v !== undefined && v !== '')
               : [];
             if (filteredDetails.length === 0) return null;
             return (
