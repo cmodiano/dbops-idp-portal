@@ -17,6 +17,9 @@ import type {
   ComparisonResult,
   StatsCatalogueData,
   StatsAdoptionData,
+  StatsOperationsData,
+  StatsApprobationsData,
+  StatsPlanifieesData,
 } from '../types/api';
 
 /**
@@ -216,6 +219,50 @@ export async function fetchStatsCatalogue(filters: DashboardFilters = {}): Promi
 export async function fetchStatsAdoption(filters: DashboardFilters = {}): Promise<StatsAdoptionData> {
   const params = buildFilterParams({ days: 14, ...filters });
   return apiFetch<StatsAdoptionData>(`/dashboard/stats-adoption?${params.toString()}`);
+}
+
+// === Operations Stats Functions (Story 60.9) ===
+
+/**
+ * Fetch operations statistics (Story 60.5, AC1; Story 60.9, AC3).
+ *
+ * Returns avg execution time, top actions by execution/failure, and by platform.
+ * Requires IsAuthenticated.
+ *
+ * @param filters Optional filters including days, fromDate, toDate, engine, environment, tags
+ * @returns StatsOperationsData
+ */
+export async function fetchStatsOperations(filters: DashboardFilters = {}): Promise<StatsOperationsData> {
+  const params = buildFilterParams({ days: 14, ...filters });
+  return apiFetch<StatsOperationsData>(`/dashboard/stats-operations?${params.toString()}`);
+}
+
+/**
+ * Fetch approval statistics (Story 60.6, AC1; Story 60.9, AC3).
+ *
+ * Returns approved/rejected counts, approval rate, and avg approval delay.
+ * Requires IsAuthenticated.
+ *
+ * @param filters Optional filters including days, fromDate, toDate, engine, environment, tags
+ * @returns StatsApprobationsData
+ */
+export async function fetchStatsApprobations(filters: DashboardFilters = {}): Promise<StatsApprobationsData> {
+  const params = buildFilterParams({ days: 14, ...filters });
+  return apiFetch<StatsApprobationsData>(`/dashboard/stats-approbations?${params.toString()}`);
+}
+
+/**
+ * Fetch scheduled executions statistics (Story 60.7, AC1; Story 60.9, AC3).
+ *
+ * Returns scheduled/manual counts, scheduled rate, and by recurrence type.
+ * Requires IsAuthenticated.
+ *
+ * @param filters Optional filters including days, fromDate, toDate, engine, environment, tags
+ * @returns StatsPlanifieesData
+ */
+export async function fetchStatsPlanifiees(filters: DashboardFilters = {}): Promise<StatsPlanifieesData> {
+  const params = buildFilterParams({ days: 14, ...filters });
+  return apiFetch<StatsPlanifieesData>(`/dashboard/stats-planifiees?${params.toString()}`);
 }
 
 // === Comparison Functions (Story 8.6) ===

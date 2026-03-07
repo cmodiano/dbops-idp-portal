@@ -26,6 +26,7 @@ import { PeriodComparisonChart } from './PeriodComparisonChart';
 import { ComparisonSummaryCards } from './ComparisonSummaryCards';
 import { ComparisonExecutionsDrawer } from './ComparisonExecutionsDrawer';
 import { AdminPlatformSection } from './AdminPlatformSection';
+import { OperationsActivitySection } from './OperationsActivitySection';
 import logger from '../../../services/logger';
 import {
   fetchStatsByTechnology,
@@ -261,6 +262,9 @@ export function ReportingDashboard() {
 
           {/* Section admin — Utilisation de la plateforme (Story 60.3) */}
           <AdminPlatformSection filters={apiFilters} />
+
+          {/* Section opérations — Activité opérationnelle (Story 60.9) */}
+          <OperationsActivitySection filters={apiFilters} />
 
           {/* Bar charts row */}
           <Row gutter={[16, 16]}>
