@@ -17,6 +17,7 @@ from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiRespon
 
 from idp_auth.models import User, APIKey
 from idp_auth.serializers import APIKeyCreateSerializer, APIKeyListSerializer
+from profiles.models import Profile
 from idp_auth.jwt_utils import create_access_token
 from core.exceptions import ForbiddenError, NotFoundError, UnauthorizedError
 from core.services import AuditService
@@ -94,7 +95,6 @@ class APIKeyTokenView(APIView):
 
         # SEC-3 FIX: Resolve real AD groups from Profile DB instead of hardcoding [user.profile].
         # API key users have no LDAP session, so we resolve profiles by name match.
-        from profiles.models import Profile
         resolved_profiles = list(Profile.objects.find_by_ad_groups([user.profile]))
         ad_groups = [p.ad_group for p in resolved_profiles if p.ad_group]
         if not ad_groups:

@@ -170,3 +170,28 @@ class TestValidateCorsConfig:
             from core.startup_checks import validate_cors_config
             with pytest.raises(ImproperlyConfigured, match="CORS_ORIGIN"):
                 validate_cors_config(debug=False)
+
+
+class TestValidateSuperuserFallbackConfig:
+    """Tests SEC-5: ALLOW_SUPERUSER_FALLBACK interdit en production."""
+
+    def test_59_5_a_production_fallback_enabled_raises(self):
+        """59-5-a: DEBUG=False, ALLOW_SUPERUSER_FALLBACK=True → ImproperlyConfigured."""
+        from core.startup_checks import validate_superuser_fallback_config
+        with pytest.raises(ImproperlyConfigured, match="ALLOW_SUPERUSER_FALLBACK"):
+            validate_superuser_fallback_config(debug=False, allow_superuser_fallback=True)
+
+    def test_59_5_b_production_fallback_disabled_succeeds(self):
+        """59-5-b: DEBUG=False, ALLOW_SUPERUSER_FALLBACK=False → pas d'exception."""
+        from core.startup_checks import validate_superuser_fallback_config
+        validate_superuser_fallback_config(debug=False, allow_superuser_fallback=False)
+
+    def test_59_5_c_development_fallback_enabled_succeeds(self):
+        """59-5-c: DEBUG=True (dev mode), ALLOW_SUPERUSER_FALLBACK=True → pas d'exception."""
+        from core.startup_checks import validate_superuser_fallback_config
+        validate_superuser_fallback_config(debug=True, allow_superuser_fallback=True)
+
+    def test_59_5_d_development_fallback_disabled_succeeds(self):
+        """59-5-d: DEBUG=True (dev mode), ALLOW_SUPERUSER_FALLBACK=False → pas d'exception."""
+        from core.startup_checks import validate_superuser_fallback_config
+        validate_superuser_fallback_config(debug=True, allow_superuser_fallback=False)

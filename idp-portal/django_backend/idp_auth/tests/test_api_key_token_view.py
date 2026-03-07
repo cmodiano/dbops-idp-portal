@@ -231,6 +231,8 @@ class TestAPIKeyTokenViewSEC3(TestCase):
 
     def test_59_3_d_other_token_fields_unchanged(self):
         """59-3-d: sub, username, profile fields unchanged by SEC-3 fix."""
+        # Profile intentionally not created: ad_groups is populated from user.profile fallback
+        # when no Profile exists in DB (tests token structure without Profile resolution).
         user, _, raw_key = self._create_user_and_key('dba_applicatif')
 
         response = self.client.post('/api/v1/auth/token/', HTTP_X_API_KEY=raw_key)

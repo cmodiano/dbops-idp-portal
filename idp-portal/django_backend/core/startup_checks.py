@@ -373,3 +373,54 @@ def validate_cors_config(debug: bool) -> None:
         raise ImproperlyConfigured(error_msg)
 
     logger.info("cors_config_validated", debug=False, cors_origin=cors_origin)
+
+
+# Story 59.5 SEC-5: Superuser fallback configuration validation
+def validate_superuser_fallback_config(debug: bool, allow_superuser_fallback: bool) -> None:
+    """
+    SEC-5: Validate ALLOW_SUPERUSER_FALLBACK configuration at startup.
+
+    ALLOW_SUPERUSER_FALLBACK allows superusers to bypass RBAC entirely.
+    This is acceptable ONLY in development/bootstrapping scenarios.
+    Activating it in production violates the principle of least privilege
+    and SOC1 compliance requirements.
+
+    Args:
+        debug: True if Django DEBUG=True (development mode)
+        allow_superuser_fallback: Value of settings.ALLOW_SUPERUSER_FALLBACK
+
+    Raises:
+        ImproperlyConfigured: If allow_superuser_fallback=True and debug=False
+    """
+    if debug:
+        # Dev mode: superuser fallback acceptable for bootstrapping
+        logger.info(
+            "superuser_fallback_config_validated",
+            debug=True,
+            allow_superuser_fallback=allow_superuser_fallback,
+            message="Dev mode — ALLOW_SUPERUSER_FALLBACK acceptable in development",
+        )
+        return
+
+    if allow_superuser_fallback:
+        error_msg = "\n".join([
+            "❌ SECURITY: ALLOW_SUPERUSER_FALLBACK is not allowed in production",
+            "DEBUG=False but ALLOW_SUPERUSER_FALLBACK=True.",
+            "This setting bypasses all RBAC for Django superusers.",
+            "",
+            "Fix: Set ALLOW_SUPERUSER_FALLBACK=false in production environment.",
+            "In production, superusers MUST have an explicit admin profile.",
+            "See .env.production.template for required variables.",
+        ])
+        logger.error(
+            "superuser_fallback_forbidden_production",
+            debug=debug,
+            allow_superuser_fallback=allow_superuser_fallback,
+        )
+        raise ImproperlyConfigured(error_msg)
+
+    logger.info(
+        "superuser_fallback_config_validated",
+        debug=debug,
+        allow_superuser_fallback=allow_superuser_fallback,
+    )
