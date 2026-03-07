@@ -17,6 +17,12 @@ source .venv/bin/activate  # Linux/macOS
 
 # Installer les dépendances
 uv pip install -r requirements-dev.lock --system
+
+# Appliquer les migrations
+python manage.py migrate
+
+# Charger les schémas d'output par défaut (idempotent)
+python manage.py seed_output_schemas
 ```
 
 ## Développement

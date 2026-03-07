@@ -1,0 +1,31 @@
+items:
+  - apiVersion: idp/v1
+    kind: OutputSchema
+    metadata:
+      name: servicenow-get-change-status
+      schema_type: integration
+      target_name: servicenow
+      operation: get_change_status
+    spec:
+      inherits_from: null
+      output_fields:
+        - name: sys_id
+          path: "$.sys_id"
+          type: string
+          description: "ID système ServiceNow du changement"
+          required: true
+        - name: change_number
+          path: "$.change_number"
+          type: string
+          description: "Numéro du changement ServiceNow"
+          required: false
+        - name: state
+          path: "$.state"
+          type: string
+          description: "État actuel du changement"
+          required: false
+        - name: approval
+          path: "$.approval"
+          type: string
+          description: "Statut d'approbation du changement"
+          required: false

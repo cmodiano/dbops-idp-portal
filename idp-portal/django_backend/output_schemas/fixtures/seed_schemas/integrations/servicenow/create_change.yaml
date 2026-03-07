@@ -1,0 +1,31 @@
+items:
+  - apiVersion: idp/v1
+    kind: OutputSchema
+    metadata:
+      name: servicenow-create-change
+      schema_type: integration
+      target_name: servicenow
+      operation: create_change
+    spec:
+      inherits_from: null
+      output_fields:
+        - name: change_number
+          path: "$.change_number"
+          type: string
+          description: "Numéro du changement ServiceNow (ex: CHG0030123)"
+          required: true
+        - name: sys_id
+          path: "$.sys_id"
+          type: string
+          description: "ID système ServiceNow du changement"
+          required: true
+        - name: state
+          path: "$.state"
+          type: string
+          description: "État du changement (New, Assess, Implement, Review, Closed)"
+          required: false
+        - name: short_description
+          path: "$.short_description"
+          type: string
+          description: "Description courte du changement"
+          required: false
