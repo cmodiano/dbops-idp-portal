@@ -6,7 +6,9 @@ Story 63.1 - Infrastructure des Schémas d'Output (Backend).
 import structlog
 from django.http import HttpResponse
 from rest_framework.viewsets import ReadOnlyModelViewSet
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.permissions import IsAuthenticated
+
+from core.permissions import IsAdminUser
 from rest_framework.decorators import api_view, permission_classes, parser_classes
 from rest_framework.parsers import MultiPartParser, BaseParser
 from rest_framework.exceptions import ParseError
@@ -102,10 +104,11 @@ def sync_output_schemas(request):
         stats = import_output_schemas_yaml(content, mode=mode)
     except ValueError as exc:
         return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-    except Exception:
+    except Exception as e:
         structlog.get_logger(__name__).exception(
             "sync_output_schemas_import_error",
             exc_info=True,
+            error=str(e),
         )
         return Response(
             {'error': "Erreur lors de l'import."},
