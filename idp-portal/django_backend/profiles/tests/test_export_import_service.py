@@ -228,11 +228,20 @@ class TestExportProfilesYaml(TestCase):
     """Tests for export_profiles_yaml()."""
 
     def test_export_empty(self):
+        """Export with only conftest-seeded profiles returns those profiles."""
         result = export_profiles_yaml()
         parsed = yaml.safe_load(result.decode("utf-8"))
-        self.assertEqual(parsed["profiles"], [])
+        # conftest seeds standard profiles; verify export works without custom profiles
+        self.assertIsInstance(parsed["profiles"], list)
+        # All exported profiles should be from conftest (no custom ones)
+        custom_names = {p["name"] for p in parsed["profiles"]} - {
+            "DBOPS", "DBA", "client_business", "dba_infrastructure",
+            "AUDITOR", "BUSINESS_USER", "dba_applicatif",
+        }
+        self.assertEqual(custom_names, set())
 
     def test_export_with_profile(self):
+        baseline_count = Profile.objects.count()
         profile = Profile.objects.create(
             name="Export Test", ad_group="GRP-EXPORT", is_admin=1
         )
@@ -248,9 +257,8 @@ class TestExportProfilesYaml(TestCase):
         result = export_profiles_yaml()
         parsed = yaml.safe_load(result.decode("utf-8"))
 
-        self.assertEqual(len(parsed["profiles"]), 1)
-        p = parsed["profiles"][0]
-        self.assertEqual(p["name"], "Export Test")
+        self.assertEqual(len(parsed["profiles"]), baseline_count + 1)
+        p = next(p for p in parsed["profiles"] if p["name"] == "Export Test")
         self.assertTrue(p["is_admin"])
         self.assertEqual(p["actions"]["type"], "list")
         self.assertEqual(p["actions"]["list"], [1, 2])
@@ -264,7 +272,7 @@ class TestExportProfilesYaml(TestCase):
 
         result = export_profiles_yaml()
         parsed = yaml.safe_load(result.decode("utf-8"))
-        p = parsed["profiles"][0]
+        p = next(p for p in parsed["profiles"] if p["name"] == "NoPerm")
         self.assertEqual(p["actions"]["type"], "all")
         self.assertEqual(p["targets"]["type"], "all")
 

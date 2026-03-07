@@ -336,7 +336,11 @@ class TestResolveCredentialMultiInstance(TestCase):
     def test_resolve_with_vault_namespace_config(self, MockVaultService):
         """Vault config namespace is passed to VaultService instance."""
         from adapters.utils import resolve_credential
+        from services import vault_service
         import json
+
+        # Clear the registry so a fresh VaultService is created
+        vault_service._vault_service_registry.clear()
 
         self.vault_prod.config = json.dumps({'namespace': 'team-ops'})
         self.vault_prod.save()

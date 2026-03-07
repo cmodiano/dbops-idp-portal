@@ -169,20 +169,21 @@ class TestFilterQuerysetByOwnership:
         self.integration = IntegrationFactory.create()
 
     def test_dba_user_sees_all(self):
-        """Utilisateur DBA/DBOPS → pas de filtre par user_id."""
+        """Utilisateur DBOPS (admin) → pas de filtre par user_id."""
         from dashboard.views import _filter_queryset_by_ownership
         from executions.models import Execution
 
+        dbops_user = UserFactory.create(profile='DBOPS')
         action = ActionFactory.create(integration=self.integration)
-        ExecutionFactory.create(action=action, user=self.dba_user)
+        ExecutionFactory.create(action=action, user=dbops_user)
         ExecutionFactory.create(action=action, user=self.biz_user)
 
         request = MagicMock()
-        request.user = self.dba_user
+        request.user = dbops_user
 
         qs = Execution.objects.all()
         result = _filter_queryset_by_ownership(qs, request)
-        # DBA sees all executions
+        # DBOPS (admin) sees all executions
         assert result.count() >= 2
 
     def test_non_dba_sees_only_own(self):

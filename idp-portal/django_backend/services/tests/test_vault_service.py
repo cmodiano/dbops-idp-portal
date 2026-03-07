@@ -829,7 +829,7 @@ class TestVaultServiceRegistry:
 class TestWarmupVaultCache:
     """Test warmup_vault_cache pre-loading."""
 
-    @patch("services.vault_service.resolve_credential")
+    @patch("adapters.utils.resolve_credential")
     def test_warmup_resolves_vault_credentials(self, mock_resolve):
         """warmup_vault_cache calls resolve_credential for each vault: integration."""
         from collections import namedtuple
@@ -840,7 +840,7 @@ class TestWarmupVaultCache:
             Row(id=2, credential_ref="vault:secret/data/app2#password", secret_service_id=None),
         ]
 
-        with patch("services.vault_service.Integration") as MockIntegration:
+        with patch("integrations.models.Integration") as MockIntegration:
             MockIntegration.objects.filter.return_value.exclude.return_value.values_list.return_value = mock_qs
 
             from services.vault_service import warmup_vault_cache
@@ -851,7 +851,7 @@ class TestWarmupVaultCache:
         assert stats["errors"] == 0
         assert mock_resolve.call_count == 2
 
-    @patch("services.vault_service.resolve_credential")
+    @patch("adapters.utils.resolve_credential")
     def test_warmup_deduplicates_same_credential_ref(self, mock_resolve):
         """Duplicate credential_ref + secret_service_id are skipped."""
         from collections import namedtuple
@@ -863,7 +863,7 @@ class TestWarmupVaultCache:
             Row(id=3, credential_ref="vault:secret/data/other#key", secret_service_id=None),
         ]
 
-        with patch("services.vault_service.Integration") as MockIntegration:
+        with patch("integrations.models.Integration") as MockIntegration:
             MockIntegration.objects.filter.return_value.exclude.return_value.values_list.return_value = mock_qs
 
             from services.vault_service import warmup_vault_cache
@@ -874,7 +874,7 @@ class TestWarmupVaultCache:
         assert stats["skipped"] == 1
         assert mock_resolve.call_count == 2
 
-    @patch("services.vault_service.resolve_credential", side_effect=Exception("vault down"))
+    @patch("adapters.utils.resolve_credential", side_effect=Exception("vault down"))
     def test_warmup_continues_on_error(self, mock_resolve):
         """Warmup is best-effort: errors are counted but don't stop processing."""
         from collections import namedtuple
@@ -885,7 +885,7 @@ class TestWarmupVaultCache:
             Row(id=2, credential_ref="vault:secret/data/app2#token", secret_service_id=None),
         ]
 
-        with patch("services.vault_service.Integration") as MockIntegration:
+        with patch("integrations.models.Integration") as MockIntegration:
             MockIntegration.objects.filter.return_value.exclude.return_value.values_list.return_value = mock_qs
 
             from services.vault_service import warmup_vault_cache
@@ -897,7 +897,7 @@ class TestWarmupVaultCache:
 
     def test_warmup_no_integrations(self):
         """No vault integrations → early return with zero counts."""
-        with patch("services.vault_service.Integration") as MockIntegration:
+        with patch("integrations.models.Integration") as MockIntegration:
             MockIntegration.objects.filter.return_value.exclude.return_value.values_list.return_value = []
 
             from services.vault_service import warmup_vault_cache

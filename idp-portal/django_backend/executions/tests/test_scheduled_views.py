@@ -169,6 +169,9 @@ class TestScheduledExecutionsPost(TestCase):
     @patch("executions.views.scheduled_views.validate_environment_against_inventory")
     def test_post_both_scheduled_at_and_recurring(self, mock_validate):
         mock_validate.return_value = None
+        # Recurring patterns require DBOPS admin
+        admin_user = UserFactory(username="sched_post_admin", profile="DBOPS")
+        self.client.force_authenticate(user=admin_user)
         response = self.client.post(
             "/api/v1/scheduled-executions/",
             data={
@@ -255,6 +258,9 @@ class TestScheduledExecutionsPost(TestCase):
     @patch("executions.views.scheduled_views.validate_environment_against_inventory")
     def test_post_with_recurring_pattern(self, mock_validate):
         mock_validate.return_value = None
+        # Recurring patterns require DBOPS admin
+        admin_user = UserFactory(username="sched_post_admin_rp", profile="DBOPS")
+        self.client.force_authenticate(user=admin_user)
         response = self.client.post(
             "/api/v1/scheduled-executions/",
             data={
@@ -469,7 +475,7 @@ class TestScheduledExecutionPut(TestCase):
         )
         self.assertEqual(response.status_code, 200)
 
-    # 2.29 environment update → normalisé
+    # 2.29 environment update → 400 FIELD_NOT_MODIFIABLE
     def test_put_environment_update(self, mock_allowed, mock_validate):
         mock_validate.return_value = None
         se = ScheduledExecutionFactory(user=self.user, action=self.action, status="pending")
@@ -478,11 +484,10 @@ class TestScheduledExecutionPut(TestCase):
             data={"environment": "PROD"},
             format="json",
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 400)
 
-    # 2.30 target_names=[] → _targets vidé
-    @patch("executions.views.scheduled_views.InventoryService")
-    def test_put_target_names_empty_clears_targets(self, mock_inv_cls, mock_allowed, mock_validate):
+    # 2.30 target_names=[] → 400 FIELD_NOT_MODIFIABLE
+    def test_put_target_names_empty_clears_targets(self, mock_allowed, mock_validate):
         mock_validate.return_value = None
         se = ScheduledExecutionFactory(user=self.user, action=self.action, status="pending")
         response = self.client.put(
@@ -490,11 +495,10 @@ class TestScheduledExecutionPut(TestCase):
             data={"target_names": []},
             format="json",
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 400)
 
-    # 2.31 target_names non-liste → 400
-    @patch("executions.views.scheduled_views.InventoryService")
-    def test_put_target_names_not_list(self, mock_inv_cls, mock_allowed, mock_validate):
+    # 2.31 target_names non-liste → 400 (FIELD_NOT_MODIFIABLE)
+    def test_put_target_names_not_list(self, mock_allowed, mock_validate):
         mock_validate.return_value = None
         se = ScheduledExecutionFactory(user=self.user, action=self.action, status="pending")
         response = self.client.put(
@@ -502,9 +506,10 @@ class TestScheduledExecutionPut(TestCase):
             data={"target_names": "not-a-list"},
             format="json",
         )
+        # target_names is now a forbidden field, returns 400 regardless
         self.assertEqual(response.status_code, 400)
 
-    # 2.34 parameters merge (sans _-prefix)
+    # 2.34 parameters merge → 400 FIELD_NOT_MODIFIABLE
     def test_put_parameters_merge(self, mock_allowed, mock_validate):
         mock_validate.return_value = None
         se = ScheduledExecutionFactory(user=self.user, action=self.action, status="pending")
@@ -513,9 +518,9 @@ class TestScheduledExecutionPut(TestCase):
             data={"parameters": {"my_param": "value"}},
             format="json",
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 400)
 
-    # 2.35 recurring_pattern update (rp existe)
+    # 2.35 recurring_pattern update → 400 FIELD_NOT_MODIFIABLE
     def test_put_recurring_pattern_update(self, mock_allowed, mock_validate):
         mock_validate.return_value = None
         se = ScheduledExecutionFactory(user=self.user, action=self.action, status="pending")
@@ -534,7 +539,7 @@ class TestScheduledExecutionPut(TestCase):
             },
             format="json",
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 400)
 
 
 # ---------------------------------------------------------------------------

@@ -34,8 +34,8 @@ def _is_django_test_case(request) -> bool:
 def ensure_admin_profiles():
     """Create standard Profile records needed by AdminProfilePermission.
 
-    Uses get_or_create so it's safe to call multiple times.
-    Call this from TestCase.setUp() methods that need admin profile resolution.
+    Uses get_or_create so it's safe to call multiple times or after
+    tests have already created profiles with the same names.
     """
     from profiles.models import Profile
 
@@ -74,12 +74,45 @@ def _ensure_admin_profiles(request, db):
     """Ensure Profile records exist for pure-pytest tests (not Django TestCase).
 
     Story 56.7: AdminProfilePermission resolves user.profile string via Profile lookup.
-    Django TestCase classes must call ensure_admin_profiles() in their setUp() explicitly.
+    Django TestCase classes are handled by pytest_runtest_setup hook below.
     """
     if _is_simple_test_case(request):
         return
     if _is_django_test_case(request):
-        # Django TestCase manages its own DB — can't inject via fixture.
-        # Tests that need admin profiles should call ensure_admin_profiles() in setUp().
         return
     ensure_admin_profiles()
+
+
+def pytest_runtest_setup(item):
+    """Hook: inject Profile records for Django TestCase classes.
+
+    Django TestCase classes don't receive pytest fixtures with 'db' dependency.
+    This hook patches setUp to call ensure_admin_profiles() AFTER the test's
+    own setUp, so tests that create their own profiles (via .create()) run first,
+    and our get_or_create() calls become no-ops for those names.
+    """
+    cls = getattr(item, "cls", None)
+    if cls is None:
+        return
+
+    is_django_tc = False
+    for base in cls.__mro__:
+        if base.__name__ in ("TestCase", "TransactionTestCase", "LiveServerTestCase"):
+            if base.__module__.startswith("django.test"):
+                is_django_tc = True
+                break
+    if not is_django_tc:
+        return
+
+    _original_key = "_original_setUp_for_profiles"
+    if hasattr(cls, _original_key):
+        return  # Already patched
+
+    original_setUp = cls.setUp if hasattr(cls, "setUp") else lambda self: None
+
+    def patched_setUp(self):
+        original_setUp(self)
+        ensure_admin_profiles()
+
+    setattr(cls, _original_key, original_setUp)
+    cls.setUp = patched_setUp

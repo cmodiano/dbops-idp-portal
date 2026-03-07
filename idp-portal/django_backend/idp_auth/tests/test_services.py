@@ -295,12 +295,14 @@ class TestAuthService(TestCase):
     def test_resolve_user_profiles_returns_queryset(self):
         """1.8 resolve_user_profiles() — appel nominal avec liste de groupes AD → retourne un QuerySet."""
         from profiles.models import Profile
-        profile = Profile.objects.create(
+        profile, _ = Profile.objects.get_or_create(
             name='DBA',
-            description='Database Administrator',
-            ad_group='CN=DBA,OU=Groups,DC=example,DC=com',
-            is_admin=1,
-            is_auditor=0
+            defaults={
+                'description': 'Database Administrator',
+                'ad_group': 'CN=DBA,OU=Groups,DC=example,DC=com',
+                'is_admin': 1,
+                'is_auditor': 0,
+            }
         )
         profile_other = Profile.objects.create(
             name='OPS',

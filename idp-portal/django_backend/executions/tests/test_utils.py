@@ -255,7 +255,8 @@ class TestApplyScopeFilter(TestCase):
         assert effective == "mine"
         qs.filter.assert_called_once_with(user_id=42)
 
-    def test_all_scope_for_dba(self):
+    @patch("executions.utils.filters.is_admin_user", return_value=True)
+    def test_all_scope_for_dba(self, mock_is_admin):
         user = MagicMock()
         user.id = 1
         user.profile = "DBA"
@@ -265,7 +266,8 @@ class TestApplyScopeFilter(TestCase):
         assert effective == "all"
         qs.filter.assert_not_called()
 
-    def test_all_scope_for_dbops(self):
+    @patch("executions.utils.filters.is_admin_user", return_value=True)
+    def test_all_scope_for_dbops(self, mock_is_admin):
         """Story 36.1 AC3: DBOPS (admin) voit tout sans filtre, comme DBA."""
         user = MagicMock()
         user.id = 2

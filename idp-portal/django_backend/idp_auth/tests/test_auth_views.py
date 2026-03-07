@@ -37,12 +37,14 @@ class TestCurrentUserProfileView(TestCase):
         )
 
         # Create profile matching user's profile
-        self.profile = Profile.objects.create(
+        self.profile, _ = Profile.objects.get_or_create(
             name='dbops',
-            description='DBOPS Profile',
-            ad_group='dbops',
-            is_admin=1,
-            is_auditor=0
+            defaults={
+                'description': 'DBOPS Profile',
+                'ad_group': 'dbops',
+                'is_admin': 1,
+                'is_auditor': 0,
+            }
         )
 
     def test_get_current_user_profile_authenticated(self):
@@ -112,13 +114,18 @@ class TestCurrentUserProfileView(TestCase):
     def test_auditor_user_has_audit_in_navigation_tabs(self):
         """Story 6.5 AC1: Auditor user should have 'audit' in navigation_tabs."""
         # Create auditor profile
-        Profile.objects.create(
+        profile, created = Profile.objects.get_or_create(
             name='dba_applicatif',
-            description='DBA Applicatif Auditor',
-            ad_group='dba_applicatif',
-            is_admin=0,
-            is_auditor=1
+            defaults={
+                'description': 'DBA Applicatif Auditor',
+                'ad_group': 'dba_applicatif',
+                'is_admin': 0,
+                'is_auditor': 1,
+            }
         )
+        if not created:
+            profile.is_auditor = 1
+            profile.save(update_fields=['is_auditor'])
         auditor_user = User.objects.create(
             username='auditor_user',
             display_name='Auditor User',
