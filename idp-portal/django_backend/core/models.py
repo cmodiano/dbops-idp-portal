@@ -107,6 +107,9 @@ class AuditActionType(models.TextChoices):
     EXECUTION_POLLING_EXHAUSTED = 'EXECUTION_POLLING_EXHAUSTED', 'Execution Polling Exhausted'
     # Story 64.1: IaC Config Sync audit types
     CONFIG_SYNC_REFERENCE_IMPORT = 'CONFIG_SYNC_REFERENCE_IMPORT', 'Config Sync - Reference Data Import'
+    # Story 64.2: IaC Config Sync - Tags and Feature Flags
+    CONFIG_SYNC_TAGS_IMPORT = 'CONFIG_SYNC_TAGS_IMPORT', 'Config Sync - Tags Import'
+    CONFIG_SYNC_FEATURE_FLAGS_IMPORT = 'CONFIG_SYNC_FEATURE_FLAGS_IMPORT', 'Config Sync - Feature Flags Import'
     # Additional types added in later migrations (V028-V035, V039-V041)
     # Note: Full list would include all types from migrations, but base types are sufficient for model
 
@@ -128,6 +131,8 @@ class AuditEntityType(models.TextChoices):
     BUSINESS_RULE_POLICY = 'business_rule_policy', 'Business Rule Policy'
     # Story 64.1: IaC Reference Data entity type
     REFERENCE_DATA = 'reference_data', 'Reference Data'
+    # Story 64.2: IaC Tags entity type
+    TAGS = 'tags', 'Tags'
     # Additional types may exist in later migrations
 
 
