@@ -64,14 +64,27 @@ class ExecutionConsumer(AuthenticatedWebSocketConsumer):
                 await self.close(code=4003)
                 return
             if hasattr(self, "channel_layer") and self.channel_layer is not None:
-                await self.channel_layer.group_add(self.group_name, self.channel_name)
-                self._group_joined = True
-                logger.info(
-                    "ws_execution_group_joined",
-                    execution_id=self.execution_id,
-                    group_name=self.group_name,
-                    user_id=self.user_id,
-                )
+                try:
+                    await self.channel_layer.group_add(self.group_name, self.channel_name)
+                    self._group_joined = True
+                    logger.info(
+                        "ws_execution_group_joined",
+                        execution_id=self.execution_id,
+                        group_name=self.group_name,
+                        user_id=self.user_id,
+                    )
+                except Exception as e:  # noqa: BLE001 — channel layer failure → graceful shutdown
+                    logger.error(
+                        "ws_execution_group_add_failed",
+                        execution_id=self.execution_id,
+                        group_name=self.group_name,
+                        user_id=self.user_id,
+                        error=str(e),
+                        error_type=type(e).__name__,
+                        exc_info=True,
+                    )
+                    self._group_joined = False
+                    await self.close()
 
     async def _check_execution_access(self) -> bool:
         """Check if authenticated user (self.user_id) has access to self.execution_id.
@@ -132,22 +145,28 @@ class ExecutionConsumer(AuthenticatedWebSocketConsumer):
         """Leave the channel group on disconnect.
 
         MEDIUM-7 FIX: Catch exceptions from group_discard if channel layer is down.
+        Guard: only run group_discard when _group_joined and group_name exist to avoid AttributeError.
         """
-        if hasattr(self, "channel_layer") and self.channel_layer is not None:
+        group_joined = getattr(self, "_group_joined", False)
+        group_name = getattr(self, "group_name", None)
+        if (
+            group_joined
+            and group_name is not None
+            and hasattr(self, "channel_layer")
+            and self.channel_layer is not None
+        ):
             try:
-                await self.channel_layer.group_discard(self.group_name, self.channel_name)
-                if getattr(self, "_group_joined", False):
-                    logger.debug(
-                        "ws_execution_group_left",
-                        execution_id=self.execution_id,
-                        group_name=self.group_name,
-                    )
+                await self.channel_layer.group_discard(group_name, self.channel_name)
+                logger.debug(
+                    "ws_execution_group_left",
+                    execution_id=self.execution_id,
+                    group_name=group_name,
+                )
             except Exception as e:  # noqa: BLE001 — best-effort-non-critical: group_discard is best-effort cleanup, must not raise
-                # MEDIUM-7 FIX: Log warning but don't raise (best-effort cleanup)
                 logger.warning(
                     "ws_execution_group_discard_failed",
                     execution_id=self.execution_id,
-                    group_name=self.group_name,
+                    group_name=group_name,
                     error=str(e),
                     error_type=type(e).__name__,
                     exc_info=True,

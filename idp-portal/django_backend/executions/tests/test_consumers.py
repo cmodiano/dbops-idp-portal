@@ -79,10 +79,11 @@ async def test_connect_with_channel_layer_does_not_call_group_add():
 
 @pytest.mark.asyncio
 async def test_disconnect_with_channel_layer_calls_group_discard():
-    """3.4: With channel_layer → group_discard called."""
+    """3.4: With channel_layer and _group_joined=True → group_discard called."""
     consumer = ExecutionConsumer()
     consumer.execution_id = "42"
     consumer.group_name = "execution_42"
+    consumer._group_joined = True
     consumer.channel_name = "channel_abc"
 
     mock_channel_layer = AsyncMock()
@@ -104,6 +105,7 @@ async def test_disconnect_group_discard_exception_does_not_propagate():
     consumer = ExecutionConsumer()
     consumer.execution_id = "42"
     consumer.group_name = "execution_42"
+    consumer._group_joined = True
     consumer.channel_name = "channel_abc"
 
     mock_channel_layer = AsyncMock()
@@ -134,6 +136,21 @@ async def test_disconnect_without_channel_layer_no_group_discard():
     with patch.object(AuthenticatedWebSocketConsumer, 'disconnect', new_callable=AsyncMock):
         # Should not raise
         await consumer.disconnect(1000)
+
+
+@pytest.mark.asyncio
+async def test_disconnect_no_attribute_error_when_group_name_unset():
+    """Regression: disconnect() when connect() returned early (no group_name) → no AttributeError."""
+    consumer = ExecutionConsumer()
+    consumer.scope = {"url_route": {"kwargs": {}}}
+    consumer.channel_name = "channel_abc"
+    consumer.channel_layer = AsyncMock()
+    # Simulate connect() returned early: group_name and _group_joined never set
+
+    with patch.object(AuthenticatedWebSocketConsumer, 'disconnect', new_callable=AsyncMock):
+        await consumer.disconnect(1000)
+
+    consumer.channel_layer.group_discard.assert_not_called()
 
 
 # ============================================================================
@@ -442,22 +459,21 @@ async def test_connect_initializes_group_joined_false():
 # ============================================================================
 
 @pytest.mark.asyncio
-async def test_receive_auth_failure_does_not_call_group_add():
-    """59-2-f: When super().receive() does not set authenticated=True → ExecutionConsumer.receive()
-    skips access check and group_add entirely (auth guard working correctly)."""
+async def test_receive_skips_group_add_when_super_receive_does_not_authenticate():
+    """59-2-f: When super().receive() does not set authenticated=True, ExecutionConsumer.receive()
+    skips access check and group_add entirely (auth guard: only join when authenticated)."""
     consumer = _make_consumer(execution_id="42", user_id=None)
 
     mock_channel_layer = AsyncMock()
     consumer.channel_layer = mock_channel_layer
     consumer.close = AsyncMock()
 
-    # super().receive() does NOT set authenticated=True (auth failure)
-    async def mock_super_receive_auth_fail(self_inner, **kwargs):
-        # authenticated stays False
-        pass
+    # super().receive() does NOT set authenticated=True (simulates auth failure / no-op)
+    async def mock_super_receive_no_auth(self_inner, **kwargs):
+        pass  # authenticated stays False
 
     with patch.object(consumer, '_check_execution_access', new=AsyncMock(return_value=False)) as mock_check:
-        with patch.object(AuthenticatedWebSocketConsumer, 'receive', mock_super_receive_auth_fail):
+        with patch.object(AuthenticatedWebSocketConsumer, 'receive', mock_super_receive_no_auth):
             await consumer.receive(text_data='{"type":"auth","token":"invalid"}')
 
     mock_check.assert_not_called()
@@ -621,9 +637,9 @@ async def test_disconnect_group_discard_called_when_joined():
 
 
 @pytest.mark.asyncio
-async def test_disconnect_group_discard_called_but_no_group_left_log_when_never_joined():
-    """59-2-m: disconnect() with _group_joined=False → group_discard called (best-effort cleanup)
-    but ws_execution_group_left NOT logged (user was denied before joining)."""
+async def test_disconnect_skips_group_discard_when_never_joined():
+    """59-2-m: disconnect() with _group_joined=False → group_discard NOT called
+    (guard: only cleanup when we actually joined to avoid AttributeError)."""
     consumer = _make_consumer(execution_id="42")
     consumer._group_joined = False
 
@@ -631,14 +647,9 @@ async def test_disconnect_group_discard_called_but_no_group_left_log_when_never_
     consumer.channel_layer = mock_channel_layer
 
     with patch.object(AuthenticatedWebSocketConsumer, 'disconnect', new_callable=AsyncMock):
-        with patch('executions.consumers.logger') as mock_logger:
-            await consumer.disconnect(4003)
+        await consumer.disconnect(4003)
 
-    # group_discard MUST still be called (best-effort cleanup regardless of join state)
-    mock_channel_layer.group_discard.assert_called_once_with("execution_42", "test_channel")
-    # ws_execution_group_left must NOT appear in debug calls
-    for call in mock_logger.debug.call_args_list:
-        assert "ws_execution_group_left" not in str(call)
+    mock_channel_layer.group_discard.assert_not_called()
 
 
 # ============================================================================
