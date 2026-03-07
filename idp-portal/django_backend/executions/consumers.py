@@ -7,11 +7,15 @@ Story 27.1: Enhanced with channel layer group messaging for AAP job monitoring.
 import json
 
 import structlog
+from asgiref.sync import sync_to_async
 from channels.exceptions import StopConsumer
 
 from core.consumers import AuthenticatedWebSocketConsumer
 
 logger = structlog.get_logger(__name__)
+
+# Terminal statuses — same as polling broadcaster
+_TERMINAL_STATUSES = frozenset({"COMPLETED", "FAILED", "CANCELLED"})
 
 
 class ExecutionConsumer(AuthenticatedWebSocketConsumer):
@@ -73,6 +77,7 @@ class ExecutionConsumer(AuthenticatedWebSocketConsumer):
                         group_name=self.group_name,
                         user_id=self.user_id,
                     )
+                    await self._replay_missed_events()
                 except Exception as e:  # noqa: BLE001 — channel layer failure → graceful shutdown
                     logger.error(
                         "ws_execution_group_add_failed",
@@ -85,6 +90,118 @@ class ExecutionConsumer(AuthenticatedWebSocketConsumer):
                     )
                     self._group_joined = False
                     await self.close()
+
+    async def _replay_missed_events(self) -> None:
+        """Post-join snapshot: send current execution state from DB to client.
+
+        Mitigates CRITICAL-5 race: events broadcast between socket acceptance and
+        first authenticated receive() are replayed from the same source (Execution +
+        ExecutionStep) that webhook/polling broadcasters persist to.
+        """
+        if not self.execution_id:
+            return
+        try:
+            execution_id_int = int(self.execution_id)
+        except (TypeError, ValueError):
+            return
+
+        def _fetch_state() -> tuple:
+            from executions.models import Execution, ExecutionStep
+
+            try:
+                execution = Execution.objects.get(id=execution_id_int)
+            except Execution.DoesNotExist:
+                return None, []
+            steps = list(
+                ExecutionStep.objects.filter(execution_id=execution_id_int).order_by("step_order")
+            )
+            return execution, steps
+
+        try:
+            execution, steps = await sync_to_async(_fetch_state)()
+        except Exception as e:  # noqa: BLE001 — best-effort: replay must not block join
+            logger.debug(
+                "ws_execution_replay_fetch_failed",
+                execution_id=self.execution_id,
+                error=str(e),
+                error_type=type(e).__name__,
+            )
+            return
+
+        if execution is None:
+            return
+
+        # status_update — matches polling broadcaster format
+        await self._safe_send({
+            "type": "status_update",
+            "data": {
+                "execution_id": execution_id_int,
+                "status": execution.status,
+                "started": (
+                    execution.started_at.isoformat() if execution.started_at else None
+                ),
+                "finished": (
+                    execution.completed_at.isoformat() if execution.completed_at else None
+                ),
+            },
+        })
+
+        # step_update for each step — matches websocket_broadcast format
+        for step in steps:
+            step_type = step.step_type
+            if hasattr(step_type, "value"):
+                step_type = step_type.value
+            await self._safe_send({
+                "type": "step_update",
+                "data": {
+                    "id": step.id,
+                    "execution_id": execution_id_int,
+                    "step_order": step.step_order,
+                    "step_name": step.step_name,
+                    "step_type": step_type,
+                    "status": step.status,
+                    "started_at": (
+                        step.started_at.isoformat() if step.started_at else None
+                    ),
+                    "completed_at": (
+                        step.completed_at.isoformat() if step.completed_at else None
+                    ),
+                    "output": step.get_output() if hasattr(step, "get_output") else None,
+                    "platform_job_id": step.platform_job_id,
+                    "error_message": step.error_message,
+                },
+            })
+
+        # log_update from platform step output (platform_logs)
+        for step in steps:
+            output = step.get_output() if hasattr(step, "get_output") else None
+            if output and isinstance(output.get("platform_logs"), str):
+                await self._safe_send({
+                    "type": "log_update",
+                    "data": {
+                        "execution_id": execution_id_int,
+                        "content": output["platform_logs"],
+                        "complete": execution.status in _TERMINAL_STATUSES,
+                    },
+                })
+
+        # terminal event if execution finished
+        if execution.status in _TERMINAL_STATUSES:
+            event_type = (
+                "execution_complete" if execution.status == "COMPLETED"
+                else "execution_failed"
+            )
+            await self._safe_send({
+                "type": event_type,
+                "data": {
+                    "execution_id": execution_id_int,
+                    "status": execution.status,
+                    "finished": (
+                        execution.completed_at.isoformat()
+                        if execution.completed_at else None
+                    ),
+                },
+            })
 
     async def _check_execution_access(self) -> bool:
         """Check if authenticated user (self.user_id) has access to self.execution_id.
