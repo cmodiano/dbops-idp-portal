@@ -2,7 +2,7 @@
 -- Baseline Schema V088 — IDP Portal
 -- ===========================================================================
 -- Date            : 2026-02-25
--- Version couverte: V000–V110 (incl. V106 SOURCE_EXECUTION_ID, V107 schedule_execution, V109 DROP CHANGE_TYPE_CONFIG GATE_CONFIG, V110 AUTH_DEV_BYPASS_LOGIN WORKFLOW_STEP_SCHEDULE_CREATED)
+-- Version couverte: V000–V111 (incl. V110 AUTH_DEV_BYPASS_LOGIN WORKFLOW_STEP_SCHEDULE_CREATED, V111 OUTPUT_SCHEMAS)
 -- Auteur          : Agent de développement (Story 41-2)
 --
 -- Usage           : NOUVEAUX ENVIRONNEMENTS UNIQUEMENT (base Oracle vierge)
@@ -10,14 +10,14 @@
 --
 -- Procédure de déploiement :
 --   1. sqlplus idp_user/password@HOST:1521/XEPDB1 @database/baseline/baseline_schema_v088.sql
---   2. flyway -baselineVersion=110 -baselineDescription=baseline_schema_v088 baseline
+--   2. flyway -baselineVersion=111 -baselineDescription=baseline_schema_v088 baseline
 --
--- Ce script couvre TOUTES les migrations V000–V110. Aucune migration incrémentale
--- n'est nécessaire après application. État identique à V000→V110 sans phases intermédiaires.
+-- Ce script couvre TOUTES les migrations V000–V111. Aucune migration incrémentale
+-- n'est nécessaire après application. État identique à V000→V111 sans phases intermédiaires.
 -- ===========================================================================
 --
 -- Objets créés :
---   33 tables, indexes, contraintes, trigger, package PKG_IDP_MAINTENANCE, données de référence
+--   34 tables, indexes, contraintes, trigger, package PKG_IDP_MAINTENANCE, données de référence
 --
 -- Exclusions (éléments neutralisés par les migrations) :
 --   - SCHEMA_VERSION (créée V000, droppée V015)
@@ -351,6 +351,35 @@ CREATE INDEX IDX_POLICY_CREATED_BY ON BUSINESS_RULE_POLICIES(CREATED_BY_ID);
 
 COMMENT ON TABLE BUSINESS_RULE_POLICIES IS 'Story 28.4: Catalogue of reusable business rule policies for actions.';
 COMMENT ON COLUMN BUSINESS_RULE_POLICIES.POLICY_JSON IS 'JSON schema defining business rule policies (on_step_output structure).';
+
+-- ---------------------------------------------------------------------------
+-- OUTPUT_SCHEMAS (V111) — Story 63.1 Infrastructure des Schémas d'Output
+-- ---------------------------------------------------------------------------
+CREATE TABLE OUTPUT_SCHEMAS (
+    ID               NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    NAME             VARCHAR2(255) NOT NULL,
+    SCHEMA_TYPE      VARCHAR2(30) NOT NULL,
+    TARGET_NAME      VARCHAR2(255) NOT NULL,
+    OPERATION        VARCHAR2(255),
+    INHERITS_FROM_ID NUMBER REFERENCES OUTPUT_SCHEMAS(ID) ON DELETE SET NULL,
+    SCHEMA_JSON      CLOB CHECK (SCHEMA_JSON IS JSON),
+    CREATED_AT       TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    UPDATED_AT       TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    CONSTRAINT UQ_OUTPUT_SCHEMAS_NAME UNIQUE (NAME),
+    CONSTRAINT UQ_OUTPUT_SCHEMA_TYPE_TARGET_OP UNIQUE (SCHEMA_TYPE, TARGET_NAME, OPERATION),
+    CONSTRAINT CK_OUTPUT_SCHEMAS_TYPE CHECK (
+        SCHEMA_TYPE IN ('action', 'integration', 'platform_convention')
+    )
+);
+
+CREATE INDEX IDX_OUTPUT_SCHEMAS_TYPE ON OUTPUT_SCHEMAS(SCHEMA_TYPE);
+
+COMMENT ON TABLE OUTPUT_SCHEMAS IS 'Declarative output schemas for workflow steps (Story 63.1)';
+COMMENT ON COLUMN OUTPUT_SCHEMAS.SCHEMA_TYPE IS 'action | integration | platform_convention';
+COMMENT ON COLUMN OUTPUT_SCHEMAS.TARGET_NAME IS 'action_name, integration_type, or convention_name';
+COMMENT ON COLUMN OUTPUT_SCHEMAS.OPERATION IS 'operation name for integration schemas (e.g. create_change), NULL for action/convention schemas';
+COMMENT ON COLUMN OUTPUT_SCHEMAS.INHERITS_FROM_ID IS 'FK self-ref for schema inheritance (resolved in Story 63.2)';
+COMMENT ON COLUMN OUTPUT_SCHEMAS.SCHEMA_JSON IS 'JSON: {output_fields: [...], template_variables: [...]}';
 
 -- ---------------------------------------------------------------------------
 -- ACTIONS_CATALOG (V002 + V003 + V008 + V013 + V014 + V017 + V018 + V022
