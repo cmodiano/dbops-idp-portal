@@ -8,7 +8,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Button, Input, Space } from 'antd';
+import { Alert, Button, Input, Space, theme } from 'antd';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 
 export interface KeyValueEditorProps {
@@ -54,6 +54,7 @@ export const KeyValueEditor: React.FC<KeyValueEditorProps> = ({
   label,
   warnings,
 }) => {
+  const { token } = theme.useToken();
   // Internal state keeps empty-key rows visible during typing
   const [localPairs, setLocalPairs] = useState<KvPair[]>(() => recordToPairs(value));
 
@@ -114,7 +115,7 @@ export const KeyValueEditor: React.FC<KeyValueEditorProps> = ({
     <div data-testid={testId}>
       {label && (
         <Space style={{ marginBottom: 4 }} size={4}>
-          <span style={{ fontSize: 12, color: 'rgba(0, 0, 0, 0.45)' }}>{label}</span>
+          <span style={{ fontSize: 12, color: token.colorTextSecondary }}>{label}</span>
           {helpContent}
         </Space>
       )}

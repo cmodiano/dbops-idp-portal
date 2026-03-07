@@ -22,7 +22,6 @@ import type {
   ExecutionStep,
   ItemType,
   WorkflowStep,
-  NotificationConfig,
 } from '../../types/api';
 import { schemaToParameterList, parameterListToSchema } from '../../utils/parametersSchema';
 import { impactRulesToList, listToImpactRules } from '../../utils/impactRulesSchema';
@@ -84,13 +83,7 @@ export function ActionWizard({
     handleUpdateActionTags,
     handleUpdateActionSteps,
     handleUpdateWorkflowSteps,
-    handleUpdateBusinessRulePolicies,
-    handlePatchAction,
   } = useActionWizardState({ open });
-  // Story 31.8: Notification configuration (email, teams, page)
-  const [notificationConfig, setNotificationConfig] = useState<NotificationConfig | null>(null);
-  /** Story 28.4: Predefined business rule policy ID (FK). Inline rules removed — only catalogue. */
-  const [businessRulePolicyId, setBusinessRulePolicyId] = useState<number | null>(null);
   /** Pour AAP : type de ressource (job_template | workflow_job) et ID template. 1 action = 1 étape. */
   const [aapResourceType, setAapResourceType] = useState<'job_template' | 'workflow_job'>('job_template');
   const [aapTemplateId, setAapTemplateId] = useState<number | undefined>(undefined);
@@ -138,10 +131,6 @@ export function ActionWizard({
       setImpactRulesList(impactRulesToList(editAction.impact_rules ?? undefined));
       setDefaultImpactLevel(editAction.default_impact_level ?? null);
       setSelectedTags(editAction.tags ?? []);
-      // Story 31.8: Load notification configuration
-      setNotificationConfig(editAction.notification_config ?? null);
-      // Story 28.4: Load business rule policy (FK only; inline removed)
-      setBusinessRulePolicyId(editAction.business_rule_policy_id ?? null);
       // Story 9.5: Load workflow steps for workflows
       if (editAction.item_type === 'workflow' && editAction.workflow_steps) {
         setWorkflowSteps(editAction.workflow_steps);
@@ -168,8 +157,6 @@ export function ActionWizard({
       setImpactRulesList([]);
       setDefaultImpactLevel(null);
       setSelectedTags([]);
-      setNotificationConfig(null);
-      setBusinessRulePolicyId(null);
       setAapResourceType('job_template');
       setAapTemplateId(undefined);
       setWorkflowSteps([]);
@@ -286,10 +273,9 @@ export function ActionWizard({
         // impact_rules and default_impact_level apply to both actions and workflows
         impact_rules: listToImpactRules(impactRulesList),
         default_impact_level: defaultImpactLevel,
-        // Story 31.8: Notification configuration — uniquement pour les actions (workflows : étapes indépendantes)
-        ...(isWorkflowSave
-          ? { notification_config: null, business_rule_policy_id: null }
-          : { notification_config: notificationConfig }),
+        // Règles métier et Notifications : configurées au niveau des étapes de workflow (EvaluationStepConfig, service_call)
+        notification_config: null,
+        business_rule_policy_id: null,
         // category: both actions and workflows (workflows: optional, backend defaults to 'autres')
         category: (values as Record<string, unknown>).category as string | undefined ?? null,
         // Only include engine/platform/integration_id/parameters_schema for actions
@@ -325,24 +311,6 @@ export function ActionWizard({
       }
 
       if (actionId) {
-        // Story 28.4: Save business rule policy (predefined only) — uniquement pour les actions (workflows : étapes indépendantes)
-        if (!isWorkflowSave) {
-          try {
-            if (businessRulePolicyId) {
-              await handleUpdateBusinessRulePolicies(actionId, null);
-              await handlePatchAction(actionId, { business_rule_policy_id: businessRulePolicyId });
-            } else {
-              await handleUpdateBusinessRulePolicies(actionId, null);
-              await handlePatchAction(actionId, { business_rule_policy_id: null });
-            }
-          } catch (policiesErr) {
-            notification.warning({
-              message: 'Règles métier non mises à jour',
-              description: policiesErr instanceof Error ? policiesErr.message : 'Les règles métier n\'ont pas pu être enregistrées. L\'action a bien été créée/modifiée.',
-            });
-          }
-        }
-
         // New workflows: always save steps. Existing: only if draft or disabled
         const canEditSteps = !editAction || editAction?.status === 'draft' || editAction?.status === 'disabled';
         
@@ -524,13 +492,6 @@ export function ActionWizard({
               setImpactRulesList={setImpactRulesList}
               defaultImpactLevel={defaultImpactLevel}
               setDefaultImpactLevel={setDefaultImpactLevel}
-              businessRulePolicyId={businessRulePolicyId}
-              setBusinessRulePolicyId={setBusinessRulePolicyId}
-              notificationConfig={notificationConfig}
-              setNotificationConfig={setNotificationConfig}
-              selectedIntegration={selectedIntegration}
-              editAction={editAction}
-              getIntegrationById={getIntegrationById}
             />
           )}
         </Form>

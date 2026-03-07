@@ -13,7 +13,6 @@ import type {
   ExecutionStep,
   ImpactLevel,
   ImpactRuleDefinition,
-  NotificationConfig,
   ParameterDefinition,
 } from '../types/api';
 import type { RemediationRuleDefinition } from '../components/admin/RemediationRulesEditor';
@@ -44,8 +43,6 @@ export function useActionFormState({ open, editAction, form, getIntegrationById 
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagsOptions, setTagsOptions] = useState<{ value: string; label: string }[]>([]);
   const [remediationRules, setRemediationRules] = useState<RemediationRuleDefinition[]>([]);
-  const [businessRulePolicyId, setBusinessRulePolicyId] = useState<number | null>(null);
-  const [notificationConfig, setNotificationConfig] = useState<NotificationConfig | null>(null);
 
   // Form.useWatch values pour previewData en temps réel
   const watchedName = Form.useWatch('name', form);
@@ -142,8 +139,6 @@ export function useActionFormState({ open, editAction, form, getIntegrationById 
           id: `rule-${i}-${Date.now()}`,
         }))
       );
-      setBusinessRulePolicyId(editAction.business_rule_policy_id ?? null);
-      setNotificationConfig(editAction.notification_config ?? null);
     } else if (!open) {
       form.resetFields();
       setExecutionSteps([]);
@@ -153,8 +148,6 @@ export function useActionFormState({ open, editAction, form, getIntegrationById 
       setPreviewEnvironment(null);
       setSelectedTags([]);
       setRemediationRules([]);
-      setBusinessRulePolicyId(null);
-      setNotificationConfig(null);
       setStepsError(null);
       setSaving(false);
     }
@@ -181,10 +174,6 @@ export function useActionFormState({ open, editAction, form, getIntegrationById 
     tagsOptions,
     remediationRules,
     setRemediationRules,
-    businessRulePolicyId,
-    setBusinessRulePolicyId,
-    notificationConfig,
-    setNotificationConfig,
     watchedIntegrationId: watchedIntegrationId as number | undefined,
     previewData,
   };

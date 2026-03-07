@@ -25,10 +25,6 @@ vi.mock('../common/SectionHelp', () => ({
   default: () => null,
 }));
 
-vi.mock('../../services/admin_service', () => ({
-  getBusinessRulePolicies: vi.fn().mockResolvedValue([]),
-}));
-
 const defaultProps: WizardStep3ImpactChangementProps = {
   isWorkflow: false,
   isReadOnly: false,
@@ -36,13 +32,6 @@ const defaultProps: WizardStep3ImpactChangementProps = {
   setImpactRulesList: vi.fn(),
   defaultImpactLevel: null,
   setDefaultImpactLevel: vi.fn(),
-  businessRulePolicyId: null,
-  setBusinessRulePolicyId: vi.fn(),
-  notificationConfig: null,
-  setNotificationConfig: vi.fn(),
-  selectedIntegration: undefined,
-  editAction: null,
-  getIntegrationById: vi.fn(() => undefined),
 };
 
 function renderWithForm(props: WizardStep3ImpactChangementProps = defaultProps) {
@@ -65,18 +54,6 @@ describe('WizardStep3ImpactChangement', () => {
     expect(screen.getByText(/Niveau d'impact par défaut/i)).toBeInTheDocument();
   });
 
-  it('affiche les sections Règles métier et Notifications pour les actions (isWorkflow=false)', () => {
-    renderWithForm();
-    expect(screen.getByText('Règles métier')).toBeInTheDocument();
-    expect(screen.getByText('Notifications')).toBeInTheDocument();
-  });
-
-  it('masque les sections Règles métier et Notifications pour les workflows (isWorkflow=true)', () => {
-    renderWithForm({ ...defaultProps, isWorkflow: true });
-    expect(screen.queryByText('Règles métier')).not.toBeInTheDocument();
-    expect(screen.queryByText('Notifications')).not.toBeInTheDocument();
-  });
-
   it('affiche les règles d\'impact existantes', () => {
     const props = {
       ...defaultProps,
@@ -84,41 +61,6 @@ describe('WizardStep3ImpactChangement', () => {
     };
     renderWithForm(props);
     expect(screen.getByText('Regle 1')).toBeInTheDocument();
-  });
-
-  it('passe stepType depuis editAction.integration_id via getIntegrationById', () => {
-    const mockGetIntegrationById = vi.fn(() => ({ id: 5, type: 'aap', name: 'My AAP' }));
-    renderWithForm({
-      ...defaultProps,
-      selectedIntegration: undefined,
-      editAction: {
-        id: 10,
-        name: 'Test Action',
-        integration_id: 5,
-        status: 'published',
-        engine: 'aap',
-      } as any,
-      getIntegrationById: mockGetIntegrationById,
-    });
-    expect(mockGetIntegrationById).toHaveBeenCalledWith(5);
-    expect(screen.getByText('Règles métier')).toBeInTheDocument();
-  });
-
-  it('passe stepType depuis editAction.platform via platformCodeToStepType quand integration_id est null', () => {
-    renderWithForm({
-      ...defaultProps,
-      selectedIntegration: undefined,
-      editAction: {
-        id: 10,
-        name: 'Test Action',
-        integration_id: null,
-        platform: 'aap',
-        status: 'published',
-        engine: 'aap',
-      } as any,
-      getIntegrationById: vi.fn(() => undefined),
-    });
-    expect(screen.getByText('Règles métier')).toBeInTheDocument();
   });
 
   it('appelle setDefaultImpactLevel via onChange du Select impact', () => {

@@ -3,12 +3,14 @@
  * Utilisée dans ActionForm et ActionWizard pour décrire les niveaux low/medium/high/critical.
  * Aucune prop : auto-suffisant, utilise IMPACT_LABELS et IMPACT_DESCRIPTIONS directement.
  */
+import { theme } from 'antd';
 import { IMPACT_LABELS, IMPACT_DESCRIPTIONS } from '../shared/impactLabels';
 
 export function ImpactLevelsLegend() {
+  const { token } = theme.useToken();
   return (
     <div
-      style={{ fontSize: 12, color: 'rgba(0, 0, 0, 0.45)' }}
+      style={{ fontSize: 12, color: token.colorTextSecondary }}
       role="region"
       aria-label="Signification des niveaux d'impact"
     >

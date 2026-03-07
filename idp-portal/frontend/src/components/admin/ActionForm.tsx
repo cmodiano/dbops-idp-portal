@@ -37,8 +37,6 @@ import {
   updateActionSteps,
   updateActionTags,
   updateRemediationRules,
-  updateBusinessRulePolicies,
-  patchAction,
   checkActionNameAvailable,
 } from '../../services/admin_service';
 import { useActionFormState } from '../../hooks/useActionFormState';
@@ -95,10 +93,6 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
     tagsOptions,
     remediationRules,
     setRemediationRules,
-    businessRulePolicyId,
-    setBusinessRulePolicyId,
-    notificationConfig,
-    setNotificationConfig,
     watchedIntegrationId,
     previewData,
   } = useActionFormState({ open, editAction, form, getIntegrationById });
@@ -142,7 +136,8 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
         impact_rules: listToImpactRules(impactRulesList),
         default_impact_level: defaultImpactLevel,
         documentation_md: values.documentation_md || null,
-        notification_config: notificationConfig,
+        notification_config: null,
+        business_rule_policy_id: null,
       };
 
       const result = await onSubmit(action);
@@ -162,12 +157,6 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
           ? remediationRules.map(({ id: _unused, ...rule }) => rule as RemediationRule)
           : null;
         await updateRemediationRules(actionId, rulesToSave);
-      }
-
-      // Story 28.4: Save business rule policy
-      if (actionId) {
-        await updateBusinessRulePolicies(actionId, null);
-        await patchAction(actionId, { business_rule_policy_id: businessRulePolicyId ?? null });
       }
 
       const done = (result as ActionDetail | ActionResponse) ?? editAction;
@@ -422,13 +411,8 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
               setExecutionSteps={setExecutionSteps}
               remediationRules={remediationRules}
               setRemediationRules={setRemediationRules}
-              businessRulePolicyId={businessRulePolicyId}
-              setBusinessRulePolicyId={setBusinessRulePolicyId}
-              notificationConfig={notificationConfig}
-              setNotificationConfig={setNotificationConfig}
               editAction={editAction}
               watchedIntegrationId={watchedIntegrationId}
-              getIntegrationById={getIntegrationById}
             />
           </Form>
         </Col>

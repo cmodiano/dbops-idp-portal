@@ -26,22 +26,13 @@ vi.mock('../common/SectionHelp', () => ({
   default: () => null,
 }));
 
-vi.mock('../../services/admin_service', () => ({
-  getBusinessRulePolicies: vi.fn().mockResolvedValue([]),
-}));
-
 const defaultProps: ActionFormCollapseSectionsProps = {
   executionSteps: [],
   setExecutionSteps: vi.fn(),
   remediationRules: [],
   setRemediationRules: vi.fn(),
-  businessRulePolicyId: null,
-  setBusinessRulePolicyId: vi.fn(),
-  notificationConfig: null,
-  setNotificationConfig: vi.fn(),
   editAction: null,
   watchedIntegrationId: undefined,
-  getIntegrationById: vi.fn(() => undefined),
 };
 
 function renderWithForm(props: ActionFormCollapseSectionsProps = defaultProps) {
@@ -53,12 +44,10 @@ function renderWithForm(props: ActionFormCollapseSectionsProps = defaultProps) {
 }
 
 describe('ActionFormCollapseSections', () => {
-  it('affiche les 4 en-têtes de panneau', () => {
+  it('affiche les 2 en-têtes de panneau (étapes, remédiation)', () => {
     renderWithForm();
     expect(screen.getByText(/Etapes d'execution et changement ServiceNow/i)).toBeInTheDocument();
     expect(screen.getByText(/Règles de remédiation automatique/i)).toBeInTheDocument();
-    expect(screen.getByText(/Règles métier/i)).toBeInTheDocument();
-    expect(screen.getByText(/Notifications/i)).toBeInTheDocument();
   });
 
   it('affiche le compteur d\'étapes quand executionSteps non vide', () => {
@@ -82,12 +71,6 @@ describe('ActionFormCollapseSections', () => {
     };
     renderWithForm(props);
     expect(screen.getByText(/1 règle/i)).toBeInTheDocument();
-  });
-
-  it('affiche "(configuré)" pour règles métier quand policyId non null', () => {
-    const props = { ...defaultProps, businessRulePolicyId: 5 };
-    renderWithForm(props);
-    expect(screen.getByText(/configuré/i)).toBeInTheDocument();
   });
 
   it('ouvre le panneau étapes au clic', async () => {

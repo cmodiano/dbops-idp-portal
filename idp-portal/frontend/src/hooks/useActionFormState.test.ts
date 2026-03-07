@@ -56,7 +56,6 @@ describe('useActionFormState', () => {
     expect(typeof result.current.setImpactRulesList).toEqual('function');
     expect(typeof result.current.setDefaultImpactLevel).toBe('function');
     expect(typeof result.current.setSelectedTags).toBe('function');
-    expect(typeof result.current.setNotificationConfig).toBe('function');
   });
 
   it('expose nameInputRef', () => {
