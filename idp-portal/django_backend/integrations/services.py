@@ -21,6 +21,12 @@ from core.exceptions import InvalidStateError
 logger = structlog.get_logger(__name__)
 
 
+_SENSITIVE_INTEGRATION_FIELDS = frozenset({'credential_ref', 'config'})
+
+_AUDITED_FIELDS = ('type', 'name', 'base_url', 'credential_ref', 'icon',
+                   'auth_flow', 'token_url', 'secret_service_id', 'config')
+
+
 def _delete_uploaded_icon(icon_path: str | None) -> None:
     """
     Delete a locally uploaded icon file (best-effort, never raises).
@@ -241,6 +247,17 @@ class IntegrationService:
                 integration_update_data.get('type', integration.type)
             )
         
+        # Capturer les anciennes valeurs AVANT modification (Story 61.1)
+        old_values = {}
+        for field in _AUDITED_FIELDS:
+            if field in integration_update_data:
+                if field == 'config':
+                    old_values[field] = integration.get_config()
+                elif field == 'secret_service_id':
+                    old_values[field] = integration.secret_service_id
+                else:
+                    old_values[field] = getattr(integration, field)
+
         # Update fields — track changed fields for update_fields optimization
         update_fields = []
         if 'type' in integration_update_data:
@@ -314,6 +331,22 @@ class IntegrationService:
             logger.warning("integration_updated_non_valid", integration_id=integration.id, status=computed_status)
             warnings.append(msg)
 
+        # Construire changes pour l'audit (Story 61.1)
+        changes = {}
+        for field, old_val in old_values.items():
+            if field == 'config':
+                new_val = integration_update_data.get('config')
+            elif field == 'secret_service_id':
+                new_val = integration_update_data.get('secret_service_id')
+            else:
+                new_val = getattr(integration, field)
+
+            if field in _SENSITIVE_INTEGRATION_FIELDS:
+                if old_val != new_val:
+                    changes[field] = {"old": "***", "new": "***"}
+            elif old_val != new_val:
+                changes[field] = {"old": old_val, "new": new_val}
+
         # Audit if user provided
         if user:
             AuditService.create_entry(
@@ -321,7 +354,7 @@ class IntegrationService:
                 action_type=AuditActionType.INTEGRATION_UPDATED,
                 entity_type=AuditEntityType.INTEGRATION,
                 entity_id=integration.id,
-                details={'name': integration.name}
+                details={'name': integration.name, 'changes': changes}
             )
 
         integration._warnings = warnings  # type: ignore[attr-defined]
