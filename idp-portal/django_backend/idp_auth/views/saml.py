@@ -40,8 +40,8 @@ class SAMLLoginView(APIView):
 
     def get(self, request: Request) -> HttpResponse:
         """Initiate SAML login flow."""
-        # SEC-6: Reject dev bypass when DEBUG=False (production)
-        if getattr(settings, "AUTH_DEV_BYPASS", False) and not getattr(settings, "DEBUG", False):
+        # SEC-6: Centralized guard - reject dev bypass when DEBUG=False (production)
+        if getattr(settings, "AUTH_DEV_BYPASS", False) and not is_dev_bypass_allowed():
             logger.critical(
                 "SECURITY ALERT: AUTH_DEV_BYPASS is enabled in production mode "
                 "(DEBUG=False). Dev bypass is disabled. Use SAML IdP for authentication."

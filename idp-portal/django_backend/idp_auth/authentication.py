@@ -56,7 +56,7 @@ class JWTAuthentication(BaseAuthentication):
         # Dev mode: Accept mock token from frontend VITE_DEV_AUTH mode
         # Centralized guard: dev bypass only when DEBUG=True (is_dev_bypass_allowed)
         is_mock_token = token == 'dev-mock-token-for-testing'
-        if is_mock_token and getattr(settings, "AUTH_DEV_BYPASS", False) and not getattr(settings, "DEBUG", False):
+        if is_mock_token and getattr(settings, "AUTH_DEV_BYPASS", False) and not is_dev_bypass_allowed():
             # SEC-6: AUTH_DEV_BYPASS=True + DEBUG=False → return None (unauthenticated)
             return None
         if is_dev_bypass_allowed() and is_mock_token:
