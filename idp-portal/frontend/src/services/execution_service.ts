@@ -44,6 +44,7 @@ import type {
   ExecutionStepResponse,
   StepLogsResponse,
   InventoryItem,
+  InventorySchema,
   ExecutionScope,
   RemediationSuggestion,
   RemediationContext,
@@ -508,4 +509,13 @@ export async function fetchInventoryItems(
 
   loadingPromises.set(apiKey, promise);
   return promise;
+}
+
+/**
+ * Fetch available inventory column concepts per entity type from config.
+ * Story 62.5 — Used by ParametersEditor to populate "Colonne valeur" options.
+ * Endpoint created in Story 62.3: GET /api/v1/inventory/schema/
+ */
+export async function fetchInventorySchema(): Promise<InventorySchema> {
+  return apiFetch<InventorySchema>('/inventory/schema');
 }
