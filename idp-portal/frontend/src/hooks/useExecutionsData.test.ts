@@ -32,6 +32,7 @@ vi.mock('../contexts/AuthContext', () => ({
   useAuth: () => ({
     user: { id: 42, username: 'actor' },
     accessToken: 'token',
+    isLoading: false,
   }),
 }));
 // useActorExecutionSync is mocked — won't create real WebSocket connections

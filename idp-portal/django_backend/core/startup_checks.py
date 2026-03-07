@@ -335,3 +335,95 @@ def validate_feature_flags_config() -> None:
         flag_count=flag_count,
         pubsub_enabled=pubsub_enabled,
     )
+
+
+# Story 59.4 SEC-4: CORS configuration validation
+def validate_cors_config(debug: bool) -> None:
+    """
+    SEC-4: Validate CORS configuration at startup.
+
+    If DEBUG=False and CORS_ORIGIN is not defined, the app would accept
+    cross-origin requests from http://localhost:5173 (hardcoded default),
+    which is a security risk in production.
+
+    Args:
+        debug: True if Django DEBUG=True (development mode)
+
+    Raises:
+        ImproperlyConfigured: If DEBUG=False and CORS_ORIGIN is not set
+    """
+    if debug:
+        # Dev mode: default localhost origin is acceptable
+        logger.info("cors_config_validated", debug=True,
+                    message="Dev mode — default localhost CORS origin acceptable")
+        return
+
+    cors_origin = (os.getenv('CORS_ORIGIN') or '').strip()
+    is_blank = not cors_origin
+    is_placeholder = bool(PLACEHOLDER_PATTERN.match(cors_origin))
+    is_localhost = cors_origin.lower().startswith('http://localhost')
+    if is_blank or is_placeholder or is_localhost:
+        error_msg = "\n".join([
+            "❌ SECURITY: CORS configuration invalid for production",
+            "DEBUG=False but CORS_ORIGIN environment variable is not set.",
+            "The default value 'http://localhost:5173' is NOT safe for production.",
+            "",
+            "Fix: Set CORS_ORIGIN to your frontend URL.",
+            "Example: CORS_ORIGIN=https://idp.internal",
+            "See .env.production.template for required variables.",
+        ])
+        logger.error("cors_config_missing_production", debug=debug)
+        raise ImproperlyConfigured(error_msg)
+
+    logger.info("cors_config_validated", debug=False, cors_origin=cors_origin)
+
+
+# Story 59.5 SEC-5: Superuser fallback configuration validation
+def validate_superuser_fallback_config(debug: bool, allow_superuser_fallback: bool) -> None:
+    """
+    SEC-5: Validate ALLOW_SUPERUSER_FALLBACK configuration at startup.
+
+    ALLOW_SUPERUSER_FALLBACK allows superusers to bypass RBAC entirely.
+    This is acceptable ONLY in development/bootstrapping scenarios.
+    Activating it in production violates the principle of least privilege
+    and SOC1 compliance requirements.
+
+    Args:
+        debug: True if Django DEBUG=True (development mode)
+        allow_superuser_fallback: Value of settings.ALLOW_SUPERUSER_FALLBACK
+
+    Raises:
+        ImproperlyConfigured: If allow_superuser_fallback=True and debug=False
+    """
+    if debug:
+        # Dev mode: superuser fallback acceptable for bootstrapping
+        logger.info(
+            "superuser_fallback_config_validated",
+            debug=True,
+            allow_superuser_fallback=allow_superuser_fallback,
+            message="Dev mode — ALLOW_SUPERUSER_FALLBACK acceptable in development",
+        )
+        return
+
+    if allow_superuser_fallback:
+        error_msg = "\n".join([
+            "❌ SECURITY: ALLOW_SUPERUSER_FALLBACK is not allowed in production",
+            "DEBUG=False but ALLOW_SUPERUSER_FALLBACK=True.",
+            "This setting bypasses all RBAC for Django superusers.",
+            "",
+            "Fix: Set ALLOW_SUPERUSER_FALLBACK=false in production environment.",
+            "In production, superusers MUST have an explicit admin profile.",
+            "See .env.production.template for required variables.",
+        ])
+        logger.error(
+            "superuser_fallback_forbidden_production",
+            debug=debug,
+            allow_superuser_fallback=allow_superuser_fallback,
+        )
+        raise ImproperlyConfigured(error_msg)
+
+    logger.info(
+        "superuser_fallback_config_validated",
+        debug=debug,
+        allow_superuser_fallback=allow_superuser_fallback,
+    )

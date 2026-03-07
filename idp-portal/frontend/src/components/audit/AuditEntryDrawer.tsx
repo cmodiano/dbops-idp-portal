@@ -8,7 +8,7 @@
  * Extrait de AuditPage.tsx.
  */
 
-import { Typography, Drawer, Card, Descriptions, Tag, Skeleton, Alert, Divider } from 'antd';
+import { Typography, Drawer, Card, Descriptions, Tag, Skeleton, Alert, Divider, Table } from 'antd';
 import { ExecutionTimeline } from '../execution/ExecutionTimeline';
 import type {
   AuditExecutionEntry,
@@ -46,6 +46,19 @@ export interface AuditEntryDrawerProps {
   loading: boolean;
   error: string | null;
   onClose: () => void;
+}
+
+/** Renders a change value: null/undefined → '—', object → <pre>JSON</pre>, else String(v). */
+function renderChangeValue(v: unknown): React.ReactNode {
+  if (v === null || v === undefined) return '—';
+  if (typeof v === 'object') {
+    return (
+      <pre style={{ margin: 0, fontSize: 11, whiteSpace: 'pre-wrap' }}>
+        {JSON.stringify(v, null, 2)}
+      </pre>
+    );
+  }
+  return String(v);
 }
 
 export function AuditEntryDrawer({
@@ -115,10 +128,31 @@ export function AuditEntryDrawer({
             )}
           </Descriptions>
 
+          {/* Modifications section for non-execution entries with changes (Story 61.9) */}
+          {entry.entity_type !== 'execution' && entry.details?.changes && Object.keys(entry.details.changes).length > 0 && (
+            <Card title="Modifications" size="small" style={{ marginBottom: 24 }}>
+              <Table
+                dataSource={Object.entries(entry.details.changes).map(([field, vals]) => ({
+                  key: field,
+                  field,
+                  old: vals.old,
+                  new: vals.new,
+                }))}
+                columns={[
+                  { title: 'Champ', dataIndex: 'field', key: 'field' },
+                  { title: 'Avant', dataIndex: 'old', key: 'old', render: renderChangeValue },
+                  { title: 'Après', dataIndex: 'new', key: 'new', render: renderChangeValue },
+                ]}
+                pagination={false}
+                size="small"
+              />
+            </Card>
+          )}
+
           {/* Details for non-execution entries (action, integration, profile, user, etc.) */}
           {entry.entity_type !== 'execution' && (() => {
             const filteredDetails = entry.details
-              ? Object.entries(entry.details).filter(([, v]) => v !== null && v !== undefined && v !== '')
+              ? Object.entries(entry.details).filter(([k, v]) => k !== 'changes' && v !== null && v !== undefined && v !== '')
               : [];
             if (filteredDetails.length === 0) return null;
             return (
@@ -164,14 +198,37 @@ export function AuditEntryDrawer({
             </>
           )}
 
-          {/* Parameters if available (executions only) */}
-          {entry.entity_type === 'execution' && entry.details?.parameters && (
-            <Card title="Paramètres" size="small" style={{ marginBottom: 24 }}>
-              <pre style={{ margin: 0, fontSize: 12, whiteSpace: 'pre-wrap' }}>
-                {JSON.stringify(entry.details.parameters, null, 2)}
-              </pre>
-            </Card>
-          )}
+          {/* Execution context section — action, targets, parameters (Story 61.10) */}
+          {entry.entity_type === 'execution' && (() => {
+            const hasContext =
+              entry.details?.action_name ||
+              (entry.details?.targets && entry.details.targets.length > 0) ||
+              entry.details?.parameters;
+            if (!hasContext) return null;
+            return (
+              <Card title="Contexte d'exécution" size="small" style={{ marginBottom: 24 }}>
+                <Descriptions column={1} size="small">
+                  {entry.details?.action_name && (
+                    <Descriptions.Item label="Action">
+                      {String(entry.details.action_name)}
+                    </Descriptions.Item>
+                  )}
+                  {entry.details?.targets && entry.details.targets.length > 0 && (
+                    <Descriptions.Item label="Cibles">
+                      {entry.details.targets.join(', ')}
+                    </Descriptions.Item>
+                  )}
+                  {entry.details?.parameters && (
+                    <Descriptions.Item label="Paramètres">
+                      <pre style={{ margin: 0, fontSize: 12, whiteSpace: 'pre-wrap' }}>
+                        {JSON.stringify(entry.details.parameters, null, 2)}
+                      </pre>
+                    </Descriptions.Item>
+                  )}
+                </Descriptions>
+              </Card>
+            );
+          })()}
 
           {/* Execution timeline if available */}
           {execution && steps.length > 0 && (

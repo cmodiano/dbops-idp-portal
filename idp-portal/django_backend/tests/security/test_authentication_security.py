@@ -254,9 +254,9 @@ class TestSessionExpiration:
 class TestDevBypassToken:
     """AUTH_DEV_BYPASS mode allows dev-mock-token-for-testing."""
 
-    @override_settings(AUTH_DEV_BYPASS=True)
+    @override_settings(AUTH_DEV_BYPASS=True, DEBUG=True)
     def test_dev_bypass_token_accepted_when_enabled(self, anon_client):
-        """dev-mock-token is accepted when AUTH_DEV_BYPASS=True."""
+        """dev-mock-token is accepted when AUTH_DEV_BYPASS=True and DEBUG=True."""
         anon_client.credentials(HTTP_AUTHORIZATION='Bearer dev-mock-token-for-testing')
         response = anon_client.get('/api/v1/auth/me/')
         assert response.status_code == status.HTTP_200_OK
@@ -268,9 +268,9 @@ class TestDevBypassToken:
         response = anon_client.get('/api/v1/auth/me/')
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    @override_settings(AUTH_DEV_BYPASS=True)
+    @override_settings(AUTH_DEV_BYPASS=True, DEBUG=True)
     def test_dev_bypass_user_has_dbops_profile(self, anon_client):
-        """Dev bypass user is created with dbops profile."""
+        """Dev bypass user is created with dbops profile (requires both AUTH_DEV_BYPASS and DEBUG)."""
         anon_client.credentials(HTTP_AUTHORIZATION='Bearer dev-mock-token-for-testing')
         response = anon_client.get('/api/v1/auth/me/')
         assert response.status_code == status.HTTP_200_OK

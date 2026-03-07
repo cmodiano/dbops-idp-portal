@@ -17,8 +17,14 @@ from profiles.models import Profile, ProfileActionPermission, ProfileTargetPermi
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.middleware import get_correlation_id
+from core.utils import sanitize_audit_changes
 
 logger = structlog.get_logger(__name__)
+
+_AUDITED_PROFILE_FIELDS = (
+    'name', 'description', 'ad_group',
+    'is_admin', 'is_auditor', 'is_approver',
+)
 
 
 class ProfileService:
@@ -154,7 +160,13 @@ class ProfileService:
             profile = Profile.objects.get(id=profile_id)
         except Profile.DoesNotExist:
             return None
-        
+
+        # Capturer les anciennes valeurs AVANT modification
+        old_values = {}
+        for field in _AUDITED_PROFILE_FIELDS:
+            if field in profile_update_data:
+                old_values[field] = getattr(profile, field)
+
         # Update fields
         if 'name' in profile_update_data:
             profile.name = profile_update_data['name']
@@ -168,12 +180,21 @@ class ProfileService:
             profile.is_auditor = 1 if profile_update_data['is_auditor'] else 0
         if 'is_approver' in profile_update_data:
             profile.is_approver = 1 if profile_update_data['is_approver'] else 0
-        
+
         try:
             profile.save()
         except IntegrityError:
             raise ValueError(f"Un profil avec le nom '{profile_update_data.get('name', profile.name)}' existe déjà")
-        
+
+        # Construire changes pour l'audit
+        changes = {}
+        for field, old_val in old_values.items():
+            new_val = getattr(profile, field)
+            if old_val != new_val:
+                changes[field] = {"old": old_val, "new": new_val}
+
+        changes = sanitize_audit_changes(changes)  # Story 61.5 — défense en profondeur
+
         # Audit if user provided
         if user:
             AuditService.create_entry(
@@ -181,9 +202,9 @@ class ProfileService:
                 action_type=AuditActionType.PROFILE_UPDATED,
                 entity_type=AuditEntityType.PROFILE,
                 entity_id=profile.id,
-                details={'name': profile.name}
+                details={'name': profile.name, 'changes': changes}
             )
-        
+
         return profile
     
     @transaction.atomic

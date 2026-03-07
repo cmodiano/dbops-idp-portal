@@ -3,6 +3,7 @@ import { Suspense, useEffect } from 'react';
 import { Outlet } from 'react-router';
 import { ErrorBoundary } from '../ErrorBoundary';
 import { TopNav } from './TopNav';
+import './AppLayout.css';
 import { prefetchEngineIcons } from '../../utils/engineIconCache';
 import { setNotificationCallback } from '../../services/api_client';
 
@@ -27,6 +28,10 @@ export function AppLayout() {
 
   return (
     <Layout style={{ minHeight: '100vh', background: 'transparent' }}>
+      {/* Skip link for keyboard users (WCAG 2.4.1) */}
+      <a href="#main-content" className="skip-link">
+        Aller au contenu principal
+      </a>
       <Header
         style={{
           position: 'fixed',
@@ -45,6 +50,8 @@ export function AppLayout() {
         <TopNav />
       </Header>
       <Content
+        id="main-content"
+        tabIndex={-1}
         style={{
           marginTop: 64,
           padding: '32px 40px',

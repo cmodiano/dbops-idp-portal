@@ -182,7 +182,8 @@ function EngineIconSvgCell({ engine, svgSrc }: { engine: ActionEngine; svgSrc: s
             alt=""
             width={ENGINE_ICON_SIZE_COMPACT}
             height={ENGINE_ICON_SIZE_COMPACT}
-            style={{ flexShrink: 0, verticalAlign: 'middle', filter: imgFilter }}
+            className="engine-icon-img"
+            style={{ flexShrink: 0, verticalAlign: 'middle', filter: imgFilter, objectFit: 'contain' }}
             aria-hidden
           />
         </div>
@@ -238,7 +239,8 @@ export function renderEngineIcon(
               alt=""
               width={ENGINE_ICON_SIZE_COMPACT}
               height={ENGINE_ICON_SIZE_COMPACT}
-              style={{ flexShrink: 0, verticalAlign: 'middle' }}
+              className="engine-icon-img"
+              style={{ flexShrink: 0, verticalAlign: 'middle', objectFit: 'contain' }}
               aria-hidden
             />
           </div>

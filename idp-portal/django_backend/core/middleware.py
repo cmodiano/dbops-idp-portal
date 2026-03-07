@@ -50,26 +50,34 @@ def get_client_ip(request: HttpRequest) -> str:
     """
     Extract client IP address from request, handling proxies.
 
-    Checks X-Forwarded-For header first (for reverse proxy scenarios),
-    then falls back to REMOTE_ADDR.
+    Priority order (SEC-7 hardening):
+    1. X-Real-IP header (injected by Nginx from $remote_addr, cannot be spoofed)
+    2. X-Forwarded-For header (first IP, fallback when no Nginx proxy)
+    3. REMOTE_ADDR (direct connection fallback for development)
 
-    Logs a warning if X-Forwarded-For contains more than 2 IPs, as this
-    may indicate IP spoofing attempts.
+    In production with Nginx, X-Real-IP is always set and trusted.
+    X-Forwarded-For is only used as fallback (dev/test environments).
     """
+    # SEC-7: Prefer X-Real-IP — set by Nginx from $remote_addr, cannot be spoofed by clients
+    x_real_ip = str(request.META.get('HTTP_X_REAL_IP', '')).strip()
+    if x_real_ip:
+        return x_real_ip
+
+    # Fallback: X-Forwarded-For (dev environments without Nginx)
     x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
     if x_forwarded_for:
-        # X-Forwarded-For may contain multiple IPs; first is the client
         ips = [ip.strip() for ip in x_forwarded_for.split(',')]
-        # Log potential spoofing if more than 2 IPs (client + proxy)
-        if len(ips) > 2:
+        # Any multi-IP XFF without X-Real-IP is suspicious (potential spoofing)
+        if len(ips) > 1:
             logger.warning(
                 "suspicious_xff_header",
                 xff_header=x_forwarded_for,
                 ip_count=len(ips),
                 extracted_client_ip=ips[0],
-                message="X-Forwarded-For contains excessive IPs - potential spoofing"
+                message="X-Forwarded-For contains multiple IPs without X-Real-IP - potential spoofing or misconfigured proxy"
             )
         return str(ips[0])
+
     return str(request.META.get('REMOTE_ADDR', ''))
 
 

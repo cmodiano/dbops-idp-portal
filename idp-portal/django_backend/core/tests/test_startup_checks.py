@@ -140,3 +140,72 @@ class TestValidateRequiredSecrets:
             from core.startup_checks import validate_required_secrets
             # Should not raise because auth_dev_bypass=True skips SAML cert check
             validate_required_secrets(app_env='production', auth_dev_bypass=True)
+
+
+class TestValidateCorsConfig:
+    """Tests SEC-4: CORS config validated at startup in production."""
+
+    def test_59_4_a_production_cors_origin_missing_raises(self):
+        """59-4-a: DEBUG=False, CORS_ORIGIN absent → ImproperlyConfigured."""
+        with patch.dict('os.environ', {'CORS_ORIGIN': ''}, clear=False):
+            from core.startup_checks import validate_cors_config
+            with pytest.raises(ImproperlyConfigured, match="CORS_ORIGIN"):
+                validate_cors_config(debug=False)
+
+    def test_59_4_b_production_cors_origin_set_succeeds(self):
+        """59-4-b: DEBUG=False, CORS_ORIGIN défini → pas d'exception."""
+        with patch.dict('os.environ', {'CORS_ORIGIN': 'https://idp.internal'}, clear=False):
+            from core.startup_checks import validate_cors_config
+            validate_cors_config(debug=False)  # Should not raise
+
+    def test_59_4_c_development_cors_origin_missing_succeeds(self):
+        """59-4-c: DEBUG=True (dev mode), CORS_ORIGIN absent → pas d'exception."""
+        with patch.dict('os.environ', {'CORS_ORIGIN': ''}, clear=False):
+            from core.startup_checks import validate_cors_config
+            validate_cors_config(debug=True)  # Should not raise in dev
+
+    def test_59_4_d_production_cors_origin_whitespace_only_raises(self):
+        """59-4-d: DEBUG=False, CORS_ORIGIN='   ' (whitespace) → ImproperlyConfigured."""
+        with patch.dict('os.environ', {'CORS_ORIGIN': '   '}, clear=False):
+            from core.startup_checks import validate_cors_config
+            with pytest.raises(ImproperlyConfigured, match="CORS_ORIGIN"):
+                validate_cors_config(debug=False)
+
+    def test_59_4_e_production_cors_origin_placeholder_raises(self):
+        """59-4-e: DEBUG=False, CORS_ORIGIN='CHANGE_CORS_ORIGIN_URL' → ImproperlyConfigured."""
+        with patch.dict('os.environ', {'CORS_ORIGIN': 'CHANGE_CORS_ORIGIN_URL'}, clear=False):
+            from core.startup_checks import validate_cors_config
+            with pytest.raises(ImproperlyConfigured, match="CORS_ORIGIN"):
+                validate_cors_config(debug=False)
+
+    def test_59_4_f_production_cors_origin_localhost_dev_default_raises(self):
+        """59-4-f: DEBUG=False, CORS_ORIGIN='http://localhost:5173' → ImproperlyConfigured."""
+        with patch.dict('os.environ', {'CORS_ORIGIN': 'http://localhost:5173'}, clear=False):
+            from core.startup_checks import validate_cors_config
+            with pytest.raises(ImproperlyConfigured, match="CORS_ORIGIN"):
+                validate_cors_config(debug=False)
+
+
+class TestValidateSuperuserFallbackConfig:
+    """Tests SEC-5: ALLOW_SUPERUSER_FALLBACK interdit en production."""
+
+    def test_59_5_a_production_fallback_enabled_raises(self):
+        """59-5-a: DEBUG=False, ALLOW_SUPERUSER_FALLBACK=True → ImproperlyConfigured."""
+        from core.startup_checks import validate_superuser_fallback_config
+        with pytest.raises(ImproperlyConfigured, match="ALLOW_SUPERUSER_FALLBACK"):
+            validate_superuser_fallback_config(debug=False, allow_superuser_fallback=True)
+
+    def test_59_5_b_production_fallback_disabled_succeeds(self):
+        """59-5-b: DEBUG=False, ALLOW_SUPERUSER_FALLBACK=False → pas d'exception."""
+        from core.startup_checks import validate_superuser_fallback_config
+        validate_superuser_fallback_config(debug=False, allow_superuser_fallback=False)
+
+    def test_59_5_c_development_fallback_enabled_succeeds(self):
+        """59-5-c: DEBUG=True (dev mode), ALLOW_SUPERUSER_FALLBACK=True → pas d'exception."""
+        from core.startup_checks import validate_superuser_fallback_config
+        validate_superuser_fallback_config(debug=True, allow_superuser_fallback=True)
+
+    def test_59_5_d_development_fallback_disabled_succeeds(self):
+        """59-5-d: DEBUG=True (dev mode), ALLOW_SUPERUSER_FALLBACK=False → pas d'exception."""
+        from core.startup_checks import validate_superuser_fallback_config
+        validate_superuser_fallback_config(debug=True, allow_superuser_fallback=False)

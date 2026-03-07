@@ -117,6 +117,8 @@ class StepExecutor:
                 entity_type=AuditEntityType.EXECUTION,
                 entity_id=self.execution.id,
                 details={
+                    'execution_id': str(self.execution.id),
+                    'action_name': self.execution.action.name if self.execution.action else None,
                     'step_id': step_id,
                     'step_name': step_name,
                     'step_order': step_order,
@@ -557,6 +559,8 @@ class StepExecutor:
                 entity_type=AuditEntityType.EXECUTION,
                 entity_id=self.execution.id,
                 details={
+                    'execution_id': str(self.execution.id),
+                    'action_name': self.execution.action.name if self.execution.action else None,
                     'step_id': execution_step.id,
                     'step_name': execution_step.step_name,
                     'error': exc.message,
@@ -607,6 +611,8 @@ class StepExecutor:
                 entity_type=AuditEntityType.EXECUTION,
                 entity_id=self.execution.id,
                 details={
+                    'execution_id': str(self.execution.id),
+                    'action_name': self.execution.action.name if self.execution.action else None,
                     'step_id': execution_step.id,
                     'step_name': execution_step.step_name,
                     'policy_decision': decision_dict,
@@ -636,6 +642,8 @@ class StepExecutor:
                 entity_type=AuditEntityType.EXECUTION,
                 entity_id=self.execution.id,
                 details={
+                    'execution_id': str(self.execution.id),
+                    'action_name': self.execution.action.name if self.execution.action else None,
                     'step_id': execution_step.id,
                     'step_name': execution_step.step_name,
                     'policy_decision': decision_dict,

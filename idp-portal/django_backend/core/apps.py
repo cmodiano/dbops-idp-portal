@@ -6,7 +6,7 @@ class CoreConfig(AppConfig):
     name = 'core'
 
     def ready(self) -> None:
-        """Initialize structlog configuration and validate secrets on app startup."""
+        """Initialize structlog and validate startup configuration (secrets, rate limits, feature flags, CORS, superuser fallback)."""
         from core.logging import configure_structlog
         configure_structlog()
 
@@ -38,5 +38,22 @@ class CoreConfig(AppConfig):
         from core.startup_checks import validate_feature_flags_config
         try:
             validate_feature_flags_config()
+        except ImproperlyConfigured:
+            raise
+
+        # SEC-4: Validate CORS configuration at startup
+        from core.startup_checks import validate_cors_config
+        try:
+            validate_cors_config(debug=settings.DEBUG)
+        except ImproperlyConfigured:
+            raise
+
+        # SEC-5: Validate ALLOW_SUPERUSER_FALLBACK configuration at startup
+        from core.startup_checks import validate_superuser_fallback_config
+        try:
+            validate_superuser_fallback_config(
+                debug=settings.DEBUG,
+                allow_superuser_fallback=settings.ALLOW_SUPERUSER_FALLBACK,
+            )
         except ImproperlyConfigured:
             raise

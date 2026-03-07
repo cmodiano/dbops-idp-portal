@@ -568,9 +568,17 @@ class TestBroadcastExecutionUpdate:
 
     def test_import_error_is_swallowed(self) -> None:
         """ImportError (no channels installed) must not propagate."""
+        import builtins
         from executions.tasks import _broadcast_execution_update
 
-        with patch("builtins.__import__", side_effect=ImportError("no module")):
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "channels.layers":
+                raise ImportError("no module")
+            return real_import(name, *args, **kwargs)
+
+        with patch.object(builtins, "__import__", fake_import):
             # Must not raise
             _broadcast_execution_update(
                 execution_id=5,

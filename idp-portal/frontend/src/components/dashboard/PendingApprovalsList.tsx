@@ -31,9 +31,11 @@ interface ApprovalContextProps {
   parameters: Record<string, unknown> | null;
   targets?: { target_type: string; target_id: string; target_name: string }[];
   compact?: boolean;
+  /** When true (e.g. in PendingApprovalsList), approval is required by definition; don't show misleading "Non" from step config. */
+  isPendingApproval?: boolean;
 }
 
-function ApprovalContext({ parameters, targets, compact }: ApprovalContextProps) {
+function ApprovalContext({ parameters, targets, compact, isPendingApproval }: ApprovalContextProps) {
   const { targets: paramTargets, envConfig, stepParams, businessParams } = partitionParameters(parameters);
 
   // Use targets prop (rich objects) first, fallback to _targets from parameters
@@ -58,6 +60,43 @@ function ApprovalContext({ parameters, targets, compact }: ApprovalContextProps)
     }
     return formatParamValue(value);
   };
+
+  const envConfigEntries = hasEnvConfig ? Object.entries(envConfig!) : [];
+
+  if (compact) {
+    const parts: string[] = [];
+    if (hasRichTargets) {
+      parts.push(`Cibles: ${targets!.map(t => t.target_name || t.target_id).join(', ')}`);
+    } else if (hasFallbackTargets) {
+      parts.push(`Cibles: ${paramTargets.join(', ')}`);
+    }
+    if (hasStepParams) {
+      const stepLines = Object.entries(stepParams!).map(([stepOrder, stepData]) => {
+        const params = stepData && typeof stepData === 'object' && 'parameters' in stepData
+          ? (stepData as { parameters: Record<string, unknown> }).parameters
+          : null;
+        const paramStr = params
+          ? Object.entries(params).map(([pk, pv]) => `${humanizeKey(pk)}=${formatParamValue(pv)}`).join(', ')
+          : '';
+        return paramStr ? `Étape ${stepOrder}: ${paramStr}` : '';
+      }).filter(Boolean);
+      if (stepLines.length) parts.push(stepLines.join(' | '));
+    }
+    if (hasBusinessParams) {
+      parts.push(Object.entries(businessParams).map(([k, v]) => `${humanizeKey(k)}=${formatParamValue(v)}`).join(', '));
+    }
+    if (envConfigEntries.length) {
+      const impact = envConfig!.impact_level != null
+        ? IMPACT_LEVEL_LABELS[String(envConfig!.impact_level)] || humanizeKey(String(envConfig!.impact_level))
+        : null;
+      if (impact) parts.push(`Impact: ${impact}`);
+    }
+    return (
+      <div style={containerStyle}>
+        <Text type="secondary">{parts.join(' · ')}</Text>
+      </div>
+    );
+  }
 
   return (
     <div style={containerStyle}>
@@ -84,7 +123,7 @@ function ApprovalContext({ parameters, targets, compact }: ApprovalContextProps)
         <div style={{ marginBottom: 4 }}>
           <Text strong style={{ fontSize: 12 }}>Paramètres :</Text>
           {Object.entries(businessParams).map(([k, v]) => (
-            <div key={k} style={{ fontSize: 12, paddingLeft: compact ? 0 : 8 }}>
+            <div key={k} style={{ fontSize: 12, paddingLeft: 8 }}>
               <Text type="secondary">{humanizeKey(k)} :</Text> {formatParamValue(v)}
             </div>
           ))}
@@ -100,10 +139,10 @@ function ApprovalContext({ parameters, targets, compact }: ApprovalContextProps)
               ? (stepData as { parameters: Record<string, unknown> }).parameters
               : null;
             return (
-            <div key={stepOrder} style={{ fontSize: 12, paddingLeft: compact ? 0 : 8 }}>
+            <div key={stepOrder} style={{ fontSize: 12, paddingLeft: 8 }}>
               <Text type="secondary">Étape {stepOrder} :</Text>
               {params && Object.entries(params).map(([pk, pv]) => (
-                <div key={pk} style={{ paddingLeft: compact ? 8 : 16 }}>
+                <div key={pk} style={{ paddingLeft: 16 }}>
                   {humanizeKey(pk)} : {formatParamValue(pv)}
                 </div>
               ))}
@@ -113,13 +152,14 @@ function ApprovalContext({ parameters, targets, compact }: ApprovalContextProps)
         </div>
       )}
 
-      {/* Env config */}
-      {hasEnvConfig && (
+      {/* Env config - when isPendingApproval, show requires_approval as Oui (workflow has approval) */}
+      {envConfigEntries.length > 0 && (
         <div>
           <Text strong style={{ fontSize: 12 }}>Configuration :</Text>
-          {Object.entries(envConfig!).map(([k, v]) => (
-            <div key={k} style={{ fontSize: 12, paddingLeft: compact ? 0 : 8 }}>
-              <Text type="secondary">{ENV_CONFIG_LABELS[k] || humanizeKey(k)} :</Text> {formatEnvConfigValue(k, v)}
+          {envConfigEntries.map(([k, v]) => (
+            <div key={k} style={{ fontSize: 12, paddingLeft: 8 }}>
+              <Text type="secondary">{ENV_CONFIG_LABELS[k] || humanizeKey(k)} :</Text>{' '}
+              {isPendingApproval && k === 'requires_approval' ? 'Oui' : formatEnvConfigValue(k, v)}
             </div>
           ))}
         </div>
@@ -215,7 +255,7 @@ export function PendingApprovalsList({
       key: 'context',
       render: (_: unknown, record: ExecutionResponse) => (
         <Space orientation="vertical" size={2} style={{ fontSize: 12 }}>
-          <ApprovalContext parameters={record.parameters} targets={record.targets} compact />
+          <ApprovalContext parameters={record.parameters} targets={record.targets} compact isPendingApproval />
         </Space>
       ),
     },
@@ -297,7 +337,7 @@ export function PendingApprovalsList({
             <p style={{ color: '#666', fontSize: 13 }}>
               L'exécution sera lancée immédiatement après approbation.
             </p>
-            <ApprovalContext parameters={selectedExecution.parameters} targets={selectedExecution.targets} />
+            <ApprovalContext parameters={selectedExecution.parameters} targets={selectedExecution.targets} isPendingApproval />
           </div>
         )}
         <TextArea
@@ -334,7 +374,7 @@ export function PendingApprovalsList({
             <p style={{ color: '#666', fontSize: 13 }}>
               Le demandeur sera notifié du refus.
             </p>
-            <ApprovalContext parameters={selectedExecution.parameters} targets={selectedExecution.targets} />
+            <ApprovalContext parameters={selectedExecution.parameters} targets={selectedExecution.targets} isPendingApproval />
           </div>
         )}
         <TextArea

@@ -19,6 +19,7 @@ from catalog.models import Action, ActionStatus, Tag, ActionTag, ActionItemType,
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.middleware import get_correlation_id
+from core.utils import sanitize_audit_changes
 from core.exceptions import ConflictError, BadRequestError
 from idp_auth.models import User
 
@@ -28,6 +29,15 @@ logger = structlog.get_logger(__name__)
 class InvalidTransitionError(Exception):
     """Raised when an invalid status transition is attempted."""
     pass
+
+
+# Story 61.2: Champs scalaires audités lors d'une mise à jour d'action
+_AUDITED_ACTION_FIELDS = (
+    'name', 'description', 'engine', 'platform',
+    'documentation_md', 'default_impact_level', 'integration_id',
+)
+# Story 61.2: Champs JSON volumineux — tracés uniquement comme { "updated": true }
+_JSON_ACTION_FIELDS = frozenset({'parameters_schema', 'impact_rules', 'remediation_rules'})
 
 
 # Valid transitions mapping: {current_status: {transition: new_status}}
@@ -363,6 +373,18 @@ class CatalogService:
         except Action.DoesNotExist:
             return None
 
+        # Story 61.2: Capturer les anciennes valeurs AVANT modification
+        old_values = {}
+        for field in _AUDITED_ACTION_FIELDS:
+            if field in action_update_data:
+                if field == 'integration_id':
+                    old_values[field] = action.integration_id
+                else:
+                    old_values[field] = getattr(action, field)
+        # Champs JSON : présence dans la requête = marqué "updated: true" (design intentionnel —
+        # évite la comparaison coûteuse de grands objets JSON ; AC4 accepte ce compromis).
+        json_fields_updated = [f for f in _JSON_ACTION_FIELDS if f in action_update_data]
+
         # Update fields
         if 'name' in action_update_data:
             action.name = action_update_data['name']
@@ -411,6 +433,20 @@ class CatalogService:
         if 'tags' in action_update_data:
             self._sync_tags(action, action_update_data['tags'])
         
+        # Story 61.2: Construire changes pour l'audit
+        changes = {}
+        for field, old_val in old_values.items():
+            if field == 'integration_id':
+                new_val = action.integration_id
+            else:
+                new_val = getattr(action, field)
+            if old_val != new_val:
+                changes[field] = {'old': old_val, 'new': new_val}
+        for json_field in json_fields_updated:
+            changes[json_field] = {'updated': True}
+
+        changes = sanitize_audit_changes(changes)  # Story 61.5 — défense en profondeur
+
         # Audit (Story 2.31 L1: add correlation_id for consistency)
         correlation_id = get_correlation_id()
         AuditService.create_entry(
@@ -418,7 +454,7 @@ class CatalogService:
             action_type=AuditActionType.ACTION_UPDATED,
             entity_type=AuditEntityType.ACTION,
             entity_id=action.id,
-            details={'name': action.name},
+            details={'name': action.name, 'changes': changes},
             correlation_id=correlation_id,
         )
 
@@ -812,6 +848,9 @@ class CatalogService:
         if action.status not in [ActionStatus.DRAFT, ActionStatus.DISABLED]:
             raise ValueError("Les étapes ne peuvent être modifiées que pour une action en brouillon ou désactivée")
 
+        # Story 61.2: Capturer le nombre d'étapes AVANT modification
+        steps_count_before = len(action.execution_steps) if action.execution_steps else 0
+
         # Update execution_steps if provided
         if steps is not None:
             # Story 16.2: Validate workflow steps if item_type is workflow
@@ -830,12 +869,22 @@ class CatalogService:
 
         # Audit if user provided
         if user:
+            # Story 61.2: Enrichir l'audit avec steps_count_before/after
+            steps_count_after = len(steps) if steps is not None else steps_count_before
             AuditService.create_entry(
                 user_id=str(user.id),
                 action_type=AuditActionType.ACTION_UPDATED,
                 entity_type=AuditEntityType.ACTION,
                 entity_id=action.id,
-                details={'updated_fields': ['execution_steps']}
+                details={
+                    'name': action.name,
+                    'changes': {
+                        'execution_steps': {
+                            'steps_count_before': steps_count_before,
+                            'steps_count_after': steps_count_after,
+                        }
+                    }
+                }
             )
 
         return action  # type: ignore[no-any-return]

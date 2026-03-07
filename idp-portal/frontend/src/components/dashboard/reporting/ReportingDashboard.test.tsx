@@ -38,6 +38,8 @@ function renderWithRouter(component: React.ReactNode) {
 }
 
 // Mock dashboard service (Story 9.4: fetchStats removed - StatCards moved to ExecutionsPage)
+// Story 60.3: fetchStatsCatalogue and fetchStatsAdoption added for AdminPlatformSection
+// Story 60.9: fetchStatsOperations, fetchStatsApprobations, fetchStatsPlanifiees added for OperationsActivitySection
 vi.mock('../../../services/dashboard_service', () => ({
   fetchStatsByTechnology: vi.fn(),
   fetchStatsByEnvironment: vi.fn(),
@@ -46,6 +48,11 @@ vi.mock('../../../services/dashboard_service', () => ({
   exportDashboardCSV: vi.fn(),
   exportDashboardPDF: vi.fn(),
   fetchComparison: vi.fn(),
+  fetchStatsCatalogue: vi.fn(),
+  fetchStatsAdoption: vi.fn(),
+  fetchStatsOperations: vi.fn(),     // Story 60.9
+  fetchStatsApprobations: vi.fn(),   // Story 60.9
+  fetchStatsPlanifiees: vi.fn(),     // Story 60.9
 }));
 
 // Story 9.4: mockStats removed - StatCards moved to ExecutionsPage
@@ -82,6 +89,13 @@ describe('ReportingDashboard', () => {
     vi.mocked(dashboardService.fetchFilterOptions).mockResolvedValue(mockFilterOptions);
     vi.mocked(dashboardService.exportDashboardCSV).mockResolvedValue();
     vi.mocked(dashboardService.exportDashboardPDF).mockResolvedValue();
+    // Story 60.3: mock AdminPlatformSection services
+    vi.mocked(dashboardService.fetchStatsCatalogue).mockResolvedValue({
+      by_status: [], by_item_type: [], by_engine: [], by_category: [], evolution: [],
+    });
+    vi.mocked(dashboardService.fetchStatsAdoption).mockResolvedValue({
+      executions_by_profile: [], active_users_by_profile: [], adoption_trend: [],
+    });
   });
 
   // Story 9.4: StatCards tests removed - moved to ExecutionsPage.test.tsx
@@ -283,6 +297,23 @@ describe('ReportingDashboard — coverage extension', () => {
     vi.mocked(dashboardService.fetchFilterOptions).mockResolvedValue(mockFilterOptions);
     vi.mocked(dashboardService.exportDashboardCSV).mockResolvedValue();
     vi.mocked(dashboardService.exportDashboardPDF).mockResolvedValue();
+    // Story 60.3: mock AdminPlatformSection services
+    vi.mocked(dashboardService.fetchStatsCatalogue).mockResolvedValue({
+      by_status: [], by_item_type: [], by_engine: [], by_category: [], evolution: [],
+    });
+    vi.mocked(dashboardService.fetchStatsAdoption).mockResolvedValue({
+      executions_by_profile: [], active_users_by_profile: [], adoption_trend: [],
+    });
+    // Story 60.9: mock OperationsActivitySection services
+    vi.mocked(dashboardService.fetchStatsOperations).mockResolvedValue({
+      avg_execution_time_s: null, top_actions_by_execution: [], top_actions_by_failure: [], by_platform: [],
+    });
+    vi.mocked(dashboardService.fetchStatsApprobations).mockResolvedValue({
+      approved_count: 0, rejected_count: 0, approval_rate: null, avg_approval_delay_s: null,
+    });
+    vi.mocked(dashboardService.fetchStatsPlanifiees).mockResolvedValue({
+      scheduled_count: 0, manual_count: 0, scheduled_rate: null, by_recurrence_type: [],
+    });
   });
 
   it('closes error alert when close button is clicked', async () => {
@@ -429,6 +460,23 @@ describe('ReportingDashboard — additional coverage 55.7', () => {
     vi.mocked(dashboardService.fetchComparison).mockResolvedValue(mockComparisonResult as never);
     vi.mocked(dashboardService.exportDashboardCSV).mockResolvedValue();
     vi.mocked(dashboardService.exportDashboardPDF).mockResolvedValue();
+    // Story 60.3: mock AdminPlatformSection services
+    vi.mocked(dashboardService.fetchStatsCatalogue).mockResolvedValue({
+      by_status: [], by_item_type: [], by_engine: [], by_category: [], evolution: [],
+    });
+    vi.mocked(dashboardService.fetchStatsAdoption).mockResolvedValue({
+      executions_by_profile: [], active_users_by_profile: [], adoption_trend: [],
+    });
+    // Story 60.9: mock OperationsActivitySection services
+    vi.mocked(dashboardService.fetchStatsOperations).mockResolvedValue({
+      avg_execution_time_s: null, top_actions_by_execution: [], top_actions_by_failure: [], by_platform: [],
+    });
+    vi.mocked(dashboardService.fetchStatsApprobations).mockResolvedValue({
+      approved_count: 0, rejected_count: 0, approval_rate: null, avg_approval_delay_s: null,
+    });
+    vi.mocked(dashboardService.fetchStatsPlanifiees).mockResolvedValue({
+      scheduled_count: 0, manual_count: 0, scheduled_rate: null, by_recurrence_type: [],
+    });
   });
 
   it('handleCompare — invoque fetchComparison et affiche les résultats (lines 117-152, 299-331)', async () => {

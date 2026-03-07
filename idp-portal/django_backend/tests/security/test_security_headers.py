@@ -12,6 +12,7 @@ Validates:
 import uuid
 
 import pytest
+import structlog.testing
 from rest_framework import status
 
 from tests.security.conftest import make_auth_client
@@ -156,26 +157,20 @@ class TestCorrelationIdPropagation:
 class TestAuditMiddleware:
     """AuditAuthMiddleware logs 401 on /api/v1/auth paths."""
 
-    def test_401_on_auth_endpoint_logged(self, anon_client, caplog):
+    def test_401_on_auth_endpoint_logged(self, anon_client):
         """401 on /api/v1/auth/* triggers audit log."""
-        # Use caplog to capture structlog output
-        with caplog.at_level('WARNING'):
+        with structlog.testing.capture_logs() as cap_logs:
             response = anon_client.get('/api/v1/auth/me/')
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
         # AuditAuthMiddleware logs "auth_unauthorized_access" at WARNING level
-        assert any(
-            'auth_unauthorized_access' in record.message
-            for record in caplog.records
-        )
+        auth_events = [e for e in cap_logs if e.get('event') == 'auth_unauthorized_access']
+        assert len(auth_events) >= 1
 
-    def test_401_on_non_auth_endpoint_not_logged(self, anon_client, caplog):
+    def test_401_on_non_auth_endpoint_not_logged(self, anon_client):
         """401 on non-auth endpoint does NOT trigger AuditAuthMiddleware."""
-        with caplog.at_level('WARNING'):
+        with structlog.testing.capture_logs() as cap_logs:
             response = anon_client.get('/api/v1/executions/')
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
         # AuditAuthMiddleware only logs for /api/v1/auth paths
-        auth_audit_records = [
-            r for r in caplog.records
-            if 'auth_unauthorized_access' in r.message
-        ]
-        assert len(auth_audit_records) == 0
+        auth_audit_events = [e for e in cap_logs if e.get('event') == 'auth_unauthorized_access']
+        assert len(auth_audit_events) == 0

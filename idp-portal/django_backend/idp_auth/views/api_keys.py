@@ -17,6 +17,7 @@ from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiRespon
 
 from idp_auth.models import User, APIKey
 from idp_auth.serializers import APIKeyCreateSerializer, APIKeyListSerializer
+from profiles.models import Profile
 from idp_auth.jwt_utils import create_access_token
 from core.exceptions import ForbiddenError, NotFoundError, UnauthorizedError
 from core.services import AuditService
@@ -91,11 +92,28 @@ class APIKeyTokenView(APIView):
             )
 
         user = api_key.user
+
+        # SEC-3 FIX: Resolve real AD groups from Profile DB instead of hardcoding [user.profile].
+        # API key users have no LDAP session, so we resolve profiles by name match.
+        resolved_profiles = list(Profile.objects.find_by_ad_groups([user.profile]))
+        ad_groups = [p.ad_group for p in resolved_profiles if p.ad_group]
+        if not ad_groups:
+            # Fallback: no Profile found (or all resolved profiles have empty ad_group).
+            # This can occur if Profile table is out of sync with user.profile field.
+            if user.profile:
+                ad_groups = [user.profile]
+            logger.warning(
+                'api_key_token_no_profile_found',
+                user_profile=user.profile,
+                user_id=user.id,
+                correlation_id=correlation_id,
+            )
+
         token_data = {
             'sub': str(user.id),
             'username': user.username,
             'profile': user.profile,
-            'ad_groups': [user.profile],
+            'ad_groups': ad_groups,
         }
         access_token = create_access_token(token_data)
         expires_in = settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60

@@ -82,33 +82,39 @@ export function WizardStep3ImpactChangement({
         />
       </Form.Item>
 
-      {/* Story 28.4: Règles métier — sélecteur prédéfini (filtré par plateforme) */}
-      <Form.Item
-        label="Règles métier"
-        tooltip="Choisissez une règle prédéfinie du catalogue (Admin → Règles métier). Seules les règles liées à votre plateforme d'exécution sont proposées."
-      >
-        <BusinessRulePolicySelector
-          policyId={businessRulePolicyId}
-          onPolicyIdChange={setBusinessRulePolicyId}
-          stepType={
-            selectedIntegration?.type
-            ?? (editAction?.integration_id ? getIntegrationById(editAction.integration_id)?.type : undefined)
-            ?? (editAction?.platform ? platformCodeToStepType(editAction.platform) : undefined)
-          }
-          disabled={isReadOnly}
-        />
-      </Form.Item>
+      {/* Règles métier et Notifications : uniquement pour les actions (pas les workflows).
+          Pour les workflows, ce sont des étapes indépendantes (evaluation, service_call notification). */}
+      {!_isWorkflow && (
+        <>
+          {/* Story 28.4: Règles métier — sélecteur prédéfini (filtré par plateforme) */}
+          <Form.Item
+            label="Règles métier"
+            tooltip="Choisissez une règle prédéfinie du catalogue (Admin → Règles métier). Seules les règles liées à votre plateforme d'exécution sont proposées."
+          >
+            <BusinessRulePolicySelector
+              policyId={businessRulePolicyId}
+              onPolicyIdChange={setBusinessRulePolicyId}
+              stepType={
+                selectedIntegration?.type
+                ?? (editAction?.integration_id ? getIntegrationById(editAction.integration_id)?.type : undefined)
+                ?? (editAction?.platform ? platformCodeToStepType(editAction.platform) : undefined)
+              }
+              disabled={isReadOnly}
+            />
+          </Form.Item>
 
-      {/* Story 31.8: Notification configuration */}
-      <Form.Item
-        label="Notifications"
-        tooltip="Configurez les canaux de notification (email, Teams, page) et leurs conditions."
-      >
-        <NotificationConfigSection
-          value={notificationConfig}
-          onChange={isReadOnly ? () => {} : setNotificationConfig}
-        />
-      </Form.Item>
+          {/* Story 31.8: Notification configuration */}
+          <Form.Item
+            label="Notifications"
+            tooltip="Configurez les canaux de notification (email, Teams, page) et leurs conditions."
+          >
+            <NotificationConfigSection
+              value={notificationConfig}
+              onChange={isReadOnly ? () => {} : setNotificationConfig}
+            />
+          </Form.Item>
+        </>
+      )}
     </Space>
   );
 }

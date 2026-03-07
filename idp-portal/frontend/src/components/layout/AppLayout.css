@@ -1,0 +1,26 @@
+/**
+ * Skip link for keyboard navigation (WCAG 2.4.1 Bypass Blocks).
+ * Visually hidden until focused; appears top-left when user tabs to it.
+ */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  z-index: 9999;
+  padding: 12px 20px;
+  background: var(--ant-color-primary);
+  color: #fff;
+  font-weight: 500;
+  font-size: 14px;
+  border-radius: 8px;
+  text-decoration: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transition: left 0.15s ease;
+}
+
+.skip-link:focus {
+  position: fixed;
+  left: 16px;
+  top: 16px;
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}

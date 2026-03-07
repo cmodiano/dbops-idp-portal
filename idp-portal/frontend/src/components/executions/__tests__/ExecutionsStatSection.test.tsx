@@ -9,7 +9,7 @@ import type { DashboardStats } from '../../../types/api';
 
 // Mock StatCard to render props as text
 vi.mock('../../dashboard/StatCard', () => ({
-  StatCard: ({ label, value, loading, suffix, tooltip, zeroText }: { label: string; value: number; loading?: boolean; suffix?: string; tooltip?: string; zeroText?: string }) => (
+  StatCard: ({ label, value, loading, suffix, tooltip, zeroText }: { label: string; value: number | string; loading?: boolean; suffix?: string; tooltip?: string; zeroText?: string }) => (
     <div data-testid="stat-card" data-loading={loading} data-tooltip={tooltip} data-zero-text={zeroText}>
       <span data-testid="stat-label">{label}</span>
       <span data-testid="stat-value">{value}{suffix}</span>
@@ -161,5 +161,15 @@ describe('Story 46.5 — Tooltips explicatifs sur les StatCards', () => {
       c.querySelector('[data-testid="stat-label"]')?.textContent === 'Exécutions du jour',
     );
     expect(jourCard?.getAttribute('data-zero-text')).toBe("Aucune pour l'instant");
+  });
+});
+
+describe('ExecutionsStatSection — Durée moy. d\'exéc. only in statistics view', () => {
+  it('does not render duration StatCard or analytics link (those are in OperationsActivitySection)', () => {
+    render(<ExecutionsStatSection {...defaultProps} />);
+
+    const labels = screen.getAllByTestId('stat-label').map((el) => el.textContent);
+    expect(labels).not.toContain("Durée moy. d'exéc.");
+    expect(screen.queryByRole('link')).toBeNull();
   });
 });

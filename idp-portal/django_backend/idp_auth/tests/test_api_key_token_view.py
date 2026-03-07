@@ -5,7 +5,7 @@ POST /api/v1/auth/token - Exchange API key for JWT.
 
 import pytest
 from datetime import datetime, timezone
-from unittest.mock import patch
+from unittest.mock import patch, ANY
 
 from jose import jwt
 from django.test import TestCase, override_settings
@@ -13,6 +13,7 @@ from rest_framework.test import APIClient
 from rest_framework import status
 
 from idp_auth.models import User, APIKey
+from profiles.models import Profile
 
 
 @pytest.mark.django_db
@@ -30,6 +31,11 @@ class TestAPIKeyTokenView(TestCase):
             username='api_user',
             display_name='API User',
             profile='dba_applicatif',
+        )
+        # SEC-3: Create matching Profile so ad_groups uses real ad_group value
+        self.profile = Profile.objects.create(
+            name='dba_applicatif',
+            ad_group='GRP-DBA-APPLICATIF',
         )
         self.api_key_instance, self.raw_key = APIKey.objects.create_key(
             user=self.user,
@@ -97,7 +103,9 @@ class TestAPIKeyTokenView(TestCase):
         self.assertEqual(payload['sub'], str(self.user.id))
         self.assertEqual(payload['username'], self.user.username)
         self.assertEqual(payload['profile'], self.user.profile)
-        self.assertIn(self.user.profile, payload['ad_groups'])
+        # SEC-3: ad_groups now contains real ad_group value from Profile DB, not user.profile string
+        self.assertIn(self.profile.ad_group, payload['ad_groups'])
+        self.assertNotIn(self.user.profile, payload['ad_groups'])
 
     def test_rate_limit_throttle_applied(self):
         with patch('core.throttling.ApiKeyTokenThrottle.allow_request', return_value=False), \
@@ -146,3 +154,97 @@ class TestAPIKeyTokenView(TestCase):
                 args, kwargs = call
                 all_values = str(args) + str(kwargs)
                 self.assertNotIn('bad-key-should-not-log', all_values, 'raw_key found in failure log')
+
+
+@pytest.mark.django_db
+@override_settings(
+    JWT_SECRET_KEY='test-secret-key',
+    JWT_ALGORITHM='HS256',
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30,
+    JWT_REFRESH_TOKEN_EXPIRE_HOURS=8,
+    RATELIMIT_ENABLED=False,
+)
+class TestAPIKeyTokenViewSEC3(TestCase):
+    """Tests SEC-3: API key token includes real ad_groups from Profile DB."""
+
+    def setUp(self):
+        self.client = APIClient()
+
+    def _create_user_and_key(self, profile_name='dba_applicatif'):
+        user = User.objects.create(username='api_user_sec3', profile=profile_name)
+        api_key, raw_key = APIKey.objects.create_key(user=user, name='test-key')
+        return user, api_key, raw_key
+
+    def test_59_3_a_profile_found_in_db_uses_real_ad_group(self):
+        """59-3-a: Profile found in DB → ad_groups contains p.ad_group, not user.profile."""
+        profile, _ = Profile.objects.get_or_create(
+            name='dba_applicatif',
+            defaults={'ad_group': 'CN=GRP-DBA-APPLICATIF,OU=Groups,DC=example,DC=com'},
+        )
+        user, _, raw_key = self._create_user_and_key('dba_applicatif')
+
+        response = self.client.post('/api/v1/auth/token/', HTTP_X_API_KEY=raw_key)
+
+        self.assertEqual(response.status_code, 200)
+        token = response.json()['data']['access_token']
+        payload = jwt.decode(token, 'test-secret-key', algorithms=['HS256'])
+
+        self.assertIn(profile.ad_group, payload['ad_groups'])
+        self.assertNotIn('dba_applicatif', payload['ad_groups'])
+
+    def test_59_3_b_no_profile_in_db_fallback_to_user_profile(self):
+        """59-3-b: No Profile in DB → fallback to [user.profile], warning logged."""
+        user, _, raw_key = self._create_user_and_key('unknown_profile')
+
+        with patch('idp_auth.views.api_keys.logger') as mock_logger:
+            response = self.client.post('/api/v1/auth/token/', HTTP_X_API_KEY=raw_key)
+
+        self.assertEqual(response.status_code, 200)
+        token = response.json()['data']['access_token']
+        payload = jwt.decode(token, 'test-secret-key', algorithms=['HS256'])
+
+        self.assertIn('unknown_profile', payload['ad_groups'])
+
+        mock_logger.warning.assert_any_call(
+            'api_key_token_no_profile_found',
+            user_profile='unknown_profile',
+            user_id=user.id,
+            correlation_id=ANY,
+        )
+
+    def test_59_3_c_multi_profile_all_ad_groups_included(self):
+        """59-3-c: Two profiles resolved → ad_groups contains both ad_group values."""
+        profile1 = Profile.objects.create(name='dbops', ad_group='GRP-DBOPS-PRIMARY')
+        # Second profile that also matches 'dbops' via ad_group field
+        profile2 = Profile.objects.create(name='dbops_extended', ad_group='dbops')
+
+        user, _, raw_key = self._create_user_and_key('dbops')
+
+        response = self.client.post('/api/v1/auth/token/', HTTP_X_API_KEY=raw_key)
+
+        self.assertEqual(response.status_code, 200)
+        token = response.json()['data']['access_token']
+        payload = jwt.decode(token, 'test-secret-key', algorithms=['HS256'])
+
+        self.assertIn(profile1.ad_group, payload['ad_groups'])
+        self.assertIn(profile2.ad_group, payload['ad_groups'])
+
+    def test_59_3_d_other_token_fields_unchanged(self):
+        """59-3-d: sub, username, profile fields unchanged by SEC-3 fix."""
+        # Profile intentionally not created: ad_groups is populated from user.profile fallback
+        # when no Profile exists in DB (tests token structure without Profile resolution).
+        user, _, raw_key = self._create_user_and_key('dba_applicatif')
+
+        response = self.client.post('/api/v1/auth/token/', HTTP_X_API_KEY=raw_key)
+
+        self.assertEqual(response.status_code, 200)
+        token = response.json()['data']['access_token']
+        payload = jwt.decode(token, 'test-secret-key', algorithms=['HS256'])
+
+        self.assertEqual(payload['sub'], str(user.id))
+        self.assertEqual(payload['username'], user.username)
+        self.assertEqual(payload['profile'], user.profile)
+        # ad_groups must be present and non-empty (actual value depends on DB state for 'dba_applicatif')
+        self.assertIn('ad_groups', payload)
+        self.assertIsInstance(payload['ad_groups'], list)
+        self.assertGreater(len(payload['ad_groups']), 0)

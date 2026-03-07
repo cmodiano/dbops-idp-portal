@@ -32,3 +32,56 @@ def ensure_utc_isoformat(dt: datetime | None) -> str | None:
 
     dt_utc = dt.astimezone(dt_timezone.utc)
     return dt_utc.isoformat().replace("+00:00", "Z")
+
+
+# --- Audit sanitization (Story 61.5) ---
+
+_SENSITIVE_AUDIT_FIELD_KEYWORDS = frozenset({
+    'password', 'passwd', 'token', 'secret', 'credential',
+    'api_key', 'apikey', 'config', 'private_key', 'client_secret',
+})
+
+# Champs dont le nom contient un mot-clé sensible mais qui ne sont pas
+# des secrets (références structurelles, endpoints, clés étrangères).
+_NON_SENSITIVE_AUDIT_FIELDS = frozenset({
+    'token_url',        # URL du endpoint OAuth — pas un token
+    'secret_service_id',  # Clé étrangère vers le vault — pas le secret lui-même
+})
+
+
+def _is_sensitive_audit_field(field_name: str) -> bool:
+    """Return True if field_name contains any sensitive keyword (case-insensitive)."""
+    if field_name in _NON_SENSITIVE_AUDIT_FIELDS:
+        return False
+    field_lower = field_name.lower()
+    return any(kw in field_lower for kw in _SENSITIVE_AUDIT_FIELD_KEYWORDS)
+
+
+def sanitize_audit_changes(changes: dict) -> dict:
+    """Masque les valeurs old/new des champs sensibles dans un dict changes d'audit.
+
+    Pour chaque champ dont le nom contient un mot-clé sensible (password, token,
+    secret, credential, api_key, config, etc.), remplace old et new par "***".
+    Les champs non-sensibles passent sans modification.
+
+    Args:
+        changes: Dict au format {field: {"old": ..., "new": ...}} ou
+                 {field: {"updated": True}} (champs JSON volumineux — non masqués).
+
+    Returns:
+        Nouveau dict avec les champs sensibles masqués.
+
+    Example:
+        >>> sanitize_audit_changes({"name": {"old": "A", "new": "B"},
+        ...                         "credential_ref": {"old": "ref1", "new": "ref2"}})
+        {"name": {"old": "A", "new": "B"}, "credential_ref": {"old": "***", "new": "***"}}
+    """
+    if not changes:
+        return changes
+    sanitized = {}
+    for field, value in changes.items():
+        if _is_sensitive_audit_field(field) and isinstance(value, dict) and 'old' in value:
+            sanitized[field] = {"old": "***", "new": "***"}
+        else:
+            sanitized[field] = value
+    return sanitized

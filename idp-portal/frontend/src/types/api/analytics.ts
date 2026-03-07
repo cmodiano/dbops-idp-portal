@@ -147,3 +147,112 @@ export interface ComparisonFilters {
   /** End date of second period (for period dimension). */
   period2End?: string;
 }
+
+// === Stats Catalogue Admin Types (Story 60.1 / 60.3) ===
+
+export interface StatsCatalogueByStatus {
+  status: string;
+  count: number;
+}
+
+export interface StatsCatalogueByItemType {
+  item_type: string;
+  count: number;
+}
+
+export interface StatsCatalogueByEngine {
+  engine: string;
+  count: number;
+}
+
+export interface StatsCatalogueByCategory {
+  category: string | null;
+  count: number;
+}
+
+export interface StatsCatalogueEvolutionPoint {
+  week_start: string; // YYYY-MM-DD
+  created_count: number;
+  published_count: number;
+}
+
+export interface StatsCatalogueData {
+  by_status: StatsCatalogueByStatus[];
+  by_item_type: StatsCatalogueByItemType[];
+  by_engine: StatsCatalogueByEngine[];
+  by_category: StatsCatalogueByCategory[];
+  evolution: StatsCatalogueEvolutionPoint[];
+}
+
+// === Stats Adoption Admin Types (Story 60.2 / 60.3) ===
+
+export interface StatsAdoptionByProfile {
+  profile: string;
+  count: number;
+}
+
+export interface StatsAdoptionActiveUser {
+  profile: string;
+  user_count: number;
+}
+
+export interface StatsAdoptionTrendPoint {
+  week_start: string; // YYYY-MM-DD
+  profile: string;
+  count: number;
+}
+
+export interface StatsAdoptionData {
+  executions_by_profile: StatsAdoptionByProfile[];
+  active_users_by_profile: StatsAdoptionActiveUser[];
+  adoption_trend: StatsAdoptionTrendPoint[];
+}
+
+// === Stats Operations Types (Story 60.5 / 60.9) ===
+
+export interface StatsOperationsActionItem {
+  action_id: number;
+  action_name: string;
+  execution_count: number;
+}
+
+export interface StatsOperationsFailureItem {
+  action_id: number;
+  action_name: string;
+  failure_count: number;
+}
+
+export interface StatsOperationsPlatformItem {
+  platform: string;
+  count: number;
+}
+
+export interface StatsOperationsData {
+  avg_execution_time_s: number | null;
+  top_actions_by_execution: StatsOperationsActionItem[];
+  top_actions_by_failure: StatsOperationsFailureItem[];
+  by_platform: StatsOperationsPlatformItem[];
+}
+
+// === Stats Approbations Types (Story 60.6 / 60.9) ===
+
+export interface StatsApprobationsData {
+  approved_count: number;
+  rejected_count: number;
+  approval_rate: number | null;
+  avg_approval_delay_s: number | null;
+}
+
+// === Stats Planifiees Types (Story 60.7 / 60.9) ===
+
+export interface StatsPlanifieesRecurrenceItem {
+  pattern_type: string;
+  count: number;
+}
+
+export interface StatsPlanifieesData {
+  scheduled_count: number;
+  manual_count: number;
+  scheduled_rate: number | null;
+  by_recurrence_type: StatsPlanifieesRecurrenceItem[];
+}

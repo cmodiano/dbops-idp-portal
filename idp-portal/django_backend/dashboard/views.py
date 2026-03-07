@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, date
 from typing import Any
 
 from django.db.models import Q, Count, QuerySet
-from django.db.models.functions import TruncDate
+from django.db.models.functions import TruncDate, TruncWeek
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from rest_framework.permissions import IsAuthenticated
@@ -17,8 +17,9 @@ import structlog
 from catalog.models import Action, Tag
 from core.exceptions import BadRequestError
 from core.middleware import get_correlation_id
-from core.permissions import IsDBAOrDBOPS
-from executions.models import Execution, ExecutionStatus
+from core.models import AuditLog, AuditActionType, AuditEntityType
+from core.permissions import IsDBAOrDBOPS, AdminProfilePermission
+from executions.models import Execution, ExecutionStatus, ExecutionStepType, ExecutionStepStatus, ScheduledExecution
 
 logger = structlog.get_logger(__name__)
 
@@ -112,6 +113,13 @@ _DASHBOARD_PARAMS = [
     OpenApiParameter('environment', str, description='Filtrage par environnement'),
     OpenApiParameter('tags', str, description='Tags (multi-valeur, OR)'),
     OpenApiParameter('status', str, description='Filtrage par statut (pour timeseries/stats-by-*)'),
+]
+
+_RETRY_ACTION_TYPES = [
+    AuditActionType.EXECUTION_STEP_RETRY_ATTEMPT,
+    AuditActionType.EXECUTION_STEP_RETRY_SUCCESS,
+    AuditActionType.EXECUTION_STEP_RETRY_EXHAUSTED,
+    AuditActionType.EXECUTION_STEP_RETRY_ABORTED,
 ]
 
 
@@ -542,3 +550,570 @@ class DashboardCompareView(APIView):
             }
         )
 
+
+class DashboardStatsCatalogueView(APIView):
+    """GET /dashboard/stats-catalogue/ -> {data: CatalogueStats}
+
+    Story 60.1: Agrégations du catalogue Actions pour l'admin/DBOPS.
+    """
+
+    permission_classes = [IsAuthenticated, AdminProfilePermission]
+
+    @extend_schema(
+        tags=['dashboard'],
+        summary='Statistiques du catalogue (admin)',
+        parameters=[
+            OpenApiParameter('days', int, description='Période en jours (défaut: 14)'),
+            OpenApiParameter('from_date', str, description='Date de début (YYYY-MM-DD)'),
+            OpenApiParameter('to_date', str, description='Date de fin (YYYY-MM-DD)'),
+        ],
+    )
+    def get(self, request):
+        qs_all = Action.objects.filter(deleted_at__isnull=True)
+
+        by_status = list(
+            qs_all.values("status").annotate(count=Count("id")).order_by("status")
+        )
+        by_item_type = list(
+            qs_all.values("item_type").annotate(count=Count("id")).order_by("item_type")
+        )
+        by_engine = [
+            {"engine": r["engine"] or "N/A", "count": r["count"]}
+            for r in qs_all.values("engine").annotate(count=Count("id")).order_by("engine")
+        ]
+        by_category = [
+            {"category": r["category"] or "N/A", "count": r["count"]}
+            for r in qs_all.values("category").annotate(count=Count("id")).order_by("category")
+        ]
+
+        period_start, period_end = _get_period_bounds(request)
+        qs_period = Action.objects.filter(
+            deleted_at__isnull=True,
+            created_at__gte=period_start,
+            created_at__lt=period_end,
+        )
+        evolution_rows = (
+            qs_period
+            .annotate(week_start=TruncWeek("created_at"))
+            .values("week_start")
+            .annotate(
+                created_count=Count("id"),
+                published_count=Count("id", filter=Q(status="published")),
+            )
+            .order_by("week_start")
+        )
+        evolution = [
+            {
+                "week_start": r["week_start"].date().isoformat() if r["week_start"] else None,
+                "created_count": int(r["created_count"] or 0),
+                "published_count": int(r["published_count"] or 0),
+            }
+            for r in evolution_rows
+            if r["week_start"] is not None
+        ]
+
+        return Response(
+            {
+                "data": {
+                    "by_status": by_status,
+                    "by_item_type": by_item_type,
+                    "by_engine": by_engine,
+                    "by_category": by_category,
+                    "evolution": evolution,
+                }
+            }
+        )
+
+
+class DashboardStatsAdoptionView(APIView):
+    """GET /dashboard/stats-adoption/ -> {data: AdoptionStats}
+
+    Story 60.2: Statistiques d'adoption par profil utilisateur.
+    - executions_by_profile: nombre d'exécutions par profil sur la période
+    - active_users_by_profile: utilisateurs distincts (≥1 exécution) par profil
+    - adoption_trend: série temporelle hebdomadaire par profil
+
+    RBAC: DBOPS voient tout; utilisateurs standard voient uniquement leurs propres exécutions.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=['dashboard'],
+        summary='Statistiques adoption par profil (admin)',
+        parameters=[
+            OpenApiParameter('days', int, description='Période en jours (défaut: 14)'),
+            OpenApiParameter('from_date', str, description='Date de début (YYYY-MM-DD)'),
+            OpenApiParameter('to_date', str, description='Date de fin (YYYY-MM-DD)'),
+        ],
+    )
+    def get(self, request):
+        period_start, period_end = _get_period_bounds(request)
+        exec_qs = Execution.objects.filter(
+            created_at__gte=period_start,
+            created_at__lt=period_end,
+        )
+        exec_qs = _filter_queryset_by_ownership(exec_qs, request, AdminProfilePermission)
+
+        # executions_by_profile
+        by_profile_rows = (
+            exec_qs.values("user__profile")
+            .annotate(count=Count("id"))
+            .order_by("user__profile")
+        )
+        executions_by_profile = [
+            {"profile": r["user__profile"] or "unknown", "count": int(r["count"] or 0)}
+            for r in by_profile_rows
+        ]
+
+        # active_users_by_profile
+        active_rows = (
+            exec_qs.values("user__profile")
+            .annotate(user_count=Count("user_id", distinct=True))
+            .order_by("user__profile")
+        )
+        active_users_by_profile = [
+            {"profile": r["user__profile"] or "unknown", "user_count": int(r["user_count"] or 0)}
+            for r in active_rows
+        ]
+
+        # adoption_trend
+        trend_rows = (
+            exec_qs
+            .annotate(week_start=TruncWeek("created_at"))
+            .values("week_start", "user__profile")
+            .annotate(count=Count("id"))
+            .order_by("week_start", "user__profile")
+        )
+        adoption_trend = [
+            {
+                "week_start": r["week_start"].date().isoformat() if r["week_start"] else None,
+                "profile": r["user__profile"] or "unknown",
+                "count": int(r["count"] or 0),
+            }
+            for r in trend_rows
+            if r["week_start"] is not None
+        ]
+
+        return Response(
+            {
+                "data": {
+                    "executions_by_profile": executions_by_profile,
+                    "active_users_by_profile": active_users_by_profile,
+                    "adoption_trend": adoption_trend,
+                }
+            }
+        )
+
+
+class DashboardStatsOperationsView(APIView):
+    """GET /dashboard/stats-operations/ -> {data: OperationsStats}
+
+    Story 60.5: Métriques opérations enrichies sur les exécutions.
+    - avg_execution_time_s: durée moyenne en secondes (COMPLETED, timestamps présents)
+    - top_actions_by_execution: top N actions les plus exécutées
+    - top_actions_by_failure: top N actions avec le plus d'échecs
+    - by_platform: répartition par plateforme de l'action
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=['dashboard'],
+        summary='Statistiques opérations enrichies',
+        parameters=[
+            *_DASHBOARD_PARAMS[:6],  # sans status
+            OpenApiParameter('top_n', int, description='Nombre de top actions (défaut: 5, max: 100)'),
+        ],
+    )
+    def get(self, request):
+        top_n = _parse_int(request.query_params.get("top_n"), 5, name="top_n")
+        if top_n <= 0 or top_n > 100:
+            raise BadRequestError(
+                code="BAD_REQUEST",
+                message="top_n invalide (doit être entre 1 et 100)",
+                details={"top_n": top_n},
+            )
+
+        period_start, period_end = _get_period_bounds(request)
+
+        qs = Execution.objects.select_related("action")
+        qs = _filter_queryset_by_ownership(qs, request)
+        qs = _apply_common_filters(qs, request=request, include_status=False)
+        qs = qs.filter(created_at__gte=period_start, created_at__lt=period_end).distinct()
+
+        # 1. Durée moyenne d'exécution en secondes
+        # Pattern Python (compatibilité Oracle) — identique à _stats_for_queryset
+        durations = []
+        for started_at, completed_at in qs.filter(
+            status=ExecutionStatus.COMPLETED,
+            started_at__isnull=False,
+            completed_at__isnull=False,
+        ).values_list("started_at", "completed_at"):
+            try:
+                if started_at is None or completed_at is None:
+                    continue
+                delta = (completed_at - started_at).total_seconds()
+                if delta >= 0:
+                    durations.append(delta)
+            except (TypeError, AttributeError) as e:
+                logger.debug(
+                    "execution_duration_calculation_skipped",
+                    started_at=started_at,
+                    completed_at=completed_at,
+                    error=str(e),
+                    error_type=type(e).__name__,
+                    correlation_id=get_correlation_id(),
+                )
+                continue
+        avg_execution_time_s = round(sum(durations) / len(durations), 2) if durations else None
+
+        # 2. Top N actions les plus exécutées
+        top_actions_rows = (
+            qs.values("action_id", "action__name")
+            .annotate(execution_count=Count("id"))
+            .order_by("-execution_count")[:top_n]
+        )
+        top_actions_by_execution = [
+            {
+                "action_id": r["action_id"],
+                "action_name": r["action__name"] or "N/A",
+                "execution_count": int(r["execution_count"] or 0),
+            }
+            for r in top_actions_rows
+        ]
+
+        # 3. Top N actions avec le plus d'échecs
+        top_failures_rows = (
+            qs.filter(status=ExecutionStatus.FAILED)
+            .values("action_id", "action__name")
+            .annotate(failure_count=Count("id"))
+            .order_by("-failure_count")[:top_n]
+        )
+        top_actions_by_failure = [
+            {
+                "action_id": r["action_id"],
+                "action_name": r["action__name"] or "N/A",
+                "failure_count": int(r["failure_count"] or 0),
+            }
+            for r in top_failures_rows
+        ]
+
+        # 4. Répartition par plateforme
+        by_platform_rows = (
+            qs.values("action__platform")
+            .annotate(count=Count("id"))
+            .order_by("action__platform")
+        )
+        by_platform = [
+            {
+                "platform": r["action__platform"] or "N/A",
+                "count": int(r["count"] or 0),
+            }
+            for r in by_platform_rows
+        ]
+
+        return Response(
+            {
+                "data": {
+                    "avg_execution_time_s": avg_execution_time_s,
+                    "top_actions_by_execution": top_actions_by_execution,
+                    "top_actions_by_failure": top_actions_by_failure,
+                    "by_platform": by_platform,
+                }
+            }
+        )
+
+
+class DashboardStatsApprobationsView(APIView):
+    """GET /dashboard/stats-approbations/ -> {data: ApprobationsStats}
+
+    Story 60.6: Statistiques du workflow d'approbation des exécutions.
+    Source duale ADR-007: Execution.approved_at (legacy) + ExecutionStep gate (nouveau).
+    - approved_count: exécutions COMPLETED avec approbation (legacy ou gate step)
+    - rejected_count: exécutions REJECTED
+    - approval_rate: taux d'approbation en % (null si aucune décision)
+    - avg_approval_delay_s: délai moyen créé→approuvé en secondes (null si aucun approuvé)
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=['dashboard'],
+        summary='Statistiques approbations',
+        parameters=_DASHBOARD_PARAMS[:6],  # sans status
+    )
+    def get(self, request):
+        period_start, period_end = _get_period_bounds(request)
+
+        qs = Execution.objects.select_related("action")
+        qs = _filter_queryset_by_ownership(qs, request)
+        qs = _apply_common_filters(qs, request=request, include_status=False)
+        qs = qs.filter(created_at__gte=period_start, created_at__lt=period_end).distinct()
+
+        # 1. Exécutions approuvées — source duale (legacy Execution.approved_at + gate step ADR-007)
+        qs_approved = qs.filter(
+            status=ExecutionStatus.COMPLETED
+        ).filter(
+            Q(approved_at__isnull=False)
+            | Q(
+                executionstep__step_type=ExecutionStepType.GATE,
+                executionstep__status=ExecutionStepStatus.COMPLETED,
+                executionstep__approved_at__isnull=False,
+            )
+        ).distinct()
+        # Oracle: .count() on distinct() fails with ORA-22848 (CLOB in comparison).
+        # Use values('id').distinct() so only numeric id is selected for DISTINCT.
+        approved_count = qs_approved.values("id").distinct().count()
+
+        # 2. Exécutions rejetées
+        rejected_count = qs.filter(status=ExecutionStatus.REJECTED).values("id").distinct().count()
+
+        # 3. Taux d'approbation
+        total_decided = approved_count + rejected_count
+        approval_rate = round((approved_count / total_decided) * 100, 1) if total_decided > 0 else None
+
+        # 4. Délai moyen d'approbation en secondes (Python loop — compatibilité Oracle)
+        delays = []
+
+        # Chemin legacy: Execution.approved_at - created_at
+        for created_at, approved_at in qs_approved.filter(
+            approved_at__isnull=False
+        ).values_list("created_at", "approved_at"):
+            try:
+                if approved_at is None or created_at is None:
+                    continue
+                delta = (approved_at - created_at).total_seconds()
+                if delta >= 0:
+                    delays.append(delta)
+            except (TypeError, AttributeError) as e:
+                logger.debug(
+                    "approval_delay_calculation_skipped_legacy",
+                    created_at=created_at,
+                    approved_at=approved_at,
+                    error=str(e),
+                    error_type=type(e).__name__,
+                    correlation_id=get_correlation_id(),
+                )
+                continue
+
+        # Chemin nouveau (ADR-007): ExecutionStep.approved_at - Execution.created_at
+        # Exclure les exécutions déjà traitées via legacy (approved_at non-null sur Execution)
+        # Dédupliquer par execution_id : une exécution peut avoir plusieurs gate steps approuvés
+        # (ex: retry). On prend le premier rencontré (ORDER BY par défaut sur created_at desc).
+        gate_exec_seen: set[int] = set()
+        for exec_id, exec_created_at, step_approved_at in qs_approved.filter(
+            approved_at__isnull=True,
+            executionstep__step_type=ExecutionStepType.GATE,
+            executionstep__status=ExecutionStepStatus.COMPLETED,
+            executionstep__approved_at__isnull=False,
+        ).values_list("id", "created_at", "executionstep__approved_at").distinct():
+            if exec_id in gate_exec_seen:
+                continue
+            gate_exec_seen.add(exec_id)
+            try:
+                if step_approved_at is None or exec_created_at is None:
+                    continue
+                delta = (step_approved_at - exec_created_at).total_seconds()
+                if delta >= 0:
+                    delays.append(delta)
+            except (TypeError, AttributeError) as e:
+                logger.debug(
+                    "approval_delay_calculation_skipped_gate",
+                    exec_created_at=exec_created_at,
+                    step_approved_at=step_approved_at,
+                    error=str(e),
+                    error_type=type(e).__name__,
+                    correlation_id=get_correlation_id(),
+                )
+                continue
+
+        avg_approval_delay_s = round(sum(delays) / len(delays), 2) if delays else None
+
+        return Response(
+            {
+                "data": {
+                    "approved_count": approved_count,
+                    "rejected_count": rejected_count,
+                    "approval_rate": approval_rate,
+                    "avg_approval_delay_s": avg_approval_delay_s,
+                }
+            }
+        )
+
+
+class DashboardStatsPlanifieesView(APIView):
+    """GET /dashboard/stats-planifiees/ -> {data: PlanifieesStats}
+
+    Story 60.7: Répartition des exécutions planifiées vs manuelles.
+    Lien inversé : ScheduledExecution.execution_id (BigIntegerField) → Execution.id.
+    - scheduled_count: exécutions dont l'ID figure dans ScheduledExecution.execution_id
+    - manual_count: exécutions sans lien planifié
+    - scheduled_rate: % planifiées (null si aucune exécution)
+    - by_recurrence_type: ventilation par RecurringPattern.pattern_type
+      (sans RecurringPattern → 'one_time')
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=['dashboard'],
+        summary='Statistiques planifiées vs manuelles',
+        parameters=_DASHBOARD_PARAMS[:6],  # sans status
+    )
+    def get(self, request):
+        period_start, period_end = _get_period_bounds(request)
+
+        qs = Execution.objects.select_related("action")
+        qs = _filter_queryset_by_ownership(qs, request)
+        qs = _apply_common_filters(qs, request=request, include_status=False)
+        qs = qs.filter(created_at__gte=period_start, created_at__lt=period_end).distinct()
+
+        # 1. IDs des exécutions déclenchées par une planification
+        #    Étape 1 : IDs des exécutions dans la période (Oracle-safe : pas de sous-requête enchaînée)
+        period_ids = set(qs.values_list('id', flat=True))
+        #    Étape 2 : parmi les ScheduledExecution, celles dont execution_id est dans la période
+        scheduled_ids = set(
+            ScheduledExecution.objects.filter(
+                execution_id__isnull=False,
+                execution_id__in=period_ids,
+            ).values_list('execution_id', flat=True)
+        ) if period_ids else set()
+
+        # Oracle: .count() on distinct() fails with ORA-22848 (CLOB in comparison).
+        total = qs.values("id").distinct().count()
+        scheduled_count = qs.filter(id__in=scheduled_ids).values("id").distinct().count()
+        manual_count = total - scheduled_count
+        scheduled_rate = round(scheduled_count / total * 100, 1) if total > 0 else None
+
+        # 2. Ventilation par type de récurrence
+        #    scheduled_ids est déjà limité aux exécutions de la période
+        by_recurrence_type = []
+
+        if scheduled_ids:
+            # Exécutions planifiées sans RecurringPattern → one_time
+            no_pattern_count = ScheduledExecution.objects.filter(
+                execution_id__in=scheduled_ids,
+                recurringpattern__isnull=True,
+            ).count()
+            if no_pattern_count > 0:
+                by_recurrence_type.append({"pattern_type": "one_time", "count": no_pattern_count})
+
+            # Exécutions planifiées avec RecurringPattern → par pattern_type
+            pattern_rows = (
+                ScheduledExecution.objects
+                .filter(
+                    execution_id__in=scheduled_ids,
+                    recurringpattern__isnull=False,
+                )
+                .values('recurringpattern__pattern_type')
+                .annotate(count=Count('id'))
+                .order_by('recurringpattern__pattern_type')
+            )
+            for row in pattern_rows:
+                by_recurrence_type.append({
+                    "pattern_type": row['recurringpattern__pattern_type'],
+                    "count": int(row['count']),
+                })
+
+        return Response(
+            {
+                "data": {
+                    "scheduled_count": scheduled_count,
+                    "manual_count": manual_count,
+                    "scheduled_rate": scheduled_rate,
+                    "by_recurrence_type": by_recurrence_type,
+                }
+            }
+        )
+
+
+class DashboardStatsRetriesView(APIView):
+    """GET /dashboard/stats-retries/ -> {data: RetriesStats}
+
+    Story 60.8: Statistiques sur les retries d'exécution.
+    Les retries sont tracés dans AuditLog (entity_type='execution') via AuditService.
+    - executions_with_retry_count: exécutions ayant au moins un AuditLog retry
+    - retry_rate: % d'exécutions avec retry (null si aucune exécution)
+    - by_action: top N actions avec le plus d'exécutions en retry
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=['dashboard'],
+        summary='Statistiques retries',
+        parameters=[
+            *_DASHBOARD_PARAMS[:6],  # sans status
+            OpenApiParameter('top_n', int, description='Nombre de top actions (défaut: 5, max: 100)'),
+        ],
+    )
+    def get(self, request):
+        top_n = _parse_int(request.query_params.get("top_n"), 5, name="top_n")
+        if top_n <= 0 or top_n > 100:
+            raise BadRequestError(
+                code="BAD_REQUEST",
+                message="top_n invalide (doit être entre 1 et 100)",
+                details={"top_n": top_n},
+            )
+
+        period_start, period_end = _get_period_bounds(request)
+
+        qs = Execution.objects.select_related("action")
+        qs = _filter_queryset_by_ownership(qs, request)
+        qs = _apply_common_filters(qs, request=request, include_status=False)
+        qs = qs.filter(created_at__gte=period_start, created_at__lt=period_end).distinct()
+
+        # Oracle-safe: matérialiser les IDs en Python avant de filtrer AuditLog
+        # len(period_ids) == total_executions → pas besoin d'un qs.count() séparé
+        period_ids = set(qs.values_list('id', flat=True))
+        total_executions = len(period_ids)
+
+        # Exécutions avec au moins un retry : chercher dans AuditLog
+        retry_execution_ids = (
+            set(
+                AuditLog.objects.filter(
+                    entity_type=AuditEntityType.EXECUTION,
+                    entity_id__in=period_ids,
+                    action_type__in=_RETRY_ACTION_TYPES,
+                ).values_list('entity_id', flat=True)
+            )
+            if period_ids
+            else set()
+        )
+
+        executions_with_retry_count = len(retry_execution_ids)
+        retry_rate = (
+            round(executions_with_retry_count / total_executions * 100, 1)
+            if total_executions > 0
+            else None
+        )
+
+        # Top N actions avec le plus d'exécutions en retry
+        by_action = []
+        if retry_execution_ids:
+            rows = (
+                Execution.objects.filter(id__in=retry_execution_ids)
+                .values('action_id', 'action__name')
+                .annotate(retry_count=Count('id'))
+                .order_by('-retry_count')[:top_n]
+            )
+            by_action = [
+                {
+                    'action_id': r['action_id'],
+                    'action_name': r['action__name'] or 'N/A',
+                    'retry_count': int(r['retry_count'] or 0),
+                }
+                for r in rows
+            ]
+
+        return Response(
+            {
+                'data': {
+                    'total_executions': total_executions,
+                    'executions_with_retry_count': executions_with_retry_count,
+                    'retry_rate': retry_rate,
+                    'by_action': by_action,
+                }
+            }
+        )

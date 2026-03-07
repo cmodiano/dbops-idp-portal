@@ -82,7 +82,8 @@ function EngineIconCell({ engine }: { engine: string | null | undefined }) {
             alt=""
             width={ENGINE_ICON_SIZE}
             height={ENGINE_ICON_SIZE}
-            style={{ flexShrink: 0 }}
+            className="engine-icon-img"
+            style={{ flexShrink: 0, objectFit: 'contain' }}
             aria-hidden
           />
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{engine}</span>
@@ -97,7 +98,8 @@ function EngineIconCell({ engine }: { engine: string | null | undefined }) {
       alt=""
       width={ENGINE_ICON_SIZE}
       height={ENGINE_ICON_SIZE}
-      style={{ flexShrink: 0 }}
+      className="engine-icon-img"
+      style={{ flexShrink: 0, objectFit: 'contain' }}
       aria-hidden
     />
   ) : (

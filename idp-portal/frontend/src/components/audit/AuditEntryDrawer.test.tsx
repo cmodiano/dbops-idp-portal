@@ -249,3 +249,208 @@ describe('AuditEntryDrawer — coverage extras', () => {
     expect(screen.getByText("Détail d'audit")).toBeInTheDocument();
   });
 });
+
+// ─── Story 61.9 — Section Modifications ──────────────────────────────────────
+describe('Story 61.9 — Section Modifications', () => {
+  const integrationUpdatedEntry: AuditExecutionEntry = {
+    ...actionEntry,
+    action_type: 'INTEGRATION_UPDATED',
+    entity_type: 'integration',
+    details: {
+      name: 'Mon Intégration',
+      changes: {
+        base_url: { old: 'https://old.example.com', new: 'https://new.example.com' },
+        credential_ref: { old: '***', new: '***' },
+      },
+    },
+  };
+
+  it('test_modifications_section_shown_when_changes_present — section affichée si changes non vide', () => {
+    render(<AuditEntryDrawer {...defaultProps} entry={integrationUpdatedEntry} />);
+    expect(screen.getByText('Modifications')).toBeInTheDocument();
+    expect(screen.getByText('base_url')).toBeInTheDocument();
+    expect(screen.getByText('https://old.example.com')).toBeInTheDocument();
+    expect(screen.getByText('https://new.example.com')).toBeInTheDocument();
+    expect(screen.getAllByText('***').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('test_modifications_section_hidden_when_no_changes — section absente si pas de changes', () => {
+    const noChangesEntry = { ...integrationUpdatedEntry, details: { name: 'Mon Intégration' } };
+    render(<AuditEntryDrawer {...defaultProps} entry={noChangesEntry} />);
+    expect(screen.queryByText('Modifications')).not.toBeInTheDocument();
+  });
+
+  it('test_modifications_section_hidden_when_changes_empty — section absente si changes vide', () => {
+    const emptyChanges = { ...integrationUpdatedEntry, details: { changes: {} } };
+    render(<AuditEntryDrawer {...defaultProps} entry={emptyChanges} />);
+    expect(screen.queryByText('Modifications')).not.toBeInTheDocument();
+  });
+
+  it('test_changes_key_excluded_from_details_section — changes absent de la section Détails', () => {
+    render(<AuditEntryDrawer {...defaultProps} entry={integrationUpdatedEntry} />);
+    // La section Détails doit exister (name est présent) mais ne doit pas afficher "changes" comme clé brute
+    const detailsCards = screen.getAllByText('Détails');
+    expect(detailsCards.length).toBeGreaterThanOrEqual(1);
+    // "changes" ne doit pas apparaître comme label de ligne dans Détails
+    const changesLabels = screen.queryAllByText('changes');
+    expect(changesLabels.length).toBe(0);
+  });
+
+  it('test_modifications_section_absent_for_execution_entity — pas de section Modifications pour execution', () => {
+    const execWithChanges: AuditExecutionEntry = {
+      ...executionEntry,
+      details: { ...executionEntry.details, changes: { status: { old: 'RUNNING', new: 'COMPLETED' } } },
+    };
+    render(<AuditEntryDrawer {...defaultProps} entry={execWithChanges} />);
+    expect(screen.queryByText('Modifications')).not.toBeInTheDocument();
+  });
+
+  it('test_null_undefined_values_display_as_dash — valeurs null/undefined affichées comme — (AC4)', () => {
+    const nullValueEntry: AuditExecutionEntry = {
+      ...integrationUpdatedEntry,
+      details: {
+        changes: {
+          field_with_null: { old: null, new: 'new_value' },
+          field_with_undefined: { old: undefined, new: null },
+        },
+      },
+    };
+    render(<AuditEntryDrawer {...defaultProps} entry={nullValueEntry} />);
+    expect(screen.getByText('Modifications')).toBeInTheDocument();
+    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(3);
+    expect(screen.getByText('new_value')).toBeInTheDocument();
+  });
+
+  it('test_object_values_rendered_as_json_pre — valeurs objets affichées en JSON dans pre (AC5)', () => {
+    const objectValueEntry: AuditExecutionEntry = {
+      ...integrationUpdatedEntry,
+      details: {
+        changes: {
+          config: { old: { host: 'old-host' }, new: { host: 'new-host' } },
+        },
+      },
+    };
+    render(<AuditEntryDrawer {...defaultProps} entry={objectValueEntry} />);
+    expect(screen.getByText('Modifications')).toBeInTheDocument();
+    expect(screen.getByText(/"old-host"/)).toBeInTheDocument();
+    expect(screen.getByText(/"new-host"/)).toBeInTheDocument();
+  });
+
+  it('test_masked_values_displayed_as_is — valeurs masquées *** affichées telles quelles (AC3)', () => {
+    const maskedEntry: AuditExecutionEntry = {
+      ...integrationUpdatedEntry,
+      details: {
+        changes: {
+          credential_ref: { old: '***', new: '***' },
+        },
+      },
+    };
+    render(<AuditEntryDrawer {...defaultProps} entry={maskedEntry} />);
+    expect(screen.getByText('Modifications')).toBeInTheDocument();
+    expect(screen.getAllByText('***').length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// ─── Story 61.10 — Contexte d'exécution ───────────────────────────────────────
+describe("Story 61.10 — Contexte d'exécution", () => {
+  const submittedEntry: AuditExecutionEntry = {
+    ...executionEntry,
+    action_type: 'EXECUTION_SUBMITTED',
+    entity_type: 'execution',
+    details: {
+      action_id: 42,
+      action_name: 'Patch Oracle PROD',
+      environment: 'prod',
+      targets: ['oracle-prod-01', 'oracle-prod-02'],
+      parameters: { patch_version: '19.21' },
+    },
+  };
+
+  const approvedWithContextEntry: AuditExecutionEntry = {
+    ...mockApprovedEntry,
+    action_type: 'EXECUTION_APPROVED',
+    entity_type: 'execution',
+    details: {
+      action_id: 5,
+      action_name: 'Deploy Prod',
+      environment: 'prod',
+      targets: ['server-prod-01'],
+      parameters: { deploy_version: '2.4.1' },
+      approval_comment: 'OK',
+    },
+  };
+
+  it("test_execution_context_shown_for_submitted_with_full_context — section affichée pour EXECUTION_SUBMITTED avec action_name, targets, parameters", () => {
+    render(<AuditEntryDrawer {...defaultProps} entry={submittedEntry} />);
+    expect(screen.getByText("Contexte d'exécution")).toBeInTheDocument();
+  });
+
+  it("test_execution_context_shown_for_approved_with_context — section affichée pour EXECUTION_APPROVED après story 61.7", () => {
+    render(<AuditEntryDrawer {...defaultProps} entry={approvedWithContextEntry} />);
+    expect(screen.getByText("Contexte d'exécution")).toBeInTheDocument();
+  });
+
+  it("test_action_name_displayed_under_action_label — action_name affiché sous label 'Action'", () => {
+    render(<AuditEntryDrawer {...defaultProps} entry={submittedEntry} />);
+    expect(screen.getByText('Action')).toBeInTheDocument();
+    expect(screen.getByText('Patch Oracle PROD')).toBeInTheDocument();
+  });
+
+  it("test_targets_displayed_under_cibles_label — targets affichés sous 'Cibles'", () => {
+    render(<AuditEntryDrawer {...defaultProps} entry={submittedEntry} />);
+    expect(screen.getByText('Cibles')).toBeInTheDocument();
+    expect(screen.getByText('oracle-prod-01, oracle-prod-02')).toBeInTheDocument();
+  });
+
+  it("test_parameters_displayed_as_json — parameters affichés en JSON indenté sous label Paramètres (AC4)", () => {
+    render(<AuditEntryDrawer {...defaultProps} entry={submittedEntry} />);
+    expect(screen.getByText('Paramètres')).toBeInTheDocument();
+    expect(screen.getByText(/"patch_version"/)).toBeInTheDocument();
+  });
+
+  it("test_section_absent_when_no_context — section absente si aucun champ présent", () => {
+    const noContextEntry: AuditExecutionEntry = {
+      ...executionEntry,
+      action_type: 'EXECUTION_COMPLETED',
+      details: { environment: 'prod', status: 'COMPLETED' },
+    };
+    render(<AuditEntryDrawer {...defaultProps} entry={noContextEntry} />);
+    expect(screen.queryByText("Contexte d'exécution")).not.toBeInTheDocument();
+  });
+
+  it("test_section_absent_for_non_execution_entity — section absente pour entity_type !== 'execution'", () => {
+    const actionEntryWithContext: AuditExecutionEntry = {
+      ...actionEntry,
+      details: { action_name: 'Deploy', targets: ['server-01'] },
+    };
+    render(<AuditEntryDrawer {...defaultProps} entry={actionEntryWithContext} />);
+    expect(screen.queryByText("Contexte d'exécution")).not.toBeInTheDocument();
+  });
+
+  it("test_section_shown_for_step_with_action_name_only — section affichée pour EXECUTION_STEP_STARTED avec seulement action_name (AC1)", () => {
+    // EXECUTION_STEP_STARTED enrichi par 61.8 : action_name présent, pas de targets ni parameters
+    const stepStartedEntry: AuditExecutionEntry = {
+      ...executionEntry,
+      action_type: 'EXECUTION_STEP_STARTED',
+      entity_type: 'execution',
+      details: { step_id: 1, step_name: 'AAP step', action_name: 'Patch Oracle', execution_id: 99 },
+    };
+    render(<AuditEntryDrawer {...defaultProps} entry={stepStartedEntry} />);
+    expect(screen.getByText("Contexte d'exécution")).toBeInTheDocument();
+    expect(screen.getByText('Action')).toBeInTheDocument();
+    expect(screen.getByText('Patch Oracle')).toBeInTheDocument();
+    expect(screen.queryByText('Cibles')).not.toBeInTheDocument();
+    expect(screen.queryByText('Paramètres')).not.toBeInTheDocument();
+  });
+
+  it("test_targets_absent_label_not_shown_when_empty_array — label Cibles absent si targets est []", () => {
+    const noTargetsEntry: AuditExecutionEntry = {
+      ...submittedEntry,
+      details: { action_name: 'Deploy', targets: [] },
+    };
+    render(<AuditEntryDrawer {...defaultProps} entry={noTargetsEntry} />);
+    // Section affichée car action_name présent, mais "Cibles" absent car targets vide
+    expect(screen.getByText("Contexte d'exécution")).toBeInTheDocument();
+    expect(screen.queryByText('Cibles')).not.toBeInTheDocument();
+  });
+});

@@ -1,13 +1,17 @@
-"""Tests pour executions/views/approval_views.py — Story 39.5.
+"""Tests pour executions/views/approval_views.py — Story 39.5, Story 59.1.
 
 Branches NON couvertes dans test_approval_endpoints.py :
 - PendingApprovalsView.get() : count_only, pagination invalide, non-DBA
 - ApproveExecutionView.post() : launch failure → LAUNCH_FAILED, update_status None → 404
 - RejectExecutionView.post()  : update_status None → branche else (direct save)
+
+Story 59.1 (SEC-1) :
+- _check_approver_permission() fail-secure : approver_profile_ids absent/vide → False + warning loggé
 """
 from __future__ import annotations
 
-from unittest.mock import patch
+import structlog.testing
+from unittest.mock import MagicMock, patch
 
 import pytest
 from django.test import TestCase
@@ -20,7 +24,7 @@ from executions.models import (
     ExecutionStepType,
 )
 from executions.services import ExecutionService
-from executions.views.approval_views import ApproveExecutionView, RejectExecutionView
+from executions.views.approval_views import ApproveExecutionView, RejectExecutionView, _check_approver_permission
 from tests.factories import ActionFactory, ExecutionFactory, ExecutionTargetFactory, IntegrationFactory, UserFactory
 
 
@@ -265,3 +269,83 @@ class TestRejectExecutionViewExtra(TestCase):
         execution.refresh_from_db()
         self.assertEqual(execution.status, ExecutionStatus.REJECTED)
         self.assertEqual(execution.error_message, "Branche else test")
+
+
+# ---------------------------------------------------------------------------
+# Story 59.1 — _check_approver_permission fail-secure (SEC-1)
+# ---------------------------------------------------------------------------
+
+def _make_mock_user(profile_id=None, is_approver=False):
+    """Helper : crée un user mock avec profil ORM."""
+    user = MagicMock()
+    user.is_authenticated = True
+    if profile_id is not None:
+        profile = MagicMock()
+        profile.id = profile_id
+        profile.is_approver_bool = is_approver
+        user.profile = profile
+    else:
+        user.profile = None
+    # Désactiver M2M profiles et ad_groups pour isolation
+    del user.profiles
+    del user.ad_groups
+    return user
+
+
+class TestCheckApproverPermissionFailSecure59_1(TestCase):
+    """Tests unitaires Story 59.1 — fail-secure pour _check_approver_permission."""
+
+    def test_absent_approver_profile_ids_returns_false(self):
+        """AC1+4 : approver_profile_ids absent dans step_config → False."""
+        user = _make_mock_user(profile_id=1, is_approver=True)
+        result = _check_approver_permission(user, {})
+        self.assertFalse(result)
+
+    def test_empty_approver_profile_ids_returns_false(self):
+        """AC1+4 : approver_profile_ids=[] → False."""
+        user = _make_mock_user(profile_id=1, is_approver=True)
+        result = _check_approver_permission(user, {'approver_profile_ids': []})
+        self.assertFalse(result)
+
+    def test_null_approver_profile_ids_returns_false(self):
+        """AC1 : approver_profile_ids=None → False (falsy)."""
+        user = _make_mock_user(profile_id=1, is_approver=True)
+        result = _check_approver_permission(user, {'approver_profile_ids': None})
+        self.assertFalse(result)
+
+    def test_authorized_user_with_nonempty_approver_ids_returns_true(self):
+        """AC4 (régression) : approver_profile_ids non vide + user autorisé → True."""
+        user = _make_mock_user(profile_id=1, is_approver=False)
+        result = _check_approver_permission(user, {'approver_profile_ids': [1, 2, 3]})
+        self.assertTrue(result)
+
+    def test_unauthorized_user_with_nonempty_approver_ids_returns_false(self):
+        """AC4 (régression) : approver_profile_ids non vide + user non autorisé → False."""
+        user = _make_mock_user(profile_id=99, is_approver=True)
+        result = _check_approver_permission(user, {'approver_profile_ids': [1, 2, 3]})
+        self.assertFalse(result)
+
+    def test_warning_logged_when_approver_profile_ids_absent(self):
+        """AC2 : warning structlog loggé quand approver_profile_ids absent."""
+        user = _make_mock_user(profile_id=1, is_approver=True)
+        with structlog.testing.capture_logs() as cap_logs:
+            _check_approver_permission(user, {})
+        self.assertEqual(len(cap_logs), 1)
+        self.assertEqual(cap_logs[0]['log_level'], 'warning')
+        self.assertEqual(cap_logs[0]['event'], 'approver_permission_fail_secure')
+
+    def test_warning_logged_when_approver_profile_ids_empty(self):
+        """AC2 : warning structlog loggé quand approver_profile_ids vide."""
+        user = _make_mock_user(profile_id=1, is_approver=True)
+        with structlog.testing.capture_logs() as cap_logs:
+            _check_approver_permission(user, {'approver_profile_ids': []})
+        self.assertEqual(len(cap_logs), 1)
+        self.assertEqual(cap_logs[0]['log_level'], 'warning')
+        self.assertEqual(cap_logs[0]['event'], 'approver_permission_fail_secure')
+
+    def test_no_warning_when_approver_profile_ids_present(self):
+        """Pas de warning quand approver_profile_ids est configuré."""
+        user = _make_mock_user(profile_id=1, is_approver=False)
+        with structlog.testing.capture_logs() as cap_logs:
+            _check_approver_permission(user, {'approver_profile_ids': [1]})
+        self.assertEqual(len(cap_logs), 0)
