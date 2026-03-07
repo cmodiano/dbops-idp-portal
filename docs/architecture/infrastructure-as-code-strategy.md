@@ -1,153 +1,149 @@
 # Infrastructure as Code Strategy — IDP Portal
 
 **Date:** 2026-03-07
-**Status:** Proposal
+**Status:** Proposal (v2 — Git as Source of Truth)
 **Authors:** Architecture Team
 
 ---
 
-## Problem Statement
+## Paradigm: Git is the Source of Truth
 
-The IDP Portal manages Actions, Workflows, Integrations, Profiles, Business Rule Policies, and Reference Data. Today these are configured exclusively through the UI/REST API, with state stored in Oracle. This creates challenges:
+The configuration Git repository is the authoritative source for all IDP Portal configuration.
+The database is a **runtime cache** of what Git declares. Any environment can be rebuilt
+from scratch by applying the repo content to an empty database (after Flyway schema migrations).
 
-- **No version history** — Who changed what, when, and why? (Audit log exists but doesn't capture "desired state")
-- **No peer review** — Changes go live instantly without approval from another team member
-- **No rollback** — Reverting a broken action configuration requires manual re-editing
-- **No environment promotion** — No way to promote configurations from dev → staging → prod
-- **No disaster recovery** — If the database is lost, all configuration must be rebuilt manually
+The UI remains available for **incident / immediate actions only**. Any change made through the
+UI is considered **ephemeral** — it lives only in the database until the next Git sync overwrites
+it. If a team wants to persist a UI change, they must manually add it to the config repo and
+merge it.
 
-We need a strategy that versions configuration as code while preserving the UI-first experience that makes the platform accessible.
+```
+ ┌─────────────────────────────────────────────────────────────────────┐
+ │                    Git Repository (SOURCE OF TRUTH)                 │
+ │  idp-config/                                                       │
+ │  ├── actions/           one YAML per action/workflow                │
+ │  ├── integrations/      one YAML per integration                   │
+ │  ├── profiles/          one YAML per profile (or single file)      │
+ │  ├── policies/          one YAML per business rule policy           │
+ │  ├── integration-types/ one YAML per integration type catalogue     │
+ │  ├── reference/         engines.yaml, categories.yaml               │
+ │  ├── feature-flags.yaml                                             │
+ │  └── tags.yaml                                                      │
+ └────────────────────┬────────────────────────────────────────────────┘
+                      │
+            merge to main triggers CI/CD
+                      │
+                      ▼
+ ┌─────────────────────────────────────────────────────────────────────┐
+ │                    CI/CD Pipeline                                    │
+ │  1. Validate YAML schemas (offline, no DB needed)                   │
+ │  2. Resolve cross-references (action→integration by name)           │
+ │  3. Call POST /admin/<entity>/sync/ for each entity type            │
+ │     (ordered: reference → integrations → policies → actions →       │
+ │      profiles → feature-flags)                                      │
+ │  4. Drift report: compare DB state vs repo                          │
+ └────────────────────┬────────────────────────────────────────────────┘
+                      │
+                      ▼
+ ┌──────────────────────────────┐       ┌─────────────────────────────┐
+ │     Oracle Database          │       │     UI (React)              │
+ │  (runtime cache of config)   │◄──────│  Emergency edits only       │
+ │                              │       │  Shows ⚠ "out of sync"     │
+ └──────────────────────────────┘       │  badge on diverged entities │
+                                        └─────────────────────────────┘
+```
 
 ---
 
-## Current State
+## What is Managed as Code (and What is Not)
 
-### Already "as code"
-| Asset | Mechanism | Maturity |
-|-------|-----------|----------|
-| Database schema | Flyway SQL migrations (`database/migrations/V*`) | High |
-| Infrastructure | Docker Compose + Dockerfiles | High |
-| Secrets references | Vault `credential_ref` paths | High |
-| Profiles | YAML export/import (`profiles/services_export_import.py`) | Medium |
+### Managed as code — the full config repo can recreate these
+| Entity | YAML location | Lookup key |
+|--------|---------------|------------|
+| Actions & Workflows | `actions/<name>.yaml` | `name` (unique) |
+| Integrations | `integrations/<name>.yaml` | `name` (unique) |
+| Integration Type Catalogue | `integration-types/<code>.yaml` | `code` (PK) |
+| Business Rule Policies | `policies/<name>.yaml` | `name` (unique) |
+| Profiles + Permissions | `profiles/<name>.yaml` | `name` (unique) |
+| Reference Engines | `reference/engines.yaml` | `code` (unique) |
+| Reference Categories | `reference/categories.yaml` | `code` (unique) |
+| Tags | `tags.yaml` | `name` (unique) |
+| Feature Flags | `feature-flags.yaml` | `flag_key` (unique) |
+| Action Mutexes | Inline in `actions/<name>.yaml` → `spec.mutex` | composite |
 
-### Not yet "as code"
-| Asset | Current storage | Priority |
-|-------|----------------|----------|
-| Actions (catalog) | Oracle `ACTIONS_CATALOG` | **High** |
-| Integrations | Oracle `INTEGRATIONS` | **High** |
-| Integration Type Catalogue | Oracle `INTEGRATION_TYPE_CATALOGUE` | Medium |
-| Business Rule Policies | Oracle `BUSINESS_RULE_POLICIES` | Medium |
-| Reference Data (engines, categories, platforms) | Oracle `REF_*` tables | Medium |
-| Tags | Oracle `TAGS` | Low |
-| Action Mutexes | Oracle `ACTION_MUTEX` | Low |
-
-### What should NEVER be versioned as code
-- **Executions** — Runtime state, not configuration
-- **Audit logs** — Append-only operational data
-- **User favorites** — User preferences
-- **Scheduled executions** — Runtime scheduling state
-
----
-
-## Recommended Architecture: DB-First with Export/Import + Managed-By Flag
-
-### Why not pure GitOps?
-
-Pure GitOps (Git as single source of truth, UI creates PRs) requires:
-- Git API integration in the frontend
-- A reconciliation controller
-- Branch/merge conflict handling for concurrent UI users
-- Significantly more complexity
-
-For a team managing database operations, the **pragmatic approach** is:
-
-1. **Keep the database as source of truth** — UI works exactly as today
-2. **Add declarative export/import** — Any config can be serialized to YAML and reimported
-3. **Add a `managed_by` flag** — Entities can be locked to "code-only" management
-4. **CI/CD pipeline applies desired state** — A pipeline reads YAML from Git and calls import endpoints
-
-```
- ┌─────────────────────────────────────────────────────────────────┐
- │                        Git Repository                          │
- │  idp-config/                                                   │
- │  ├── actions/                                                  │
- │  │   ├── oracle-patching.yaml                                  │
- │  │   └── db2-provisioning.yaml                                 │
- │  ├── integrations/                                             │
- │  │   ├── aap-production.yaml                                   │
- │  │   └── servicenow.yaml                                      │
- │  ├── profiles.yaml                    (already exists!)        │
- │  ├── policies/                                                 │
- │  │   └── change-approval-policy.yaml                           │
- │  └── reference/                                                │
- │      ├── engines.yaml                                          │
- │      ├── categories.yaml                                       │
- │      └── platforms.yaml                                        │
- └──────────────┬──────────────────────────────┬──────────────────┘
-                │ CI/CD pipeline               │ Developer pushes
-                │ calls import API             │ YAML changes
-                ▼                              │
- ┌──────────────────────────┐                  │
- │       Django API         │◄─────────────────┘
- │  POST /admin/*/import/   │
- │  GET  /admin/*/export/   │
- └──────────┬───────────────┘
-            │ create-or-update
-            ▼
- ┌──────────────────────────┐     ┌──────────────────────┐
- │     Oracle Database      │◄────│    UI (React)        │
- │   (source of truth)      │     │  Direct API writes   │
- └──────────────────────────┘     └──────────────────────┘
-```
-
-### The `managed_by` Flag
-
-Each versionable entity gets a new field:
-
-```python
-managed_by = models.CharField(
-    max_length=10,
-    choices=[('ui', 'UI'), ('code', 'Code')],
-    default='ui',
-    db_column='MANAGED_BY',
-)
-```
-
-**Behavior:**
-- `managed_by='ui'` → Fully editable in the UI (default, backward-compatible)
-- `managed_by='code'` → **Read-only in the UI**, only modifiable via import endpoint
-- The UI shows a lock icon and "Managed by code" badge on code-managed entities
-- The import endpoint sets `managed_by='code'` automatically
-- An admin can "release" an entity back to UI management via a dedicated endpoint
-
-This prevents the **drift problem**: if an entity is managed by code, no one can accidentally modify it through the UI.
+### NOT managed as code — runtime / operational state
+| Entity | Reason |
+|--------|--------|
+| Executions, Execution Steps, Execution Targets | Runtime state |
+| Scheduled Executions, Recurring Patterns | Runtime scheduling |
+| Audit Log | Append-only operational data |
+| User Favorites | User preferences |
+| Users, API Keys, Sessions | Identity / auth state |
+| Integration health_status/health_checked_at | Runtime health probes |
 
 ---
 
-## YAML Schema Design
+## Current State Assessment
 
-### Action Definition
+| What exists today | Status |
+|-------------------|--------|
+| **Profiles YAML export/import** (`profiles/services_export_import.py`) | Done — pattern to replicate |
+| Profile Import Modal in UI (`ProfileImportModal.tsx`) | Done |
+| Profile export endpoint (`GET /admin/profiles/export/yaml/`) | Done |
+| Profile import endpoint (`POST /admin/profiles/import/yaml/`) | Done |
+| Integration seed command (`seed_integration_types.py`) | Partial — imperative, not declarative |
+| Integration migration command (`migrate_integrations.py`) | Partial — status updates only |
+| Dev seed script (`scripts/seed_dev_data.py`) | Partial — imperative Python, not YAML |
+| Actions export/import | **Missing** |
+| Integrations export/import | **Missing** |
+| Policies export/import | **Missing** |
+| Reference data export/import | **Missing** |
+| Feature flags export/import | **Missing** |
+| Integration type catalogue export/import | **Missing** |
+| Tags export/import | **Missing** |
+| Sync endpoint (full declarative reconciliation) | **Missing** |
+| Drift detection | **Missing** |
+| CI/CD pipeline for config sync | **Missing** |
+
+---
+
+## YAML Schema Definitions
+
+All YAML files use a consistent envelope:
 
 ```yaml
-# idp-config/actions/oracle-patching.yaml
+apiVersion: idp/v1
+kind: <EntityType>
+metadata:
+  name: <unique-identifier>
+  # entity-specific metadata
+spec:
+  # entity-specific configuration
+```
+
+### Action / Workflow
+
+```yaml
 apiVersion: idp/v1
 kind: Action
 metadata:
-  name: oracle-patching-quarterly
-  description: "Quarterly Oracle database patching workflow"
-  category: Patching
-  engine: Oracle
-  platform: AAP
-  item_type: workflow
-  tags:
+  name: oracle-patching-quarterly         # UNIQUE — lookup key
+  description: "Quarterly Oracle database patching"
+  category: Patching                       # must exist in reference/categories.yaml
+  engine: Oracle                           # must exist in reference/engines.yaml
+  platform: AAP                            # must exist in integration-types/
+  item_type: workflow                      # action | workflow
+  tags:                                    # auto-created if missing from tags.yaml
     - oracle
     - patching
-    - quarterly
 spec:
-  status: published
+  status: published                        # draft | published | disabled
   requires_target: true
-  default_impact_level: high
-  parameters_schema:
+  default_impact_level: high               # low | medium | high | critical
+  documentation_md: |
+    ## Oracle Quarterly Patching
+    This workflow applies quarterly Oracle CPU patches.
+  parameters_schema:                       # JSON Schema draft-07
     type: object
     properties:
       patch_version:
@@ -192,43 +188,81 @@ spec:
   notification_config:
     email: true
     teams: true
-  integration_ref: aap-production  # Reference by name
-  business_rule_policy_ref: change-approval-policy  # Reference by name
+  remediation_rules: null                  # or inline remediation config
+  integration_ref: aap-production          # resolved by name → Integration.name
+  business_rule_policy_ref: change-approval-policy  # resolved by name → BusinessRulePolicy.name
   mutex:
-    - incompatible_with: oracle-upgrade
+    - incompatible_with: oracle-upgrade    # resolved by name → Action.name
       same_target: true
       description: "Cannot patch during upgrade"
 ```
 
-### Integration Definition
+### Integration
 
 ```yaml
-# idp-config/integrations/aap-production.yaml
 apiVersion: idp/v1
 kind: Integration
 metadata:
-  name: aap-production
-  type: aap
-  role: platform
+  name: aap-production                     # UNIQUE — lookup key
+  type: aap                                # must exist in integration-types/
 spec:
   base_url: https://aap.internal.company.com
   auth_flow: basic_then_token
   token_url: https://aap.internal.company.com/api/v2/tokens/
-  credential_ref: vault:secret/integrations/aap-prod  # Vault path, never inline secrets
+  credential_ref: secret/integrations/aap-prod   # Vault path — NEVER inline secrets
   icon: /icons/aap.svg
-  config:
+  secret_service_ref: vault-production     # optional — resolved by name → Integration.name
+  config:                                  # auth flow steps, JSON blob
     verify_ssl: true
     timeout: 30
 ```
 
-### Business Rule Policy Definition
+### Integration Type Catalogue
 
 ```yaml
-# idp-config/policies/change-approval-policy.yaml
+apiVersion: idp/v1
+kind: IntegrationTypeCatalogue
+metadata:
+  code: aap                                # PK — lookup key
+  name: Ansible Automation Platform
+spec:
+  description: "Red Hat AAP for automation"
+  version: "2.4"
+  is_active: true
+  integration_role: platform               # platform | service
+  actions:                                 # IntegrationAction entries
+    - action_code: launch_job
+      action_label: "Launch Job Template"
+      description: "Launch a job template by ID or name"
+      required_params:
+        type: object
+        properties:
+          job_template_id: { type: integer }
+      optional_params:
+        type: object
+        properties:
+          extra_vars: { type: object }
+      response_format:
+        type: object
+        properties:
+          job_id: { type: integer }
+          status: { type: string }
+    - action_code: check_job_status
+      action_label: "Check Job Status"
+      description: "Poll job status by ID"
+      required_params:
+        type: object
+        properties:
+          job_id: { type: integer }
+```
+
+### Business Rule Policy
+
+```yaml
 apiVersion: idp/v1
 kind: BusinessRulePolicy
 metadata:
-  name: change-approval-policy
+  name: change-approval-policy             # UNIQUE — lookup key
   description: "Standard change approval requirements"
 spec:
   is_active: true
@@ -251,81 +285,251 @@ spec:
           message: "Change request rejected"
 ```
 
+### Profile
+
+```yaml
+apiVersion: idp/v1
+kind: Profile
+metadata:
+  name: dbops-team                         # UNIQUE — lookup key
+  description: "Database operations team"
+  ad_group: CN=GRP-IDP-DBOPS,OU=Groups,DC=corp
+spec:
+  is_admin: false
+  is_auditor: false
+  is_approver: true
+  actions:
+    type: pattern                          # all | list | pattern
+    patterns:
+      - oracle
+      - patching
+  targets:
+    type: pattern
+    patterns:
+      - "PROD-*"
+    exclusion_patterns:
+      - "PROD-CRITICAL-*"
+    filter_by_attribute:
+      engine_type: ["oracle"]
+      zone: ["prod"]
+  environments:
+    - production
+    - staging
+```
+
 ### Reference Data
 
 ```yaml
-# idp-config/reference/engines.yaml
+# reference/engines.yaml
 apiVersion: idp/v1
 kind: ReferenceData
 metadata:
   type: engines
 spec:
   - code: Oracle
-    name: Oracle Database
+    label: Oracle Database
+    display_order: 1
+    is_active: true
     icon_url: /icons/oracle.svg
   - code: SQL Server
-    name: Microsoft SQL Server
-    icon_url: /icons/sqlserver.svg
+    label: Microsoft SQL Server
+    display_order: 2
+    is_active: true
   - code: DB2
-    name: IBM DB2
-    icon_url: /icons/db2.svg
+    label: IBM DB2
+    display_order: 3
+    is_active: true
+```
+
+```yaml
+# reference/categories.yaml
+apiVersion: idp/v1
+kind: ReferenceData
+metadata:
+  type: categories
+spec:
+  - code: Provisioning
+    label: Provisioning
+    display_order: 1
+    is_active: true
+  - code: Patching
+    label: Patching
+    display_order: 2
+    is_active: true
+  - code: Administration
+    label: Administration
+    display_order: 3
+    is_active: true
+  - code: Monitoring
+    label: Monitoring
+    display_order: 4
+    is_active: true
+```
+
+### Tags
+
+```yaml
+# tags.yaml
+apiVersion: idp/v1
+kind: Tags
+spec:
+  - oracle
+  - sqlserver
+  - db2
+  - patching
+  - provisioning
+  - monitoring
+  - backup
+  - administration
+```
+
+### Feature Flags
+
+```yaml
+# feature-flags.yaml
+apiVersion: idp/v1
+kind: FeatureFlags
+spec:
+  - flag_key: new_workflow_builder
+    enabled: true
+    rollout_percent: 100
+    description: "Enable new visual workflow builder"
+  - flag_key: inventory_multi_table
+    enabled: false
+    rollout_percent: 0
+    description: "Enable multi-table inventory support"
 ```
 
 ---
 
-## Implementation Phases
+## Implementation Plan
 
-### Phase 1: Generalize Export/Import (extend existing pattern)
+### Ordering constraint
 
-**Goal:** Every configurable entity can be exported to YAML and reimported.
+Entities have dependencies. The sync must apply them in order:
 
-**Backend changes:**
-
-| App | New file | Endpoints |
-|-----|----------|-----------|
-| `catalog` | `catalog/services_export_import.py` | `GET /admin/actions/export/`, `POST /admin/actions/import/` |
-| `integrations` | `integrations/services_export_import.py` | `GET /admin/integrations/export/`, `POST /admin/integrations/import/` |
-| `catalog` | (extend above) | `GET /admin/business-rule-policies/export/`, `POST .../import/` |
-| `reference` | `reference/services_export_import.py` | `GET /admin/reference/export/`, `POST /admin/reference/import/` |
-
-**Pattern to follow** (from `profiles/services_export_import.py`):
-- `export_*_yaml()` → Serialize all entities to YAML bytes
-- `import_*_yaml(content, user)` → Parse, validate schema, create-or-update, return `(created, updated)` counts
-- `_validate_yaml_schema(parsed)` → Structural validation before applying changes
-- References between entities use `name` (not IDs) for portability across environments
-
-**Frontend changes:**
-- Add "Export YAML" / "Import YAML" buttons to each admin panel
-- Reuse the existing `ProfileImportModal.tsx` pattern
-
-### Phase 2: Add `managed_by` field
-
-**Database migration:**
-```sql
--- V090__add_managed_by_columns.sql
-ALTER TABLE ACTIONS_CATALOG ADD MANAGED_BY VARCHAR2(10) DEFAULT 'ui' NOT NULL;
-ALTER TABLE INTEGRATIONS ADD MANAGED_BY VARCHAR2(10) DEFAULT 'ui' NOT NULL;
-ALTER TABLE BUSINESS_RULE_POLICIES ADD MANAGED_BY VARCHAR2(10) DEFAULT 'ui' NOT NULL;
-
-ALTER TABLE ACTIONS_CATALOG ADD CONSTRAINT CK_ACTIONS_MANAGED_BY CHECK (MANAGED_BY IN ('ui', 'code'));
-ALTER TABLE INTEGRATIONS ADD CONSTRAINT CK_INTEGRATIONS_MANAGED_BY CHECK (MANAGED_BY IN ('ui', 'code'));
-ALTER TABLE BUSINESS_RULE_POLICIES ADD CONSTRAINT CK_BRP_MANAGED_BY CHECK (MANAGED_BY IN ('ui', 'code'));
+```
+1. reference/engines.yaml       (no deps)
+2. reference/categories.yaml    (no deps)
+3. tags.yaml                    (no deps)
+4. feature-flags.yaml           (no deps)
+5. integration-types/*.yaml     (no deps)
+6. integrations/*.yaml          (depends on: integration-types, other integrations for secret_service_ref)
+7. policies/*.yaml              (no deps)
+8. actions/*.yaml               (depends on: integrations, policies, reference data, tags)
+9. profiles/*.yaml              (depends on: actions for LIST-type permissions)
 ```
 
-**Backend changes:**
-- Add `managed_by` field to Django models
-- Import endpoint sets `managed_by='code'` on imported entities
-- Update/delete views reject modifications on `managed_by='code'` entities with HTTP 403
-- Add `POST /admin/actions/{id}/release/` to set `managed_by='ui'`
+### Phase 1: Export services for all entity types
 
-**Frontend changes:**
-- Show lock icon + "Managed by code" badge on code-managed entities
-- Disable edit/delete buttons for code-managed entities
-- Show tooltip: "This entity is managed via YAML. To modify, update the YAML file and reimport."
+**Goal:** Every entity type can be serialized to YAML and deserialized back.
 
-### Phase 3: CI/CD Reconciliation Pipeline
+Replicate the `profiles/services_export_import.py` pattern for each entity.
 
-**GitHub Actions workflow** (or Azure DevOps equivalent):
+| New file | Entity types | Export function | Import function |
+|----------|-------------|-----------------|-----------------|
+| `catalog/services_export_import.py` | Actions, ActionMutex, Tags | `export_actions_yaml()` | `import_actions_yaml(content, user)` |
+| `integrations/services_export_import.py` | Integrations | `export_integrations_yaml()` | `import_integrations_yaml(content, user)` |
+| `integrations/services_export_import_types.py` | IntegrationTypeCatalogue + IntegrationAction | `export_integration_types_yaml()` | `import_integration_types_yaml(content, user)` |
+| `catalog/services_export_import_policies.py` | BusinessRulePolicy | `export_policies_yaml()` | `import_policies_yaml(content, user)` |
+| `reference/services_export_import.py` | RefEngine, RefCategory | `export_reference_yaml(type)` | `import_reference_yaml(content, type, user)` |
+| `core/services_export_import.py` | FeatureFlag | `export_feature_flags_yaml()` | `import_feature_flags_yaml(content, user)` |
+| `catalog/services_export_import_tags.py` | Tag | `export_tags_yaml()` | `import_tags_yaml(content, user)` |
+
+**Each import function must:**
+1. Parse YAML with `yaml.safe_load`
+2. Validate the schema envelope (`apiVersion`, `kind`, required fields)
+3. Resolve cross-references by name (e.g., `integration_ref: "aap-production"` → lookup `Integration.objects.get(name="aap-production")`)
+4. Create-or-update using the unique key (name/code)
+5. Wrap in `transaction.atomic()` — all-or-nothing
+6. Log to `AUDIT_LOG` with `source='yaml_import'` in details
+7. Return `(created, updated, unchanged)` counts
+
+**Each export function must:**
+1. Query all entities (or filter by a list of names)
+2. Serialize to YAML using the schema above
+3. Resolve FK IDs back to names (e.g., `integration_id=42` → `integration_ref: "aap-production"`)
+4. Mask `credential_ref` values in export (show path but redact last segment)
+5. Return UTF-8 bytes
+
+### Phase 2: Sync API endpoints
+
+**New API endpoints** (admin-only):
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/admin/actions/export/yaml/` | Export all actions as YAML |
+| `POST` | `/admin/actions/sync/` | Import actions YAML (create-or-update) |
+| `GET` | `/admin/integrations/export/yaml/` | Export all integrations as YAML |
+| `POST` | `/admin/integrations/sync/` | Import integrations YAML |
+| `GET` | `/admin/integration-types/export/yaml/` | Export integration type catalogue |
+| `POST` | `/admin/integration-types/sync/` | Import integration types |
+| `GET` | `/admin/policies/export/yaml/` | Export business rule policies |
+| `POST` | `/admin/policies/sync/` | Import policies |
+| `GET` | `/admin/reference/engines/export/yaml/` | Export engines |
+| `POST` | `/admin/reference/engines/sync/` | Import engines |
+| `GET` | `/admin/reference/categories/export/yaml/` | Export categories |
+| `POST` | `/admin/reference/categories/sync/` | Import categories |
+| `GET` | `/admin/tags/export/yaml/` | Export tags |
+| `POST` | `/admin/tags/sync/` | Import tags |
+| `GET` | `/admin/feature-flags/export/yaml/` | Export feature flags |
+| `POST` | `/admin/feature-flags/sync/` | Import feature flags |
+
+**Sync semantics (declarative):**
+- Entities in YAML that don't exist in DB → **created**
+- Entities in YAML that exist in DB → **updated** (full replace of fields)
+- Entities in DB that are NOT in YAML → **not deleted** (additive sync by default)
+- Optional `?mode=full` query param → entities in DB but NOT in YAML get **soft-deleted/disabled**
+
+The `/sync/` endpoints accept `multipart/form-data` (file upload) or `application/x-yaml` (raw body).
+
+### Phase 3: Management command for full repo sync
+
+**New management command:** `python manage.py sync_config --config-dir /path/to/idp-config/`
+
+```python
+# core/management/commands/sync_config.py
+"""
+Apply a full IDP config directory to the database.
+Processes entity types in dependency order.
+
+Usage:
+  python manage.py sync_config --config-dir ./idp-config/
+  python manage.py sync_config --config-dir ./idp-config/ --dry-run
+  python manage.py sync_config --config-dir ./idp-config/ --mode full
+"""
+```
+
+This command:
+1. Reads all YAML files from the config directory
+2. Validates schemas offline (no DB queries)
+3. Resolves cross-references and checks for dangling refs
+4. Applies changes in dependency order (see ordering above)
+5. Reports: `created`, `updated`, `unchanged`, `errors` per entity type
+6. `--dry-run` mode: validate + report without writing to DB
+7. `--mode full`: disable/delete entities not in config repo
+8. `--validate-only`: schema + reference validation, no DB writes
+
+### Phase 4: Drift detection
+
+**New management command:** `python manage.py detect_drift --config-dir /path/to/idp-config/`
+
+This command:
+1. Exports current DB state as YAML (in-memory)
+2. Loads config directory YAML
+3. Compares entity-by-entity using the unique key
+4. Reports:
+   - **Missing in DB** — entity in YAML but not in DB (needs sync)
+   - **Missing in YAML** — entity in DB but not in YAML (UI-created, unversioned)
+   - **Diverged** — entity exists in both but fields differ (UI edit overrode code)
+   - **In sync** — entity matches
+
+**Optional Celery periodic task:** Run drift detection every N hours, push results to:
+- Dashboard widget (new React component)
+- Teams/Slack notification
+- Audit log entry
+
+### Phase 5: CI/CD pipeline
 
 ```yaml
 # .github/workflows/sync-idp-config.yml
@@ -334,55 +538,225 @@ on:
   push:
     branches: [main]
     paths: ['idp-config/**']
+  pull_request:
+    branches: [main]
+    paths: ['idp-config/**']
 
 jobs:
-  sync:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Install dependencies
+        run: pip install pyyaml jsonschema
       - name: Validate YAML schemas
         run: python scripts/validate_idp_config.py idp-config/
-      - name: Apply to staging
+      - name: Check cross-references
+        run: python scripts/check_references.py idp-config/
+
+  apply-staging:
+    if: github.event_name == 'push'
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply configuration to staging
         env:
           IDP_API_URL: ${{ secrets.STAGING_API_URL }}
           IDP_API_TOKEN: ${{ secrets.STAGING_API_TOKEN }}
-        run: python scripts/apply_idp_config.py --env staging idp-config/
-      - name: Drift detection
-        run: python scripts/detect_drift.py --env staging idp-config/
+        run: python scripts/apply_idp_config.py --env staging --dir idp-config/
+
+  apply-production:
+    if: github.event_name == 'push'
+    needs: apply-staging
+    runs-on: ubuntu-latest
+    environment: production  # requires manual approval in GitHub
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply configuration to production
+        env:
+          IDP_API_URL: ${{ secrets.PROD_API_URL }}
+          IDP_API_TOKEN: ${{ secrets.PROD_API_TOKEN }}
+        run: python scripts/apply_idp_config.py --env production --dir idp-config/
 ```
 
-**Drift detection** (scheduled Celery task):
-- Export current DB state → compare with Git repo content
-- Report drift as Slack/Teams notification or dashboard warning
-- Optional: auto-remediate by re-applying Git state
+**`scripts/apply_idp_config.py`** — Python CLI that:
+1. Reads YAML files from `idp-config/`
+2. For each entity type (in dependency order), calls the corresponding `/admin/*/sync/` endpoint
+3. Reports results per entity type
+4. Exits non-zero on any error
 
-### Phase 4: UI Writes as PRs (optional, full GitOps)
+### Phase 6: UI drift indicators
 
-Only if the team wants full GitOps:
-- UI "Save" button generates a YAML diff
-- Calls GitHub/Azure DevOps API to create a PR
-- PR review + merge triggers Phase 3 pipeline
-- Requires frontend integration with Git API
+**Frontend changes:**
+
+1. **Drift badge on admin panels** — If an entity was modified via UI after the last Git sync, show a warning icon with tooltip: "Modified locally — not in sync with config repo. Add to YAML to persist."
+
+2. **"Export to YAML" button** — On each entity detail page, allow exporting a single entity as YAML (for copy-paste into the config repo).
+
+3. **Sync status dashboard widget** — Show last sync time, counts of diverged entities, link to audit log.
+
+**Backend support:**
+- Add `last_synced_at` and `last_synced_hash` columns to track when an entity was last applied from YAML
+- Compare `updated_at > last_synced_at` to detect UI-modified entities
+
+---
+
+## Database Migration
+
+```sql
+-- V111__add_iac_sync_tracking_columns.sql
+
+-- Track when entities were last synced from config repo
+ALTER TABLE ACTIONS_CATALOG ADD LAST_SYNCED_AT TIMESTAMP NULL;
+ALTER TABLE ACTIONS_CATALOG ADD LAST_SYNCED_HASH VARCHAR2(64) NULL;
+
+ALTER TABLE INTEGRATIONS ADD LAST_SYNCED_AT TIMESTAMP NULL;
+ALTER TABLE INTEGRATIONS ADD LAST_SYNCED_HASH VARCHAR2(64) NULL;
+
+ALTER TABLE BUSINESS_RULE_POLICIES ADD LAST_SYNCED_AT TIMESTAMP NULL;
+ALTER TABLE BUSINESS_RULE_POLICIES ADD LAST_SYNCED_HASH VARCHAR2(64) NULL;
+
+ALTER TABLE PROFILES ADD LAST_SYNCED_AT TIMESTAMP NULL;
+ALTER TABLE PROFILES ADD LAST_SYNCED_HASH VARCHAR2(64) NULL;
+
+ALTER TABLE INTEGRATION_TYPE_CATALOGUE ADD LAST_SYNCED_AT TIMESTAMP NULL;
+ALTER TABLE INTEGRATION_TYPE_CATALOGUE ADD LAST_SYNCED_HASH VARCHAR2(64) NULL;
+
+ALTER TABLE REF_ENGINES ADD LAST_SYNCED_AT TIMESTAMP NULL;
+ALTER TABLE REF_ENGINES ADD LAST_SYNCED_HASH VARCHAR2(64) NULL;
+
+ALTER TABLE REF_CATEGORIES ADD LAST_SYNCED_AT TIMESTAMP NULL;
+ALTER TABLE REF_CATEGORIES ADD LAST_SYNCED_HASH VARCHAR2(64) NULL;
+
+ALTER TABLE CORE_FEATURE_FLAGS ADD LAST_SYNCED_AT TIMESTAMP NULL;
+ALTER TABLE CORE_FEATURE_FLAGS ADD LAST_SYNCED_HASH VARCHAR2(64) NULL;
+
+-- Add new audit action types for sync operations
+-- (extend CHECK constraint on AUDIT_LOG.ACTION_TYPE)
+```
+
+The `LAST_SYNCED_HASH` is a SHA-256 of the YAML content for that entity, used by drift detection
+to quickly determine if the DB state matches the repo without full field comparison.
+
+---
+
+## Cross-Reference Resolution
+
+All references between entities use **names**, not IDs. The import/sync process resolves them:
+
+| Field in YAML | Resolved to | Error if missing? |
+|---------------|-------------|-------------------|
+| `integration_ref: "aap-production"` | `Action.integration_id` via `Integration.objects.get(name=...)` | Yes — reject import |
+| `business_rule_policy_ref: "change-approval"` | `Action.business_rule_policy_id` via `BusinessRulePolicy.objects.get(name=...)` | Yes — reject import |
+| `secret_service_ref: "vault-prod"` | `Integration.secret_service_id` via `Integration.objects.get(name=...)` | Yes — reject import |
+| `mutex[].incompatible_with: "oracle-upgrade"` | `ActionMutex.incompatible_with_id` via `Action.objects.get(name=...)` | Yes — reject import |
+| `metadata.category: "Patching"` | Validated against `RefCategory.objects.filter(code=...)` | Warning (allow if category doesn't exist yet) |
+| `metadata.engine: "Oracle"` | Validated against `RefEngine.objects.filter(code=...)` | Warning |
+| `metadata.platform: "AAP"` | Validated against `IntegrationTypeCatalogue.objects.filter(code=...)` | Warning |
+| `metadata.tags: ["oracle"]` | Auto-created via `Tag.objects.get_or_create(name=...)` | Never fails |
+| `profiles.actions.list: [42]` | **Problem: IDs not portable!** Must use action names instead | N/A |
+
+**Profile action permissions fix:** The existing profile YAML uses `action_ids` (integer list).
+For Git-as-source-of-truth, we need to also support `action_names` (string list) that resolve
+to IDs at import time. The existing `action_ids` format continues to work for backward
+compatibility, but the export should prefer `action_names`.
 
 ---
 
 ## Security Considerations
 
-1. **Never store secrets in YAML** — Use `credential_ref: vault:path/to/secret` references only
-2. **Import endpoint requires admin role** — Same RBAC as existing admin endpoints
-3. **Audit trail** — All imports logged in `AUDIT_LOG` with source='yaml_import'
-4. **Schema validation** — Reject malformed YAML before applying any changes
-5. **Atomic imports** — Wrap import in a database transaction; rollback on any error
-6. **Sensitive fields excluded from export** — `credential_ref` values are masked in export
+1. **Never store secrets in YAML** — Only Vault paths (`credential_ref`). The export masks even paths.
+2. **Import/sync endpoints require admin role** — Same RBAC as existing admin endpoints.
+3. **Audit trail** — Every sync operation logs to `AUDIT_LOG` with `details.source = 'config_sync'`.
+4. **Schema validation** — Reject malformed YAML before any DB writes.
+5. **Atomic per entity type** — Each entity type import is wrapped in `transaction.atomic()`.
+6. **CI/CD token scoping** — API token for sync should have a dedicated `config_sync` permission, not full admin.
+7. **No delete by default** — Sync is additive. Full mode (with deletes) requires explicit `--mode full`.
 
 ---
 
-## Migration Path
+## Disaster Recovery Scenario
 
-1. **No breaking changes** — All existing UI workflows continue to work
-2. **Default `managed_by='ui'`** — Existing entities are unaffected
-3. **Opt-in per entity** — Teams choose which entities to manage as code
-4. **Gradual adoption** — Start with reference data (low risk), then integrations, then actions
+If the database is destroyed:
+
+1. Run Flyway migrations → empty schema
+2. Run `python manage.py sync_config --config-dir ./idp-config/` → full config restored
+3. Runtime state (executions, audit logs, scheduled tasks) is lost — this is acceptable as it's operational data
+
+This makes the config repo the **complete backup** of all IDP Portal configuration.
+
+---
+
+## UI Emergency Edit Flow
+
+When an operator makes an emergency change via the UI:
+
+1. UI shows a confirmation dialog: "This entity is managed by the config repo. Your change will be overwritten on next sync. Proceed?"
+2. Change is applied immediately to the DB (for incident response speed).
+3. The entity's `updated_at` becomes later than `last_synced_at` → drift detected.
+4. Dashboard shows the entity as "diverged from config repo".
+5. After the incident, the operator must:
+   - Export the entity as YAML (button in UI)
+   - Add it to the config repo (manual Git commit)
+   - Merge to main → next sync makes DB and repo consistent again
+
+---
+
+## File Structure in Config Repo
+
+```
+idp-config/
+├── README.md                          # Explains the structure and sync process
+├── reference/
+│   ├── engines.yaml                   # RefEngine entries
+│   └── categories.yaml                # RefCategory entries
+├── tags.yaml                          # All tags
+├── feature-flags.yaml                 # All feature flags
+├── integration-types/
+│   ├── aap.yaml                       # IntegrationTypeCatalogue + IntegrationActions
+│   ├── servicenow.yaml
+│   ├── terraform_cloud.yaml
+│   ├── github_actions.yaml
+│   ├── azure_devops.yaml
+│   └── vault.yaml
+├── integrations/
+│   ├── aap-production.yaml
+│   ├── servicenow-itsm.yaml
+│   ├── vault-production.yaml
+│   └── github-actions-ci.yaml
+├── policies/
+│   ├── change-approval-policy.yaml
+│   └── emergency-bypass-policy.yaml
+├── actions/
+│   ├── oracle-patching-quarterly.yaml
+│   ├── oracle-provisioning.yaml
+│   ├── db2-health-check.yaml
+│   └── sqlserver-backup-full.yaml
+└── profiles/
+    ├── dbops-team.yaml
+    ├── dba-senior.yaml
+    ├── auditors.yaml
+    └── platform-admin.yaml
+```
+
+---
+
+## Implementation Priority & Effort Estimates
+
+| Phase | Description | Dependencies | Files to create/modify |
+|-------|-------------|--------------|----------------------|
+| **1** | Export/import services for all entities | None | 7 new service files, ~200 lines each |
+| **2** | Sync API endpoints | Phase 1 | 8 new view classes, URL registrations |
+| **3** | `sync_config` management command | Phase 1 | 1 new command, ~300 lines |
+| **4** | Drift detection command | Phase 1 | 1 new command, ~200 lines |
+| **5** | CI/CD pipeline + apply script | Phases 2-3 | 3 scripts + 1 workflow YAML |
+| **6** | UI drift indicators + DB migration | Phase 4 | 1 migration, model changes, 2-3 React components |
+
+**Recommended starting order:** Phase 1 (export/import) is the foundation — everything else depends on it. Within Phase 1, start with **reference data** (simplest schema, lowest risk) → **integrations** → **policies** → **actions** (most complex, has cross-references) → update **profiles** (already exists, needs action_names support).
 
 ---
 
@@ -390,9 +764,13 @@ Only if the team wants full GitOps:
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| Source of truth | Database (not Git) | Preserves instant UI editing; Git is secondary sync |
-| File format | YAML | Human-readable, already used for profiles, familiar to DevOps teams |
-| Entity references | By name (not ID) | Portable across environments (dev/staging/prod have different IDs) |
-| Conflict resolution | Last-write-wins with audit | Simpler than merge; audit trail provides recovery |
-| Import granularity | Per-entity-type | Import all actions, or all integrations; not mixed bundles |
-| `managed_by` default | `ui` | Backward-compatible; opt-in for code management |
+| Source of truth | **Git repo** | Full disaster recovery, peer review, environment promotion |
+| DB role | Runtime cache | Faster reads than Git; sync applies Git state to DB |
+| UI writes | Allowed but ephemeral | Incident response needs instant changes; next sync overwrites |
+| Sync semantics | Additive by default | Prevents accidental deletion; `--mode full` for cleanup |
+| File format | YAML | Human-readable, already used for profiles, familiar to ops teams |
+| Entity references | By name (not ID) | Portable across environments |
+| One file per entity vs. bundle | One file per entity for actions/integrations/profiles; single file for reference data/tags/flags | Easier Git diffs, merge conflict avoidance |
+| Profile action permissions | Support `action_names` (string list) alongside `action_ids` | Names are portable; IDs are environment-specific |
+| Delete behavior on sync | Soft-delete/disable, never hard-delete | Preserves audit trail and FK integrity |
+| Sync hash | SHA-256 of YAML content per entity | Fast drift detection without field-by-field comparison |
