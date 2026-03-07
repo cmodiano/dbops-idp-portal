@@ -9,7 +9,7 @@ import type { DashboardStats } from '../../../types/api';
 
 // Mock StatCard to render props as text
 vi.mock('../../dashboard/StatCard', () => ({
-  StatCard: ({ label, value, loading, suffix, tooltip, zeroText }: { label: string; value: number; loading?: boolean; suffix?: string; tooltip?: string; zeroText?: string }) => (
+  StatCard: ({ label, value, loading, suffix, tooltip, zeroText }: { label: string; value: number | string; loading?: boolean; suffix?: string; tooltip?: string; zeroText?: string }) => (
     <div data-testid="stat-card" data-loading={loading} data-tooltip={tooltip} data-zero-text={zeroText}>
       <span data-testid="stat-label">{label}</span>
       <span data-testid="stat-value">{value}{suffix}</span>
@@ -30,6 +30,15 @@ vi.mock('@ant-design/icons', () => ({
   CheckCircleOutlined: () => <span>CheckIcon</span>,
   SyncOutlined: () => <span>SyncIcon</span>,
   ExclamationCircleOutlined: () => <span>ExclamationIcon</span>,
+  ClockCircleOutlined: () => <span>ClockIcon</span>,
+  ArrowRightOutlined: () => <span>ArrowRightIcon</span>,
+}));
+
+// Mock react-router Link
+vi.mock('react-router', () => ({
+  Link: ({ to, children }: { to: string; children: React.ReactNode }) => (
+    <a href={to}>{children}</a>
+  ),
 }));
 
 const defaultStats: DashboardStats = {
@@ -161,5 +170,65 @@ describe('Story 46.5 — Tooltips explicatifs sur les StatCards', () => {
       c.querySelector('[data-testid="stat-label"]')?.textContent === 'Exécutions du jour',
     );
     expect(jourCard?.getAttribute('data-zero-text')).toBe("Aucune pour l'instant");
+  });
+});
+
+describe('Story 60.11 — Enrichissement ExecutionsStatSection', () => {
+  const baseProps = {
+    statsData: {
+      executions_jour: 10,
+      taux_succes_pct: 80,
+      executions_en_cours: 1,
+      executions_en_erreur: 0,
+    },
+    statsLoading: false,
+    timeSeriesData: [],
+    timeSeriesLoading: false,
+    filters: {},
+  };
+
+  it('renders duration StatCard when avgExecutionTimeS is provided', () => {
+    render(<ExecutionsStatSection {...baseProps} avgExecutionTimeS={42.5} avgExecutionTimeLoading={false} />);
+
+    const labels = screen.getAllByTestId('stat-label').map((el) => el.textContent);
+    expect(labels).toContain("Durée moy. d'exéc.");
+
+    const values = screen.getAllByTestId('stat-value').map((el) => el.textContent);
+    expect(values).toContain('42.5s');
+  });
+
+  it('shows N/D when avgExecutionTimeS is null', () => {
+    render(<ExecutionsStatSection {...baseProps} avgExecutionTimeS={null} avgExecutionTimeLoading={false} />);
+
+    const values = screen.getAllByTestId('stat-value').map((el) => el.textContent);
+    expect(values).toContain('N/D');
+    expect(values).not.toContain('N/Ds');
+  });
+
+  it('does not render duration section when avgExecutionTimeS prop is absent', () => {
+    render(<ExecutionsStatSection {...baseProps} />);
+
+    const labels = screen.getAllByTestId('stat-label').map((el) => el.textContent);
+    expect(labels).not.toContain("Durée moy. d'exéc.");
+    expect(screen.queryByRole('link')).toBeNull();
+  });
+
+  it('renders analytics link when avgExecutionTimeS provided', () => {
+    render(<ExecutionsStatSection {...baseProps} avgExecutionTimeS={10} avgExecutionTimeLoading={false} />);
+
+    const link = screen.getByRole('link');
+    expect(link).toHaveAttribute('href', '/analytics');
+    expect(link).toHaveTextContent('Voir les statistiques détaillées');
+  });
+
+  it('shows loading state for duration StatCard when avgExecutionTimeLoading is true', () => {
+    render(<ExecutionsStatSection {...baseProps} avgExecutionTimeS={42.5} avgExecutionTimeLoading={true} />);
+
+    const cards = screen.getAllByTestId('stat-card');
+    const durationCard = cards.find((c) =>
+      c.querySelector('[data-testid="stat-label"]')?.textContent === "Durée moy. d'exéc.",
+    );
+    expect(durationCard).toBeDefined();
+    expect(durationCard?.getAttribute('data-loading')).toBe('true');
   });
 });
