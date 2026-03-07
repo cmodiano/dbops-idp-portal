@@ -621,7 +621,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 
 | # | Issue précédente | Ancien statut | Nouveau statut | Détails |
 |---|------------------|---------------|----------------|---------|
-| 16.2 | `except Exception` résiduels | 33 occurrences | **✅ RESOLVED (Story 48.9)** | 77 occurrences auditées, 100 % conformes (`noqa: BLE001` + catégorie). Rapport: `docs/story-48-9-except-exception-audit-report.md` |
+| 16.2 | `except Exception` résiduels | 33 occurrences | **✅ RESOLVED (Story 48.9)** | 77 occurrences auditées, 100 % conformes (`noqa: BLE001` + catégorie). Rapport: `docs/backend/story-48-9-except-exception-audit-report.md` |
 | 16.3 | `.catch(() => {})` résiduels | 21 occurrences | **0 en production** ✅ RESOLVED | Plus que 2 occurrences en fichiers test. Issue fermée |
 
 ---
