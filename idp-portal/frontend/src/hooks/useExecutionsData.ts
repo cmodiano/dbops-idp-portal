@@ -87,7 +87,7 @@ export const useExecutionsData = (
   filters: ExecutionFilters,
   canApprove: boolean,
 ): UseExecutionsDataReturn => {
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
 
   const [integrationIconsMap, setIntegrationIconsMap] = useState<IntegrationIconsMap | null>(null);
   const [executions, setExecutions] = useState<ExecutionResponse[]>([]);
@@ -239,11 +239,13 @@ export const useExecutionsData = (
 
   useEffect(() => { loadPendingApprovalsRef.current = loadPendingApprovals; }, [loadPendingApprovals]);
 
-  // Initial load with loading indicator (subsequent polls are silent)
+  // Initial load: defer until auth is ready to avoid race on reload/new window (Story 59).
+  // When authLoading becomes false and canApprove is true, we fetch; otherwise skip.
   useEffect(() => {
+    if (authLoading || !canApprove) return;
     setPendingApprovalsLoading(true);
     loadPendingApprovals().finally(() => setPendingApprovalsLoading(false));
-  }, [loadPendingApprovals]);
+  }, [loadPendingApprovals, authLoading, canApprove]);
 
   // Story 58.5 — Poll pending approvals list every 30s (AC1, AC3)
   useEffect(() => {

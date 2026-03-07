@@ -1,10 +1,9 @@
-"""Tests Story 58.4 AC3 — ApproveStepView et RejectStepView avec approver_profile_ids.
+"""Tests Story 58.4 AC3, Story 59.1 SEC-1 — ApproveStepView et RejectStepView avec approver_profile_ids.
 
 Ces tests vérifient que :
 - User avec profil dans approver_profile_ids → 200 OK
 - User sans profil dans approver_profile_ids → 403 Forbidden
-- Step sans approver_profile_ids, user is_approver=True → 200 OK
-- Step sans approver_profile_ids, user non-is_approver → 403 Forbidden
+- Step sans approver_profile_ids → 403 Forbidden (fail-secure, Story 59.1 SEC-1)
 """
 from __future__ import annotations
 
@@ -115,11 +114,10 @@ class TestApproveStepViewPermission58_4(TestCase):
         )
         self.assertEqual(response.status_code, 403)
 
-    @patch('executions.views.approval_views.resume_container_workflow_from_gate')
-    def test_fallback_user_with_is_approver_can_approve(self, mock_resume):
-        """Step sans approver_profile_ids, user is_approver=True → 200 OK."""
-        profile = _make_profile("Fallback Approver", is_approver=True)
-        user = _make_user_with_profile("fallback_approver_58_4_c", profile)
+    def test_failsecure_no_approver_profile_ids_is_forbidden(self):
+        """Story 59.1 SEC-1 : Step sans approver_profile_ids → 403 Forbidden (fail-secure)."""
+        profile = _make_profile("Approver Profile", is_approver=True)
+        user = _make_user_with_profile("failsecure_approver_59_1_c", profile)
         self.client.force_authenticate(user=user)
 
         action = self._make_action_with_approver_ids(approver_profile_ids=None)
@@ -130,15 +128,15 @@ class TestApproveStepViewPermission58_4(TestCase):
             f"/api/v1/executions/{execution.id}/steps/{step.id}/approve/",
             format='json',
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 403)
 
-    def test_fallback_user_without_is_approver_is_forbidden(self):
-        """Step sans approver_profile_ids, user non is_approver → 403 Forbidden."""
-        profile = _make_profile("Regular Profile", is_approver=False)
-        user = _make_user_with_profile("non_approver_fallback_58_4_d", profile)
+    def test_failsecure_empty_approver_profile_ids_is_forbidden(self):
+        """Story 59.1 SEC-1 : Step avec approver_profile_ids=[] → 403 Forbidden (fail-secure)."""
+        profile = _make_profile("Approver Profile Empty", is_approver=True)
+        user = _make_user_with_profile("failsecure_approver_59_1_d", profile)
         self.client.force_authenticate(user=user)
 
-        action = self._make_action_with_approver_ids(approver_profile_ids=None)
+        action = self._make_action_with_approver_ids(approver_profile_ids=[])
         execution = ExecutionFactory(action=action, user=user, status=ExecutionStatus.RUNNING)
         step = _make_approval_step(execution)
 

@@ -72,46 +72,26 @@ def _get_user_profile_ids(user: User) -> set[int]:
     return profile_ids
 
 
-def _is_user_approver(user: User) -> bool:
-    """Vérifie si l'utilisateur a au moins un profil avec is_approver=True.
-
-    Chemin 1 : Profile ORM direct
-    Chemin 2 : M2M profiles
-    Chemin 3 : ad_groups → Profile.objects.find_by_ad_groups()
-    """
-    # Chemin 1
-    profile_val = getattr(user, 'profile', None)
-    if profile_val and hasattr(profile_val, 'is_approver_bool') and profile_val.is_approver_bool:
-        return True
-    # Chemin 2
-    if hasattr(user, 'profiles'):
-        for p in user.profiles.all():
-            if getattr(p, 'is_approver_bool', False):
-                return True
-    # Chemin 3
-    if hasattr(user, 'ad_groups'):
-        ad_groups = user.ad_groups or []
-        for p in Profile.objects.find_by_ad_groups(ad_groups):
-            if p.is_approver_bool:
-                return True
-    return False
-
 
 def _check_approver_permission(user: User, step_config: dict) -> bool:
-    """Vérifie si l'utilisateur peut approuver ce step (Story 58.4 AC3).
+    """Vérifie si l'utilisateur peut approuver ce step (Story 58.4 AC3, Story 59.1 SEC-1).
 
-    Logique :
+    Logique fail-secure :
+    - Si step_config ne contient pas approver_profile_ids ou si la liste est vide :
+        → False (fail-secure : en l'absence de restriction explicite, refuser)
     - Si step_config contient approver_profile_ids non vide :
         → True si l'utilisateur a au moins un profil dans la liste
-    - Sinon (fallback) :
-        → True si l'utilisateur a au moins un profil avec is_approver=True
     """
     approver_profile_ids = step_config.get('approver_profile_ids') or []
-    if approver_profile_ids:
-        user_profile_ids = _get_user_profile_ids(user)
-        return bool(user_profile_ids & set(approver_profile_ids))
-    # Fallback : tout profil is_approver=True
-    return _is_user_approver(user)
+    if not approver_profile_ids:
+        logger.warning(
+            "approver_permission_fail_secure",
+            reason="approver_profile_ids absent or empty in step_config",
+            step_config_keys=list(step_config.keys()),
+        )
+        return False
+    user_profile_ids = _get_user_profile_ids(user)
+    return bool(user_profile_ids & set(approver_profile_ids))
 
 
 # ---------------------------------------------------------------------------

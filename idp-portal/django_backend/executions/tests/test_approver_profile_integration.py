@@ -162,12 +162,12 @@ class TestIntegrationApproverProfileIds(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Test 2 : Rétrocompatibilité — step sans approver_profile_ids → tout is_approver=True
+# Test 2 : Fail-secure — step sans approver_profile_ids → 403 (Story 59.1 SEC-1)
 # ---------------------------------------------------------------------------
 
 @pytest.mark.django_db
 class TestIntegrationRetroCompatNoApproverIds(TestCase):
-    """AC5 : step sans approver_profile_ids → fallback vers is_approver=True."""
+    """Story 59.1 SEC-1 : step sans approver_profile_ids → fail-secure → 403 pour tout le monde."""
 
     def setUp(self):
         self.client = APIClient()
@@ -179,7 +179,7 @@ class TestIntegrationRetroCompatNoApproverIds(TestCase):
         self.approver_user = _make_user_with_orm_profile("retro_approver_58_4", self.approver_profile)
         self.non_approver_user = _make_user_with_orm_profile("retro_non_approver_58_4", self.non_approver_profile)
 
-        # Action SANS approver_profile_ids → tout is_approver=True peut approuver
+        # Action SANS approver_profile_ids → fail-secure → 403 pour tout le monde
         self.action = ActionFactory(
             status="published",
             integration=self.integration,
@@ -188,13 +188,12 @@ class TestIntegrationRetroCompatNoApproverIds(TestCase):
                 "name": "gate-step",
                 "step_type": "gate",
                 "gate_type": "approval",
-                # Pas de approver_profile_ids
+                # Pas de approver_profile_ids → fail-secure
             }]
         )
 
-    @patch('executions.views.approval_views.resume_container_workflow_from_gate')
-    def test_is_approver_user_can_approve_without_profile_restriction(self, mock_resume):
-        """Fallback : is_approver=True → peut approuver quand pas de approver_profile_ids."""
+    def test_is_approver_user_cannot_approve_without_profile_restriction(self):
+        """Story 59.1 SEC-1 : is_approver=True sans approver_profile_ids → 403 fail-secure."""
         self.client.force_authenticate(user=self.approver_user)
         execution = ExecutionFactory(
             action=self.action,
@@ -207,10 +206,10 @@ class TestIntegrationRetroCompatNoApproverIds(TestCase):
             f"/api/v1/executions/{execution.id}/steps/{step.id}/approve/",
             format='json',
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 403)
 
     def test_non_approver_user_cannot_approve_without_profile_restriction(self):
-        """Fallback : is_approver=False → ne peut pas approuver sans approver_profile_ids."""
+        """is_approver=False sans approver_profile_ids → 403 (comportement inchangé)."""
         self.client.force_authenticate(user=self.non_approver_user)
         execution = ExecutionFactory(
             action=self.action,

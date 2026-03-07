@@ -8,7 +8,6 @@ from django.test import TestCase
 # Ces fonctions seront ajoutées à approval_views.py
 from executions.views.approval_views import (
     _get_user_profile_ids,
-    _is_user_approver,
     _check_approver_permission,
 )
 
@@ -76,33 +75,6 @@ class TestGetUserProfileIds(TestCase):
         self.assertIn(99, result)
 
 
-class TestIsUserApprover(TestCase):
-    """Tests pour _is_user_approver."""
-
-    def test_returns_true_when_orm_profile_is_approver(self):
-        user = _make_user(profile_id=1, is_approver=True)
-        self.assertTrue(_is_user_approver(user))
-
-    def test_returns_false_when_orm_profile_not_approver(self):
-        user = _make_user(profile_id=1, is_approver=False)
-        self.assertFalse(_is_user_approver(user))
-
-    def test_returns_false_when_no_profile(self):
-        user = _make_user()
-        self.assertFalse(_is_user_approver(user))
-
-    def test_returns_true_when_m2m_profile_is_approver(self):
-        p = MagicMock()
-        p.is_approver_bool = True
-        user = _make_user(profiles_m2m=[p])
-        self.assertTrue(_is_user_approver(user))
-
-    def test_returns_false_when_m2m_profile_not_approver(self):
-        p = MagicMock()
-        p.is_approver_bool = False
-        user = _make_user(profiles_m2m=[p])
-        self.assertFalse(_is_user_approver(user))
-
 
 class TestCheckApproverPermission(TestCase):
     """Tests pour _check_approver_permission — Story 58.4 AC3."""
@@ -119,29 +91,29 @@ class TestCheckApproverPermission(TestCase):
         step_config = {'approver_profile_ids': [1, 2]}
         self.assertFalse(_check_approver_permission(user, step_config))
 
-    def test_fallback_user_with_is_approver_returns_true(self):
-        """Sans approver_profile_ids et user avec is_approver=True → True."""
+    def test_absent_approver_profile_ids_returns_false(self):
+        """Story 59.1 SEC-1 : Sans approver_profile_ids → False (fail-secure)."""
         user = _make_user(profile_id=1, is_approver=True)
         step_config = {}
-        self.assertTrue(_check_approver_permission(user, step_config))
+        self.assertFalse(_check_approver_permission(user, step_config))
 
-    def test_fallback_user_without_is_approver_returns_false(self):
-        """Sans approver_profile_ids et user sans is_approver → False."""
+    def test_fail_secure_no_profile_ids_non_approver_returns_false(self):
+        """Story 59.1 SEC-1 : Sans approver_profile_ids et user sans is_approver → False (fail-secure)."""
         user = _make_user(profile_id=1, is_approver=False)
         step_config = {}
         self.assertFalse(_check_approver_permission(user, step_config))
 
-    def test_empty_list_triggers_fallback(self):
-        """approver_profile_ids=[] → fallback vers is_approver."""
+    def test_empty_list_returns_false(self):
+        """Story 59.1 SEC-1 : approver_profile_ids=[] → False (fail-secure, plus de fallback)."""
         user = _make_user(profile_id=1, is_approver=True)
         step_config = {'approver_profile_ids': []}
-        self.assertTrue(_check_approver_permission(user, step_config))
+        self.assertFalse(_check_approver_permission(user, step_config))
 
-    def test_null_approver_profile_ids_triggers_fallback(self):
-        """approver_profile_ids=null → fallback vers is_approver."""
+    def test_null_approver_profile_ids_returns_false(self):
+        """Story 59.1 SEC-1 : approver_profile_ids=null → False (fail-secure, plus de fallback)."""
         user = _make_user(profile_id=1, is_approver=True)
         step_config = {'approver_profile_ids': None}
-        self.assertTrue(_check_approver_permission(user, step_config))
+        self.assertFalse(_check_approver_permission(user, step_config))
 
     def test_user_with_multiple_profiles_one_matches(self):
         """User avec plusieurs profils dont un correspond → True."""
