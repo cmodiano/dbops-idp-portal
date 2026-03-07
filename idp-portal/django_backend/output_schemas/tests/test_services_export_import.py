@@ -185,3 +185,6 @@ class TestImportOutputSchemasYaml:
         child = OutputSchema.objects.get(name='rt-child')
         assert child.inherits_from is not None
         assert child.inherits_from.name == 'rt-parent'
+
+        parent = OutputSchema.objects.get(name='rt-parent')
+        assert parent.inherits_from is None
