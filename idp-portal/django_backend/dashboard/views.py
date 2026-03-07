@@ -18,7 +18,7 @@ from catalog.models import Action, Tag
 from core.exceptions import BadRequestError
 from core.middleware import get_correlation_id
 from core.permissions import IsDBAOrDBOPS, AdminProfilePermission
-from executions.models import Execution, ExecutionStatus
+from executions.models import Execution, ExecutionStatus, ExecutionStepType, ExecutionStepStatus
 
 logger = structlog.get_logger(__name__)
 
@@ -812,6 +812,121 @@ class DashboardStatsOperationsView(APIView):
                     "top_actions_by_execution": top_actions_by_execution,
                     "top_actions_by_failure": top_actions_by_failure,
                     "by_platform": by_platform,
+                }
+            }
+        )
+
+
+class DashboardStatsApprobationsView(APIView):
+    """GET /dashboard/stats-approbations/ -> {data: ApprobationsStats}
+
+    Story 60.6: Statistiques du workflow d'approbation des exécutions.
+    Source duale ADR-007: Execution.approved_at (legacy) + ExecutionStep gate (nouveau).
+    - approved_count: exécutions COMPLETED avec approbation (legacy ou gate step)
+    - rejected_count: exécutions REJECTED
+    - approval_rate: taux d'approbation en % (null si aucune décision)
+    - avg_approval_delay_s: délai moyen créé→approuvé en secondes (null si aucun approuvé)
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=['dashboard'],
+        summary='Statistiques approbations',
+        parameters=_DASHBOARD_PARAMS[:6],  # sans status
+    )
+    def get(self, request):
+        period_start, period_end = _get_period_bounds(request)
+
+        qs = Execution.objects.select_related("action")
+        qs = _filter_queryset_by_ownership(qs, request)
+        qs = _apply_common_filters(qs, request=request, include_status=False)
+        qs = qs.filter(created_at__gte=period_start, created_at__lt=period_end).distinct()
+
+        # 1. Exécutions approuvées — source duale (legacy Execution.approved_at + gate step ADR-007)
+        qs_approved = qs.filter(
+            status=ExecutionStatus.COMPLETED
+        ).filter(
+            Q(approved_at__isnull=False)
+            | Q(
+                executionstep__step_type=ExecutionStepType.GATE,
+                executionstep__status=ExecutionStepStatus.COMPLETED,
+                executionstep__approved_at__isnull=False,
+            )
+        ).distinct()
+        approved_count = qs_approved.count()
+
+        # 2. Exécutions rejetées
+        rejected_count = qs.filter(status=ExecutionStatus.REJECTED).count()
+
+        # 3. Taux d'approbation
+        total_decided = approved_count + rejected_count
+        approval_rate = round((approved_count / total_decided) * 100, 1) if total_decided > 0 else None
+
+        # 4. Délai moyen d'approbation en secondes (Python loop — compatibilité Oracle)
+        delays = []
+
+        # Chemin legacy: Execution.approved_at - created_at
+        for created_at, approved_at in qs_approved.filter(
+            approved_at__isnull=False
+        ).values_list("created_at", "approved_at"):
+            try:
+                if approved_at is None or created_at is None:
+                    continue
+                delta = (approved_at - created_at).total_seconds()
+                if delta >= 0:
+                    delays.append(delta)
+            except (TypeError, AttributeError) as e:
+                logger.debug(
+                    "approval_delay_calculation_skipped_legacy",
+                    created_at=created_at,
+                    approved_at=approved_at,
+                    error=str(e),
+                    error_type=type(e).__name__,
+                    correlation_id=get_correlation_id(),
+                )
+                continue
+
+        # Chemin nouveau (ADR-007): ExecutionStep.approved_at - Execution.created_at
+        # Exclure les exécutions déjà traitées via legacy (approved_at non-null sur Execution)
+        # Dédupliquer par execution_id : une exécution peut avoir plusieurs gate steps approuvés
+        # (ex: retry). On prend le premier rencontré (ORDER BY par défaut sur created_at desc).
+        gate_exec_seen: set[int] = set()
+        for exec_id, exec_created_at, step_approved_at in qs_approved.filter(
+            approved_at__isnull=True,
+            executionstep__step_type=ExecutionStepType.GATE,
+            executionstep__status=ExecutionStepStatus.COMPLETED,
+            executionstep__approved_at__isnull=False,
+        ).values_list("id", "created_at", "executionstep__approved_at").distinct():
+            if exec_id in gate_exec_seen:
+                continue
+            gate_exec_seen.add(exec_id)
+            try:
+                if step_approved_at is None or exec_created_at is None:
+                    continue
+                delta = (step_approved_at - exec_created_at).total_seconds()
+                if delta >= 0:
+                    delays.append(delta)
+            except (TypeError, AttributeError) as e:
+                logger.debug(
+                    "approval_delay_calculation_skipped_gate",
+                    exec_created_at=exec_created_at,
+                    step_approved_at=step_approved_at,
+                    error=str(e),
+                    error_type=type(e).__name__,
+                    correlation_id=get_correlation_id(),
+                )
+                continue
+
+        avg_approval_delay_s = round(sum(delays) / len(delays), 2) if delays else None
+
+        return Response(
+            {
+                "data": {
+                    "approved_count": approved_count,
+                    "rejected_count": rejected_count,
+                    "approval_rate": approval_rate,
+                    "avg_approval_delay_s": avg_approval_delay_s,
                 }
             }
         )

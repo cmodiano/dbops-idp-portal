@@ -22,6 +22,8 @@ urlpatterns = [
     path("dashboard/stats-adoption/", views.DashboardStatsAdoptionView.as_view(), name="dashboard-stats-adoption"),
     # Story 60.5: Stats opérations enrichies (durée moyenne, top actions, plateformes)
     path("dashboard/stats-operations/", views.DashboardStatsOperationsView.as_view(), name="dashboard-stats-operations"),
+    # Story 60.6: Stats approbations (volume approuvé/rejeté, taux, délai moyen)
+    path("dashboard/stats-approbations/", views.DashboardStatsApprobationsView.as_view(), name="dashboard-stats-approbations"),
     # NOTE: This endpoint returns the object directly (no {"data": ...}) per frontend apiFetchRaw usage.
     path("dashboard/filter-options/", views.DashboardFilterOptionsView.as_view(), name="dashboard-filter-options"),
     # Story 30.2: Dashboard export endpoints
