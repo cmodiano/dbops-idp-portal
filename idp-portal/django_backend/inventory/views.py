@@ -44,6 +44,10 @@ logger = structlog.get_logger(__name__)
 #   import inventory.views as v; v._inventory_service_factory = lambda: MockInventoryService()
 _inventory_service_factory = InventoryService
 
+# Story 62.3: inventory entity types and default columns for schema endpoint
+INVENTORY_ENTITY_TYPES = ('servers', 'instances', 'databases')
+DEFAULT_COLUMNS = ['id', 'name']
+
 
 class IsAdminOrIntegration(BasePermission):
     """
@@ -670,3 +674,56 @@ def list_databases(request: Request) -> Response:
     )
 
     return Response({'data': serializer.data}, status=status.HTTP_200_OK)
+
+
+# --- Story 62.3: Inventory schema endpoint ---
+
+
+@extend_schema(exclude=True)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_inventory_schema(request: Request) -> Response:
+    """
+    Return available column concepts per inventory entity type from config.
+    Story 62.3 — Used by ParametersEditor and execution wizard to load dynamic columns.
+
+    Returns:
+        200: dict mapping entity type → list of column concept names (id always first)
+        401: if not authenticated
+    """
+    correlation_id = get_correlation_id()
+    inventory_service = _inventory_service_factory()
+    try:
+        mapper = inventory_service._get_inventory_mapper()
+    except InventoryServiceError as e:
+        logger.error(
+            "inventory_schema_fetch_failed",
+            error=str(e),
+            user_id=request.user.id,
+            correlation_id=correlation_id,
+        )
+        return Response(
+            {'detail': str(e)},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    schema: dict[str, list[str]] = {}
+    for entity_type in INVENTORY_ENTITY_TYPES:
+        if mapper and mapper.is_multi_table:
+            entity_config = mapper.get_entity_config(entity_type)
+            if entity_config:
+                # Always place 'id' first, even if present elsewhere in config columns
+                columns = ['id'] + [k for k in entity_config.get('columns', {}).keys() if k != 'id']
+                schema[entity_type] = columns
+            else:
+                schema[entity_type] = list(DEFAULT_COLUMNS)
+        else:
+            schema[entity_type] = list(DEFAULT_COLUMNS)
+
+    logger.info(
+        "inventory_schema_fetched",
+        user_id=request.user.id,
+        entity_counts={k: len(v) for k, v in schema.items()},
+        correlation_id=correlation_id,
+    )
+    return Response(schema, status=status.HTTP_200_OK)

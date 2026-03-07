@@ -1,5 +1,7 @@
 // === Inventory Types (Story 4.1, Task 2) ===
 
+import type { InventorySourceType } from './catalog';
+
 /** Inventory item for dropdowns (Story 4.1, Task 2.1). */
 export interface InventoryItem {
   id: string;
@@ -9,3 +11,9 @@ export interface InventoryItem {
   server_ref?: string | null;   // instances (Story 37.5)
   db_ref?: string | null;       // instances (Story 37.5)
 }
+
+/**
+ * Story 62.5 — Schema of available column concepts per inventory entity type.
+ * Matches response of GET /api/v1/inventory/schema/
+ */
+export type InventorySchema = Record<InventorySourceType, string[]>;

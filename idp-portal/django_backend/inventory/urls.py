@@ -13,6 +13,7 @@ from django.urls import path
 from inventory.views import (
     list_targets, list_all_targets, list_environments,
     list_servers, list_instances, list_databases,
+    get_inventory_schema,
 )
 
 urlpatterns = [
@@ -23,4 +24,6 @@ urlpatterns = [
     path('servers/', list_servers, name='inventory-servers'),
     path('instances/', list_instances, name='inventory-instances'),
     path('databases/', list_databases, name='inventory-databases'),
+    # Story 62.3: Inventory schema — available columns per entity type
+    path('schema/', get_inventory_schema, name='inventory-schema'),
 ]

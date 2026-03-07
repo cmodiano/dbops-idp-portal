@@ -3,9 +3,11 @@ Tests de couverture complémentaires pour catalog/serializers.py (Story 55.4).
 Cible les branches non couvertes par les tests existants.
 """
 import pytest
-from unittest.mock import MagicMock
+import catalog.serializers as serializers_module
+from unittest.mock import MagicMock, patch
 from django.test import TestCase
 from rest_framework import serializers
+from inventory.services import InventoryServiceError
 
 from catalog.models import Action, ActionStatus, ActionItemType, BusinessRulePolicy
 from catalog.serializers import (
@@ -612,6 +614,121 @@ class TestValidateParametersSchemaInventory(TestCase):
                 'inventory_value_column': 'bad_column',
             }}})
         self.assertIn('inventory_value_column must be one of', str(cm.exception.detail))
+
+    # ── Story 62.4 — dynamic column validation via mapper ─────────────────────
+
+    def test_dynamic_column_accepted_from_mapper(self):
+        """AC1 — colonne dynamique présente dans le mapper → validation OK."""
+        mock_service = MagicMock()
+        mock_mapper = MagicMock()
+        mock_mapper.is_multi_table = True
+        mock_mapper.get_entity_config.return_value = {
+            'columns': {'name': 'HOSTNAME', 'region': 'REGION'}
+        }
+        mock_service._get_inventory_mapper.return_value = mock_mapper
+
+        value = {'properties': {'p1': {
+            'source': 'inventory',
+            'inventory_type': 'servers',
+            'inventory_value_column': 'region',
+        }}}
+        with patch.object(serializers_module, '_catalog_inventory_service_factory', return_value=mock_service):
+            result = self._call(value)
+        self.assertEqual(result, value)
+
+    def test_dynamic_column_rejected_not_in_mapper(self):
+        """AC2 — colonne absente du mapper → ValidationError avec liste des colonnes autorisées."""
+        mock_service = MagicMock()
+        mock_mapper = MagicMock()
+        mock_mapper.is_multi_table = True
+        mock_mapper.get_entity_config.return_value = {
+            'columns': {'name': 'HOSTNAME', 'environment': 'ENV'}
+        }
+        mock_service._get_inventory_mapper.return_value = mock_mapper
+
+        with patch.object(serializers_module, '_catalog_inventory_service_factory', return_value=mock_service):
+            with self.assertRaises(serializers.ValidationError) as cm:
+                self._call({'properties': {'p1': {
+                    'source': 'inventory',
+                    'inventory_type': 'servers',
+                    'inventory_value_column': 'region',
+                }}})
+        self.assertIn('inventory_value_column must be one of', str(cm.exception.detail))
+
+    def test_fallback_when_no_mapper(self):
+        """AC3 — mapper None → fallback VALID_INVENTORY_VALUE_COLUMNS, colonne standard acceptée."""
+        mock_service = MagicMock()
+        mock_service._get_inventory_mapper.return_value = None
+
+        value = {'properties': {'p1': {
+            'source': 'inventory',
+            'inventory_type': 'servers',
+            'inventory_value_column': 'name',
+        }}}
+        with patch.object(serializers_module, '_catalog_inventory_service_factory', return_value=mock_service):
+            result = self._call(value)
+        self.assertEqual(result, value)
+
+    def test_fallback_when_no_mapper_bad_column_rejected(self):
+        """AC3 — mapper None → fallback, colonne inconnue rejetée."""
+        mock_service = MagicMock()
+        mock_service._get_inventory_mapper.return_value = None
+
+        with patch.object(serializers_module, '_catalog_inventory_service_factory', return_value=mock_service):
+            with self.assertRaises(serializers.ValidationError) as cm:
+                self._call({'properties': {'p1': {
+                    'source': 'inventory',
+                    'inventory_type': 'servers',
+                    'inventory_value_column': 'bad_column',
+                }}})
+        self.assertIn('inventory_value_column must be one of', str(cm.exception.detail))
+
+    def test_fallback_when_inventory_service_error(self):
+        """AC4 — InventoryServiceError → fallback, pas d'exception non catchée."""
+        mock_service = MagicMock()
+        mock_service._get_inventory_mapper.side_effect = InventoryServiceError("db down")
+
+        value = {'properties': {'p1': {
+            'source': 'inventory',
+            'inventory_type': 'servers',
+            'inventory_value_column': 'name',
+        }}}
+        with patch.object(serializers_module, '_catalog_inventory_service_factory', return_value=mock_service):
+            result = self._call(value)
+        self.assertEqual(result, value)
+
+    def test_fallback_when_flat_table_mode(self):
+        """Fallback — mapper présent mais is_multi_table=False → fallback VALID_INVENTORY_VALUE_COLUMNS."""
+        mock_service = MagicMock()
+        mock_mapper = MagicMock()
+        mock_mapper.is_multi_table = False
+        mock_service._get_inventory_mapper.return_value = mock_mapper
+
+        value = {'properties': {'p1': {
+            'source': 'inventory',
+            'inventory_type': 'servers',
+            'inventory_value_column': 'name',
+        }}}
+        with patch.object(serializers_module, '_catalog_inventory_service_factory', return_value=mock_service):
+            result = self._call(value)
+        self.assertEqual(result, value)
+
+    def test_fallback_when_entity_config_none(self):
+        """Edge case — mapper multi_table mais entity_config=None → fallback VALID_INVENTORY_VALUE_COLUMNS."""
+        mock_service = MagicMock()
+        mock_mapper = MagicMock()
+        mock_mapper.is_multi_table = True
+        mock_mapper.get_entity_config.return_value = None
+        mock_service._get_inventory_mapper.return_value = mock_mapper
+
+        value = {'properties': {'p1': {
+            'source': 'inventory',
+            'inventory_type': 'servers',
+            'inventory_value_column': 'name',
+        }}}
+        with patch.object(serializers_module, '_catalog_inventory_service_factory', return_value=mock_service):
+            result = self._call(value)
+        self.assertEqual(result, value)
 
 
 # ─── Tests ActionFieldValidationMixin (lignes 183-218) ───────────────────────

@@ -63,9 +63,34 @@ function getInvalidWorkflowStepOrders(form: ReturnType<typeof Form.useForm>[0]):
 
 function buildWorkflowStepParams(
   parameters: Record<string, unknown>,
-  isWorkflow: boolean
+  isWorkflow: boolean,
+  workflowSteps?: Array<{ order: number; referenced_action_id?: number | null }>
 ): Record<string, { parameters: Record<string, unknown> }> | undefined {
   if (!isWorkflow) return undefined;
+
+  const sharedParams = (parameters.shared_parameters as Record<string, unknown> | undefined) ?? {};
+  const hasShared = Object.keys(sharedParams).length > 0;
+
+  if (workflowSteps && workflowSteps.length > 0) {
+    const raw = (parameters.workflow_step_parameters as
+      | Record<string, { parameters?: Record<string, unknown> }>
+      | undefined) ?? {};
+    const out: Record<string, { parameters: Record<string, unknown> }> = {};
+    for (const step of workflowSteps) {
+      const orderKey = String(step.order);
+      const stepEntry = raw[orderKey];
+      const stepSpecific = (stepEntry?.parameters ?? {}) as Record<string, unknown>;
+      const merged: Record<string, unknown> = hasShared
+        ? { ...sharedParams, ...stepSpecific }
+        : { ...stepSpecific };
+      if (Object.keys(merged).length > 0) {
+        out[orderKey] = { parameters: merged };
+      }
+    }
+    return Object.keys(out).length > 0 ? out : undefined;
+  }
+
+  // Fallback : comportement existant si workflowSteps non fourni (rétrocompatibilité)
   const raw = (parameters as Record<string, unknown>)?.workflow_step_parameters as
     | Record<string, { parameters?: Record<string, unknown> }>
     | undefined;
@@ -361,13 +386,13 @@ export function useExecutionWizardState({
         action_id: action.id, environment: targetNames ? undefined : (derivedEnvironment ?? undefined),
         target_names: targetNames,
         parameters: isWorkflow ? null : (Object.keys(parameters).length > 0 ? parameters : null),
-        workflow_step_parameters: buildWorkflowStepParams(parameters, isWorkflow),
+        workflow_step_parameters: buildWorkflowStepParams(parameters, isWorkflow, workflowSteps),
         parent_execution_id: parentExecutionId ?? null,
         page_me: pageMeEnabled || undefined,
       });
       if (executionId != null) onSuccess?.(executionId);
     } finally { isSubmittingRef.current = false; }
-  }, [action, derivedEnvironment, effectiveTargetNames, parameters, notification, onSuccess, parentExecutionId, isWorkflow, execSubmit, pageMeEnabled]);
+  }, [action, derivedEnvironment, effectiveTargetNames, parameters, notification, onSuccess, parentExecutionId, isWorkflow, workflowSteps, execSubmit, pageMeEnabled]);
 
   const handleSubmitScheduled = useCallback(async () => {
     if (isSubmittingRef.current || execSubmit.isSubmitting) {
@@ -408,7 +433,7 @@ export function useExecutionWizardState({
       const scheduledId = await execSubmit.submitScheduled({
         action_id: action.id, environment: derivedEnvironment,
         parameters: isWorkflow ? null : (Object.keys(parameters).length > 0 ? parameters : null),
-        workflow_step_parameters: buildWorkflowStepParams(parameters, isWorkflow),
+        workflow_step_parameters: buildWorkflowStepParams(parameters, isWorkflow, workflowSteps),
         scheduled_at: schedulingType === 'one-time' ? scheduledAt?.utc().toISOString() : null,
         recurring_pattern: recurringPattern,
         target_names: selectedTargets.length > 0 ? selectedTargets.map((t) => t.name) : undefined,
@@ -428,7 +453,7 @@ export function useExecutionWizardState({
         onCancel(); if (onSuccess) onSuccess(scheduledId);
       }
     } finally { isSubmittingRef.current = false; }
-  }, [action, derivedEnvironment, selectedTargets, parameters, notification, onCancel, onSuccess, isWorkflow, execSubmit, pageMeEnabled]);
+  }, [action, derivedEnvironment, selectedTargets, parameters, notification, onCancel, onSuccess, isWorkflow, workflowSteps, execSubmit, pageMeEnabled]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Escape') onCancel();

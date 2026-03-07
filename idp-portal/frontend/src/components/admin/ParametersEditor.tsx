@@ -39,7 +39,8 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { ParameterDefinition, ParameterSchemaType, InventorySourceType } from '../../types/api';
+import type { ParameterDefinition, ParameterSchemaType, InventorySourceType, InventorySchema } from '../../types/api';
+import { useInventorySchema } from '../../hooks/useInventorySchema';
 
 const { Text } = Typography;
 
@@ -86,6 +87,8 @@ interface SortableParamCardProps {
   allParams: ParameterDefinition[];
   onParamChange: (index: number, field: keyof ParameterDefinition, fieldValue: unknown) => void;
   onRemove: (index: number) => void;
+  inventorySchema: InventorySchema | null;  // Story 62.5
+  inventorySchemaLoading: boolean;          // Story 62.5
 }
 
 const SortableParamCard: React.FC<SortableParamCardProps> = ({
@@ -94,6 +97,8 @@ const SortableParamCard: React.FC<SortableParamCardProps> = ({
   allParams,
   onParamChange,
   onRemove,
+  inventorySchema,
+  inventorySchemaLoading,
 }) => {
   const { token } = theme.useToken();
   const {
@@ -285,7 +290,12 @@ const SortableParamCard: React.FC<SortableParamCardProps> = ({
               <Select
                 value={param.inventory_value_column}
                 onChange={(v) => onParamChange(index, 'inventory_value_column', v || undefined)}
-                options={INVENTORY_VALUE_COLUMN_OPTIONS[param.inventory_type]}
+                options={
+                  (inventorySchema && param.inventory_type && inventorySchema[param.inventory_type])
+                    ? inventorySchema[param.inventory_type].map((col) => ({ value: col, label: col }))
+                    : (INVENTORY_VALUE_COLUMN_OPTIONS[param.inventory_type] ?? [])
+                }
+                loading={inventorySchemaLoading}
                 style={{ width: 180 }}
                 allowClear
                 placeholder="Par défaut (name)"
@@ -300,6 +310,7 @@ const SortableParamCard: React.FC<SortableParamCardProps> = ({
 };
 
 export const ParametersEditor: React.FC<ParametersEditorProps> = ({ value = EMPTY_PARAMS, onChange }) => {
+  const { schema: inventorySchema, loading: inventorySchemaLoading } = useInventorySchema(); // Story 62.5
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -368,6 +379,8 @@ export const ParametersEditor: React.FC<ParametersEditorProps> = ({ value = EMPT
                 allParams={value}
                 onParamChange={handleParamChange}
                 onRemove={handleRemove}
+                inventorySchema={inventorySchema}
+                inventorySchemaLoading={inventorySchemaLoading}
               />
             ))}
           </SortableContext>

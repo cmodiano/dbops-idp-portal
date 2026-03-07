@@ -19,3 +19,6 @@ _bmad-output/
 # pytest-cov generated JSON report (artefact de build, ne pas commiter)
 idp-portal/django_backend/coverage.json
 
+# MkDocs build output
+site/
+

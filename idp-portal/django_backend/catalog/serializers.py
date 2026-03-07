@@ -18,6 +18,9 @@ from catalog.models import (
 )
 from reference.models import RefEngine, RefCategory
 from integrations.models import Integration, IntegrationTypeCatalogue, IntegrationRole
+# Story 62.4: Dynamic inventory column validation via DIP factory
+# No circular import: inventory does not import from catalog
+from inventory.services import InventoryService, InventoryServiceError as _InventoryServiceError
 
 # Story 31.9: Alias mapping for legacy platform codes → catalogue codes
 # Canonical source — also used by business_rule_views.py
@@ -34,6 +37,43 @@ VALID_INVENTORY_VALUE_COLUMNS: dict[str, tuple[str, ...]] = {
     'instances': ('name', 'id', 'server_ref', 'db_ref'),
     'databases': ('name', 'id'),
 }
+
+# Story 62.4: DIP factory — overridable in tests (same pattern as inventory/views.py Story 33.4)
+_catalog_inventory_service_factory = InventoryService
+
+
+def _get_allowed_inventory_columns(inventory_type: str) -> tuple[str, ...]:
+    """
+    Story 62.4: Get allowed inventory_value_column values dynamically from
+    the active inventory integration config.
+
+    Falls back to VALID_INVENTORY_VALUE_COLUMNS if:
+    - No active inventory_db integration is configured (mapper is None)
+    - Integration is in flat_table mode (not multi_table)
+    - InventoryServiceError is raised by the service
+
+    Args:
+        inventory_type: One of 'servers', 'instances', 'databases'
+
+    Returns:
+        Tuple of allowed column concept names (id always first when dynamic)
+    """
+    try:
+        service = _catalog_inventory_service_factory()
+        mapper = service._get_inventory_mapper()
+        if mapper and mapper.is_multi_table:
+            entity_config = mapper.get_entity_config(inventory_type)
+            if entity_config:
+                # Build column list: 'id' first, then remaining concepts from config
+                columns = ['id'] + [
+                    k for k in entity_config.get('columns', {}).keys() if k != 'id'
+                ]
+                return tuple(columns)
+    except _InventoryServiceError:
+        pass  # Fallback below
+
+    # Fallback: use hardcoded list (backward compat — no inventory integration configured)
+    return VALID_INVENTORY_VALUE_COLUMNS.get(inventory_type, ('id', 'name'))
 
 
 def _validate_platform_integration_consistency(
@@ -113,10 +153,10 @@ def validate_parameters_schema_inventory(value: Any) -> Any:
                 f"Parameter '{param_name}': inventory_type must be one of: "
                 f"{', '.join(VALID_INVENTORY_TYPES)}"
             )
-        # Story 37.4 — validate optional inventory_value_column
+        # Story 37.4 / 62.4 — validate optional inventory_value_column (dynamic from mapper)
         inventory_value_column = prop.get('inventory_value_column')
         if inventory_value_column is not None:
-            allowed = VALID_INVENTORY_VALUE_COLUMNS.get(inventory_type, ())
+            allowed = _get_allowed_inventory_columns(inventory_type)
             if inventory_value_column not in allowed:
                 raise serializers.ValidationError(
                     f"Parameter '{param_name}': inventory_value_column must be one of: "
