@@ -72,7 +72,7 @@ class TestDashboardStatsApprobationsStructure:
         now = timezone.now()
         action = ActionFactory.create()
         ExecutionFactory.create(
-            action=action, status='COMPLETED',
+            action=action, user=self.user, status='COMPLETED',
             approved_at=now + timedelta(seconds=3600),
         )
         response = self.client.get(URL)
