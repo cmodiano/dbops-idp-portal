@@ -105,6 +105,8 @@ class StepTemplateResolver:
             k: v for k, v in self._env.filters.items()
             if k in _ALLOWED_FILTERS
         }
+        # truncate(N) strict : pas de leeway (par défaut 5) pour garantir ≤ N caractères
+        self._env.policies['truncate.leeway'] = 0
 
     def resolve(self, input_mapping: dict) -> dict:
         """

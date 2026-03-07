@@ -17,10 +17,12 @@ class OutputSchemaRegistry:
     def __init__(self) -> None:
         self._cache: dict[str, dict] = {}
         self._lock = threading.Lock()
+        self._version = 0
 
     def invalidate(self) -> None:
         """Vide le cache. Appeler après import_output_schemas_yaml()."""
         with self._lock:
+            self._version += 1
             self._cache.clear()
 
     def _resolve(self, schema: OutputSchema) -> dict:
@@ -77,6 +79,7 @@ class OutputSchemaRegistry:
         with self._lock:
             if cache_key in self._cache:
                 return self._cache[cache_key]
+            version_before_fetch = self._version
 
         try:
             schema = OutputSchema.objects.select_related('inherits_from').get(
@@ -89,7 +92,8 @@ class OutputSchemaRegistry:
 
         resolved = self._resolve(schema)
         with self._lock:
-            self._cache[cache_key] = resolved
+            if self._version == version_before_fetch and cache_key not in self._cache:
+                self._cache[cache_key] = resolved
         return resolved
 
     def get_integration_schema(self, integration_type: str, operation: str) -> dict | None:
@@ -98,6 +102,7 @@ class OutputSchemaRegistry:
         with self._lock:
             if cache_key in self._cache:
                 return self._cache[cache_key]
+            version_before_fetch = self._version
 
         try:
             schema = OutputSchema.objects.select_related('inherits_from').get(
@@ -110,7 +115,8 @@ class OutputSchemaRegistry:
 
         resolved = self._resolve(schema)
         with self._lock:
-            self._cache[cache_key] = resolved
+            if self._version == version_before_fetch and cache_key not in self._cache:
+                self._cache[cache_key] = resolved
         return resolved
 
     def get_platform_convention(self, convention_name: str) -> dict | None:
@@ -119,6 +125,7 @@ class OutputSchemaRegistry:
         with self._lock:
             if cache_key in self._cache:
                 return self._cache[cache_key]
+            version_before_fetch = self._version
 
         try:
             schema = OutputSchema.objects.select_related('inherits_from').get(
@@ -131,7 +138,8 @@ class OutputSchemaRegistry:
 
         resolved = self._resolve(schema)
         with self._lock:
-            self._cache[cache_key] = resolved
+            if self._version == version_before_fetch and cache_key not in self._cache:
+                self._cache[cache_key] = resolved
         return resolved
 
 

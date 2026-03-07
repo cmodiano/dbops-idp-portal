@@ -137,3 +137,32 @@ class TestImportOutputSchemasYaml:
         assert schema.schema_type == 'integration'
         assert schema.operation == 'create_change'
         assert schema.schema_json is not None
+
+    def test_roundtrip_with_inheritance(self):
+        """Export → import préserve inherits_from (parent chargé avant enfant)."""
+        parent = make_schema(
+            'rt-parent',
+            schema_type=SchemaType.PLATFORM_CONVENTION,
+            target_name='rt-parent',
+            schema_json={'output_fields': [{'name': 'base_field', 'type': 'string'}]}
+        )
+        make_schema(
+            'rt-child',
+            schema_type=SchemaType.ACTION,
+            target_name='rt-child-action',
+            inherits_from=parent,
+            schema_json={'output_fields': [{'name': 'extra_field', 'type': 'integer'}]}
+        )
+        exported = export_output_schemas_yaml()
+        # Vérifier ordre : parent avant enfant dans le YAML (order_by('id'))
+        parsed = yaml.safe_load(exported)
+        names = [i['metadata']['name'] for i in parsed['items']]
+        assert names.index('rt-parent') < names.index('rt-child')
+
+        OutputSchema.objects.all().delete()
+        stats = import_output_schemas_yaml(exported, mode='full')
+        assert stats['created'] == 2
+
+        child = OutputSchema.objects.get(name='rt-child')
+        assert child.inherits_from is not None
+        assert child.inherits_from.name == 'rt-parent'
