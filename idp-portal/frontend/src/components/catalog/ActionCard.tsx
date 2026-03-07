@@ -55,13 +55,20 @@ function getEngineIcon(engine: ActionEngine): React.ReactNode {
   const apiIconUrl = getEngineIconUrl(engine);
   const svgSrc = apiIconUrl || ENGINE_SVG_SOURCES[engine];
   if (svgSrc) {
+    const size = STYLE_TOKENS.engineIconSize;
     return (
       <img
         src={svgSrc}
         alt=""
-        width={STYLE_TOKENS.engineIconSize}
-        height={STYLE_TOKENS.engineIconSize}
-        style={{ flexShrink: 0 }}
+        width={size}
+        height={size}
+        className="engine-icon-img"
+        style={{
+          flexShrink: 0,
+          width: size,
+          height: size,
+          objectFit: 'contain',
+        }}
         aria-hidden
       />
     );

@@ -232,6 +232,23 @@ def _get_and_validate_pending_execution(execution_id: int) -> Execution:
     return execution
 
 
+def _get_execution_audit_context(execution: Execution) -> dict:
+    """Contexte d'exécution pour l'audit : targets + parameters (déjà sanitisés).
+
+    Retourne un dict avec les clés présentes seulement si non vides :
+    - targets : liste de target_name des ExecutionTarget liées
+    - parameters : dict des paramètres (déjà sanitisés en DB depuis _create_execution_atomic)
+    """
+    context: dict = {}
+    targets = [t.target_name for t in execution.targets.all()]
+    if targets:
+        context["targets"] = targets
+    params = execution.get_parameters()
+    if params:
+        context["parameters"] = params
+    return context
+
+
 class PendingApprovalsView(APIView):
     """GET /executions/pending-approvals (DBA/DBOPS only)"""
 
@@ -385,6 +402,8 @@ class ApproveExecutionView(APIView):
                         "step_name": step.step_name,
                         "on_success_step_id": on_success_step_id,
                         "via_legacy_endpoint": True,
+                        "action_name": step.execution.action.name if step.execution.action else None,
+                        **_get_execution_audit_context(step.execution),
                     },
                     correlation_id=correlation_id,
                 )
@@ -436,6 +455,7 @@ class ApproveExecutionView(APIView):
                 "previous_status": old_status,
                 "new_status": ExecutionStatus.RUNNING,
                 "approval_comment": approval_comment or None,
+                **_get_execution_audit_context(execution),
             },
             correlation_id=correlation_id,
         )
@@ -556,6 +576,8 @@ class RejectExecutionView(APIView):
                         "on_error_step_id": on_error_step_id,
                         "rejection_reason": rejection_reason or None,
                         "via_legacy_endpoint": True,
+                        "action_name": step.execution.action.name if step.execution.action else None,
+                        **_get_execution_audit_context(step.execution),
                     },
                     correlation_id=correlation_id,
                 )
@@ -610,6 +632,7 @@ class RejectExecutionView(APIView):
                 "previous_status": old_status,
                 "new_status": ExecutionStatus.REJECTED,
                 "rejection_reason": rejection_reason or None,
+                **_get_execution_audit_context(execution),
             },
             correlation_id=correlation_id,
         )
@@ -697,6 +720,8 @@ class ApproveStepView(APIView):
                 "step_id": step.id,
                 "step_name": step.step_name,
                 "on_success_step_id": on_success_step_id,
+                "action_name": step.execution.action.name if step.execution.action else None,
+                **_get_execution_audit_context(step.execution),
             },
             correlation_id=correlation_id,
         )
@@ -781,6 +806,9 @@ class RejectStepView(APIView):
                 "step_id": step.id,
                 "step_name": step.step_name,
                 "on_error_step_id": on_error_step_id,
+                "rejection_reason": step.approval_comment or None,
+                "action_name": step.execution.action.name if step.execution.action else None,
+                **_get_execution_audit_context(step.execution),
             },
             correlation_id=correlation_id,
         )

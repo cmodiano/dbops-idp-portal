@@ -68,10 +68,49 @@ html.dark .nav-pill-active {
 
 /* Focus states */
 .nav-pill:focus-visible,
+.nav-icon-btn:focus-visible,
 .theme-toggle:focus-visible,
 .nav-profile:focus-visible {
   outline: 2px solid var(--ant-color-primary);
   outline-offset: 2px;
+}
+
+/* Icon button (bell, etc.): same glass style as theme toggle */
+.nav-icon-btn {
+  backdrop-filter: blur(14px) saturate(1.15);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+
+html.light .nav-icon-btn {
+  background: rgba(255, 255, 255, 0.45) !important;
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+html.dark .nav-icon-btn {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
+.nav-icon-btn:hover {
+  background: rgba(0, 135, 78, 0.12) !important;
+  border-color: rgba(0, 135, 78, 0.2);
+}
+
+html.dark .nav-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.nav-icon-btn {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-icon-btn {
+    transition: none !important;
+  }
 }
 
 /* Theme toggle: pill verre dépoli */

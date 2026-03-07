@@ -224,6 +224,7 @@ export function TopNav() {
               showZero={false}
             >
               <button
+                className="nav-icon-btn"
                 onClick={handleBellClick}
                 aria-label={
                   pendingApprovalsCount === 0
