@@ -20,6 +20,9 @@ import {
   fetchStatsAdoption,
 } from '../../../services/dashboard_service';
 import type { DashboardFilters, StatsCatalogueData, StatsAdoptionData } from '../../../types/api';
+import { CatalogueItemTypeChart } from './CatalogueItemTypeChart';
+import { CatalogueEvolutionChart } from './CatalogueEvolutionChart';
+import { AdoptionByProfileChart } from './AdoptionByProfileChart';
 
 const { Title } = Typography;
 
@@ -140,7 +143,33 @@ export function AdminPlatformSection({ filters }: AdminPlatformSectionProps) {
         </Col>
       </Row>
 
-      {/* TODO Story 60.4 : graphiques admin (répartition actions/workflows, évolution catalogue, adoption par profil) */}
+      {!catalogueForbidden && (
+        <>
+          <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+            <Col xs={24} md={12}>
+              <CatalogueItemTypeChart
+                data={catalogueData?.by_item_type ?? []}
+                loading={sectionLoading}
+              />
+            </Col>
+            <Col xs={24} md={12}>
+              <CatalogueEvolutionChart
+                data={catalogueData?.evolution ?? []}
+                loading={sectionLoading}
+              />
+            </Col>
+          </Row>
+        </>
+      )}
+
+      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+        <Col xs={24}>
+          <AdoptionByProfileChart
+            data={adoptionData?.executions_by_profile ?? []}
+            loading={sectionLoading}
+          />
+        </Col>
+      </Row>
     </>
   );
 }
