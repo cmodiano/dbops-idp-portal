@@ -105,6 +105,8 @@ class AuditActionType(models.TextChoices):
     POLICY_DELETED = 'POLICY_DELETED', 'Policy Deleted'
     # Story 30.7: Polling exhaustion audit type
     EXECUTION_POLLING_EXHAUSTED = 'EXECUTION_POLLING_EXHAUSTED', 'Execution Polling Exhausted'
+    # Story 64.1: IaC Config Sync audit types
+    CONFIG_SYNC_REFERENCE_IMPORT = 'CONFIG_SYNC_REFERENCE_IMPORT', 'Config Sync - Reference Data Import'
     # Additional types added in later migrations (V028-V035, V039-V041)
     # Note: Full list would include all types from migrations, but base types are sufficient for model
 
@@ -124,6 +126,8 @@ class AuditEntityType(models.TextChoices):
     INTEGRATION_ACTION = 'integration_action', 'Integration Action'
     # Story 28.4: Business rule policy entity type
     BUSINESS_RULE_POLICY = 'business_rule_policy', 'Business Rule Policy'
+    # Story 64.1: IaC Reference Data entity type
+    REFERENCE_DATA = 'reference_data', 'Reference Data'
     # Additional types may exist in later migrations
 
 
