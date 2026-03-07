@@ -6,6 +6,9 @@ Story 63.1 - Infrastructure des Schémas d'Output (Backend).
 from rest_framework import serializers
 from output_schemas.models import OutputSchema
 
+# Types autorisés pour output_fields (évite typos et valeurs arbitraires)
+ALLOWED_OUTPUT_FIELD_TYPES = frozenset({'string', 'integer', 'boolean', 'text', 'array', 'object'})
+
 
 class OutputSchemaSerializer(serializers.ModelSerializer):
     inherits_from_name = serializers.SerializerMethodField()
@@ -47,4 +50,12 @@ class OutputSchemaSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "schema_json.output_fields doit être une liste."
             )
+        for i, field in enumerate(value['output_fields']):
+            if isinstance(field, dict) and 'type' in field:
+                ft = field.get('type')
+                if ft is not None and str(ft) not in ALLOWED_OUTPUT_FIELD_TYPES:
+                    raise serializers.ValidationError(
+                        f"output_fields[{i}].type '{ft}' invalide. "
+                        f"Types autorisés : {sorted(ALLOWED_OUTPUT_FIELD_TYPES)}."
+                    )
         return value

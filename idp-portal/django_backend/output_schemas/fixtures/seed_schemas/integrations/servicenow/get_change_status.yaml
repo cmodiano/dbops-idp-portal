@@ -9,23 +9,23 @@ items:
     spec:
       inherits_from: null
       output_fields:
-        - name: sys_id
-          path: "$.sys_id"
+        - name: change_id
+          path: "$.change_id"
           type: string
-          description: "ID système ServiceNow du changement"
+          description: "ID du change request (contrat get_change_status)"
           required: true
-        - name: change_number
-          path: "$.change_number"
+        - name: number
+          path: "$.number"
           type: string
-          description: "Numéro du changement ServiceNow"
+          description: "Numéro du changement ServiceNow (contrat get_change_status)"
           required: false
         - name: state
           path: "$.state"
           type: string
-          description: "État actuel du changement"
+          description: "État actuel du changement (contrat get_change_status)"
           required: false
-        - name: approval
-          path: "$.approval"
-          type: string
-          description: "Statut d'approbation du changement"
+        - name: priority
+          path: "$.priority"
+          type: integer
+          description: "Priorité du changement (contrat get_change_status)"
           required: false

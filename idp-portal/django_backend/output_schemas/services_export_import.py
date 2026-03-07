@@ -8,6 +8,7 @@ from typing import Any
 import yaml
 from django.db import transaction
 from output_schemas.models import OutputSchema
+from output_schemas.serializers import ALLOWED_OUTPUT_FIELD_TYPES
 
 ENVELOPE_API_VERSION = 'idp/v1'
 ENVELOPE_KIND = 'OutputSchema'
@@ -86,6 +87,17 @@ def _item_to_schema_data(item: Any) -> dict:
 
     schema_json = {k: v for k, v in spec.items() if k != 'inherits_from'} if spec else None
 
+    # Valider les types des output_fields (aligné avec OutputSchemaSerializer)
+    if schema_json and isinstance(schema_json.get('output_fields'), list):
+        for i, field in enumerate(schema_json['output_fields']):
+            if isinstance(field, dict) and 'type' in field:
+                ft = field.get('type')
+                if ft is not None and str(ft) not in ALLOWED_OUTPUT_FIELD_TYPES:
+                    raise ValueError(
+                        f"output_fields[{i}].type '{ft}' invalide. "
+                        f"Types autorisés : {sorted(ALLOWED_OUTPUT_FIELD_TYPES)}."
+                    )
+
     return {
         'name': metadata.get('name', ''),
         'schema_type': metadata.get('schema_type', ''),
@@ -96,13 +108,18 @@ def _item_to_schema_data(item: Any) -> dict:
     }
 
 
-def import_output_schemas_yaml(content: str, mode: str = 'additive') -> dict:
+def import_output_schemas_yaml(
+    content: str,
+    mode: str = 'additive',
+    create_only: bool = False,
+) -> dict:
     """
     Import OutputSchema from YAML envelope.
 
     Args:
         content: YAML string with envelope format
         mode: 'additive' (upsert only) or 'full' (delete absent schemas)
+        create_only: if True, only create missing schemas; never update existing
 
     Returns:
         dict with keys: created, updated, unchanged, deleted, mode
@@ -149,6 +166,9 @@ def import_output_schemas_yaml(content: str, mode: str = 'additive') -> dict:
 
             try:
                 schema = OutputSchema.objects.select_related('inherits_from').get(name=name)
+                if create_only:
+                    stats['unchanged'] += 1
+                    continue
                 changed = any(getattr(schema, k) != v for k, v in data.items())
                 if changed:
                     for k, v in data.items():

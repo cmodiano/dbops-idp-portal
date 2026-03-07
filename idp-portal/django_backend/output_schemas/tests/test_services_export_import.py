@@ -115,6 +115,25 @@ class TestImportOutputSchemasYaml:
         assert stats['deleted'] == 0
         assert OutputSchema.objects.filter(name='keep-me').exists()
 
+    def test_import_rejects_invalid_output_field_type(self):
+        """Import rejette les output_fields avec type invalide."""
+        yaml_invalid = """items:
+  - apiVersion: idp/v1
+    kind: OutputSchema
+    metadata:
+      name: bad-type-schema
+      schema_type: action
+      target_name: foo
+      operation: null
+    spec:
+      inherits_from: null
+      output_fields:
+        - name: logs
+          type: tex
+"""
+        with pytest.raises(ValueError, match="invalide"):
+            import_output_schemas_yaml(yaml_invalid, mode='additive')
+
     def test_import_empty_items(self):
         stats = import_output_schemas_yaml('items: []', mode='additive')
         assert stats['created'] == 0

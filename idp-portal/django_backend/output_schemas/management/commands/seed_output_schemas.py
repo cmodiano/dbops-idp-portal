@@ -8,6 +8,7 @@ from pathlib import Path
 
 import yaml
 from django.core.management.base import BaseCommand
+from django.db import transaction
 
 from output_schemas.services_export_import import import_output_schemas_yaml
 
@@ -52,16 +53,14 @@ class Command(BaseCommand):
         from output_schemas.models import OutputSchema
 
         existing_count = OutputSchema.objects.count()
-
-        if existing_count > 0 and not force:
+        create_only = existing_count > 0 and not force
+        if create_only:
             self.stdout.write(
-                self.style.SUCCESS(
+                self.style.NOTICE(
                     f'{existing_count} schéma(s) existent déjà. '
-                    'Utilisez --force pour recharger.'
+                    'Ajout des schémas manquants uniquement (--force pour recharger).'
                 )
             )
-            logger.info('seed_output_schemas: skip (schemas already exist)', extra={'count': existing_count})
-            return
 
         if force and existing_count > 0:
             self.stdout.write(f'Mode --force : rechargement de {existing_count} schéma(s) existant(s)...')
@@ -72,47 +71,49 @@ class Command(BaseCommand):
         total_deleted = 0
         all_seed_names: list[str] = []
 
-        for yaml_path in SEED_FILES_ORDERED:
-            if not yaml_path.exists():
-                self.stdout.write(
-                    self.style.WARNING(f'Fichier manquant (ignoré) : {yaml_path}')
+        with transaction.atomic():
+            for yaml_path in SEED_FILES_ORDERED:
+                if not yaml_path.exists():
+                    self.stdout.write(
+                        self.style.WARNING(f'Fichier manquant (ignoré) : {yaml_path}')
+                    )
+                    continue
+
+                content = yaml_path.read_text(encoding='utf-8')
+
+                # Collecter les noms de schémas seed pour la suppression post-étape (mode=full)
+                try:
+                    parsed = yaml.safe_load(content)
+                    for item in (parsed or {}).get('items', []):
+                        name = (item.get('metadata') or {}).get('name', '')
+                        if name:
+                            all_seed_names.append(name)
+                except yaml.YAMLError:
+                    pass  # import_output_schemas_yaml lèvera ValueError pour le même fichier
+
+                # Toujours charger en mode additive par fichier : mode=full est traité en post-étape
+                stats = import_output_schemas_yaml(
+                    content, mode='additive', create_only=create_only
                 )
-                continue
 
-            content = yaml_path.read_text(encoding='utf-8')
+                total_created += stats.get('created', 0)
+                total_updated += stats.get('updated', 0)
+                total_unchanged += stats.get('unchanged', 0)
 
-            # Collecter les noms de schémas seed pour la suppression post-étape (mode=full)
-            try:
-                parsed = yaml.safe_load(content)
-                for item in (parsed or {}).get('items', []):
-                    name = (item.get('metadata') or {}).get('name', '')
-                    if name:
-                        all_seed_names.append(name)
-            except yaml.YAMLError:
-                pass  # import_output_schemas_yaml lèvera ValueError pour le même fichier
+                logger.debug(
+                    'seed_output_schemas: file processed',
+                    extra={
+                        'seed_file': str(yaml_path.name),
+                        'stats_created': stats.get('created', 0),
+                        'stats_updated': stats.get('updated', 0),
+                        'stats_unchanged': stats.get('unchanged', 0),
+                    },
+                )
 
-            # Toujours charger en mode additive par fichier : mode=full est traité en post-étape
-            # pour éviter que chaque fichier supprime les schémas des fichiers précédents.
-            stats = import_output_schemas_yaml(content, mode='additive')
-
-            total_created += stats.get('created', 0)
-            total_updated += stats.get('updated', 0)
-            total_unchanged += stats.get('unchanged', 0)
-
-            logger.debug(
-                'seed_output_schemas: file processed',
-                extra={
-                    'seed_file': str(yaml_path.name),
-                    'stats_created': stats.get('created', 0),
-                    'stats_updated': stats.get('updated', 0),
-                    'stats_unchanged': stats.get('unchanged', 0),
-                },
-            )
-
-        if mode == 'full' and all_seed_names:
-            deleted_qs = OutputSchema.objects.exclude(name__in=all_seed_names)
-            total_deleted = deleted_qs.count()
-            deleted_qs.delete()
+            if mode == 'full' and all_seed_names:
+                deleted_qs = OutputSchema.objects.exclude(name__in=all_seed_names)
+                total_deleted = deleted_qs.count()
+                deleted_qs.delete()
 
         self.stdout.write(
             self.style.SUCCESS(

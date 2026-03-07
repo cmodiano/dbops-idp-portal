@@ -89,3 +89,14 @@ class TestOutputSchemaSerializer:
             'schema_json': {'output_fields': [{'name': 'change_number', 'type': 'string'}]},
         })
         assert s.is_valid(), s.errors
+
+    def test_validate_schema_json_invalid_output_field_type(self):
+        """output_fields avec type invalide (typo ou non autorisé) → erreur de validation."""
+        s = OutputSchemaSerializer(data={
+            'name': 'bad-type',
+            'schema_type': 'action',
+            'target_name': 'foo',
+            'schema_json': {'output_fields': [{'name': 'logs', 'type': 'tex'}]},
+        })
+        assert not s.is_valid()
+        assert 'schema_json' in s.errors

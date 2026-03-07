@@ -90,6 +90,22 @@ class TestSeedOutputSchemasCommand:
         assert 'change_number' in field_names
         assert 'sys_id' in field_names
 
+    def test_servicenow_get_change_status_has_contract_fields(self):
+        """Le schéma servicenow-get-change-status respecte le contrat integration_type_catalogue."""
+        call_command('seed_output_schemas', verbosity=0)
+
+        schema = OutputSchema.objects.get(name='servicenow-get-change-status')
+        assert schema.target_name == 'servicenow'
+        assert schema.operation == 'get_change_status'
+
+        fields = schema.schema_json.get('output_fields', [])
+        field_names = {f['name'] for f in fields}
+        # Contrat get_change_status : change_id, number, state, priority
+        assert 'change_id' in field_names
+        assert 'number' in field_names
+        assert 'state' in field_names
+        assert 'priority' in field_names
+
     def test_cache_registry_invalidated_after_seed(self):
         """Le cache schema_registry est invalidé après le seed (schémas accessibles via registry)."""
         schema_registry.invalidate()
