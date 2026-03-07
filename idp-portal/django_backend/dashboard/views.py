@@ -18,7 +18,7 @@ from catalog.models import Action, Tag
 from core.exceptions import BadRequestError
 from core.middleware import get_correlation_id
 from core.permissions import IsDBAOrDBOPS, AdminProfilePermission
-from executions.models import Execution, ExecutionStatus, ExecutionStepType, ExecutionStepStatus
+from executions.models import Execution, ExecutionStatus, ExecutionStepType, ExecutionStepStatus, ScheduledExecution
 
 logger = structlog.get_logger(__name__)
 
@@ -927,6 +927,91 @@ class DashboardStatsApprobationsView(APIView):
                     "rejected_count": rejected_count,
                     "approval_rate": approval_rate,
                     "avg_approval_delay_s": avg_approval_delay_s,
+                }
+            }
+        )
+
+
+class DashboardStatsPlanifieesView(APIView):
+    """GET /dashboard/stats-planifiees/ -> {data: PlanifieesStats}
+
+    Story 60.7: Répartition des exécutions planifiées vs manuelles.
+    Lien inversé : ScheduledExecution.execution_id (BigIntegerField) → Execution.id.
+    - scheduled_count: exécutions dont l'ID figure dans ScheduledExecution.execution_id
+    - manual_count: exécutions sans lien planifié
+    - scheduled_rate: % planifiées (null si aucune exécution)
+    - by_recurrence_type: ventilation par RecurringPattern.pattern_type
+      (sans RecurringPattern → 'one_time')
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=['dashboard'],
+        summary='Statistiques planifiées vs manuelles',
+        parameters=_DASHBOARD_PARAMS[:6],  # sans status
+    )
+    def get(self, request):
+        period_start, period_end = _get_period_bounds(request)
+
+        qs = Execution.objects.select_related("action")
+        qs = _filter_queryset_by_ownership(qs, request)
+        qs = _apply_common_filters(qs, request=request, include_status=False)
+        qs = qs.filter(created_at__gte=period_start, created_at__lt=period_end).distinct()
+
+        # 1. IDs des exécutions déclenchées par une planification
+        #    Étape 1 : IDs des exécutions dans la période (Oracle-safe : pas de sous-requête enchaînée)
+        period_ids = set(qs.values_list('id', flat=True))
+        #    Étape 2 : parmi les ScheduledExecution, celles dont execution_id est dans la période
+        scheduled_ids = set(
+            ScheduledExecution.objects.filter(
+                execution_id__isnull=False,
+                execution_id__in=period_ids,
+            ).values_list('execution_id', flat=True)
+        ) if period_ids else set()
+
+        total = qs.count()
+        scheduled_count = qs.filter(id__in=scheduled_ids).count()
+        manual_count = total - scheduled_count
+        scheduled_rate = round(scheduled_count / total * 100, 1) if total > 0 else None
+
+        # 2. Ventilation par type de récurrence
+        #    scheduled_ids est déjà limité aux exécutions de la période
+        by_recurrence_type = []
+
+        if scheduled_ids:
+            # Exécutions planifiées sans RecurringPattern → one_time
+            no_pattern_count = ScheduledExecution.objects.filter(
+                execution_id__in=scheduled_ids,
+                recurringpattern__isnull=True,
+            ).count()
+            if no_pattern_count > 0:
+                by_recurrence_type.append({"pattern_type": "one_time", "count": no_pattern_count})
+
+            # Exécutions planifiées avec RecurringPattern → par pattern_type
+            pattern_rows = (
+                ScheduledExecution.objects
+                .filter(
+                    execution_id__in=scheduled_ids,
+                    recurringpattern__isnull=False,
+                )
+                .values('recurringpattern__pattern_type')
+                .annotate(count=Count('id'))
+                .order_by('recurringpattern__pattern_type')
+            )
+            for row in pattern_rows:
+                by_recurrence_type.append({
+                    "pattern_type": row['recurringpattern__pattern_type'],
+                    "count": int(row['count']),
+                })
+
+        return Response(
+            {
+                "data": {
+                    "scheduled_count": scheduled_count,
+                    "manual_count": manual_count,
+                    "scheduled_rate": scheduled_rate,
+                    "by_recurrence_type": by_recurrence_type,
                 }
             }
         )
