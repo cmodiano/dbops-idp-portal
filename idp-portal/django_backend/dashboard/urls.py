@@ -16,6 +16,8 @@ urlpatterns = [
     path("dashboard/stats-by-technology/", views.DashboardStatsByTechnologyView.as_view(), name="dashboard-stats-by-technology"),
     path("dashboard/stats-by-environment/", views.DashboardStatsByEnvironmentView.as_view(), name="dashboard-stats-by-environment"),
     path("dashboard/compare/", views.DashboardCompareView.as_view(), name="dashboard-compare"),
+    # Story 60.1: Stats catalogue admin (actions par statut/type/engine/catégorie + évolution)
+    path("dashboard/stats-catalogue/", views.DashboardStatsCatalogueView.as_view(), name="dashboard-stats-catalogue"),
     # NOTE: This endpoint returns the object directly (no {"data": ...}) per frontend apiFetchRaw usage.
     path("dashboard/filter-options/", views.DashboardFilterOptionsView.as_view(), name="dashboard-filter-options"),
     # Story 30.2: Dashboard export endpoints

@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, date
 from typing import Any
 
 from django.db.models import Q, Count, QuerySet
-from django.db.models.functions import TruncDate
+from django.db.models.functions import TruncDate, TruncWeek
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from rest_framework.permissions import IsAuthenticated
@@ -17,7 +17,7 @@ import structlog
 from catalog.models import Action, Tag
 from core.exceptions import BadRequestError
 from core.middleware import get_correlation_id
-from core.permissions import IsDBAOrDBOPS
+from core.permissions import IsDBAOrDBOPS, AdminProfilePermission
 from executions.models import Execution, ExecutionStatus
 
 logger = structlog.get_logger(__name__)
@@ -538,6 +538,80 @@ class DashboardCompareView(APIView):
                     "value1_stats": v1_stats,
                     "value2_stats": v2_stats,
                     "deltas": deltas,
+                }
+            }
+        )
+
+
+class DashboardStatsCatalogueView(APIView):
+    """GET /dashboard/stats-catalogue/ -> {data: CatalogueStats}
+
+    Story 60.1: Agrégations du catalogue Actions pour l'admin/DBOPS.
+    """
+
+    permission_classes = [IsAuthenticated, AdminProfilePermission]
+
+    @extend_schema(
+        tags=['dashboard'],
+        summary='Statistiques du catalogue (admin)',
+        parameters=[
+            OpenApiParameter('days', int, description='Période en jours (défaut: 14)'),
+            OpenApiParameter('from_date', str, description='Date de début (YYYY-MM-DD)'),
+            OpenApiParameter('to_date', str, description='Date de fin (YYYY-MM-DD)'),
+        ],
+    )
+    def get(self, request):
+        qs_all = Action.objects.filter(deleted_at__isnull=True)
+
+        by_status = list(
+            qs_all.values("status").annotate(count=Count("id")).order_by("status")
+        )
+        by_item_type = list(
+            qs_all.values("item_type").annotate(count=Count("id")).order_by("item_type")
+        )
+        by_engine = [
+            {"engine": r["engine"] or "N/A", "count": r["count"]}
+            for r in qs_all.values("engine").annotate(count=Count("id")).order_by("engine")
+        ]
+        by_category = [
+            {"category": r["category"] or "N/A", "count": r["count"]}
+            for r in qs_all.values("category").annotate(count=Count("id")).order_by("category")
+        ]
+
+        period_start, period_end = _get_period_bounds(request)
+        qs_period = Action.objects.filter(
+            deleted_at__isnull=True,
+            created_at__gte=period_start,
+            created_at__lt=period_end,
+        )
+        evolution_rows = (
+            qs_period
+            .annotate(week_start=TruncWeek("created_at"))
+            .values("week_start")
+            .annotate(
+                created_count=Count("id"),
+                published_count=Count("id", filter=Q(status="published")),
+            )
+            .order_by("week_start")
+        )
+        evolution = [
+            {
+                "week_start": r["week_start"].date().isoformat() if r["week_start"] else None,
+                "created_count": int(r["created_count"] or 0),
+                "published_count": int(r["published_count"] or 0),
+            }
+            for r in evolution_rows
+            if r["week_start"] is not None
+        ]
+
+        return Response(
+            {
+                "data": {
+                    "by_status": by_status,
+                    "by_item_type": by_item_type,
+                    "by_engine": by_engine,
+                    "by_category": by_category,
+                    "evolution": evolution,
                 }
             }
         )
