@@ -140,3 +140,33 @@ class TestValidateRequiredSecrets:
             from core.startup_checks import validate_required_secrets
             # Should not raise because auth_dev_bypass=True skips SAML cert check
             validate_required_secrets(app_env='production', auth_dev_bypass=True)
+
+
+class TestValidateCorsConfig:
+    """Tests SEC-4: CORS config validated at startup in production."""
+
+    def test_59_4_a_production_cors_origin_missing_raises(self):
+        """59-4-a: DEBUG=False, CORS_ORIGIN absent → ImproperlyConfigured."""
+        with patch.dict('os.environ', {'CORS_ORIGIN': ''}, clear=False):
+            from core.startup_checks import validate_cors_config
+            with pytest.raises(ImproperlyConfigured, match="CORS_ORIGIN"):
+                validate_cors_config(debug=False)
+
+    def test_59_4_b_production_cors_origin_set_succeeds(self):
+        """59-4-b: DEBUG=False, CORS_ORIGIN défini → pas d'exception."""
+        with patch.dict('os.environ', {'CORS_ORIGIN': 'https://idp.internal'}, clear=False):
+            from core.startup_checks import validate_cors_config
+            validate_cors_config(debug=False)  # Should not raise
+
+    def test_59_4_c_development_cors_origin_missing_succeeds(self):
+        """59-4-c: DEBUG=True (dev mode), CORS_ORIGIN absent → pas d'exception."""
+        with patch.dict('os.environ', {'CORS_ORIGIN': ''}, clear=False):
+            from core.startup_checks import validate_cors_config
+            validate_cors_config(debug=True)  # Should not raise in dev
+
+    def test_59_4_d_production_cors_origin_whitespace_only_raises(self):
+        """59-4-d: DEBUG=False, CORS_ORIGIN='   ' (whitespace) → ImproperlyConfigured."""
+        with patch.dict('os.environ', {'CORS_ORIGIN': '   '}, clear=False):
+            from core.startup_checks import validate_cors_config
+            with pytest.raises(ImproperlyConfigured, match="CORS_ORIGIN"):
+                validate_cors_config(debug=False)

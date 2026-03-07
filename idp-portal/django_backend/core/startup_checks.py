@@ -335,3 +335,41 @@ def validate_feature_flags_config() -> None:
         flag_count=flag_count,
         pubsub_enabled=pubsub_enabled,
     )
+
+
+# Story 59.4 SEC-4: CORS configuration validation
+def validate_cors_config(debug: bool) -> None:
+    """
+    SEC-4: Validate CORS configuration at startup.
+
+    If DEBUG=False and CORS_ORIGIN is not defined, the app would accept
+    cross-origin requests from http://localhost:5173 (hardcoded default),
+    which is a security risk in production.
+
+    Args:
+        debug: True if Django DEBUG=True (development mode)
+
+    Raises:
+        ImproperlyConfigured: If DEBUG=False and CORS_ORIGIN is not set
+    """
+    if debug:
+        # Dev mode: default localhost origin is acceptable
+        logger.info("cors_config_validated", debug=True,
+                    message="Dev mode — default localhost CORS origin acceptable")
+        return
+
+    cors_origin = (os.getenv('CORS_ORIGIN') or '').strip()
+    if not cors_origin:
+        error_msg = "\n".join([
+            "❌ SECURITY: CORS configuration invalid for production",
+            "DEBUG=False but CORS_ORIGIN environment variable is not set.",
+            "The default value 'http://localhost:5173' is NOT safe for production.",
+            "",
+            "Fix: Set CORS_ORIGIN to your frontend URL.",
+            "Example: CORS_ORIGIN=https://idp.internal",
+            "See .env.production.template for required variables.",
+        ])
+        logger.error("cors_config_missing_production", debug=debug)
+        raise ImproperlyConfigured(error_msg)
+
+    logger.info("cors_config_validated", debug=False, cors_origin=cors_origin)

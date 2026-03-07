@@ -40,3 +40,10 @@ class CoreConfig(AppConfig):
             validate_feature_flags_config()
         except ImproperlyConfigured:
             raise
+
+        # SEC-4: Validate CORS configuration at startup
+        from core.startup_checks import validate_cors_config
+        try:
+            validate_cors_config(debug=settings.DEBUG)
+        except ImproperlyConfigured:
+            raise
