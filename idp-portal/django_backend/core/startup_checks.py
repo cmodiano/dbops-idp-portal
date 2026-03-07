@@ -359,7 +359,10 @@ def validate_cors_config(debug: bool) -> None:
         return
 
     cors_origin = (os.getenv('CORS_ORIGIN') or '').strip()
-    if not cors_origin:
+    is_blank = not cors_origin
+    is_placeholder = bool(PLACEHOLDER_PATTERN.match(cors_origin))
+    is_localhost = cors_origin.lower().startswith('http://localhost')
+    if is_blank or is_placeholder or is_localhost:
         error_msg = "\n".join([
             "❌ SECURITY: CORS configuration invalid for production",
             "DEBUG=False but CORS_ORIGIN environment variable is not set.",

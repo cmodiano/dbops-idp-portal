@@ -12,6 +12,7 @@ from rest_framework.exceptions import AuthenticationFailed
 
 from core.models import AuditActionType, AuditEntityType
 from core.services import AuditService
+from idp_auth.dev_bypass import is_dev_bypass_allowed
 from idp_auth.jwt_utils import verify_token
 from idp_auth.models import User
 
@@ -53,17 +54,13 @@ class JWTAuthentication(BaseAuthentication):
         token = auth_header.split(' ', 1)[1]
 
         # Dev mode: Accept mock token from frontend VITE_DEV_AUTH mode
-        # Check both AUTH_DEV_BYPASS setting and token value
-        is_dev_bypass = getattr(settings, 'AUTH_DEV_BYPASS', False)
+        # Centralized guard: dev bypass only when DEBUG=True (is_dev_bypass_allowed)
         is_mock_token = token == 'dev-mock-token-for-testing'
-        
-        if is_dev_bypass and is_mock_token:
-            # SEC-6: Block completely in production — return None instead of creating dev-user.
-            # Returning None means DRF will treat the request as unauthenticated (401 if auth required).
-            if not settings.DEBUG:
-                return None
-
-            # DEBUG=True (dev mode only): Get or create dev user
+        if is_mock_token and getattr(settings, "AUTH_DEV_BYPASS", False) and not getattr(settings, "DEBUG", False):
+            # SEC-6: AUTH_DEV_BYPASS=True + DEBUG=False → return None (unauthenticated)
+            return None
+        if is_dev_bypass_allowed() and is_mock_token:
+            # SEC-6: Get or create dev user (only reached when DEBUG=True)
             dev_user, _ = User.objects.get_or_create(
                 username="dev-user",
                 defaults={

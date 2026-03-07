@@ -171,6 +171,20 @@ class TestValidateCorsConfig:
             with pytest.raises(ImproperlyConfigured, match="CORS_ORIGIN"):
                 validate_cors_config(debug=False)
 
+    def test_59_4_e_production_cors_origin_placeholder_raises(self):
+        """59-4-e: DEBUG=False, CORS_ORIGIN='CHANGE_CORS_ORIGIN_URL' → ImproperlyConfigured."""
+        with patch.dict('os.environ', {'CORS_ORIGIN': 'CHANGE_CORS_ORIGIN_URL'}, clear=False):
+            from core.startup_checks import validate_cors_config
+            with pytest.raises(ImproperlyConfigured, match="CORS_ORIGIN"):
+                validate_cors_config(debug=False)
+
+    def test_59_4_f_production_cors_origin_localhost_dev_default_raises(self):
+        """59-4-f: DEBUG=False, CORS_ORIGIN='http://localhost:5173' → ImproperlyConfigured."""
+        with patch.dict('os.environ', {'CORS_ORIGIN': 'http://localhost:5173'}, clear=False):
+            from core.startup_checks import validate_cors_config
+            with pytest.raises(ImproperlyConfigured, match="CORS_ORIGIN"):
+                validate_cors_config(debug=False)
+
 
 class TestValidateSuperuserFallbackConfig:
     """Tests SEC-5: ALLOW_SUPERUSER_FALLBACK interdit en production."""

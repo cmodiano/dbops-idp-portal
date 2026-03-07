@@ -53,9 +53,9 @@ class TestSAMLLoginView(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn('idp.example.com', response.url)
 
-    @override_settings(AUTH_DEV_BYPASS=True)
+    @override_settings(AUTH_DEV_BYPASS=True, DEBUG=True)
     def test_saml_login_dev_bypass(self):
-        """Dev bypass mode skips IdP and emits JWT directly."""
+        """Dev bypass mode skips IdP and emits JWT directly (requires DEBUG=True)."""
         from idp_auth.views import SAMLLoginView
 
         request = self.factory.get('/api/v1/auth/saml/login')

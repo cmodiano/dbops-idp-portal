@@ -13,6 +13,7 @@ from rest_framework.request import Request
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny
 
+from idp_auth.dev_bypass import is_dev_bypass_allowed
 from idp_auth.models import User
 from idp_auth.services import AuthService
 from idp_auth.saml_utils import create_saml_auth
@@ -39,14 +40,20 @@ class SAMLLoginView(APIView):
 
     def get(self, request: Request) -> HttpResponse:
         """Initiate SAML login flow."""
+        # SEC-6: Reject dev bypass when DEBUG=False (production)
+        if getattr(settings, "AUTH_DEV_BYPASS", False) and not getattr(settings, "DEBUG", False):
+            logger.critical(
+                "SECURITY ALERT: AUTH_DEV_BYPASS is enabled in production mode "
+                "(DEBUG=False). Dev bypass is disabled. Use SAML IdP for authentication."
+            )
+            raise ForbiddenError(
+                code="DEV_BYPASS_FORBIDDEN",
+                message="Dev bypass authentication is not allowed in production.",
+                details={},
+            )
         # Dev bypass mode (for local development without IdP)
-        if settings.AUTH_DEV_BYPASS:
-            # SEC-7: Guard — log CRITICAL if dev bypass is active with DEBUG=False (production)
-            if not settings.DEBUG:
-                logger.critical(
-                    "SECURITY ALERT: AUTH_DEV_BYPASS is enabled in production mode "
-                    "(DEBUG=False). This creates a critical security vulnerability."
-                )
+        # Centralized guard: only allow when DEBUG=True (is_dev_bypass_allowed)
+        if is_dev_bypass_allowed():
             # Resolve real dev-user id so GET /auth/me finds the user (no user with id=0 in DB)
             dev_user, _ = User.objects.get_or_create(
                 username="dev-user",

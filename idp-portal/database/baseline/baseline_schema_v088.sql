@@ -2,7 +2,7 @@
 -- Baseline Schema V088 — IDP Portal
 -- ===========================================================================
 -- Date            : 2026-02-25
--- Version couverte: V000–V107 (incl. V099 EXECUTION_STEPS, V100 CK_AUDIT_LOG_ACTION_TYPE, V103 SCHEDULED_EXECUTION_CELERY_TRIGGERED, V105 PROFILES.IS_APPROVER, V106 SOURCE_EXECUTION_ID, V107 schedule_execution step type)
+-- Version couverte: V000–V110 (incl. V099 EXECUTION_STEPS, V100 CK_AUDIT_LOG_ACTION_TYPE, V103 SCHEDULED_EXECUTION_CELERY_TRIGGERED, V105 PROFILES.IS_APPROVER, V106 SOURCE_EXECUTION_ID, V107 schedule_execution step type, V110 AUTH_DEV_BYPASS_LOGIN WORKFLOW_STEP_SCHEDULE_CREATED)
 -- Auteur          : Agent de développement (Story 41-2)
 --
 -- Usage           : NOUVEAUX ENVIRONNEMENTS UNIQUEMENT (base Oracle vierge)
@@ -694,9 +694,10 @@ ALTER TABLE AUDIT_LOG ADD CONSTRAINT CK_AUDIT_LOG_ACTION_TYPE CHECK (
             'SCHEDULED_EXECUTION_RECURRING_DISABLED',
             'SCHEDULED_EXECUTION_CELERY_TRIGGERED',  -- V103: Celery Beat process_pending_scheduled_executions
 
-            -- User / Auth / Favorites (V094: API_KEY_TOKEN_EXCHANGE, SERVICE_LOGIN)
+            -- User / Auth / Favorites (V094: API_KEY_TOKEN_EXCHANGE, SERVICE_LOGIN; V110: AUTH_DEV_BYPASS_LOGIN)
             'USER_CREATED', 'USER_UPDATED', 'USER_LOGIN', 'USER_LOGOUT', 'USER_REFRESH',
             'API_KEY_TOKEN_EXCHANGE', 'FAVORITE_ADDED', 'FAVORITE_REMOVED', 'SERVICE_LOGIN',
+            'AUTH_DEV_BYPASS_LOGIN',
 
             -- Execution step retry
             'EXECUTION_STEP_RETRY_ATTEMPT', 'EXECUTION_STEP_RETRY_SUCCESS',
@@ -706,6 +707,9 @@ ALTER TABLE AUDIT_LOG ADD CONSTRAINT CK_AUDIT_LOG_ACTION_TYPE CHECK (
             'EXECUTION_STEP_WAITING',
             'EXECUTION_STEP_GATE_SATISFIED',
             'EXECUTION_STEP_GATE_TIMEOUT',
+
+            -- Story 57.15 (V110): Workflow schedule step
+            'WORKFLOW_STEP_SCHEDULE_CREATED',
 
             -- Feature flags
             'FEATURE_FLAG_CREATED', 'FEATURE_FLAG_UPDATED'
