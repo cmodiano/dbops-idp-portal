@@ -118,4 +118,8 @@ def import_output_schemas_yaml(content: str, mode: str = 'additive') -> dict:
         stats['deleted'] = deleted_qs.count()
         deleted_qs.delete()
 
+    # Invalider le cache du registry après tout import
+    from output_schemas.registry import schema_registry  # noqa: PLC0415 — import tardif pour éviter les cycles
+    schema_registry.invalidate()
+
     return stats

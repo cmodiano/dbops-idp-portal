@@ -1,6 +1,7 @@
 """
 Tests for output_schemas views.
 Story 63.1 - Infrastructure des Schémas d'Output (Backend).
+Story 63.2 - Registre des Schémas & Résolution (endpoints discovery).
 """
 
 import pytest
@@ -8,6 +9,7 @@ import yaml
 from django.contrib.auth.models import User
 from rest_framework.test import APIClient
 
+from catalog.models import Action, ActionItemType
 from output_schemas.models import OutputSchema, SchemaType
 
 
@@ -188,3 +190,193 @@ class TestAdminSyncView:
         data = response.data['data']
         assert data['deleted'] == 1
         assert not OutputSchema.objects.filter(name='will-be-deleted').exists()
+
+
+# ---------------------------------------------------------------------------
+# Story 63.2: Tests pour les endpoints discovery
+# ---------------------------------------------------------------------------
+
+
+def make_workflow(name, steps=None):
+    """Créer une Action de type workflow pour les tests."""
+    return Action.objects.create(
+        name=name,
+        item_type=ActionItemType.WORKFLOW,
+        execution_steps=steps or [],
+    )
+
+
+def make_action_catalog(name):
+    """Créer une Action de type action pour les tests."""
+    return Action.objects.create(
+        name=name,
+        item_type=ActionItemType.ACTION,
+    )
+
+
+@pytest.mark.django_db
+class TestGetStepOutputSchema:
+    """Tests pour GET /api/v1/output-schemas/workflows/{id}/steps/{step_id}/output-schema/"""
+
+    def setup_method(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(username='testuser-discovery', password='pass')
+        self.client.force_authenticate(user=self.user)
+
+    def test_step_platform_with_schema(self):
+        """AC4: Step platform avec schéma — retourne le schéma résolu."""
+        ref_action = make_action_catalog('flyway-migrate-v2')
+        workflow = make_workflow('wf-test-platform', steps=[
+            {
+                'step_id': 'step-1',
+                'step_type': 'platform',
+                'name': 'Flyway Migrate',
+                'referenced_action_id': ref_action.id,
+            }
+        ])
+        OutputSchema.objects.create(
+            name='flyway-migrate-v2-schema',
+            schema_type=SchemaType.ACTION,
+            target_name='flyway-migrate-v2',
+            schema_json={'output_fields': [{'name': 'migrations_applied', 'type': 'integer'}]},
+        )
+        url = f'/api/v1/output-schemas/workflows/{workflow.id}/steps/step-1/output-schema/'
+        response = self.client.get(url)
+        assert response.status_code == 200
+        assert response.data['step_id'] == 'step-1'
+        assert response.data['step_type'] == 'platform'
+        assert response.data['schema'] is not None
+        assert response.data['schema']['output_fields'][0]['name'] == 'migrations_applied'
+
+    def test_step_service_call_with_schema(self):
+        """AC4: Step service_call — retourne le schéma résolu."""
+        workflow = make_workflow('wf-test-service-call', steps=[
+            {
+                'step_id': 'step-sn',
+                'step_type': 'service_call',
+                'name': 'Create Change',
+                'integration_type': 'servicenow',
+                'operation': 'create_change',
+            }
+        ])
+        OutputSchema.objects.create(
+            name='sn-create-change-schema',
+            schema_type=SchemaType.INTEGRATION,
+            target_name='servicenow',
+            operation='create_change',
+            schema_json={'output_fields': [{'name': 'change_number', 'type': 'string'}]},
+        )
+        url = f'/api/v1/output-schemas/workflows/{workflow.id}/steps/step-sn/output-schema/'
+        response = self.client.get(url)
+        assert response.status_code == 200
+        assert response.data['step_id'] == 'step-sn'
+        assert response.data['schema'] is not None
+        assert response.data['schema']['output_fields'][0]['name'] == 'change_number'
+
+    def test_step_gate_no_schema(self):
+        """AC4: Step gate (pas de schéma) — retourne schema=null."""
+        workflow = make_workflow('wf-test-gate', steps=[
+            {
+                'step_id': 'gate-1',
+                'step_type': 'gate',
+                'name': 'Approval Gate',
+            }
+        ])
+        url = f'/api/v1/output-schemas/workflows/{workflow.id}/steps/gate-1/output-schema/'
+        response = self.client.get(url)
+        assert response.status_code == 200
+        assert response.data['step_id'] == 'gate-1'
+        assert response.data['schema'] is None
+
+    def test_workflow_not_found_returns_404(self):
+        """AC4: Workflow inexistant → 404."""
+        url = '/api/v1/output-schemas/workflows/99999/steps/step-1/output-schema/'
+        response = self.client.get(url)
+        assert response.status_code == 404
+
+    def test_step_not_found_returns_404(self):
+        """AC4: Step inexistant dans le workflow → 404."""
+        workflow = make_workflow('wf-test-step-missing', steps=[
+            {'step_id': 'step-existing', 'step_type': 'gate', 'name': 'Gate'}
+        ])
+        url = f'/api/v1/output-schemas/workflows/{workflow.id}/steps/step-inexistant/output-schema/'
+        response = self.client.get(url)
+        assert response.status_code == 404
+
+    def test_requires_authentication(self):
+        """AC4: Endpoint protégé — 401 sans authentification."""
+        self.client.force_authenticate(user=None)
+        url = '/api/v1/output-schemas/workflows/1/steps/step-1/output-schema/'
+        response = self.client.get(url)
+        assert response.status_code in (401, 403)
+
+
+@pytest.mark.django_db
+class TestGetAvailableVariables:
+    """Tests pour GET /api/v1/output-schemas/workflows/{id}/available-variables/"""
+
+    def setup_method(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(username='testuser-vars', password='pass')
+        self.client.force_authenticate(user=self.user)
+
+    def test_workflow_with_multiple_steps(self):
+        """AC5: Retourne les variables de tous les steps schématisés."""
+        ref_action = make_action_catalog('terraform-plan-test')
+        workflow = make_workflow('wf-multi-steps', steps=[
+            {
+                'step_id': 'step-1',
+                'step_type': 'platform',
+                'name': 'Terraform Plan',
+                'referenced_action_id': ref_action.id,
+            },
+            {
+                'step_id': 'step-2',
+                'step_type': 'gate',
+                'name': 'Approval',
+            },
+        ])
+        OutputSchema.objects.create(
+            name='terraform-plan-schema',
+            schema_type=SchemaType.ACTION,
+            target_name='terraform-plan-test',
+            schema_json={'output_fields': [
+                {'name': 'plan_output', 'type': 'string', 'description': 'Terraform plan'},
+                {'name': 'resource_count', 'type': 'integer', 'description': 'Resources to change'},
+            ]},
+        )
+        url = f'/api/v1/output-schemas/workflows/{workflow.id}/available-variables/'
+        response = self.client.get(url)
+        assert response.status_code == 200
+        result = response.data
+        # Seul step-1 a un schéma, step-2 (gate) est exclu
+        assert len(result) == 1
+        assert result[0]['step_id'] == 'step-1'
+        assert result[0]['step_name'] == 'Terraform Plan'
+        var_names = [v['name'] for v in result[0]['variables']]
+        assert 'plan_output' in var_names
+        assert 'resource_count' in var_names
+
+    def test_workflow_without_schemas(self):
+        """AC5: Workflow sans aucun step schématisé — retourne liste vide."""
+        workflow = make_workflow('wf-no-schemas', steps=[
+            {'step_id': 'gate-1', 'step_type': 'gate', 'name': 'Gate'},
+            {'step_id': 'gate-2', 'step_type': 'gate', 'name': 'Gate 2'},
+        ])
+        url = f'/api/v1/output-schemas/workflows/{workflow.id}/available-variables/'
+        response = self.client.get(url)
+        assert response.status_code == 200
+        assert response.data == []
+
+    def test_workflow_not_found_returns_404(self):
+        """AC5: Workflow inexistant → 404."""
+        url = '/api/v1/output-schemas/workflows/99998/available-variables/'
+        response = self.client.get(url)
+        assert response.status_code == 404
+
+    def test_requires_authentication(self):
+        """AC5: Endpoint protégé — 401/403 sans authentification."""
+        self.client.force_authenticate(user=None)
+        url = '/api/v1/output-schemas/workflows/1/available-variables/'
+        response = self.client.get(url)
+        assert response.status_code in (401, 403)

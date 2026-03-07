@@ -98,3 +98,103 @@ def sync_output_schemas(request):
         )
 
     return Response({'data': stats})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_step_output_schema(request, workflow_id: int, step_id: str):
+    """
+    GET /api/v1/output-schemas/workflows/{workflow_id}/steps/{step_id}/output-schema/
+    Retourne le schéma d'output résolu pour un step spécifique d'un workflow.
+    """
+    from catalog.models import Action  # noqa: PLC0415 — import tardif pour éviter les cycles
+    from output_schemas.registry import schema_registry  # noqa: PLC0415
+
+    try:
+        workflow = Action.objects.get(id=workflow_id, item_type='workflow')
+    except Action.DoesNotExist:
+        return Response({'error': f'Workflow {workflow_id} introuvable.'}, status=404)
+
+    steps = workflow.execution_steps or []
+    step = next((s for s in steps if s.get('step_id') == step_id), None)
+    if step is None:
+        return Response({'error': f'Step "{step_id}" introuvable dans le workflow {workflow_id}.'}, status=404)
+
+    step_type = step.get('step_type', 'platform')
+    schema = None
+
+    if step_type == 'platform':
+        ref_action_id = step.get('referenced_action_id')
+        if ref_action_id:
+            try:
+                ref_action = Action.objects.get(id=ref_action_id)
+                schema = schema_registry.get_action_schema(ref_action.name)
+            except Action.DoesNotExist:
+                pass
+    elif step_type == 'service_call':
+        integration_type = step.get('integration_type', '')
+        operation = step.get('operation', '')
+        if integration_type and operation:
+            schema = schema_registry.get_integration_schema(integration_type, operation)
+
+    return Response({
+        'step_id': step_id,
+        'step_name': step.get('name', ''),
+        'step_type': step_type,
+        'schema': schema,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_available_variables(request, workflow_id: int):
+    """
+    GET /api/v1/output-schemas/workflows/{workflow_id}/available-variables/
+    Retourne toutes les variables disponibles par step pour le variable picker.
+    """
+    from catalog.models import Action  # noqa: PLC0415 — import tardif pour éviter les cycles
+    from output_schemas.registry import schema_registry  # noqa: PLC0415
+
+    try:
+        workflow = Action.objects.get(id=workflow_id, item_type='workflow')
+    except Action.DoesNotExist:
+        return Response({'error': f'Workflow {workflow_id} introuvable.'}, status=404)
+
+    steps = sorted(
+        workflow.execution_steps or [],
+        key=lambda s: (s.get('step_order') is None, s.get('step_order', 0)),
+    )
+    # Pré-charger les actions référencées pour éviter N+1
+    ref_ids = [
+        s.get('referenced_action_id')
+        for s in steps
+        if s.get('step_type', 'platform') == 'platform' and s.get('referenced_action_id')
+    ]
+    ref_actions = {a.id: a for a in Action.objects.filter(id__in=ref_ids)} if ref_ids else {}
+
+    result = []
+    for step in steps:
+        step_id = step.get('step_id', '')
+        step_type = step.get('step_type', 'platform')
+        step_name = step.get('name', step_id)
+        schema = None
+
+        if step_type == 'platform':
+            ref_id = step.get('referenced_action_id')
+            if ref_id and ref_id in ref_actions:
+                schema = schema_registry.get_action_schema(ref_actions[ref_id].name)
+        elif step_type == 'service_call':
+            integration_type = step.get('integration_type', '')
+            operation = step.get('operation', '')
+            if integration_type and operation:
+                schema = schema_registry.get_integration_schema(integration_type, operation)
+
+        if schema and schema.get('output_fields'):
+            result.append({
+                'step_id': step_id,
+                'step_name': step_name,
+                'step_type': step_type,
+                'variables': schema['output_fields'],
+            })
+
+    return Response(result)
