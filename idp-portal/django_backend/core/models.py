@@ -116,6 +116,8 @@ class AuditActionType(models.TextChoices):
     CONFIG_SYNC_INTEGRATION_IMPORT = 'CONFIG_SYNC_INTEGRATION_IMPORT', 'Config Sync - Integration Import'
     # Story 64.5: IaC Config Sync - Business Rule Policy
     CONFIG_SYNC_POLICY_IMPORT = 'CONFIG_SYNC_POLICY_IMPORT', 'Config Sync - Policy Import'
+    # Story 64.6: IaC Config Sync - Action
+    CONFIG_SYNC_ACTION_IMPORT = 'CONFIG_SYNC_ACTION_IMPORT', 'Config Sync - Action Import'
     # Additional types added in later migrations (V028-V035, V039-V041)
     # Note: Full list would include all types from migrations, but base types are sufficient for model
 
