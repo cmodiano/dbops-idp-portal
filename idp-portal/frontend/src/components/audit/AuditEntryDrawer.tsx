@@ -198,14 +198,37 @@ export function AuditEntryDrawer({
             </>
           )}
 
-          {/* Parameters if available (executions only) */}
-          {entry.entity_type === 'execution' && entry.details?.parameters && (
-            <Card title="Paramètres" size="small" style={{ marginBottom: 24 }}>
-              <pre style={{ margin: 0, fontSize: 12, whiteSpace: 'pre-wrap' }}>
-                {JSON.stringify(entry.details.parameters, null, 2)}
-              </pre>
-            </Card>
-          )}
+          {/* Execution context section — action, targets, parameters (Story 61.10) */}
+          {entry.entity_type === 'execution' && (() => {
+            const hasContext =
+              entry.details?.action_name ||
+              (entry.details?.targets && entry.details.targets.length > 0) ||
+              entry.details?.parameters;
+            if (!hasContext) return null;
+            return (
+              <Card title="Contexte d'exécution" size="small" style={{ marginBottom: 24 }}>
+                <Descriptions column={1} size="small">
+                  {entry.details?.action_name && (
+                    <Descriptions.Item label="Action">
+                      {String(entry.details.action_name)}
+                    </Descriptions.Item>
+                  )}
+                  {entry.details?.targets && entry.details.targets.length > 0 && (
+                    <Descriptions.Item label="Cibles">
+                      {entry.details.targets.join(', ')}
+                    </Descriptions.Item>
+                  )}
+                  {entry.details?.parameters && (
+                    <Descriptions.Item label="Paramètres">
+                      <pre style={{ margin: 0, fontSize: 12, whiteSpace: 'pre-wrap' }}>
+                        {JSON.stringify(entry.details.parameters, null, 2)}
+                      </pre>
+                    </Descriptions.Item>
+                  )}
+                </Descriptions>
+              </Card>
+            );
+          })()}
 
           {/* Execution timeline if available */}
           {execution && steps.length > 0 && (

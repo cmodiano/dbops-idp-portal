@@ -23,7 +23,9 @@ export interface AuditExecutionEntry {
     parameters?: Record<string, unknown>;
     servicenow_change_id?: string;
     error_message?: string;
+    action_name?: string;                                      // Story 61.10 (details enrichis par 61.7/61.8)
     changes?: Record<string, { old: unknown; new: unknown }>; // Story 61.9
+    targets?: string[];                                        // Story 61.10
     [key: string]: unknown;
   } | null;
   ip_address: string | null;
