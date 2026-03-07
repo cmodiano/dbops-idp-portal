@@ -2,7 +2,7 @@
 -- Baseline Schema V088 — IDP Portal
 -- ===========================================================================
 -- Date            : 2026-02-25
--- Version couverte: V000–V110 (incl. V099 EXECUTION_STEPS, V100 CK_AUDIT_LOG_ACTION_TYPE, V103 SCHEDULED_EXECUTION_CELERY_TRIGGERED, V105 PROFILES.IS_APPROVER, V106 SOURCE_EXECUTION_ID, V107 schedule_execution step type, V110 AUTH_DEV_BYPASS_LOGIN WORKFLOW_STEP_SCHEDULE_CREATED)
+-- Version couverte: V000–V110 (incl. V106 SOURCE_EXECUTION_ID, V107 schedule_execution, V109 DROP CHANGE_TYPE_CONFIG GATE_CONFIG, V110 AUTH_DEV_BYPASS_LOGIN WORKFLOW_STEP_SCHEDULE_CREATED)
 -- Auteur          : Agent de développement (Story 41-2)
 --
 -- Usage           : NOUVEAUX ENVIRONNEMENTS UNIQUEMENT (base Oracle vierge)
@@ -10,10 +10,10 @@
 --
 -- Procédure de déploiement :
 --   1. sqlplus idp_user/password@HOST:1521/XEPDB1 @database/baseline/baseline_schema_v088.sql
---   2. flyway -baselineVersion=100 -baselineDescription=baseline_schema_v088 baseline
+--   2. flyway -baselineVersion=110 -baselineDescription=baseline_schema_v088 baseline
 --
--- Ce script couvre TOUTES les migrations V000–V100. Aucune migration incrémentale
--- n'est nécessaire après application. État identique à V000→V100 sans phases intermédiaires.
+-- Ce script couvre TOUTES les migrations V000–V110. Aucune migration incrémentale
+-- n'est nécessaire après application. État identique à V000→V110 sans phases intermédiaires.
 -- ===========================================================================
 --
 -- Objets créés :
@@ -355,8 +355,9 @@ COMMENT ON COLUMN BUSINESS_RULE_POLICIES.POLICY_JSON IS 'JSON schema defining bu
 -- ---------------------------------------------------------------------------
 -- ACTIONS_CATALOG (V002 + V003 + V008 + V013 + V014 + V017 + V018 + V022
 --                  + V027 + V031 + V036 + V037 + V046 + V056 + V074 + V076
---                  + V080 + V081 + V082)
--- Exclusions : RBAC_POLICIES (col. V002, droppée V013), CHANGE_MODEL_CODE (ajoutée V017, droppée V019)
+--                  + V080 + V082) — V081 GATE_CONFIG droppée V109
+-- Exclusions : RBAC_POLICIES (col. V002, droppée V013), CHANGE_MODEL_CODE (ajoutée V017, droppée V019),
+--   CHANGE_TYPE_CONFIG (V019, droppée V109), GATE_CONFIG (V081, droppée V109)
 -- Contraintes exclues (car droppées) : CK_ACTIONS_CATALOG_CATEGORY (V018),
 --   CK_ACTIONS_CATALOG_ENGINE (V050), CK_ACTIONS_CATALOG_PLATFORM (V052)
 -- V018: CATEGORY rendu nullable (migration vers tags-only, Story 2.23)
@@ -376,7 +377,6 @@ CREATE TABLE ACTIONS_CATALOG (
     UPDATED_AT              TIMESTAMP,
     -- V003
     EXECUTION_STEPS         CLOB,
-    CHANGE_TYPE_CONFIG      CLOB,
     -- V014
     DEFAULT_IMPACT_LEVEL    VARCHAR2(20),
     -- V022
@@ -397,8 +397,6 @@ CREATE TABLE ACTIONS_CATALOG (
     BUSINESS_RULE_POLICIES  CLOB,
     -- V076
     BUSINESS_RULE_POLICY_ID NUMBER,
-    -- V081
-    GATE_CONFIG             CLOB CHECK (GATE_CONFIG IS JSON),
     -- V082
     NOTIFICATION_CONFIG     CLOB CHECK (NOTIFICATION_CONFIG IS JSON),
 
@@ -438,7 +436,6 @@ CREATE INDEX IDX_ACTION_BUSINESS_RULE_POLICY    ON ACTIONS_CATALOG(BUSINESS_RULE
 COMMENT ON COLUMN ACTIONS_CATALOG.PARAMETERS_SCHEMA IS 'JSON Schema (draft-07) defining action parameters.';
 COMMENT ON COLUMN ACTIONS_CATALOG.IMPACT_RULES IS 'JSON object mapping environment to impact level.';
 COMMENT ON COLUMN ACTIONS_CATALOG.EXECUTION_STEPS IS 'JSON array of execution steps (V003).';
-COMMENT ON COLUMN ACTIONS_CATALOG.CHANGE_TYPE_CONFIG IS 'JSON object mapping environment to change type.';
 COMMENT ON COLUMN ACTIONS_CATALOG.DEFAULT_IMPACT_LEVEL IS 'Default impact level when no rule matches environment (V014).';
 COMMENT ON COLUMN ACTIONS_CATALOG.DOCUMENTATION_MD IS 'Markdown documentation for the action (V022).';
 COMMENT ON COLUMN ACTIONS_CATALOG.ITEM_TYPE IS 'Entry type: action or workflow (V027).';
@@ -450,7 +447,6 @@ COMMENT ON COLUMN ACTIONS_CATALOG.DELETED_BY IS 'User who disabled the action (V
 COMMENT ON COLUMN ACTIONS_CATALOG.DELETION_REASON IS 'Reason for deactivation (V056).';
 COMMENT ON COLUMN ACTIONS_CATALOG.BUSINESS_RULE_POLICIES IS 'Inline JSON business rule policies (V074).';
 COMMENT ON COLUMN ACTIONS_CATALOG.BUSINESS_RULE_POLICY_ID IS 'FK to BUSINESS_RULE_POLICIES catalogue (V076).';
-COMMENT ON COLUMN ACTIONS_CATALOG.GATE_CONFIG IS 'JSON configuration des gates par type (V081).';
 COMMENT ON COLUMN ACTIONS_CATALOG.NOTIFICATION_CONFIG IS 'JSON configuration des notifications (V082).';
 
 -- ===========================================================================
