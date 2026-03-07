@@ -3,6 +3,8 @@
 **Date :** 2026-02-26  
 **Projet :** test (idp-portal – frontend + django_backend)
 
+> **Migration (2026-03) :** La documentation a été consolidée dans `docs/` avec MkDocs Material. Les anciens répertoires `idp-portal/docs/`, `idp-portal/django_backend/docs/` et `idp-portal/frontend/docs/` ont été supprimés. L'inventaire ci-dessous reflète l'état précédent à titre historique.
+
 ---
 
 ## Partie : Frontend (idp-portal/frontend)
@@ -82,7 +84,7 @@
 | .github/workflows/ci.yml | ci | Pipeline CI |
 | .github/pull_request_template.md | process | Template PR |
 
-*(Liste non exhaustive ; nombreux autres .md dans idp-portal/docs et django_backend/docs.)*
+*(Liste non exhaustive ; inventaire historique avant migration vers docs/.)*
 
 ---
 

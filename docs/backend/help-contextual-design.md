@@ -14,7 +14,7 @@ La documentation est stockée côté **backend** (fichiers MD dans le repo), mai
 
 ### Stockage des fichiers MD
 
-- **Répertoire :** `idp-portal/django_backend/docs/help/` (ou dédié type `help/content/` dans une app `help`).
+- **Répertoire :** `docs/backend/help/` (ou dédié type `help/content/` dans une app `help`).
 - **Un fichier par sujet** (topic), nommé par `topic_id` : ex. `action-form-integration.md`, `action-form-changement-servicenow.md`, `gates-config.md`.
 - **Format recommandé :** Markdown avec **frontmatter YAML** optionnel pour le texte court (tooltip) :
 
@@ -92,7 +92,7 @@ Cette section permet d'associer l'action à une **intégration** (instance de pl
 
 | Élément            | Rôle |
 |--------------------|------|
-| **Fichiers MD**    | Dans `django_backend/docs/help/*.md`, un par topic, avec frontmatter `short` optionnel. |
+| **Fichiers MD**    | Dans `docs/backend/help/*.md`, un par topic, avec frontmatter `short` optionnel. |
 | **API**            | `GET /api/v1/help/<topic_id>/` → `{ short, markdown }`. |
 | **Tooltip**        | Texte court (`short`) au survol de l’icône. |
 | **Popover**        | Markdown rendu (`markdown`) au clic sur l’icône (ou lien « Aide »). |

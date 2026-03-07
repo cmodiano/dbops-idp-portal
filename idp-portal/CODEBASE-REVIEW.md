@@ -562,7 +562,7 @@ Les 6 fichiers "cohérent/justifié" disposent désormais d'un commentaire `# Re
 
 **Audit final Story 48.9 (2026-02-26) :** 77 occurrences inventoriées dans 40 fichiers backend. **100 % conformes** — toutes avec `noqa: BLE001` et commentaire de catégorie (resilience-boundary, graceful-degradation, catch-all-mark-failed, best-effort-non-critical, logged-and-reraised, logged-and-wrapped). Aucune correction nécessaire.
 
-Rapport détaillé : [`django_backend/docs/story-48-9-except-exception-audit-report.md`](django_backend/docs/story-48-9-except-exception-audit-report.md)
+Rapport détaillé : [`docs/backend/story-48-9-except-exception-audit-report.md`](../docs/backend/story-48-9-except-exception-audit-report.md)
 
 ~~33 occurrences de `except Exception` dans `executions/` (16 fichiers). La plupart sont documentées (`noqa: BLE001`) ou dans des contextes de résilience (webhooks, polling, runtime). Les cas non documentés dans les fichiers nouveaux/refactorisés (ex. `container_workflow_runtime.py` — 5 occurrences) mériteraient une revue pour vérifier qu'ils sont tous justifiés.~~
 

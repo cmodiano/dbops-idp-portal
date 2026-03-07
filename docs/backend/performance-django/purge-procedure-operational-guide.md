@@ -324,6 +324,6 @@ ORDER BY TABLE_NAME, INDEX_NAME;
 
 - **Migration V087** : `idp-portal/database/migrations/V087__create_purge_procedure.sql`
 - **Rollback V087** : `idp-portal/database/rollback/V087__create_purge_procedure_rollback.sql`
-- **Note DBA 40.1** : `idp-portal/django_backend/docs/performance/dba-validation-partitionnement-40-1.md`
+- **Note DBA 40.1** : [dba-validation-partitionnement-40-1.md](./dba-validation-partitionnement-40-1.md)
 - **Story 40.5** : `_bmad-output/implementation-artifacts/40-5-procedure-purge-politique-retention.md`
 - **Trigger immutabilité** : `idp-portal/database/migrations/V054__audit_log_immutable_trigger.sql`

@@ -188,4 +188,4 @@ database/rollback/
 ---
 
 *Généré dans le cadre de la Story 41-2 — Consolidation des scripts de migration Flyway*
-*Référence : `idp-portal/docs/migration-audit-epic41.md` (Story 41-1)*
+*Référence : `docs/backend/migration/migration-audit-epic41.md` (Story 41-1)*
