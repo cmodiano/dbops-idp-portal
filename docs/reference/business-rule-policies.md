@@ -79,7 +79,7 @@ Ce mécanisme permet aux administrateurs de définir des règles métier pour :
 
 ---
 
-## Définition et Objectif
+## Définition et Objectif {#définition-et-objectif}
 
 ### Cas d'Usage Métier
 
@@ -113,7 +113,7 @@ Décision : Auto-approuvé → Aucune revue supplémentaire
 
 ---
 
-## Typologie des Règles Métier dans le Système
+## Typologie des Règles Métier dans le Système {#typologie-des-règles-métier-dans-le-système}
 
 Le système IDP Portal contient plusieurs niveaux de règles métier, évaluées à différents moments du cycle de vie de l'exécution :
 
@@ -143,7 +143,7 @@ Le système IDP Portal contient plusieurs niveaux de règles métier, évaluées
 
 ---
 
-## Quand sont Évaluées les Règles
+## Quand sont Évaluées les Règles {#quand-sont-évaluées-les-règles}
 
 ### Diagramme de Séquence d'Évaluation
 
@@ -209,7 +209,7 @@ sequenceDiagram
 
 ---
 
-## Structure du Schéma JSON
+## Structure du Schéma JSON {#structure-du-schéma-json}
 
 ### Vue d'Ensemble
 
@@ -382,7 +382,7 @@ sequenceDiagram
 
 ---
 
-## Types de Politique Supportés
+## Types de Politique Supportés {#types-de-politique-supportés}
 
 ### 1. `review_if_modified` (Story 28.1–28.2)
 
@@ -586,7 +586,7 @@ Workflow met à jour credentials. Changement de secrets = requête de revue.
 
 ---
 
-## Référence API
+## Référence API {#référence-api}
 
 ### Endpoint : Mettre à Jour les Politiques de Règles Métier
 
@@ -1223,7 +1223,7 @@ sequenceDiagram
 
 ## Voir aussi
 
-- [condition-gates.md](./backend/condition-gates.md) — Évaluation des gates pré-étape
-- [change-type-config.md](./backend/change-type-config.md) — Configuration ServiceNow par environnement
-- [remediation-rules.md](./backend/remediation-rules.md) — Actions correctives post-exécution
-- [api-reference.md](./backend/api-reference.md) — Référence complète API
+- [condition-gates.md](../backend/condition-gates.md) — Évaluation des gates pré-étape
+- [change-type-config.md](../backend/change-type-config.md) — Configuration ServiceNow par environnement
+- [api-reference.md](../backend/api-reference.md) — Endpoint remediation-rules (Actions correctives post-exécution)
+- [api-reference.md](../backend/api-reference.md) — Référence complète API

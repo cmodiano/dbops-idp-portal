@@ -66,7 +66,7 @@ Champ `OracleJSONField` nullable sur le modèle `Action`. Définit des politique
 - **Validation** : `catalog/validators.py` → `validate_business_rule_policies()`
 - **API** : `PUT /api/v1/admin/actions/{id}/business-rule-policies/`
 - **UI Admin** : Section "Règles métier" dans ActionForm (éditeur JSON avec validation live)
-- **Documentation complète** : [business-rule-policies.md](../../docs/business-rule-policies.md)
+- **Documentation complète** : [business-rule-policies.md](../reference/business-rule-policies.md)
 
 #### Architecture RuleEngine (Story 28.3)
 

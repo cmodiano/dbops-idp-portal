@@ -243,7 +243,7 @@ Le champ `filter_by_attribute_json` des profils cibles (`ProfileTargetPermission
 
 Le matching est **case-insensitive** : `"Oracle"`, `"oracle"`, `"ORACLE"` correspondent tous.
 
-Pour plus de détails, voir [rbac-filter-by-attribute.md](../django_backend/docs/rbac-filter-by-attribute.md).
+Pour plus de détails, voir [rbac-filter-by-attribute.md](../backend/rbac-filter-by-attribute.md).
 
 ---
 
@@ -268,10 +268,10 @@ Pour ajouter un nouveau moteur au système :
 
 ## 7. Références
 
-- **Glossaire IDP Portal :** [django_backend/docs/glossary.md](../django_backend/docs/glossary.md) — Définitions formelles engine vs engine_type
-- **Filtres RBAC par attribut :** [django_backend/docs/rbac-filter-by-attribute.md](../django_backend/docs/rbac-filter-by-attribute.md) — Détails filtrage engine_type dans profils
-- **Rapport technique :** [rapport-bases-moteurs-technologies-integrations.md](./rapport-bases-moteurs-technologies-integrations.md) — Analyse complète des concepts
-- **Migration V049 :** [`../database/migrations/V049__create_ref_engines.sql`](../database/migrations/V049__create_ref_engines.sql) — Création table REF_ENGINES avec valeurs initiales (Oracle, SQL Server, DB2, PostgreSQL, MySQL, Workflow)
+- **Glossaire IDP Portal :** [django_backend/docs/glossary.md](../reference/glossary.md) — Définitions formelles engine vs engine_type
+- **Filtres RBAC par attribut :** [django_backend/docs/rbac-filter-by-attribute.md](../backend/rbac-filter-by-attribute.md) — Détails filtrage engine_type dans profils
+- **Rapport technique :** [rapport-bases-moteurs-technologies-integrations.md](../integrations/rapport-bases-moteurs-technologies-integrations.md) — Analyse complète des concepts
+- **Migration V049 :** `idp-portal/database/migrations/V049__create_ref_engines.sql` (dépôt) — Création table REF_ENGINES avec valeurs initiales (Oracle, SQL Server, DB2, PostgreSQL, MySQL, Workflow)
 - **InventoryMapper :** `django_backend/inventory/mapper.py` — Mapping colonnes source → concepts business
 
 ## 8. Exemples de valeurs problématiques

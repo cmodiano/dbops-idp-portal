@@ -23,7 +23,7 @@
 
 ---
 
-## 1. Prérequis
+## 1. Prérequis {#1-prérequis}
 
 ### Conditions pour démarrer le décommissionnement
 
@@ -52,7 +52,7 @@
 
 ---
 
-## 2. Timeline de Décommissionnement
+## 2. Timeline de Décommissionnement {#2-timeline-de-décommissionnement}
 
 ```
 Jour J      → Bascule production (Django actif)
@@ -77,7 +77,7 @@ J+90        → PHASE 3: Suppression définitive VM + archivage final
 
 ---
 
-## 3. Phase 1: J+7 - Arrêt du Service
+## 3. Phase 1: J+7 - Arrêt du Service {#3-phase-1-j7---arrêt-du-service}
 
 ### 3.1 Prérequis Phase 1
 
@@ -144,7 +144,7 @@ Aucune action requise.
 
 ---
 
-## 4. Phase 2: J+30 - Désactivation VM
+## 4. Phase 2: J+30 - Désactivation VM {#4-phase-2-j30---désactivation-vm}
 
 ### 4.1 Prérequis Phase 2
 
@@ -222,7 +222,7 @@ Rollback possible jusqu'à J+90 (réactivation VM).
 
 ---
 
-## 5. Phase 3: J+90 - Suppression Définitive
+## 5. Phase 3: J+90 - Suppression Définitive {#5-phase-3-j90---suppression-définitive}
 
 ### 5.1 Prérequis Phase 3
 

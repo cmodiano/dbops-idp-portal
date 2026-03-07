@@ -4,7 +4,7 @@
 
 Ce glossaire définit les concepts clés du portail IDP pour éviter les ambiguïtés entre termes similaires. Il distingue notamment **quatre notions** qui se recoupent partiellement : Moteur (Engine), Plateforme (Platform), Service, et engine_type (inventaire).
 
-> Pour une analyse technique complète, voir le [rapport bases, moteurs, technologies et intégrations](../../docs/rapport-bases-moteurs-technologies-integrations.md).
+> Pour une analyse technique complète, voir le [rapport bases, moteurs, technologies et intégrations](../integrations/rapport-bases-moteurs-technologies-integrations.md).
 
 ---
 
@@ -94,7 +94,7 @@ Les valeurs `engine_type` **DOIVENT** être alignées sur les codes `REF_ENGINES
 
 **Pourquoi pas de validation stricte :** Les sources d'inventaire externes sont multiples et utilisent des conventions variées. Imposer une contrainte référentielle empêcherait l'intégration de sources avec des conventions non standard. Le matching case-insensitive (`UPPER()`) absorbe les différences de casse, mais **la normalisation lors de la configuration InventoryMapper est la responsabilité de l'administrateur d'intégration**.
 
-**Recommandation :** Lors de la configuration d'un `InventoryMapper`, normaliser les valeurs `engine_type` selon la convention ci-dessus. Voir le [guide de mapping inventaire](../../docs/inventory-mapping-guide.md) pour les détails de configuration.
+**Recommandation :** Lors de la configuration d'un `InventoryMapper`, normaliser les valeurs `engine_type` selon la convention ci-dessus. Voir le [guide de mapping inventaire](inventory-mapping-guide.md) pour les détails de configuration.
 
 ---
 
@@ -189,9 +189,9 @@ Une action Terraform Cloud (`platform=Terraform`, `engine=Workflow`) qui :
 
 ## Références techniques
 
-- **Architecture adapters :** [architecture.md](./architecture.md)
-- **Catalogue d'intégrations :** [integration-type-catalogue.md](./integration-type-catalogue.md)
-- **Analyse complète :** [rapport-bases-moteurs-technologies-integrations.md](../../docs/rapport-bases-moteurs-technologies-integrations.md)
+- **Architecture adapters :** [architecture.md](../backend/architecture-django.md)
+- **Catalogue d'intégrations :** [integration-type-catalogue.md](../backend/integration-type-catalogue.md)
+- **Analyse complète :** [rapport-bases-moteurs-technologies-integrations.md](../integrations/rapport-bases-moteurs-technologies-integrations.md)
 - **Story 29.1 :** Ajout champ `integration_role` (platform/service) dans `IntegrationTypeCatalogue`
 
 ---
@@ -209,7 +209,7 @@ Une action Terraform Cloud (`platform=Terraform`, `engine=Workflow`) qui :
 | **IntegrationTypeCatalogue** | Modèle Django qui référence tous les types d'intégration supportés (plateformes et services) avec leurs actions disponibles. Champ `integration_role` (platform/service) depuis Story 29.1. |
 | **credential_ref** | Référence à un secret stocké dans Vault, au format `vault:mount/data/path#key`. Résolu au runtime par `VaultService`. Aucun secret n'est stocké en base. |
 | **Service de secrets** | Service externe (ex. HashiCorp Vault) qui stocke et résout les credentials de manière sécurisée au moment de l'exécution. Le portail IDP utilise Vault comme service de secrets principal. |
-| **Secret 0** | Credential initial permettant au portail de s'authentifier au service de secrets (bootstrap problem). Fourni par les variables d'environnement (VAULT_TOKEN ou VAULT_ROLE_ID + VAULT_SECRET_ID), jamais stocké en base. Voir [vault-bootstrap-guide.md](vault-bootstrap-guide.md). |
+| **Secret 0** | Credential initial permettant au portail de s'authentifier au service de secrets (bootstrap problem). Fourni par les variables d'environnement (VAULT_TOKEN ou VAULT_ROLE_ID + VAULT_SECRET_ID), jamais stocké en base. Voir [../backend/vault-bootstrap-guide.md](../backend/vault-bootstrap-guide.md). |
 | **secret_service_id** | Champ optionnel sur le modèle `Integration` (Story 27.11). FK vers une intégration de type `vault` spécifiant quelle instance Vault utiliser pour résoudre les secrets. NULL = Vault par défaut. |
 | **Circuit breaker** | Mécanisme de résilience qui coupe les appels vers un service indisponible après N échecs consécutifs. Utilisé par `VaultService` et `SplunkService`. |
 | **correlation_id** | Identifiant UUID unique qui relie tous les événements d'une même exécution, de bout en bout (logs, audit, Splunk). |

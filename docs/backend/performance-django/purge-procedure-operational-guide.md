@@ -19,7 +19,7 @@
 
 ---
 
-## 1. Politique de rétention
+## 1. Politique de rétention {#1-politique-de-rétention}
 
 | Table | Clé de partition | Rétention par défaut | Justification |
 |---|---|---|---|
@@ -35,7 +35,7 @@
 
 ---
 
-## 2. Fréquence recommandée et fenêtre de maintenance
+## 2. Fréquence recommandée et fenêtre de maintenance {#2-fréquence-recommandée-et-fenêtre-de-maintenance}
 
 ### Fréquence
 
@@ -57,7 +57,7 @@ Rationale : EXECUTIONS et AUDIT_LOG sont partitionnées mensuellement (INTERVAL 
 
 ---
 
-## 3. Procédure d'exécution (guide DBA)
+## 3. Procédure d'exécution (guide DBA) {#3-procédure-dexécution-guide-dba}
 
 ### Étape 1 — Vérification préalable (backup)
 
@@ -160,7 +160,7 @@ ORDER BY EXECUTED_AT DESC;
 
 ---
 
-## 4. Paramètres configurables
+## 4. Paramètres configurables {#4-paramètres-configurables}
 
 La procédure `PKG_IDP_MAINTENANCE.purge_old_partitions` accepte les paramètres suivants :
 
@@ -185,7 +185,7 @@ Les constantes `gc_retention_executions = 24` et `gc_retention_audit_log = 12` s
 
 ---
 
-## 5. Rollback — IMPOSSIBLE après DROP PARTITION PURGE
+## 5. Rollback — IMPOSSIBLE après DROP PARTITION PURGE {#5-rollback--impossible-après-drop-partition-purge}
 
 > 🚨 **AVERTISSEMENT CRITIQUE**
 >
@@ -210,7 +210,7 @@ Les constantes `gc_retention_executions = 24` et `gc_retention_audit_log = 12` s
 
 ---
 
-## 6. Avertissements AUDIT_LOG — SOC1/NFR8
+## 6. Avertissements AUDIT_LOG — SOC1/NFR8 {#6-avertissements-audit_log--soc1nfr8}
 
 ### Contexte réglementaire
 
@@ -244,7 +244,7 @@ END;
 
 ---
 
-## 7. Planification automatique — DBMS_SCHEDULER (optionnel)
+## 7. Planification automatique — DBMS_SCHEDULER (optionnel) {#7-planification-automatique--dbms_scheduler-optionnel}
 
 Le déclenchement automatique via `DBMS_SCHEDULER` est une option pour automatiser la purge mensuelle. **Ce script est fourni à titre indicatif et n'est pas activé par V087.**
 
@@ -284,7 +284,7 @@ END;
 
 ---
 
-## 8. Monitoring et vérification
+## 8. Monitoring et vérification {#8-monitoring-et-vérification}
 
 ### Tableau de bord IDP_MAINTENANCE_LOG
 

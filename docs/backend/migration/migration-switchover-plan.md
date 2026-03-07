@@ -61,7 +61,7 @@ Migration du backend du portail IDP de **FastAPI + SQL brut** vers **Django + Dj
 
 ---
 
-## 2. Options de Bascule Analysées
+## 2. Options de Bascule Analysées {#2-options-de-bascule-analysées}
 
 ### 2.1 Option A : Bascule DNS/Load Balancer (Switch Instantané)
 
@@ -120,7 +120,7 @@ Migration du backend du portail IDP de **FastAPI + SQL brut** vers **Django + Dj
 
 ---
 
-## 3. Stratégie Retenue
+## 3. Stratégie Retenue {#3-stratégie-retenue}
 
 ### Décision : **Option A - Bascule DNS/Load Balancer**
 
@@ -228,7 +228,7 @@ Migration du backend du portail IDP de **FastAPI + SQL brut** vers **Django + Dj
 
 ---
 
-## 5. Rôles et Responsabilités
+## 5. Rôles et Responsabilités {#5-rôles-et-responsabilités}
 
 ### RACI Matrix
 
@@ -251,7 +251,7 @@ Migration du backend du portail IDP de **FastAPI + SQL brut** vers **Django + Dj
 
 ---
 
-## 6. Procédure de Bascule
+## 6. Procédure de Bascule {#6-procédure-de-bascule}
 
 ### 6.1 Pré-Bascule (J-1)
 
@@ -326,7 +326,7 @@ curl -w "@curl-format.txt" -o /dev/null -s https://api.idp.internal/api/v1/catal
 
 ---
 
-## 7. Procédure de Rollback
+## 7. Procédure de Rollback {#7-procédure-de-rollback}
 
 ### 7.1 Critères de Déclenchement Rollback
 
@@ -634,10 +634,9 @@ curl -w "time_total: %{time_total}s\n" -o /dev/null -s https://api.idp.internal/
 
 ### 11.4 Références
 
-- [Epic M - Migration FastAPI → Django](_bmad-output/planning-artifacts/epic-migration-fastapi-django.md)
-- [Architecture IDP](_bmad-output/planning-artifacts/architecture.md)
-- [M.9 Tests et Coverage](m-9-tests-unitaires-et-integration-parite.md)
-- [Backend Best Practices](docs/backend-best-practices.md)
+- [Migration FastAPI → Django](./fastapi-to-django-migration.md)
+- [Architecture Backend](../architecture-django.md)
+- [Backend Best Practices](../backend-best-practices.md)
 
 ---
 

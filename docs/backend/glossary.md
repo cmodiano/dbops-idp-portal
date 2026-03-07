@@ -4,7 +4,7 @@
 
 Ce glossaire définit les concepts clés du portail IDP pour éviter les ambiguïtés entre termes similaires. Il distingue notamment **quatre notions** qui se recoupent partiellement : Moteur (Engine), Plateforme (Platform), Service, et engine_type (inventaire).
 
-> Pour une analyse technique complète, voir le [rapport bases, moteurs, technologies et intégrations](../../docs/rapport-bases-moteurs-technologies-integrations.md).
+> Pour une analyse technique complète, voir le [rapport bases, moteurs, technologies et intégrations](../integrations/rapport-bases-moteurs-technologies-integrations.md).
 
 ---
 
@@ -94,7 +94,7 @@ Les valeurs `engine_type` **DOIVENT** être alignées sur les codes `REF_ENGINES
 
 **Pourquoi pas de validation stricte :** Les sources d'inventaire externes sont multiples et utilisent des conventions variées. Imposer une contrainte référentielle empêcherait l'intégration de sources avec des conventions non standard. Le matching case-insensitive (`UPPER()`) absorbe les différences de casse, mais **la normalisation lors de la configuration InventoryMapper est la responsabilité de l'administrateur d'intégration**.
 
-**Recommandation :** Lors de la configuration d'un `InventoryMapper`, normaliser les valeurs `engine_type` selon la convention ci-dessus. Voir le [guide de mapping inventaire](../../docs/inventory-mapping-guide.md) pour les détails de configuration.
+**Recommandation :** Lors de la configuration d'un `InventoryMapper`, normaliser les valeurs `engine_type` selon la convention ci-dessus. Voir le [guide de mapping inventaire](../reference/inventory-mapping-guide.md) pour les détails de configuration.
 
 ---
 
@@ -191,7 +191,7 @@ Une action Terraform Cloud (`platform=Terraform`, `engine=Workflow`) qui :
 
 - **Architecture adapters :** [architecture.md](./architecture.md)
 - **Catalogue d'intégrations :** [integration-type-catalogue.md](./integration-type-catalogue.md)
-- **Analyse complète :** [rapport-bases-moteurs-technologies-integrations.md](../../docs/rapport-bases-moteurs-technologies-integrations.md)
+- **Analyse complète :** [rapport-bases-moteurs-technologies-integrations.md](../integrations/rapport-bases-moteurs-technologies-integrations.md)
 - **Story 29.1 :** Ajout champ `integration_role` (platform/service) dans `IntegrationTypeCatalogue`
 
 ---

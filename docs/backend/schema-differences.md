@@ -2,7 +2,7 @@
 
 > **📦 Document d'archivage — Migration terminée**  
 > Ce document est conservé pour référence historique. La migration FastAPI→Django est complète (février 2026).  
-> Voir [MIGRATION_ARCHIVE.md](MIGRATION_ARCHIVE.md) pour accéder au code FastAPI archivé.
+> Voir [MIGRATION_ARCHIVE.md](./migration/MIGRATION_ARCHIVE.md) pour accéder au code FastAPI archivé.
 
 **Date d'analyse:** 2026-02-05
 **Version:** 1.0

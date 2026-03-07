@@ -147,7 +147,7 @@
 
 ---
 
-## 3. Analyse des dépendances inter-scripts
+## 3. Analyse des dépendances inter-scripts {#3-analyse-des-dépendances-inter-scripts}
 
 ### 3.1 Graphe de dépendances par FK et ALTER TABLE
 
@@ -254,7 +254,7 @@ Tous les `CREATE TABLE`, `ALTER TABLE ADD`, `DROP TABLE`, `CREATE INDEX`, `INSER
 
 ---
 
-## 5. Scripts de cleanup/drop — importance pour la consolidation
+## 5. Scripts de cleanup/drop — importance pour la consolidation {#5-scripts-de-cleanupdrop--importance-pour-la-consolidation}
 
 Ces scripts sont cruciaux : ils définissent ce qui **ne doit pas** apparaître dans un script de baseline.
 
@@ -274,7 +274,7 @@ Ces scripts sont cruciaux : ils définissent ce qui **ne doit pas** apparaître 
 
 ---
 
-## 6. Stratégies de consolidation
+## 6. Stratégies de consolidation {#6-stratégies-de-consolidation}
 
 ### Option A — Baseline V000–V083 + incrémental V084–V088 *(Recommandée)*
 
@@ -352,7 +352,7 @@ WHERE generated = 'N';
 
 ---
 
-## 7. Stratégie recommandée
+## 7. Stratégie recommandée {#7-stratégie-recommandée}
 
 ### Recommandation : **Option A — Baseline V000–V083**
 
@@ -421,7 +421,7 @@ idp-portal/database/
 
 ---
 
-## 8. Risques documentés
+## 8. Risques documentés {#8-risques-documentés}
 
 ### R1 — Checksums Flyway incompatibles avec environnements existants
 
@@ -552,7 +552,7 @@ diff <(normalize.sh /tmp/schema-a.sql) <(normalize.sh /tmp/schema-b.sql)
 
 ---
 
-## 10. Procédure de déploiement — Baseline vs Incrémental
+## 10. Procédure de déploiement — Baseline vs Incrémental {#10-procédure-de-déploiement--baseline-vs-incrémental}
 
 ### 10.1 Environnements existants (dev, staging, prod)
 

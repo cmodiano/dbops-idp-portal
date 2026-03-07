@@ -67,4 +67,4 @@
 - [Guide SOLID complet](../solid-guidelines.md)
 - [ADR-006 — Injection de dépendances (Option A)](../decisions/adr-006-dependency-injection.md)
 - [Checklist nouvel endpoint DRF](endpoint-checklist.md)
-- [Pre-PR security checklist](../security/pre-pr-checklist.md)
+- [Pre-PR security checklist](../security-django/pre-pr-checklist.md)

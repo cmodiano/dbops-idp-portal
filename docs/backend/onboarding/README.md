@@ -19,13 +19,13 @@ Bienvenue dans le projet IDP Portal ! Ce guide couvre tout ce qu'un nouveau dév
 ### Standards de développement
 
 - [Checklist nouveaux endpoints](../standards/endpoint-checklist.md) — Checklist PR pour tout nouvel endpoint DRF
-- [Pièges sécurité courants](../security/common-pitfalls.md) — Erreurs fréquentes et solutions
-- [Checklist sécurité pré-PR](../security/pre-pr-checklist.md) — Auto-review sécurité avant PR
+- [Pièges sécurité courants](../security-django/common-pitfalls.md) — Erreurs fréquentes et solutions
+- [Checklist sécurité pré-PR](../security-django/pre-pr-checklist.md) — Auto-review sécurité avant PR
 
 ### Tests
 
-- [README Tests](../../tests/README.md) — Conventions et guide d'exécution des tests
-- [Issues connues](../../tests/KNOWN_ISSUES.md) — Problèmes de tests documentés
+- README Tests — `idp-portal/django_backend/tests/README.md` (dépôt)
+- Issues connues — `idp-portal/django_backend/tests/KNOWN_ISSUES.md` (dépôt)
 
 ### Observabilité
 

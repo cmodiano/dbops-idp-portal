@@ -422,7 +422,7 @@ Les tests de securite fonctionnels sont executes automatiquement dans le pipelin
 
 ## 7. Plan de Remediation
 
-Voir le document detaille : [`security-remediation-plan.md`](security-remediation-plan.md)
+Voir le document detaille : [`remediation-plan.md`](remediation-plan.md)
 
 ### Priorite CRITIQUE (Corriger immediatement)
 
@@ -477,8 +477,8 @@ Voir le document detaille : [`security-remediation-plan.md`](security-remediatio
 
 ### Documentation
 
-7. **Architecture Securite :** Voir [`security-architecture.md`](security-architecture.md) pour l'architecture complete
-8. **Conformite SOC1 :** Voir [`soc1-compliance-report.md`](soc1-compliance-report.md) pour le rapport complet
+7. **Architecture Securite :** Voir [`architecture-global.md`](architecture-global.md) pour l'architecture complete
+8. **Conformite SOC1 :** Voir [`compliance-soc1.md`](compliance-soc1.md) pour le rapport complet
 9. **Validation Release :** Voir [`security-release-validation.md`](security-release-validation.md) pour la decision go/no-go
 
 ---
@@ -487,9 +487,9 @@ Voir le document detaille : [`security-remediation-plan.md`](security-remediatio
 
 ### Rapports Detailles
 
-- **Plan de remediation complet :** [`security-remediation-plan.md`](security-remediation-plan.md)
-- **Rapport conformite SOC1 :** [`soc1-compliance-report.md`](soc1-compliance-report.md)
-- **Architecture securite :** [`security-architecture.md`](security-architecture.md)
+- **Plan de remediation complet :** [`remediation-plan.md`](remediation-plan.md)
+- **Rapport conformite SOC1 :** [`compliance-soc1.md`](compliance-soc1.md)
+- **Architecture securite :** [`architecture-global.md`](architecture-global.md)
 - **Validation release :** [`security-release-validation.md`](security-release-validation.md)
 
 ### Rapports Outils Automatises

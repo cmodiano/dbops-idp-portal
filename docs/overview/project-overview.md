@@ -39,17 +39,17 @@
 
 ## Documentation générée
 
-- [Architecture Frontend](./architecture-frontend.md)  
-- [Architecture Backend](./architecture-django_backend.md)  
+- [Architecture Frontend](../architecture/frontend.md)  
+- [Architecture Backend](../architecture/backend.md)  
 - [Analyse de l’arbre des sources](./source-tree-analysis.md)  
-- [Contrats API (Backend)](./api-contracts-django_backend.md) | [Frontend (client)](./api-contracts-frontend.md)  
-- [Modèles de données (Backend)](./data-models-django_backend.md)  
-- [Inventaire composants (Frontend)](./component-inventory-frontend.md)  
-- [Gestion d’état (Frontend)](./state-management-frontend.md)  
-- [Architecture d’intégration](./integration-architecture.md)  
-- [Guide de développement](./development-guide.md)  
-- [Configuration déploiement](./deployment-configuration.md)  
-- [Guide de contribution](./contribution-guide.md)  
+- [Contrats API (Backend)](../api/contracts-backend.md) | [Frontend (client)](../api/contracts-frontend.md)  
+- [Modèles de données (Backend)](../backend/data-models.md)  
+- [Inventaire composants (Frontend)](../frontend/component-inventory.md)  
+- [Gestion d’état (Frontend)](../frontend/state-management.md)  
+- [Architecture d’intégration](../architecture/integration.md)  
+- [Guide de développement](../reference/development-guide.md)  
+- [Configuration déploiement](../operations/deployment.md)  
+- [Guide de contribution](../reference/contribution-guide.md)  
 
 ---
 

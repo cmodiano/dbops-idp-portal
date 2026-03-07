@@ -264,7 +264,7 @@ THROTTLE_SERVICE_LOGIN_RATE=5/minute
 
 ## Voir aussi
 
-- [`docs/api-self-service.md`](../api-self-service.md) — Guide d'utilisation de l'endpoint pour les développeurs
+- [`api/self-service.md`](../api/self-service.md) — Guide d'utilisation de l'endpoint pour les développeurs
 - [`docs/backend/api-reference.md`](api-reference.md) — Référence complète de l'endpoint `POST /auth/service-login`
 - [`docs/backend/authentication.md`](authentication.md) — Architecture générale de l'authentification
 - Documentation OpenAPI/Swagger : `/api/docs`

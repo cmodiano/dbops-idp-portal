@@ -2,7 +2,7 @@
 
 > **📦 Document d'archivage — Migration terminée**  
 > Ce document est conservé pour référence historique. La migration FastAPI→Django est complète (février 2026).  
-> Voir [MIGRATION_ARCHIVE.md](MIGRATION_ARCHIVE.md) pour accéder au code FastAPI archivé.
+> Voir [MIGRATION_ARCHIVE.md](./MIGRATION_ARCHIVE.md) pour accéder au code FastAPI archivé.
 
 **Date de complétion:** 2026-02-05
 **Epic:** M - Migration FastAPI vers Django REST Framework
@@ -71,7 +71,7 @@
 
 ---
 
-## 3. Architecture Avant/Après
+## 3. Architecture Avant/Après {#3-architecture-avantaprès}
 
 ### Avant : FastAPI
 
@@ -133,7 +133,7 @@
 
 ---
 
-## 4. Défis Techniques
+## 4. Défis Techniques {#4-défis-techniques}
 
 ### Défi 1 : Mapping Oracle → Django ORM
 
@@ -217,7 +217,7 @@ DATABASES = {
 
 ---
 
-## 5. Résultats et Métriques
+## 5. Résultats et Métriques {#5-résultats-et-métriques}
 
 ### Couverture de tests
 
@@ -279,7 +279,7 @@ DATABASES = {
 
 ---
 
-## 7. Références
+## 7. Références {#7-références}
 
 ### Commits clés
 
@@ -295,9 +295,9 @@ DATABASES = {
 ### Documentation
 
 - [Plan de bascule](migration-switchover-plan.md)
-- [Parité de schéma](schema-differences.md)
-- [Templates de communication](communication-templates.md)
-- [Checklist dry run staging](staging-dry-run-checklist.md)
+- [Parité de schéma](../schema-differences.md)
+- [Templates de communication](../../reference/communication-templates.md)
+- [Checklist dry run staging](../../operations/staging-dry-run-checklist.md)
 
 ### Code
 

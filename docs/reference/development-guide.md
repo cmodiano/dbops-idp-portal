@@ -112,7 +112,7 @@ Fichier `.env` à la racine de `idp-portal/` ou dans `django_backend/` : `ORACLE
 
 ## Contribution
 
-Voir **[CONTRIBUTING.md](../../CONTRIBUTING.md)** à la racine du dépôt :
+Voir **CONTRIBUTING.md** à la racine du dépôt :
 
 - Onboarding : `idp-portal/django_backend/docs/onboarding/README.md`
 - ADRs : `idp-portal/django_backend/docs/decisions/README.md`

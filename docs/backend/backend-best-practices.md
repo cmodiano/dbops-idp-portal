@@ -103,7 +103,7 @@ Ce script vérifie que tous les action types attendus sont présents dans la con
 
 ---
 
-## Bind Variables Oracle - Mots réservés
+## Bind Variables Oracle - Mots réservés {#bind-variables-oracle---mots-réservés}
 
 ### Contexte
 
@@ -156,5 +156,5 @@ Ces tests vérifient que les requêtes SQL n'utilisent pas de mots réservés Or
 ## Références
 
 - [Oracle Reserved Words](https://docs.oracle.com/en/database/oracle/oracle-database/19/sqlrf/Oracle-SQL-Reserved-Words.html)
-- [Story 9.7: Fix Oracle bind variable comment](../../_bmad-output/implementation-artifacts/9-7-fix-oracle-bind-variable-comment.md)
-- [Story 9.8: Fix audit log approval action types](../../_bmad-output/implementation-artifacts/9-8-fix-audit-log-approval-action-types.md)
+- Story 9.7: Fix Oracle bind variable comment (voir `_bmad-output/implementation-artifacts/` dans le dépôt)
+- Story 9.8: Fix audit log approval action types (voir `_bmad-output/implementation-artifacts/` dans le dépôt)

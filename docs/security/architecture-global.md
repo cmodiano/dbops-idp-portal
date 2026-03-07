@@ -111,7 +111,7 @@ Ce document decrit l'architecture de securite complete du portail IDP, incluant 
 
 ---
 
-## 2. Couche 1 : Reseau (Nginx)
+## 2. Couche 1 : Reseau (Nginx) {#2-couche-1--reseau-nginx}
 
 ### Configuration TLS
 
@@ -158,7 +158,7 @@ server {
 
 ---
 
-## 3. Couche 2 : Application (Django Middleware)
+## 3. Couche 2 : Application (Django Middleware) {#3-couche-2--application-django-middleware}
 
 ### Middleware Stack
 
@@ -262,7 +262,7 @@ if not DEBUG:
 
 ---
 
-## 4. Couche 3 : Authentification SAML 2.0 + JWT
+## 4. Couche 3 : Authentification SAML 2.0 + JWT {#4-couche-3--authentification-saml-20--jwt}
 
 ### Flow Complet SAML 2.0 SP-Initiated
 
@@ -413,7 +413,7 @@ AUTH_DEV_BYPASS = env.bool('AUTH_DEV_BYPASS', default=False)
 
 ---
 
-## 5. Couche 4 : RBAC 3 Dimensions
+## 5. Couche 4 : RBAC 3 Dimensions {#5-couche-4--rbac-3-dimensions}
 
 ### Modele RBAC
 
@@ -538,7 +538,7 @@ user.profiles = [dba_applicatif, dba_infrastructure]
 
 ---
 
-## 6. Couche 5 : Gestion des Secrets
+## 6. Couche 5 : Gestion des Secrets {#6-couche-5--gestion-des-secrets}
 
 ### Principe : credential_ref = Reference Vault
 
@@ -685,7 +685,7 @@ class VaultService:
 
 ---
 
-## 7. Couche 6 : Audit Trail Immutable
+## 7. Couche 6 : Audit Trail Immutable {#7-couche-6--audit-trail-immutable}
 
 ### Defense en Profondeur : Trigger Oracle + Django Model Override
 
@@ -1204,7 +1204,7 @@ Description cause racine (vulnerabilite, configuration, erreur humaine)
 - Sessions 30min (NFR9)
 - Journalisation acces non autorise (NFR10)
 
-**Rapport complet :** [`soc1-compliance-report.md`](soc1-compliance-report.md)
+**Rapport complet :** [`compliance-soc1.md`](compliance-soc1.md)
 
 ### OWASP Top 10 (2021)
 
@@ -1237,7 +1237,7 @@ Description cause racine (vulnerabilite, configuration, erreur humaine)
 - NFR10 : Journalisation acces non autorise
 - NFR11 : Pas de donnees sensibles
 
-**Matrice de tracabilite :** Voir [`soc1-compliance-report.md`](soc1-compliance-report.md)
+**Matrice de tracabilite :** Voir [`compliance-soc1.md`](compliance-soc1.md)
 
 ---
 
@@ -1438,9 +1438,9 @@ index=idp_portal event="rate_limit_exceeded" | stats count by ip_address, endpoi
 Le portail IDP implementer une architecture de securite robuste en 6 couches de defense en profondeur, couvrant le chiffrement en transit, l'authentification SAML 2.0 + JWT, l'autorisation RBAC granulaire, la gestion des secrets via Vault, et l'audit trail immutable. **177 tests de securite automatises** valident en continu ces controles via CI/CD, garantissant la conformite SOC1 et la protection contre les vulnerabilites OWASP Top 10.
 
 **Documents lies :**
-- **Rapport audit securite :** [`security-audit-report.md`](security-audit-report.md)
-- **Plan de remediation :** [`security-remediation-plan.md`](security-remediation-plan.md)
-- **Rapport conformite SOC1 :** [`soc1-compliance-report.md`](soc1-compliance-report.md)
+- **Rapport audit securite :** [`audit-report.md`](audit-report.md)
+- **Plan de remediation :** [`remediation-plan.md`](remediation-plan.md)
+- **Rapport conformite SOC1 :** [`compliance-soc1.md`](compliance-soc1.md)
 - **Validation release :** [`security-release-validation.md`](security-release-validation.md)
 
 ---

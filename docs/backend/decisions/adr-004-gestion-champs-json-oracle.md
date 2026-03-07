@@ -75,6 +75,6 @@ class OracleJSONField(models.TextField):
 
 ## Références
 
-- [OracleJSONField implementation](../../core/fields.py)
+- OracleJSONField implementation — `idp-portal/django_backend/core/fields.py` (dépôt)
 - Story 17-4 — Refactoring OracleJSONField
 - [Django JSONField documentation](https://docs.djangoproject.com/en/stable/ref/models/fields/#jsonfield)

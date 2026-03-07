@@ -188,7 +188,7 @@ Fonctionne (matching case-insensitive) mais ne suit pas la convention minuscules
 {"engine_type": ["MSSQL"]}
 ```
 
-Ne correspond pas aux valeurs `REF_ENGINES` normalisées. Si la source d'inventaire utilise `MSSQL`, configurer la normalisation dans `InventoryMapper` (voir [guide de mapping inventaire](../../docs/inventory-mapping-guide.md)).
+Ne correspond pas aux valeurs `REF_ENGINES` normalisées. Si la source d'inventaire utilise `MSSQL`, configurer la normalisation dans `InventoryMapper` (voir [guide de mapping inventaire](../reference/inventory-mapping-guide.md)).
 
 ### Matching case-insensitive
 
@@ -207,7 +207,7 @@ Les deux utilisent `InventoryMapper` pour résoudre le concept `engine_type` ver
 
 ### Référence
 
-Pour un guide complet sur la normalisation `engine_type` et la configuration `InventoryMapper`, voir le [guide de mapping inventaire](../../docs/inventory-mapping-guide.md).
+Pour un guide complet sur la normalisation `engine_type` et la configuration `InventoryMapper`, voir le [guide de mapping inventaire](../reference/inventory-mapping-guide.md).
 
 ---
 

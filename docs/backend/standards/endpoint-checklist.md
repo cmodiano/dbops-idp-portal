@@ -79,9 +79,9 @@
 ---
 
 **Références :**
-- [Conventions de test](../../tests/README.md)
-- [Issues connues](../../tests/KNOWN_ISSUES.md)
+- Conventions de test — `idp-portal/django_backend/tests/README.md` (dépôt)
+- Issues connues — `idp-portal/django_backend/tests/KNOWN_ISSUES.md` (dépôt)
 - [Notes migration DRF](../drf-api-migration-notes.md)
 - [Conventions de logging](../logging-conventions.md)
-- [Security pitfalls](../security/common-pitfalls.md)
-- [Pre-PR security checklist](../security/pre-pr-checklist.md)
+- [Security pitfalls](../security-django/common-pitfalls.md)
+- [Pre-PR security checklist](../security-django/pre-pr-checklist.md)

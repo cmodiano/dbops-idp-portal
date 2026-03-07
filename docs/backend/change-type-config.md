@@ -4,7 +4,7 @@
 
 Le champ `Action.change_type_config` (OracleJSONField) stocke la configuration du type de changement ServiceNow **par environnement**. Il est étendu dans la Story 25.4 pour inclure des overrides de gouvernance (opération autorisée, plage de maintenance, approbation).
 
-Référence : `_bmad-output/implementation-artifacts/convergence-dbops-idp-portal.md` section 2.
+Référence : `_bmad-output/implementation-artifacts/convergence-dbops-idp-portal.md` (dépôt) section 2.
 
 ## Structure JSON
 
@@ -64,4 +64,4 @@ Référence : `_bmad-output/implementation-artifacts/convergence-dbops-idp-porta
 ## Voir aussi
 
 - [condition-gates.md](./condition-gates.md) — gates `maintenance_window`, `approval_granted`
-- [convergence-dbops-idp-portal.md](../../_bmad-output/implementation-artifacts/convergence-dbops-idp-portal.md)
+- `_bmad-output/implementation-artifacts/convergence-dbops-idp-portal.md` (dépôt)

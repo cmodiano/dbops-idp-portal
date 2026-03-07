@@ -115,8 +115,8 @@ REF_PLATFORMS contient à la fois `Terraform` (générique) et `Terraform Cloud`
 
 ## Références
 
-- [Glossaire Platform/Engine/Service](../../docs/glossaire-plateforme-moteur-service.md)
-- [Rapport technique Section 2.2](../../docs/rapport-bases-moteurs-technologies-integrations.md)
-- [Inventory mapping guide (Story 29.3)](./inventory-mapping-guide.md)
+- [Glossaire Platform/Engine/Service](../reference/glossary.md)
+- [Rapport technique Section 2.2](../integrations/rapport-bases-moteurs-technologies-integrations.md)
+- [Inventory mapping guide (Story 29.3)](../reference/inventory-mapping-guide.md)
 - Migration V051 : création REF_PLATFORMS
 - Migration V073 : ajout Tower et Terraform Cloud

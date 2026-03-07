@@ -16,7 +16,7 @@
 | Production sans variable `as e` / non justifié | **0** |
 | Corrections appliquées cette story | 10 (code review 2026-02-26) |
 
-**Conclusion :** L'audit exhaustif confirme que **100 % des occurrences production** sont documentées avec `noqa: BLE001` et un commentaire de catégorie. Aucune correction n'était nécessaire. La section 16.2 du CODEBASE-REVIEW.md est mise à jour en statut **RESOLVED**.
+**Conclusion :** L'audit exhaustif confirme que **100 % des occurrences production** sont documentées avec `noqa: BLE001` et un commentaire de catégorie. Aucune correction n'était nécessaire. La section 16.2 du CODEBASE-REVIEW.md (racine du dépôt) est mise à jour en statut **RESOLVED**.
 
 ---
 
@@ -284,6 +284,6 @@ Fichiers modifiés : `catalog/rbac_service.py:166`, `core/db_resilience.py:111`,
 
 - [Story 17.6 — Exception refactor report](story-17-6-exception-refactor-report.md)
 - [Story 22.11 — Exception refactor report](story-22-11-exception-refactor-report.md)
-- [Story 35.2 — Audit exhaustif (CODEBASE-REVIEW §16.2)](../../CODEBASE-REVIEW.md)
+- Story 35.2 — Audit exhaustif (CODEBASE-REVIEW §16.2, voir `idp-portal/CODEBASE-REVIEW.md` dans le dépôt)
 - [Conventions de logging](logging-conventions.md)
 - [Standards endpoint](standards/endpoint-checklist.md)

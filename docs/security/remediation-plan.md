@@ -561,9 +561,9 @@ detect-secrets scan --all-files
 
 ## 10. Annexes
 
-- [Rapport d'audit complet](security-audit-report.md)
-- [Configuration CI/CD](../.github/workflows/ci.yml)
-- [Baseline secrets](../.secrets.baseline)
+- [Rapport d'audit complet](audit-report.md)
+- Configuration CI/CD — `idp-portal/.github/workflows/ci.yml` (dépôt)
+- Baseline secrets — `idp-portal/.secrets.baseline` (dépôt)
 
 ---
 
@@ -599,9 +599,9 @@ detect-secrets scan --all-files
 
 ### Documents Lies
 
-- **Rapport audit complet :** [`security-audit-report.md`](security-audit-report.md)
-- **Rapport conformite SOC1 :** [`soc1-compliance-report.md`](soc1-compliance-report.md)
-- **Architecture securite :** [`security-architecture.md`](security-architecture.md)
+- **Rapport audit complet :** [`audit-report.md`](audit-report.md)
+- **Rapport conformite SOC1 :** [`compliance-soc1.md`](compliance-soc1.md)
+- **Architecture securite :** [`architecture-global.md`](architecture-global.md)
 - **Validation release :** [`security-release-validation.md`](security-release-validation.md)
 
 ---

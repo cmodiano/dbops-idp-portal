@@ -49,5 +49,5 @@
 
 ## Liens transverses
 
-- [Documentation projet (racine)](../../docs/) — Rapports, analyses, conformité
-- [Rapport bases/moteurs/technologies/intégrations](../../docs/rapport-bases-moteurs-technologies-integrations.md) — Analyse exhaustive des 4 concepts (Engine, Platform, IntegrationTypeCatalogue, engine_type)
+- [Index documentation](../index.md) — Rapports, analyses, conformité
+- [Rapport bases/moteurs/technologies/intégrations](../integrations/rapport-bases-moteurs-technologies-integrations.md) — Analyse exhaustive des 4 concepts (Engine, Platform, IntegrationTypeCatalogue, engine_type)

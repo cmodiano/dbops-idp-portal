@@ -226,7 +226,7 @@ pytest tests/ --tb=short
 **PARTIELLEMENT CONFORMES (2 controles) :**
 - FR29/NFR21 : VaultService = placeholder (ecart documente, non bloquant)
 
-**Preuve :** Rapport complet [`soc1-compliance-report.md`](soc1-compliance-report.md)
+**Preuve :** Rapport complet [`compliance-soc1.md`](compliance-soc1.md)
 
 **Decision :** ✅ **GO** pour conformite SOC1 (ecarts PARTIELS documentes et acceptes)
 
@@ -322,10 +322,10 @@ pytest tests/ --tb=short
 
 ## 7. Documents Lies
 
-- **Rapport audit securite complet :** [`security-audit-report.md`](security-audit-report.md)
-- **Plan de remediation detaille :** [`security-remediation-plan.md`](security-remediation-plan.md)
-- **Rapport conformite SOC1 :** [`soc1-compliance-report.md`](soc1-compliance-report.md)
-- **Architecture securite :** [`security-architecture.md`](security-architecture.md)
+- **Rapport audit securite complet :** [`audit-report.md`](audit-report.md)
+- **Plan de remediation detaille :** [`remediation-plan.md`](remediation-plan.md)
+- **Rapport conformite SOC1 :** [`compliance-soc1.md`](compliance-soc1.md)
+- **Architecture securite :** [`architecture-global.md`](architecture-global.md)
 
 ---
 

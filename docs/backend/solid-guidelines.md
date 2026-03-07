@@ -17,7 +17,7 @@
 
 ---
 
-## 1. SRP — Single Responsibility Principle
+## 1. SRP — Single Responsibility Principle {#1-srp--single-responsibility-principle}
 
 > Un module, une classe ou une fonction ne doit avoir qu'une seule raison de changer.
 
@@ -88,7 +88,7 @@ Composants extraits : `ImpactLevelsLegend`, `ActionFormCollapseSections`, `Chang
 
 ---
 
-## 2. OCP — Open/Closed Principle
+## 2. OCP — Open/Closed Principle {#2-ocp--openclosed-principle}
 
 > Les entités logicielles doivent être ouvertes à l'extension mais fermées à la modification.
 
@@ -147,7 +147,7 @@ class VaultService:
 
 ---
 
-## 3. LSP — Liskov Substitution Principle
+## 3. LSP — Liskov Substitution Principle {#3-lsp--liskov-substitution-principle}
 
 > Les sous-types doivent être substituables à leurs types de base sans altérer le comportement attendu.
 
@@ -169,7 +169,7 @@ Lors de l'ajout d'un nouvel adapter ou interpréteur :
 
 ---
 
-## 4. ISP — Interface Segregation Principle
+## 4. ISP — Interface Segregation Principle {#4-isp--interface-segregation-principle}
 
 > Les clients ne doivent pas dépendre d'interfaces qu'ils n'utilisent pas.
 
@@ -210,7 +210,7 @@ Après le refactoring Story 33.5, les sous-composants reçoivent uniquement les 
 
 ---
 
-## 5. DIP — Dependency Inversion Principle
+## 5. DIP — Dependency Inversion Principle {#5-dip--dependency-inversion-principle}
 
 > Dépendre des abstractions, pas des implémentations concrètes.
 
@@ -305,7 +305,7 @@ reset_services()
 
 ---
 
-## 6. Anti-patterns référencés
+## 6. Anti-patterns référencés {#6-anti-patterns-référencés}
 
 Tableau condensé des violations corrigées dans l'Epic 33 :
 

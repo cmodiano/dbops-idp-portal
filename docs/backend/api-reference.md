@@ -118,7 +118,7 @@ Permet d'obtenir un token JWT de façon programmatique, sans flux SAML interacti
 **JWT émis :** même format que les tokens SAML (`sub`, `username`, `profile`, `ad_groups`). Les droits RBAC sont ceux de l'utilisateur associé à la clé.
 **Audit :** chaque tentative (succès/échec) est tracée avec type `API_KEY_TOKEN_EXCHANGE`.
 
-> **Voir aussi :** [`docs/api-self-service.md`](../api-self-service.md) pour des exemples curl et bash complets.
+> **Voir aussi :** [`api/self-service.md`](../api/self-service.md) pour des exemples curl et bash complets.
 
 #### POST /auth/service-login — Authentification LDAP comptes de service
 
@@ -190,7 +190,7 @@ Header `Retry-After` présent. Attendre 1 minute.
 **JWT émis :** même format que SAML — champs `sub`, `username`, `profile`, `ad_groups`. Les droits RBAC sont ceux résolus depuis les groupes AD du compte.
 **Audit :** chaque tentative (succès/échec) est tracée avec type `SERVICE_LOGIN` (distinct de `USER_LOGIN` pour les logins SSO).
 
-> **Voir aussi :** [`docs/api-self-service.md`](../api-self-service.md) pour des exemples complets, [`docs/backend/ldap-configuration.md`](ldap-configuration.md) pour la configuration LDAP.
+> **Voir aussi :** [`api/self-service.md`](../api/self-service.md) pour des exemples complets, [`ldap-configuration.md`](ldap-configuration.md) pour la configuration LDAP.
 
 ### Catalogue (Admin)
 

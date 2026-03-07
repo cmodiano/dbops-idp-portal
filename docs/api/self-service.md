@@ -84,7 +84,7 @@ Pour les pipelines CI/CD et scripts d'automatisation utilisant un compte Active 
 1. Un compte Active Directory valide (username + password connus)
 2. Le compte appartient à au moins un groupe AD mappé à un profil dans le portail IDP (ex. `CN=GRP-IDP-DBOPS,OU=Groups,DC=example,DC=com`)
 3. Le profil associé dispose des permissions nécessaires sur les actions et targets à utiliser
-4. Le serveur LDAP est configuré et accessible depuis le portail IDP (cf. [`docs/backend/ldap-configuration.md`](backend/ldap-configuration.md))
+4. Le serveur LDAP est configuré et accessible depuis le portail IDP (cf. [`docs/backend/ldap-configuration.md`](../backend/ldap-configuration.md))
 
 **Flow :** Le portail IDP effectue un bind LDAP avec vos credentials, récupère vos groupes AD, résout votre profil, et émet un JWT — exactement comme un login SAML, mais de façon programmatique.
 
@@ -603,7 +603,7 @@ Chaque exécution créée via l'API est tracée dans l'audit avec :
 Liens relatifs à la base URL du portail (ex. `https://portail.example.com`) :
 
 - Documentation API complète (OpenAPI/Swagger) : `/api/docs`
-- Référence complète des endpoints : [`docs/backend/api-reference.md`](backend/api-reference.md)
-- Configuration LDAP pour comptes de service : [`docs/backend/ldap-configuration.md`](backend/ldap-configuration.md)
+- Référence complète des endpoints : [`backend/api-reference.md`](../backend/api-reference.md)
+- Configuration LDAP pour comptes de service : [`docs/backend/ldap-configuration.md`](../backend/ldap-configuration.md)
 - Guide d'administration des actions : `/docs/admin-actions.md`
 - Architecture RBAC et permissions : `/docs/rbac.md`

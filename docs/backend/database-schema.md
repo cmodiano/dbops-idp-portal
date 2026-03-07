@@ -1117,4 +1117,4 @@ Importer le schéma Oracle pour visualisation graphique.
 ### Documentation connexe
 
 - [Modèles Django et Relations](./models.md) - Documentation des modèles Django
-- [Architecture](../../_bmad-output/planning-artifacts/architecture.md#Data-Architecture) - Décisions architecturales (chemin relatif à la racine du dépôt)
+- [Architecture Backend](./architecture-django.md) - Architecture Django

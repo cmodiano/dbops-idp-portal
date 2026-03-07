@@ -285,7 +285,7 @@ npm run test
 
 ## Liens utiles
 
-- [FRONTEND-STANDARDS.md](../../frontend/FRONTEND-STANDARDS.md) - Conventions de développement
+- [FRONTEND-STANDARDS.md](FRONTEND-STANDARDS.md) - Conventions de développement
 - [Ant Design 6 Documentation](https://ant.design)
 - [React Router v7](https://reactrouter.com)
 - [Vitest Documentation](https://vitest.dev)

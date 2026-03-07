@@ -137,7 +137,7 @@ Ce document consolide la validation de conformité SOC1 du portail IDP couvrant 
 
 **Story 15.1 — Preuves complémentaires :**
 - detect-secrets scan : 0 secrets réels (14 faux positifs dans tests/templates)
-- Rapport : `docs/security-audit-report.md`
+- Rapport : `docs/audit-report.md`
 
 ### Écart identifié
 
@@ -246,7 +246,7 @@ Ce document consolide la validation de conformité SOC1 du portail IDP couvrant 
 - **pip-audit :** 19 vulnérabilités HIGH dans dépendances (azure-core, requests, urllib3, etc.)
 - **npm audit :** 0 vulnérabilités ✅
 - **detect-secrets :** 0 secrets réels ✅
-- **Rapports :** `docs/security-audit-report.md`, `docs/security-remediation-plan.md`
+- **Rapports :** `docs/audit-report.md`, `docs/remediation-plan.md`
 
 ### Story 15.2 — Tests Sécurité Fonctionnels
 
@@ -292,9 +292,9 @@ Ce rapport de conformite SOC1 a ete valide dans le cadre de l'audit de securite 
 - **Detection secrets (detect-secrets)** : 0 secret reel
 
 **Documentation :**
-- **Architecture securite complete** : [`security-architecture.md`](security-architecture.md)
-- **Plan de remediation detaille** : [`security-remediation-plan.md`](security-remediation-plan.md)
-- **Rapport audit consolide** : [`security-audit-report.md`](security-audit-report.md)
+- **Architecture securite complete** : [`architecture-global.md`](architecture-global.md)
+- **Plan de remediation detaille** : [`remediation-plan.md`](remediation-plan.md)
+- **Rapport audit consolide** : [`audit-report.md`](audit-report.md)
 - **Validation release** : [`security-release-validation.md`](security-release-validation.md)
 
 ### Decision Release
@@ -316,13 +316,13 @@ Ce rapport de conformite SOC1 a ete valide dans le cadre de l'audit de securite 
 
 ## Documents Lies
 
-- **Architecture securite complete :** [`security-architecture.md`](security-architecture.md)
-- **Rapport audit securite :** [`security-audit-report.md`](security-audit-report.md)
-- **Plan de remediation :** [`security-remediation-plan.md`](security-remediation-plan.md)
+- **Architecture securite complete :** [`architecture-global.md`](architecture-global.md)
+- **Rapport audit securite :** [`audit-report.md`](audit-report.md)
+- **Plan de remediation :** [`remediation-plan.md`](remediation-plan.md)
 - **Validation release :** [`security-release-validation.md`](security-release-validation.md)
-- **Configuration CI/CD securite :** `../.github/workflows/ci.yml`
-- **Tests securite fonctionnels :** `../django_backend/tests/security/`
-- **Tests conformite SOC1 :** `../django_backend/tests/security/test_soc1_compliance.py`
+- **Configuration CI/CD securite :** `idp-portal/.github/workflows/ci.yml` (dépôt)
+- **Tests securite fonctionnels :** `idp-portal/django_backend/tests/security/` (dépôt)
+- **Tests conformite SOC1 :** `idp-portal/django_backend/tests/security/test_soc1_compliance.py` (dépôt)
 
 ---
 

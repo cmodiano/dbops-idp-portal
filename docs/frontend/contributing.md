@@ -144,7 +144,7 @@ if (typeof data === 'object' && data !== null) {
 ### Règles Ant Design 6
 
 > Ces règles sont appliquées automatiquement par ESLint (`eslint-plugin-standards/`).
-> Voir [`FRONTEND-STANDARDS.md`](../../frontend/FRONTEND-STANDARDS.md) pour la référence complète.
+> Voir [`FRONTEND-STANDARDS.md`](FRONTEND-STANDARDS.md) pour la référence complète.
 
 ```typescript
 // ❌ INTERDIT - imports internes (standards/no-antd-internal-imports)

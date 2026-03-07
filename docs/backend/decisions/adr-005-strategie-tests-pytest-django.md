@@ -88,7 +88,7 @@ app/tests/
 
 ## Références
 
-- [Conventions de test détaillées](../../tests/README.md)
-- [Issues connues](../../tests/KNOWN_ISSUES.md)
+- Conventions de test détaillées — `idp-portal/django_backend/tests/README.md` (dépôt)
+- Issues connues — `idp-portal/django_backend/tests/KNOWN_ISSUES.md` (dépôt)
 - [pytest-django documentation](https://pytest-django.readthedocs.io/)
 - [factory_boy documentation](https://factoryboy.readthedocs.io/)

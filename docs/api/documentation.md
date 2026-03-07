@@ -45,7 +45,7 @@ Pour les scripts, pipelines CI/CD ou consommation API externe :
 2. Copier `access_token` de la réponse JSON (`data.access_token`)
 3. Cliquer **Authorize** et coller le token **sans préfixe "Bearer"** — Swagger l'ajoute automatiquement
 
-> Pour les détails complets (curl, erreurs, rate limit, création de clés), consulter [api-self-service.md](api-self-service.md) (doc interne) ou l'interface interactive [Swagger UI](http://localhost:8000/api/schema/swagger-ui/).
+> Pour les détails complets (curl, erreurs, rate limit, création de clés), consulter [self-service.md](self-service.md) (doc interne) ou l'interface interactive [Swagger UI](http://localhost:8000/api/schema/swagger-ui/).
 
 ## Export du schéma
 
