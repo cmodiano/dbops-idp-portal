@@ -18,6 +18,8 @@ urlpatterns = [
     path("dashboard/compare/", views.DashboardCompareView.as_view(), name="dashboard-compare"),
     # Story 60.1: Stats catalogue admin (actions par statut/type/engine/catégorie + évolution)
     path("dashboard/stats-catalogue/", views.DashboardStatsCatalogueView.as_view(), name="dashboard-stats-catalogue"),
+    # Story 60.2: Stats adoption par profil (exécutions/utilisateurs actifs/tendance hebdo)
+    path("dashboard/stats-adoption/", views.DashboardStatsAdoptionView.as_view(), name="dashboard-stats-adoption"),
     # NOTE: This endpoint returns the object directly (no {"data": ...}) per frontend apiFetchRaw usage.
     path("dashboard/filter-options/", views.DashboardFilterOptionsView.as_view(), name="dashboard-filter-options"),
     # Story 30.2: Dashboard export endpoints

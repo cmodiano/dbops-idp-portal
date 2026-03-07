@@ -616,3 +616,83 @@ class DashboardStatsCatalogueView(APIView):
             }
         )
 
+
+class DashboardStatsAdoptionView(APIView):
+    """GET /dashboard/stats-adoption/ -> {data: AdoptionStats}
+
+    Story 60.2: Statistiques d'adoption par profil utilisateur.
+    - executions_by_profile: nombre d'exécutions par profil sur la période
+    - active_users_by_profile: utilisateurs distincts (≥1 exécution) par profil
+    - adoption_trend: série temporelle hebdomadaire par profil
+
+    RBAC: DBOPS voient tout; utilisateurs standard voient uniquement leurs propres exécutions.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=['dashboard'],
+        summary='Statistiques adoption par profil (admin)',
+        parameters=[
+            OpenApiParameter('days', int, description='Période en jours (défaut: 14)'),
+            OpenApiParameter('from_date', str, description='Date de début (YYYY-MM-DD)'),
+            OpenApiParameter('to_date', str, description='Date de fin (YYYY-MM-DD)'),
+        ],
+    )
+    def get(self, request):
+        period_start, period_end = _get_period_bounds(request)
+        exec_qs = Execution.objects.filter(
+            created_at__gte=period_start,
+            created_at__lt=period_end,
+        )
+        exec_qs = _filter_queryset_by_ownership(exec_qs, request, AdminProfilePermission)
+
+        # executions_by_profile
+        by_profile_rows = (
+            exec_qs.values("user__profile")
+            .annotate(count=Count("id"))
+            .order_by("user__profile")
+        )
+        executions_by_profile = [
+            {"profile": r["user__profile"] or "unknown", "count": int(r["count"] or 0)}
+            for r in by_profile_rows
+        ]
+
+        # active_users_by_profile
+        active_rows = (
+            exec_qs.values("user__profile")
+            .annotate(user_count=Count("user_id", distinct=True))
+            .order_by("user__profile")
+        )
+        active_users_by_profile = [
+            {"profile": r["user__profile"] or "unknown", "user_count": int(r["user_count"] or 0)}
+            for r in active_rows
+        ]
+
+        # adoption_trend
+        trend_rows = (
+            exec_qs
+            .annotate(week_start=TruncWeek("created_at"))
+            .values("week_start", "user__profile")
+            .annotate(count=Count("id"))
+            .order_by("week_start", "user__profile")
+        )
+        adoption_trend = [
+            {
+                "week_start": r["week_start"].date().isoformat() if r["week_start"] else None,
+                "profile": r["user__profile"] or "unknown",
+                "count": int(r["count"] or 0),
+            }
+            for r in trend_rows
+            if r["week_start"] is not None
+        ]
+
+        return Response(
+            {
+                "data": {
+                    "executions_by_profile": executions_by_profile,
+                    "active_users_by_profile": active_users_by_profile,
+                    "adoption_trend": adoption_trend,
+                }
+            }
+        )
