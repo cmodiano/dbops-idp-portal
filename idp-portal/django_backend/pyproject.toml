@@ -16,7 +16,7 @@ keywords = ["database", "automation", "portal", "devops"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Environment :: Web Environment",
-    "Framework :: Django :: 5.1",
+    "Framework :: Django :: 5.2",
     "Intended Audience :: Information Technology",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
@@ -26,7 +26,7 @@ classifiers = [
 dependencies = [
     "cachetools>=5.3.0",
     "croniter>=6.0.0",
-    "Django>=5.1.0,<6.0",
+    "Django>=5.2.12,<6.0",
     "httpx>=0.27.0",
     "django-cors-headers>=4.3.0",
     "djangorestframework>=3.15.0",
@@ -83,7 +83,7 @@ Repository = "https://github.com/company/idp-portal"
 Issues = "https://github.com/company/idp-portal/issues"
 
 [build-system]
-requires = ["setuptools>=75.0"]
+requires = ["setuptools>=78.1.1"]
 build-backend = "setuptools.build_meta"
 
 # Story 15.1: Security audit configuration
