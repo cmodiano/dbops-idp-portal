@@ -11,6 +11,7 @@ import React, { useMemo } from 'react';
 import { Divider, Select, Typography } from 'antd';
 import type { WorkflowStepNodeData } from '../WorkflowStepNode';
 import { KeyValueEditor } from './KeyValueEditor';
+import { NotificationTemplateEditor } from './NotificationTemplateEditor';
 import { ConditionConfig } from './ConditionConfig';
 import { MappingHelpPopover } from './MappingHelpPopover';
 import { useInputMappingWarnings } from '../../../hooks/useInputMappingWarnings';
@@ -107,20 +108,38 @@ export const ServiceCallStepConfig: React.FC<ServiceCallStepConfigProps> = ({
 
       {/* Input mapping */}
       <div style={{ marginBottom: 12 }}>
-        <KeyValueEditor
-          label="Mapping d'entrée (input_mapping)"
-          helpContent={<MappingHelpPopover type="input" availableSteps={filteredStepOptions} />}
-          value={data.input_mapping as Record<string, string> | null}
-          onChange={(v) => onUpdate({ input_mapping: v })}
-          disabled={disabled}
-          keyPlaceholder="Paramètre"
-          valuePlaceholder="{{ steps.<step_id>.<champ> }}"
-          data-testid="input-mapping-editor"
-          warnings={inputMappingWarnings}
-          workflowId={workflowId}
-          currentStepId={data.step_id}
-          availableStepIds={availableStepIds}
-        />
+        {data.integration_type === 'notification' &&
+        ['send_email', 'send_teams'].includes(data.operation ?? '') ? (
+          <>
+            <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
+              Configuration de la notification
+            </Text>
+            <NotificationTemplateEditor
+              value={data.input_mapping as Record<string, string> | null}
+              onChange={(v) => onUpdate({ input_mapping: v })}
+              disabled={disabled}
+              workflowId={workflowId}
+              currentStepId={data.step_id ?? ''}
+              availableStepIds={availableStepIds}
+              operation={data.operation as 'send_email' | 'send_teams'}
+            />
+          </>
+        ) : (
+          <KeyValueEditor
+            label="Mapping d'entrée (input_mapping)"
+            helpContent={<MappingHelpPopover type="input" availableSteps={filteredStepOptions} />}
+            value={data.input_mapping as Record<string, string> | null}
+            onChange={(v) => onUpdate({ input_mapping: v })}
+            disabled={disabled}
+            keyPlaceholder="Paramètre"
+            valuePlaceholder="{{ steps.<step_id>.<champ> }}"
+            data-testid="input-mapping-editor"
+            warnings={inputMappingWarnings}
+            workflowId={workflowId}
+            currentStepId={data.step_id}
+            availableStepIds={availableStepIds}
+          />
+        )}
       </div>
 
       {/* Output mapping */}

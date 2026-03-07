@@ -211,3 +211,40 @@ describe('ServiceCallStepConfig — VariablePicker (Story 63.3)', () => {
     expect(container.querySelector('[data-testid="variable-picker-trigger"]')).not.toBeInTheDocument();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Story 63.4 — NotificationTemplateEditor intégration
+// ---------------------------------------------------------------------------
+
+describe('ServiceCallStepConfig — NotificationTemplateEditor (Story 63.4, AC4)', () => {
+  it('rend NotificationTemplateEditor pour notification send_email', () => {
+    const data = {
+      ...baseData,
+      integration_type: 'notification',
+      operation: 'send_email',
+      input_mapping: null,
+    };
+    const { container } = render(<ServiceCallStepConfig data={data} onUpdate={vi.fn()} />);
+    expect(
+      container.querySelector('[data-testid="notification-template-editor-email"]'),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId('input-mapping-editor')).not.toBeInTheDocument();
+  });
+
+  it('conserve le KeyValueEditor générique pour notify_execution_event', () => {
+    const data = {
+      ...baseData,
+      integration_type: 'notification',
+      operation: 'notify_execution_event',
+      input_mapping: null,
+    };
+    const { container } = render(<ServiceCallStepConfig data={data} onUpdate={vi.fn()} />);
+    expect(screen.getByTestId('input-mapping-editor')).toBeInTheDocument();
+    expect(
+      container.querySelector('[data-testid="notification-template-editor-email"]'),
+    ).not.toBeInTheDocument();
+    expect(
+      container.querySelector('[data-testid="notification-template-editor-teams"]'),
+    ).not.toBeInTheDocument();
+  });
+});

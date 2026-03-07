@@ -4,7 +4,7 @@ Step Template Resolver — Story 57.2 (ADR-007 §3b)
 Résout les références ``{{ steps.<step_id>.<field> }}`` dans les ``input_mapping``
 d'un step en utilisant Jinja2 ``SandboxedEnvironment``.
 
-Filtres autorisés : ``join``, ``length``, ``first``, ``default``.
+Filtres autorisés : ``join``, ``length``, ``first``, ``default``, ``truncate``.
 """
 
 from typing import Any, Iterator, cast
@@ -14,7 +14,7 @@ import jinja2.sandbox
 
 
 # Ensemble des filtres Jinja2 autorisés dans les templates de workflow
-_ALLOWED_FILTERS = frozenset({'join', 'length', 'first', 'default'})
+_ALLOWED_FILTERS = frozenset({'join', 'length', 'first', 'default', 'truncate'})
 
 
 class _StepOutputProxy:
@@ -76,21 +76,24 @@ class StepTemplateResolver:
     Résout les templates ``{{ steps.<step_id>.<field> }}`` dans les ``input_mapping``.
 
     Utilise ``jinja2.sandbox.SandboxedEnvironment`` pour la sécurité.
-    Seuls les filtres ``join``, ``length``, ``first``, ``default`` sont disponibles.
+    Seuls les filtres ``join``, ``length``, ``first``, ``default``, ``truncate`` sont disponibles.
 
     AC#3 : résolution via Jinja2 SandboxedEnvironment avec filtres limités.
     AC#4 : step absent → accès retourne ``None`` (proxy vide).
     """
 
-    def __init__(self, step_outputs: dict):
+    def __init__(self, step_outputs: dict, execution_context: dict | None = None):
         """
         Initialise le resolver avec le contexte partagé des outputs de steps.
 
         Args:
             step_outputs: Dict ``{step_id: {alias: valeur}}`` issu de
                           ``ContainerWorkflowRuntime._step_outputs``.
+            execution_context: Variables de contexte d'exécution (action_name,
+                               environment, execution_id). Optionnel, défaut ``{}``.
         """
         self._step_outputs = step_outputs if isinstance(step_outputs, dict) else {}
+        self._execution_context = execution_context or {}
         self._env = jinja2.sandbox.SandboxedEnvironment(
             undefined=jinja2.Undefined,
             # AC#4 : convertit None Python en chaîne vide pour éviter le rendu 'None'
@@ -117,7 +120,7 @@ class StepTemplateResolver:
         """
         if not input_mapping:
             return {}
-        context = {'steps': _StepsProxy(self._step_outputs)}
+        context = {**self._execution_context, 'steps': _StepsProxy(self._step_outputs)}
         return cast(dict, self._resolve_value(input_mapping, context))
 
     def _resolve_value(self, value: Any, context: dict) -> Any:

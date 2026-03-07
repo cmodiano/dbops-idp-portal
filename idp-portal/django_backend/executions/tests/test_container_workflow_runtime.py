@@ -934,7 +934,7 @@ class TestContainerWorkflowStepOutputs:
     @patch('executions.container_workflow_runtime.AuditService')
     def test_input_mapping_resolved_from_previous_step(self, mock_audit):
         """AC#5 : résolution input_mapping depuis le step précédent dans _step_outputs."""
-        from unittest.mock import MagicMock, patch as mock_patch
+        from unittest.mock import ANY, MagicMock, patch as mock_patch
 
         # Simuler des outputs pré-chargés pour un step précédent
         steps = [
@@ -961,7 +961,11 @@ class TestContainerWorkflowStepOutputs:
             runtime._execute_step(steps[1])
 
             # Vérifier que StepTemplateResolver a été instancié et appelé
-            MockResolver.assert_called_once_with(runtime._step_outputs)
+            # (Story 63.4 : execution_context est maintenant passé en second argument)
+            MockResolver.assert_called_once_with(
+                runtime._step_outputs,
+                execution_context=ANY,
+            )
             mock_resolver_instance.resolve.assert_called_once_with({"db": "{{ steps['step-a'].database }}"})
 
     @override_settings(
