@@ -65,10 +65,16 @@ describe('WizardStep3ImpactChangement', () => {
     expect(screen.getByText(/Niveau d'impact par défaut/i)).toBeInTheDocument();
   });
 
-  it('affiche les sections Règles métier et Notifications', () => {
+  it('affiche les sections Règles métier et Notifications pour les actions (isWorkflow=false)', () => {
     renderWithForm();
     expect(screen.getByText('Règles métier')).toBeInTheDocument();
     expect(screen.getByText('Notifications')).toBeInTheDocument();
+  });
+
+  it('masque les sections Règles métier et Notifications pour les workflows (isWorkflow=true)', () => {
+    renderWithForm({ ...defaultProps, isWorkflow: true });
+    expect(screen.queryByText('Règles métier')).not.toBeInTheDocument();
+    expect(screen.queryByText('Notifications')).not.toBeInTheDocument();
   });
 
   it('affiche les règles d\'impact existantes', () => {

@@ -43,7 +43,7 @@ import { WizardStep3ImpactChangement } from './WizardStep3ImpactChangement';
 const STEP_ITEMS = [
   { title: 'Général', content: 'Type, nom, moteur, intégration, tags' },
   { title: 'Automatisme & Paramètres', content: 'Configuration selon le type' },
-  { title: 'Impact & Changement', content: 'Règles d\'impact, changement ServiceNow, règles métier' },
+  { title: 'Impact & Changement', content: 'Règles d\'impact, niveau par défaut' },
 ];
 
 export interface ActionWizardProps {
@@ -286,8 +286,10 @@ export function ActionWizard({
         // impact_rules and default_impact_level apply to both actions and workflows
         impact_rules: listToImpactRules(impactRulesList),
         default_impact_level: defaultImpactLevel,
-        // Story 31.8: Notification configuration
-        notification_config: notificationConfig,
+        // Story 31.8: Notification configuration — uniquement pour les actions (workflows : étapes indépendantes)
+        ...(isWorkflowSave
+          ? { notification_config: null, business_rule_policy_id: null }
+          : { notification_config: notificationConfig }),
         // category: both actions and workflows (workflows: optional, backend defaults to 'autres')
         category: (values as Record<string, unknown>).category as string | undefined ?? null,
         // Only include engine/platform/integration_id/parameters_schema for actions
@@ -323,20 +325,22 @@ export function ActionWizard({
       }
 
       if (actionId) {
-        // Story 28.4: Save business rule policy (predefined only)
-        try {
-          if (businessRulePolicyId) {
-            await handleUpdateBusinessRulePolicies(actionId, null);
-            await handlePatchAction(actionId, { business_rule_policy_id: businessRulePolicyId });
-          } else {
-            await handleUpdateBusinessRulePolicies(actionId, null);
-            await handlePatchAction(actionId, { business_rule_policy_id: null });
+        // Story 28.4: Save business rule policy (predefined only) — uniquement pour les actions (workflows : étapes indépendantes)
+        if (!isWorkflowSave) {
+          try {
+            if (businessRulePolicyId) {
+              await handleUpdateBusinessRulePolicies(actionId, null);
+              await handlePatchAction(actionId, { business_rule_policy_id: businessRulePolicyId });
+            } else {
+              await handleUpdateBusinessRulePolicies(actionId, null);
+              await handlePatchAction(actionId, { business_rule_policy_id: null });
+            }
+          } catch (policiesErr) {
+            notification.warning({
+              message: 'Règles métier non mises à jour',
+              description: policiesErr instanceof Error ? policiesErr.message : 'Les règles métier n\'ont pas pu être enregistrées. L\'action a bien été créée/modifiée.',
+            });
           }
-        } catch (policiesErr) {
-          notification.warning({
-            message: 'Règles métier non mises à jour',
-            description: policiesErr instanceof Error ? policiesErr.message : 'Les règles métier n\'ont pas pu être enregistrées. L\'action a bien été créée/modifiée.',
-          });
         }
 
         // New workflows: always save steps. Existing: only if draft or disabled
