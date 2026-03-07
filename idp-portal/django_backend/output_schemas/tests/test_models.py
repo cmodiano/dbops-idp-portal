@@ -109,6 +109,26 @@ class TestOutputSchemaCreate:
                 schema_json={'output_fields': []},
             )
 
+    def test_null_operations_allowed_same_schema_type_target(self):
+        """Partial unique constraint allows multiple rows with operation=None."""
+        s1 = OutputSchema.objects.create(
+            name='action-a-1',
+            schema_type=SchemaType.ACTION,
+            target_name='same-action',
+            operation=None,
+            schema_json={'output_fields': []},
+        )
+        s2 = OutputSchema.objects.create(
+            name='action-a-2',
+            schema_type=SchemaType.ACTION,
+            target_name='same-action',
+            operation=None,
+            schema_json={'output_fields': []},
+        )
+        assert s1.pk is not None
+        assert s2.pk is not None
+        assert s1.pk != s2.pk
+
     def test_schema_json_null_allowed(self):
         schema = OutputSchema.objects.create(
             name='no-json',

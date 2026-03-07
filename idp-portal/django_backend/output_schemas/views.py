@@ -3,6 +3,7 @@ Views for output_schemas app.
 Story 63.1 - Infrastructure des Schémas d'Output (Backend).
 """
 
+import structlog
 from django.http import HttpResponse
 from rest_framework.viewsets import ReadOnlyModelViewSet
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
@@ -78,7 +79,17 @@ def sync_output_schemas(request):
 
     # Accept multipart file upload or yaml parsed body (YAMLParser sets request.data to str)
     if 'file' in request.FILES:
-        content = request.FILES['file'].read().decode('utf-8')
+        try:
+            content = request.FILES['file'].read().decode('utf-8')
+        except UnicodeDecodeError:
+            structlog.get_logger(__name__).exception(
+                "sync_output_schemas_decode_error",
+                exc_info=True,
+            )
+            return Response(
+                {'error': 'Aucun contenu YAML fourni ou encodage non valide.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
     elif request.data and isinstance(request.data, str) and request.data.strip():
         content = request.data
     else:
@@ -91,9 +102,13 @@ def sync_output_schemas(request):
         stats = import_output_schemas_yaml(content, mode=mode)
     except ValueError as exc:
         return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-    except Exception as exc:
+    except Exception:
+        structlog.get_logger(__name__).exception(
+            "sync_output_schemas_import_error",
+            exc_info=True,
+        )
         return Response(
-            {'error': f'Erreur lors de l\'import : {exc}'},
+            {'error': "Erreur lors de l'import."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 

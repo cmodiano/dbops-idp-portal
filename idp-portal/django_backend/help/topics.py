@@ -2,8 +2,8 @@ from pathlib import Path
 
 from django.conf import settings
 
-# Répertoire contenant les fichiers d'aide Markdown
-HELP_DIR = Path(settings.BASE_DIR) / 'docs' / 'help'
+# Répertoire contenant les fichiers d'aide Markdown (docs/backend/help/ au niveau repo)
+HELP_DIR = Path(settings.BASE_DIR).resolve().parent.parent / 'docs' / 'backend' / 'help'
 
 # Liste blanche topic_id → nom de fichier (sécurité path traversal)
 HELP_TOPICS: dict[str, str] = {

@@ -12,3 +12,6 @@ class OutputSchemasConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'output_schemas'
     verbose_name = 'Output Schemas'
+
+    def ready(self) -> None:
+        import output_schemas.signals  # noqa: F401

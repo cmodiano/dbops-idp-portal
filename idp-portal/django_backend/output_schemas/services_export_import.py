@@ -75,6 +75,12 @@ def import_output_schemas_yaml(content: str, mode: str = 'additive') -> dict:
 
     Returns:
         dict with keys: created, updated, unchanged, deleted, mode
+
+    Note:
+        Items must be ordered so parents precede children. A child schema
+        references its parent via spec.inherits_from (name). If a child
+        appears before its parent in the YAML, a ValueError is raised.
+        The export uses order_by('id') to ensure correct ordering.
     """
     # Fix H1: catch yaml.YAMLError and re-raise as ValueError so the view returns 400
     try:

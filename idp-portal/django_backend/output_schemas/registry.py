@@ -29,25 +29,30 @@ class OutputSchemaRegistry:
         Les champs propres du schéma overrident ceux du parent.
         Support de l'héritage à 1 niveau (le parent ne re-résout pas récursivement
         pour éviter les cycles, mais la FK est une référence directe).
+        Normalise et valide schema_json pour éviter 500 sur payloads malformés.
         """
-        own_fields = (schema.schema_json or {}).get('output_fields', [])
-        own_template_vars = (schema.schema_json or {}).get('template_variables', [])
+        raw = schema.schema_json if isinstance(schema.schema_json, dict) else {}
+        own_fields = self._safe_field_list(raw.get('output_fields'))
+        own_template_vars = self._safe_field_list(raw.get('template_variables'))
 
         if schema.inherits_from_id:
             # select_related('inherits_from') doit avoir été utilisé à l'appel
             parent = schema.inherits_from
             if parent:
-                parent_fields = (parent.schema_json or {}).get('output_fields', [])
-                parent_template_vars = (parent.schema_json or {}).get('template_variables', [])
+                parent_raw = parent.schema_json if isinstance(parent.schema_json, dict) else {}
+                parent_fields = self._safe_field_list(parent_raw.get('output_fields'))
+                parent_template_vars = self._safe_field_list(parent_raw.get('template_variables'))
                 # Merge : parent fields first, then own fields override by name
-                merged_by_name = {f['name']: f for f in parent_fields}
+                merged_by_name = {f['name']: f for f in parent_fields if isinstance(f.get('name'), str)}
                 for f in own_fields:
-                    merged_by_name[f['name']] = f
+                    if isinstance(f.get('name'), str):
+                        merged_by_name[f['name']] = f
                 merged_fields = list(merged_by_name.values())
                 # Template variables: own override parent by name
-                tv_by_name = {v['name']: v for v in parent_template_vars}
+                tv_by_name = {v['name']: v for v in parent_template_vars if isinstance(v.get('name'), str)}
                 for v in own_template_vars:
-                    tv_by_name[v['name']] = v
+                    if isinstance(v.get('name'), str):
+                        tv_by_name[v['name']] = v
                 return {
                     'output_fields': merged_fields,
                     'template_variables': list(tv_by_name.values()),
@@ -58,6 +63,13 @@ class OutputSchemaRegistry:
             'output_fields': own_fields,
             'template_variables': own_template_vars,
         }
+
+    @staticmethod
+    def _safe_field_list(value: object) -> list[dict]:
+        """Coerce to list of dicts with string 'name' key; filter invalid entries."""
+        if not isinstance(value, list):
+            return []
+        return [x for x in value if isinstance(x, dict) and isinstance(x.get('name'), str)]
 
     def get_action_schema(self, action_name: str) -> dict | None:
         """Résout le schéma pour un step plateforme (action_name = nom de l'action catalogue)."""
