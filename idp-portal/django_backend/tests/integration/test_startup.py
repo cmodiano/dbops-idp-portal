@@ -20,10 +20,14 @@ class TestApplicationStartup:
         """CoreConfig.ready() must call validate_required_secrets."""
         with patch('core.startup_checks.validate_required_secrets') as mock_validate:
             with patch('core.logging.configure_structlog'):
-                from django.apps import apps
-                core_config = apps.get_app_config('core')
-                core_config.ready()
-                mock_validate.assert_called_once()
+                with patch('core.startup_checks.validate_rate_limit_config'):
+                    with patch('core.startup_checks.validate_feature_flags_config'):
+                        with patch('core.startup_checks.validate_cors_config'):
+                            with patch('core.startup_checks.validate_superuser_fallback_config'):
+                                from django.apps import apps
+                                core_config = apps.get_app_config('core')
+                                core_config.ready()
+                                mock_validate.assert_called_once()
 
     def test_app_startup_fails_without_secrets_in_production(self):
         """L'application refuse de démarrer en production sans secrets."""
