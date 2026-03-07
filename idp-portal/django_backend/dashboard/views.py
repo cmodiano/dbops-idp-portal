@@ -862,10 +862,12 @@ class DashboardStatsApprobationsView(APIView):
                 executionstep__approved_at__isnull=False,
             )
         ).distinct()
-        approved_count = qs_approved.count()
+        # Oracle: .count() on distinct() fails with ORA-22848 (CLOB in comparison).
+        # Use values('id').distinct() so only numeric id is selected for DISTINCT.
+        approved_count = qs_approved.values("id").distinct().count()
 
         # 2. Exécutions rejetées
-        rejected_count = qs.filter(status=ExecutionStatus.REJECTED).count()
+        rejected_count = qs.filter(status=ExecutionStatus.REJECTED).values("id").distinct().count()
 
         # 3. Taux d'approbation
         total_decided = approved_count + rejected_count
@@ -978,8 +980,9 @@ class DashboardStatsPlanifieesView(APIView):
             ).values_list('execution_id', flat=True)
         ) if period_ids else set()
 
-        total = qs.count()
-        scheduled_count = qs.filter(id__in=scheduled_ids).count()
+        # Oracle: .count() on distinct() fails with ORA-22848 (CLOB in comparison).
+        total = qs.values("id").distinct().count()
+        scheduled_count = qs.filter(id__in=scheduled_ids).values("id").distinct().count()
         manual_count = total - scheduled_count
         scheduled_rate = round(scheduled_count / total * 100, 1) if total > 0 else None
 

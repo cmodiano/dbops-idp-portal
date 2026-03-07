@@ -19,6 +19,7 @@ from catalog.models import Action, ActionStatus, Tag, ActionTag, ActionItemType,
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.middleware import get_correlation_id
+from core.utils import sanitize_audit_changes
 from core.exceptions import ConflictError, BadRequestError
 from idp_auth.models import User
 
@@ -443,6 +444,8 @@ class CatalogService:
                 changes[field] = {'old': old_val, 'new': new_val}
         for json_field in json_fields_updated:
             changes[json_field] = {'updated': True}
+
+        changes = sanitize_audit_changes(changes)  # Story 61.5 — défense en profondeur
 
         # Audit (Story 2.31 L1: add correlation_id for consistency)
         correlation_id = get_correlation_id()

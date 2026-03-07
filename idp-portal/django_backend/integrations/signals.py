@@ -11,6 +11,7 @@ from django.dispatch import receiver
 from core.models import AuditActionType, AuditEntityType
 from core.services import AuditService
 from core.middleware import get_correlation_id
+from core.utils import sanitize_audit_changes
 from integrations.models import Integration, IntegrationTypeCatalogue, IntegrationAction
 
 logger = structlog.get_logger(__name__)
@@ -96,6 +97,7 @@ def audit_integration_type_catalogue(sender, instance, created, raw, **kwargs):
                 new_val = getattr(instance, field)
                 if old_val != new_val:
                     changes[field] = {"old": old_val, "new": new_val}
+        changes = sanitize_audit_changes(changes)  # Story 61.5
         details['changes'] = changes
 
     try:
@@ -145,6 +147,7 @@ def audit_integration_action(sender, instance, created, raw, **kwargs):
                 new_val = getattr(instance, field)
                 if old_val != new_val:
                     changes[field] = {"old": old_val, "new": new_val}
+        changes = sanitize_audit_changes(changes)  # Story 61.5
         details['changes'] = changes
 
     try:

@@ -4,18 +4,15 @@
  * Story 26.4 - AC4: Extracted from ExecutionsPage.tsx.
  * Story 9.4: 4 StatCards (executions du jour, taux de succès, en cours, en erreur).
  * Story 9.10: TrendLineChart under StatCards.
- * Story 60.11: Avg execution time StatCard + analytics link.
+ * Durée moy. d'exéc. is only shown in the statistics view (OperationsActivitySection).
  */
-import { Row, Col, Typography } from 'antd';
+import { Row, Col } from 'antd';
 import {
   RocketOutlined,
   CheckCircleOutlined,
   SyncOutlined,
   ExclamationCircleOutlined,
-  ClockCircleOutlined,
-  ArrowRightOutlined,
 } from '@ant-design/icons';
-import { Link } from 'react-router';
 import { StatCard } from '../dashboard/StatCard';
 import { TrendLineChart } from '../dashboard/reporting/TrendLineChart';
 import type {
@@ -30,8 +27,6 @@ export interface ExecutionsStatSectionProps {
   timeSeriesData: DashboardTimeSeriesPoint[];
   timeSeriesLoading: boolean;
   filters: ExecutionFilters;
-  avgExecutionTimeS?: number | null;
-  avgExecutionTimeLoading?: boolean;
 }
 
 export const ExecutionsStatSection: React.FC<ExecutionsStatSectionProps> = ({
@@ -40,15 +35,7 @@ export const ExecutionsStatSection: React.FC<ExecutionsStatSectionProps> = ({
   timeSeriesData,
   timeSeriesLoading,
   filters,
-  avgExecutionTimeS,
-  avgExecutionTimeLoading,
 }) => {
-  const avgTimeValue: number | string =
-    avgExecutionTimeS !== null && avgExecutionTimeS !== undefined
-      ? avgExecutionTimeS
-      : 'N/D';
-  const avgTimeSuffix = typeof avgTimeValue === 'number' ? 's' : undefined;
-
   return (
     <>
       {/* Story 9.4 AC1, AC3, AC4, AC5; Story 9.10 AC6: StatCards section (filter-aware) */}
@@ -100,30 +87,6 @@ export const ExecutionsStatSection: React.FC<ExecutionsStatSectionProps> = ({
       <div style={{ marginBottom: 16 }}>
         <TrendLineChart data={timeSeriesData} loading={timeSeriesLoading} />
       </div>
-
-      {/* Story 60.11: Durée moy. d'exéc. + lien analytics */}
-      {avgExecutionTimeS !== undefined && (
-        <Row gutter={[16, 16]} align="middle" style={{ marginTop: 8 }}>
-          <Col xs={24} sm={12} md={6}>
-            <StatCard
-              label="Durée moy. d'exéc."
-              value={avgTimeValue}
-              suffix={avgTimeSuffix}
-              icon={<ClockCircleOutlined />}
-              variant="inProgress"
-              loading={avgExecutionTimeLoading ?? false}
-              tooltip="Durée moyenne des exécutions COMPLETED sur la période"
-            />
-          </Col>
-          <Col xs={24} sm={12} md={18} style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-            <Link to="/analytics">
-              <Typography.Text type="secondary">
-                Voir les statistiques détaillées <ArrowRightOutlined />
-              </Typography.Text>
-            </Link>
-          </Col>
-        </Row>
-      )}
     </>
   );
 };

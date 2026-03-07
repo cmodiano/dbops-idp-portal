@@ -17,11 +17,10 @@ from integrations.validation_service import IntegrationValidationService
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.exceptions import InvalidStateError
+from core.utils import sanitize_audit_changes
 
 logger = structlog.get_logger(__name__)
 
-
-_SENSITIVE_INTEGRATION_FIELDS = frozenset({'credential_ref', 'config'})
 
 _AUDITED_FIELDS = ('type', 'name', 'base_url', 'credential_ref', 'icon',
                    'auth_flow', 'token_url', 'secret_service_id', 'config')
@@ -331,8 +330,8 @@ class IntegrationService:
             logger.warning("integration_updated_non_valid", integration_id=integration.id, status=computed_status)
             warnings.append(msg)
 
-        # Construire changes pour l'audit (Story 61.1)
-        changes = {}
+        # Construire changes pour l'audit (Story 61.1, refactorisé Story 61.5)
+        changes_raw = {}
         for field, old_val in old_values.items():
             if field == 'config':
                 new_val = integration_update_data.get('config')
@@ -340,12 +339,10 @@ class IntegrationService:
                 new_val = integration_update_data.get('secret_service_id')
             else:
                 new_val = getattr(integration, field)
+            if old_val != new_val:
+                changes_raw[field] = {"old": old_val, "new": new_val}
 
-            if field in _SENSITIVE_INTEGRATION_FIELDS:
-                if old_val != new_val:
-                    changes[field] = {"old": "***", "new": "***"}
-            elif old_val != new_val:
-                changes[field] = {"old": old_val, "new": new_val}
+        changes = sanitize_audit_changes(changes_raw)
 
         # Audit if user provided
         if user:

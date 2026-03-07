@@ -17,6 +17,7 @@ from profiles.models import Profile, ProfileActionPermission, ProfileTargetPermi
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.middleware import get_correlation_id
+from core.utils import sanitize_audit_changes
 
 logger = structlog.get_logger(__name__)
 
@@ -191,6 +192,8 @@ class ProfileService:
             new_val = getattr(profile, field)
             if old_val != new_val:
                 changes[field] = {"old": old_val, "new": new_val}
+
+        changes = sanitize_audit_changes(changes)  # Story 61.5 — défense en profondeur
 
         # Audit if user provided
         if user:

@@ -22,7 +22,6 @@ import {
   fetchExecutionStats,
   fetchExecutionTimeSeries,
 } from '../services/execution_service';
-import { fetchStatsOperations } from '../services/dashboard_service';
 import { getIntegrations } from '../services/integrations_service';
 import type { IntegrationIconsMap } from '../utils/executionRenderers';
 import type {
@@ -32,23 +31,12 @@ import type {
   DashboardStats,
   DashboardTimeSeriesPoint,
 } from '../types/api';
-import type { DashboardFilters } from '../types/api/analytics';
 import logger from '../services/logger';
 import { useAuth } from '../contexts/AuthContext';
 import { useActorExecutionSync } from './useActorExecutionSync';
 import { RUNNING_STATUSES } from '../constants/executions';
 
 const PAGE_SIZE = 25;
-
-function mapExecutionFiltersToDashboardFilters(filters: ExecutionFilters): DashboardFilters {
-  const out: DashboardFilters = {};
-  if (filters.start_date) out.fromDate = filters.start_date;
-  if (filters.end_date) out.toDate = filters.end_date;
-  if (filters.engine) out.engine = filters.engine;
-  if (filters.environment) out.environment = filters.environment as string;
-  if (filters.tags?.length) out.tags = filters.tags;
-  return out;
-}
 
 /** Observer polling interval: refresh the full list so status changes from other users become visible. */
 const OBSERVER_POLL_INTERVAL_MS = 10_000;
@@ -82,9 +70,6 @@ export interface UseExecutionsDataReturn {
   pendingApprovals: ExecutionResponse[];
   pendingApprovalsLoading: boolean;
   loadPendingApprovals: () => Promise<void>;
-  // Avg execution time (Story 60.11)
-  avgExecutionTimeS: number | null;
-  avgExecutionTimeLoading: boolean;
   // Integration icons
   integrationIconsMap: IntegrationIconsMap | null;
   // Refs for stale closure prevention (Story 22.14)
@@ -121,8 +106,6 @@ export const useExecutionsData = (
   const [pendingApprovalsLoading, setPendingApprovalsLoading] = useState(false);
   const [statsData, setStatsData] = useState<DashboardStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
-  const [avgExecutionTimeS, setAvgExecutionTimeS] = useState<number | null>(null);
-  const [avgExecutionTimeLoading, setAvgExecutionTimeLoading] = useState(true);
 
   // Stale closure refs (Story 22.14)
   const currentPageRef = useRef(currentPage);
@@ -316,17 +299,6 @@ export const useExecutionsData = (
     loadStats();
   }, [activeScope, filters]);
 
-  // Avg execution time (Story 60.11) — analytics metric, not real-time, depends only on filters
-  useEffect(() => {
-    let cancelled = false;
-    setAvgExecutionTimeLoading(true);
-    fetchStatsOperations(mapExecutionFiltersToDashboardFilters(filters))
-      .then((data) => { if (!cancelled) setAvgExecutionTimeS(data.avg_execution_time_s); })
-      .catch(() => { if (!cancelled) setAvgExecutionTimeS(null); })
-      .finally(() => { if (!cancelled) setAvgExecutionTimeLoading(false); });
-    return () => { cancelled = true; };
-  }, [filters]);
-
   // Story 36.2 — Real-time WS sync for current user's active executions
   const actorActiveIds = useMemo(
     () =>
@@ -364,7 +336,6 @@ export const useExecutionsData = (
     sortField, setSortField, sortOrder, setSortOrder,
     activeScope, setActiveScope, userHasChosenScope,
     statsData, statsLoading, timeSeriesData, timeSeriesLoading,
-    avgExecutionTimeS, avgExecutionTimeLoading,
     pendingApprovals, pendingApprovalsLoading, loadPendingApprovals,
     integrationIconsMap,
     isRefreshingRef, refetchCurrentState, refresh, updateExecutionInList,

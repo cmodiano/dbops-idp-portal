@@ -66,7 +66,6 @@ export default function ExecutionsPage() {
     sortField, setSortField, sortOrder, setSortOrder,
     activeScope, setActiveScope, userHasChosenScope,
     statsData, statsLoading, timeSeriesData, timeSeriesLoading,
-    avgExecutionTimeS, avgExecutionTimeLoading,
     pendingApprovals, pendingApprovalsLoading, loadPendingApprovals,
     integrationIconsMap, isRefreshingRef, refetchCurrentState, refresh: _refresh,
     updateExecutionInList, PAGE_SIZE,
@@ -275,7 +274,6 @@ export default function ExecutionsPage() {
       <ExecutionsStatSection
         statsData={statsData} statsLoading={statsLoading}
         timeSeriesData={timeSeriesData} timeSeriesLoading={timeSeriesLoading} filters={filters}
-        avgExecutionTimeS={avgExecutionTimeS} avgExecutionTimeLoading={avgExecutionTimeLoading}
       />
 
       <ExecutionsFiltersPanel
