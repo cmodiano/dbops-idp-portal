@@ -2,7 +2,7 @@
  * ActionWizard — Wizard 3 étapes pour création/édition d'action ou workflow (Story 2.22, AC #1–#5; Story 4.10 AC4; Story 9.5).
  *
  * Modèle : 1 action = 1 étape. La plateforme (step 1) définit le connecteur.
- * Étapes : (1) Général (type, nom, moteur, plateforme, tags), (2) Automatisme & Paramètres (quel job/workflow appeler + paramètres, ou étapes workflow), (3) Impact & Changement.
+ * Étapes : (1) Général (type, nom, moteur, plateforme, tags), (2) Automatisme & Paramètres (quel job/workflow appeler + paramètres, ou étapes workflow), (3) Impact (règles d'impact, niveau par défaut).
  *
  * Story 9.5: Support for workflows (item_type='workflow') with WorkflowStepsEditor.
  */
@@ -42,7 +42,7 @@ import { WizardStep3ImpactChangement } from './WizardStep3ImpactChangement';
 const STEP_ITEMS = [
   { title: 'Général', content: 'Type, nom, moteur, intégration, tags' },
   { title: 'Automatisme & Paramètres', content: 'Configuration selon le type' },
-  { title: 'Impact & Changement', content: 'Règles d\'impact, niveau par défaut' },
+  { title: 'Impact', content: 'Règles d\'impact, niveau par défaut' },
 ];
 
 export interface ActionWizardProps {
@@ -482,6 +482,7 @@ export function ActionWizard({
               setWorkflowSteps={setWorkflowSteps}
               workflowViewMode={workflowViewMode}
               setWorkflowViewMode={setWorkflowViewMode}
+              workflowId={editAction?.id}
             />
           )}
           {currentStep === 2 && (

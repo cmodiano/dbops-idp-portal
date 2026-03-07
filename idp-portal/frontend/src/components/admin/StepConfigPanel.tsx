@@ -36,6 +36,8 @@ export interface StepConfigPanelProps {
   availableStepIds?: string[];
   /** Story 57.19: Pre-computed step options with readable labels */
   availableStepOptions?: { value: string; label: string }[];
+  /** Story 63.3: ID du workflow pour le VariablePicker. */
+  workflowId?: number;
 }
 
 export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({
@@ -47,6 +49,7 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({
   disabled = false,
   availableStepIds = [],
   availableStepOptions,
+  workflowId,
 }) => {
   const data = node?.data as unknown as WorkflowStepNodeData | undefined;
 
@@ -266,6 +269,8 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({
             onUpdate={handleUpdate}
             disabled={disabled}
             availableStepOptions={availableStepOptions}
+            availableStepIds={availableStepIds}
+            workflowId={workflowId}
           />
         )}
 
@@ -297,6 +302,8 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({
             onUpdate={handleUpdate}
             disabled={disabled}
             availableStepOptions={availableStepOptions}
+            availableStepIds={availableStepIds}
+            workflowId={workflowId}
           />
         )}
 

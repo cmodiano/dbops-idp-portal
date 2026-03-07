@@ -137,6 +137,8 @@ export interface WizardStep2AutomatismeProps {
   setWorkflowSteps: (steps: WorkflowStep[]) => void;
   workflowViewMode: 'list' | 'visual';
   setWorkflowViewMode: (mode: 'list' | 'visual') => void;
+  /** Story 63.3: ID du workflow pour le VariablePicker. */
+  workflowId?: number;
 }
 
 export function WizardStep2Automatisme({
@@ -154,6 +156,7 @@ export function WizardStep2Automatisme({
   setWorkflowSteps,
   workflowViewMode,
   setWorkflowViewMode,
+  workflowId,
 }: WizardStep2AutomatismeProps) {
   return (
     <Space orientation="vertical" style={{ width: '100%' }} size="middle">
@@ -191,6 +194,7 @@ export function WizardStep2Automatisme({
                 steps={workflowSteps}
                 onChange={setWorkflowSteps}
                 disabled={isReadOnly}
+                workflowId={workflowId}
               />
             )}
           </Space>

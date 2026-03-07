@@ -1,6 +1,6 @@
 /**
  * ActionWizard tests (Story 2.22, AC #1–#5, Task 7; Story 4.10 AC4).
- * - Wizard 3 steps: Général, Automatisme & Paramètres, Impact & Changement. 1 action = 1 étape. Plateforme définit le connecteur.
+ * - Wizard 3 steps: Général, Automatisme & Paramètres, Impact. 1 action = 1 étape. Plateforme définit le connecteur.
  */
 
 import React from 'react';
@@ -130,13 +130,13 @@ describe('ActionWizard', () => {
   });
 
   describe('AC1: Ouverture du wizard', () => {
-    it('affiche 3 étapes : Général, Automatisme & Paramètres, Impact & Changement', async () => {
+    it('affiche 3 étapes : Général, Automatisme & Paramètres, Impact', async () => {
       await act(async () => {
         render(<ActionWizard {...defaultProps} />);
       });
       expect(screen.getByText('Général')).toBeInTheDocument();
       expect(screen.getByText('Automatisme & Paramètres')).toBeInTheDocument();
-      expect(screen.getByText('Impact & Changement')).toBeInTheDocument();
+      expect(screen.getByText('Impact')).toBeInTheDocument();
     });
 
     it("affiche le contenu de l'étape 1 (champs Général) - Story 2.23: Catégorie removed", async () => {

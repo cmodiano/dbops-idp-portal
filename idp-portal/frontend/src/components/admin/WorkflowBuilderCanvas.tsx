@@ -64,6 +64,8 @@ export interface WorkflowBuilderCanvasProps {
   workflowMetadata?: WorkflowMetadata;
   /** Callback when import replaces metadata (name, description, tags). Story 16.8. */
   onMetadataImport?: (metadata: WorkflowMetadata) => void;
+  /** Story 63.3: ID du workflow pour le VariablePicker. */
+  workflowId?: number;
 }
 
 function WorkflowBuilderCanvasInner({
@@ -72,6 +74,7 @@ function WorkflowBuilderCanvasInner({
   disabled = false,
   workflowMetadata,
   onMetadataImport,
+  workflowId,
 }: WorkflowBuilderCanvasProps) {
   const { token } = theme.useToken();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
@@ -153,6 +156,7 @@ function WorkflowBuilderCanvasInner({
         disabled={disabled}
         availableStepIds={graph.workflowStepIds}
         availableStepOptions={graph.workflowStepOptions}
+        workflowId={workflowId}
       />
 
       <ValidationReportPanel

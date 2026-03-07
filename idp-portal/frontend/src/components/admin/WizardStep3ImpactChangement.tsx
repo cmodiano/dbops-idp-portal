@@ -1,5 +1,5 @@
 /**
- * WizardStep3ImpactChangement — Étape 3 du wizard (Impact & Changement) extraite de ActionWizard (Story 33.5, Task 5).
+ * WizardStep3ImpactChangement — Étape 3 du wizard (Impact) extraite de ActionWizard (Story 33.5, Task 5).
  * Contient : règles d'impact, niveau par défaut.
  * Règles métier et Notifications : déplacées au niveau des étapes de workflow (EvaluationStepConfig, service_call).
  */

@@ -7,6 +7,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ServiceCallStepConfig } from './ServiceCallStepConfig';
+
+vi.mock('../../../hooks/useOutputSchemas', () => ({
+  useOutputSchemas: () => ({ availableVariables: [], loading: false, error: null }),
+}));
 import {
   SERVICE_CALL_OPERATIONS,
   INTEGRATION_LABELS,
@@ -175,5 +179,35 @@ describe('ServiceCallStepConfig — notification integration_type (Story 16.9, A
     render(<ServiceCallStepConfig data={baseData} onUpdate={vi.fn()} />);
     expect(screen.getByText('ServiceNow')).toBeInTheDocument();
     expect(screen.getByText('Créer un change')).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Story 63.3 — VariablePicker intégration
+// ---------------------------------------------------------------------------
+
+const dataWithMapping = { ...baseData, input_mapping: { param1: 'value1' } };
+
+describe('ServiceCallStepConfig — VariablePicker (Story 63.3)', () => {
+  it('passe workflowId au composant enfant via KeyValueEditor', () => {
+    // Le VariablePicker est rendu par KeyValueEditor — avec au moins une ligne input_mapping
+    // et workflowId fourni, il doit apparaître dans le DOM (via data-testid du trigger).
+    const { container } = render(
+      <ServiceCallStepConfig
+        data={dataWithMapping}
+        onUpdate={vi.fn()}
+        workflowId={42}
+        availableStepIds={['sc-1', 'sc-2']}
+      />
+    );
+    // Le VariablePicker trigger (CodeOutlined) doit être présent pour chaque ligne
+    expect(container.querySelector('[data-testid="variable-picker-trigger"]')).toBeInTheDocument();
+  });
+
+  it('ne rend pas le VariablePicker si workflowId est undefined', () => {
+    const { container } = render(
+      <ServiceCallStepConfig data={dataWithMapping} onUpdate={vi.fn()} />
+    );
+    expect(container.querySelector('[data-testid="variable-picker-trigger"]')).not.toBeInTheDocument();
   });
 });

@@ -28,6 +28,10 @@ export interface ServiceCallStepConfigProps {
   disabled?: boolean;
   /** Story 57.20: Step options with readable labels for MappingHelpPopover. */
   availableStepOptions?: { value: string; label: string }[];
+  /** Story 63.3: Step IDs disponibles pour le VariablePicker. */
+  availableStepIds?: string[];
+  /** Story 63.3: ID du workflow pour le VariablePicker. */
+  workflowId?: number;
 }
 
 export const ServiceCallStepConfig: React.FC<ServiceCallStepConfigProps> = ({
@@ -35,6 +39,8 @@ export const ServiceCallStepConfig: React.FC<ServiceCallStepConfigProps> = ({
   onUpdate,
   disabled = false,
   availableStepOptions,
+  availableStepIds,
+  workflowId,
 }) => {
   const availableOperations = data.integration_type
     ? (SERVICE_CALL_OPERATIONS[data.integration_type] ?? [])
@@ -111,6 +117,9 @@ export const ServiceCallStepConfig: React.FC<ServiceCallStepConfigProps> = ({
           valuePlaceholder="{{ steps.<step_id>.<champ> }}"
           data-testid="input-mapping-editor"
           warnings={inputMappingWarnings}
+          workflowId={workflowId}
+          currentStepId={data.step_id}
+          availableStepIds={availableStepIds}
         />
       </div>
 
