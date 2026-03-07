@@ -318,6 +318,9 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_CLASSES': [
         'core.throttling.GeneralAPIThrottle',  # Story 17.11 - default rate limit for all API endpoints
     ],
+    # SEC-7: 1 proxy (Nginx) → DRF reads last IP in XFF (= Nginx-injected real IP)
+    # With nginx-django.conf using $remote_addr, XFF contains only 1 IP → NUM_PROXIES=1 is correct.
+    'NUM_PROXIES': 1,
     'DEFAULT_THROTTLE_RATES': {
         'auth': os.getenv('THROTTLE_AUTH_RATE', '10/minute'),
         'token_refresh': os.getenv('THROTTLE_TOKEN_REFRESH_RATE', '20/minute'),
