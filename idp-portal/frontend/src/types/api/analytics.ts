@@ -147,3 +147,63 @@ export interface ComparisonFilters {
   /** End date of second period (for period dimension). */
   period2End?: string;
 }
+
+// === Stats Catalogue Admin Types (Story 60.1 / 60.3) ===
+
+export interface StatsCatalogueByStatus {
+  status: string;
+  count: number;
+}
+
+export interface StatsCatalogueByItemType {
+  item_type: string;
+  count: number;
+}
+
+export interface StatsCatalogueByEngine {
+  engine: string;
+  count: number;
+}
+
+export interface StatsCatalogueByCategory {
+  category: string | null;
+  count: number;
+}
+
+export interface StatsCatalogueEvolutionPoint {
+  week_start: string; // YYYY-MM-DD
+  created_count: number;
+  published_count: number;
+}
+
+export interface StatsCatalogueData {
+  by_status: StatsCatalogueByStatus[];
+  by_item_type: StatsCatalogueByItemType[];
+  by_engine: StatsCatalogueByEngine[];
+  by_category: StatsCatalogueByCategory[];
+  evolution: StatsCatalogueEvolutionPoint[];
+}
+
+// === Stats Adoption Admin Types (Story 60.2 / 60.3) ===
+
+export interface StatsAdoptionByProfile {
+  profile: string;
+  count: number;
+}
+
+export interface StatsAdoptionActiveUser {
+  profile: string;
+  user_count: number;
+}
+
+export interface StatsAdoptionTrendPoint {
+  week_start: string; // YYYY-MM-DD
+  profile: string;
+  count: number;
+}
+
+export interface StatsAdoptionData {
+  executions_by_profile: StatsAdoptionByProfile[];
+  active_users_by_profile: StatsAdoptionActiveUser[];
+  adoption_trend: StatsAdoptionTrendPoint[];
+}

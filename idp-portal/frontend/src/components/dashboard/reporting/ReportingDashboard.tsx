@@ -25,6 +25,7 @@ import { ComparisonChart } from './ComparisonChart';
 import { PeriodComparisonChart } from './PeriodComparisonChart';
 import { ComparisonSummaryCards } from './ComparisonSummaryCards';
 import { ComparisonExecutionsDrawer } from './ComparisonExecutionsDrawer';
+import { AdminPlatformSection } from './AdminPlatformSection';
 import logger from '../../../services/logger';
 import {
   fetchStatsByTechnology,
@@ -92,6 +93,12 @@ export function ReportingDashboard() {
 
   // Current period from filters or default
   const period = filters.days || 14;
+
+  // Build API filters object (used by both data loading and child components)
+  const apiFilters: DashboardFilters = {
+    ...filters,
+    days: hasCustomDateRange ? undefined : period,
+  };
 
   // Handle period change via Segmented
   const handlePeriodChange = useCallback(
@@ -175,12 +182,6 @@ export function ReportingDashboard() {
       setLoading(true);
       setError(null);
 
-      // Build API filters object
-      const apiFilters: DashboardFilters = {
-        ...filters,
-        days: hasCustomDateRange ? undefined : period,
-      };
-
       try {
         // Story 9.4: stats (StatCards) moved to ExecutionsPage
         const [techData, envData, timeData] = await Promise.all([
@@ -257,6 +258,9 @@ export function ReportingDashboard() {
           )}
 
           {/* Story 9.4: StatCards moved to ExecutionsPage */}
+
+          {/* Section admin — Utilisation de la plateforme (Story 60.3) */}
+          <AdminPlatformSection filters={apiFilters} />
 
           {/* Bar charts row */}
           <Row gutter={[16, 16]}>

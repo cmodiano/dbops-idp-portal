@@ -15,6 +15,8 @@ import type {
   FilterOptions,
   ComparisonFilters,
   ComparisonResult,
+  StatsCatalogueData,
+  StatsAdoptionData,
 } from '../types/api';
 
 /**
@@ -184,6 +186,36 @@ export async function exportDashboardPDF(filters: DashboardFilters = {}): Promis
   const blob = await apiFetchBlob(url);
   const filename = generateExportFilename('pdf');
   downloadBlob(blob, filename);
+}
+
+// === Admin Stats Functions (Story 60.3) ===
+
+/**
+ * Fetch catalogue statistics for admin (Story 60.1, AC1; Story 60.3, AC3).
+ *
+ * Returns metrics about published actions, workflows, engines, categories, and evolution.
+ * Requires AdminProfilePermission (DBOPS only) — returns 403 for other profiles.
+ *
+ * @param filters Optional filters including days, fromDate, toDate
+ * @returns StatsCatalogueData
+ */
+export async function fetchStatsCatalogue(filters: DashboardFilters = {}): Promise<StatsCatalogueData> {
+  const params = buildFilterParams({ days: 30, ...filters });
+  return apiFetch<StatsCatalogueData>(`/dashboard/stats-catalogue?${params.toString()}`);
+}
+
+/**
+ * Fetch adoption statistics by user profile (Story 60.2, AC1; Story 60.3, AC3).
+ *
+ * Returns executions and active users grouped by profile, plus adoption trend.
+ * Requires IsAuthenticated.
+ *
+ * @param filters Optional filters including days, fromDate, toDate
+ * @returns StatsAdoptionData
+ */
+export async function fetchStatsAdoption(filters: DashboardFilters = {}): Promise<StatsAdoptionData> {
+  const params = buildFilterParams({ days: 14, ...filters });
+  return apiFetch<StatsAdoptionData>(`/dashboard/stats-adoption?${params.toString()}`);
 }
 
 // === Comparison Functions (Story 8.6) ===

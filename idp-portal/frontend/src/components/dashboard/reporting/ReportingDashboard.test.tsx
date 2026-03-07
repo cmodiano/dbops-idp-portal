@@ -38,6 +38,7 @@ function renderWithRouter(component: React.ReactNode) {
 }
 
 // Mock dashboard service (Story 9.4: fetchStats removed - StatCards moved to ExecutionsPage)
+// Story 60.3: fetchStatsCatalogue and fetchStatsAdoption added for AdminPlatformSection
 vi.mock('../../../services/dashboard_service', () => ({
   fetchStatsByTechnology: vi.fn(),
   fetchStatsByEnvironment: vi.fn(),
@@ -46,6 +47,8 @@ vi.mock('../../../services/dashboard_service', () => ({
   exportDashboardCSV: vi.fn(),
   exportDashboardPDF: vi.fn(),
   fetchComparison: vi.fn(),
+  fetchStatsCatalogue: vi.fn(),
+  fetchStatsAdoption: vi.fn(),
 }));
 
 // Story 9.4: mockStats removed - StatCards moved to ExecutionsPage
@@ -82,6 +85,13 @@ describe('ReportingDashboard', () => {
     vi.mocked(dashboardService.fetchFilterOptions).mockResolvedValue(mockFilterOptions);
     vi.mocked(dashboardService.exportDashboardCSV).mockResolvedValue();
     vi.mocked(dashboardService.exportDashboardPDF).mockResolvedValue();
+    // Story 60.3: mock AdminPlatformSection services
+    vi.mocked(dashboardService.fetchStatsCatalogue).mockResolvedValue({
+      by_status: [], by_item_type: [], by_engine: [], by_category: [], evolution: [],
+    });
+    vi.mocked(dashboardService.fetchStatsAdoption).mockResolvedValue({
+      executions_by_profile: [], active_users_by_profile: [], adoption_trend: [],
+    });
   });
 
   // Story 9.4: StatCards tests removed - moved to ExecutionsPage.test.tsx

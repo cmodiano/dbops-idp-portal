@@ -102,6 +102,9 @@ vi.mock('../../../services/dashboard_service', () => ({
   exportDashboardCSV: vi.fn(),
   exportDashboardPDF: vi.fn(),
   fetchComparison: vi.fn(),
+  // Story 60.3: mock AdminPlatformSection services
+  fetchStatsCatalogue: vi.fn(),
+  fetchStatsAdoption: vi.fn(),
 }));
 
 vi.mock('../../../services/logger', () => ({
@@ -158,6 +161,13 @@ describe('ReportingDashboard - coverage 55.7 (comparison/drill-down)', () => {
       statuses: [],
     });
     vi.mocked(dashboardService.fetchComparison).mockResolvedValue(mockComparisonResult as never);
+    // Story 60.3: mock AdminPlatformSection services
+    vi.mocked(dashboardService.fetchStatsCatalogue).mockResolvedValue({
+      by_status: [], by_item_type: [], by_engine: [], by_category: [], evolution: [],
+    });
+    vi.mocked(dashboardService.fetchStatsAdoption).mockResolvedValue({
+      executions_by_profile: [], active_users_by_profile: [], adoption_trend: [],
+    });
   });
 
   it('handleCompare — appelle fetchComparison et affiche ComparisonSummaryCards (lines 304-324)', async () => {
@@ -323,6 +333,13 @@ describe('ReportingDashboard - coverage 55.7 (comparison/drill-down)', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('comparison-executions-drawer')).not.toBeInTheDocument();
     });
+  });
+
+  it('AdminPlatformSection non affiché en mode comparison (AC8)', async () => {
+    await setupComparisonMode();
+
+    // La section "Utilisation de la plateforme" ne doit pas être présente en mode comparison
+    expect(screen.queryByText('Utilisation de la plateforme')).not.toBeInTheDocument();
   });
 
   it('handleFiltersChange — met à jour les filtres (line 112)', async () => {
