@@ -172,6 +172,8 @@ class RetryHandler:
                 entity_type=AuditEntityType.EXECUTION,
                 entity_id=self.execution.id,
                 details={
+                    'execution_id': str(self.execution.id),
+                    'action_name': self.execution.action.name if self.execution.action else None,
                     'step_id': step_id,
                     'attempt': 1,
                     'max_attempts': max_attempts,
@@ -197,6 +199,8 @@ class RetryHandler:
                 entity_type=AuditEntityType.EXECUTION,
                 entity_id=self.execution.id,
                 details={
+                    'execution_id': str(self.execution.id),
+                    'action_name': self.execution.action.name if self.execution.action else None,
                     'step_id': step_id,
                     'attempt': 1,
                     'max_attempts': max_attempts,
@@ -229,6 +233,8 @@ class RetryHandler:
                 entity_type=AuditEntityType.EXECUTION,
                 entity_id=self.execution.id,
                 details={
+                    'execution_id': str(self.execution.id),
+                    'action_name': self.execution.action.name if self.execution.action else None,
                     'step_id': step_id,
                     'attempt': 1,
                     'max_attempts': max_attempts,
@@ -272,8 +278,10 @@ class RetryHandler:
             entity_type=AuditEntityType.EXECUTION,
             entity_id=self.execution.id,
             details={
+                'execution_id': str(self.execution.id),
+                'action_name': self.execution.action.name if self.execution.action else None,
                 'step_id': step_id,
-                'max_attempts': 1,
+                'max_attempts': max_attempts,
                 'final_error': result.error_message,
             },
             correlation_id=self.correlation_id,

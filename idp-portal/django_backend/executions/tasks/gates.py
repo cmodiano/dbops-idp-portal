@@ -189,6 +189,8 @@ def _transition_step_to_running(step: ExecutionStep, gate_status: dict, correlat
         entity_type=AuditEntityType.EXECUTION,
         entity_id=step.execution_id,
         details={
+            'execution_id': str(step.execution_id),
+            'action_name': step.execution.action.name if step.execution.action else None,
             'step_id': step.id,
             'step_order': step.step_order,
             'step_name': step.step_name,
@@ -349,6 +351,8 @@ def _handle_gate_timeout(step: ExecutionStep, gate_status: dict, correlation_id:
         entity_type=AuditEntityType.EXECUTION,
         entity_id=step.execution_id,
         details={
+            'execution_id': str(step.execution_id),
+            'action_name': step.execution.action.name if step.execution.action else None,
             'step_id': step.id,
             'step_order': step.step_order,
             'step_name': step.step_name,

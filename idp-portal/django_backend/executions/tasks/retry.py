@@ -59,7 +59,7 @@ def retry_workflow_step(self: Any, execution_id: int, step: dict, attempt: int) 
             }
 
         # Load execution and create runtime
-        execution = Execution.objects.get(id=execution_id)
+        execution = Execution.objects.select_related('action').get(id=execution_id)
         from executions.workflow_runtime import WorkflowRuntime
         runtime = WorkflowRuntime(execution)
 
@@ -80,6 +80,8 @@ def retry_workflow_step(self: Any, execution_id: int, step: dict, attempt: int) 
                 entity_type=AuditEntityType.EXECUTION,
                 entity_id=execution_id,
                 details={
+                    'execution_id': str(execution_id),
+                    'action_name': execution.action.name if execution.action else None,
                     'step_id': step_id,
                     'attempt': attempt,
                     'max_attempts': step.get('retry_max_attempts', 3),
@@ -106,8 +108,11 @@ def retry_workflow_step(self: Any, execution_id: int, step: dict, attempt: int) 
                 entity_type=AuditEntityType.EXECUTION,
                 entity_id=execution_id,
                 details={
+                    'execution_id': str(execution_id),
+                    'action_name': execution.action.name if execution.action else None,
                     'step_id': step_id,
                     'attempt': attempt,
+                    'max_attempts': step.get('retry_max_attempts', 3),
                     'reason': 'non_retryable_error',
                     'error': result.error_message,
                 },
@@ -133,6 +138,8 @@ def retry_workflow_step(self: Any, execution_id: int, step: dict, attempt: int) 
                 entity_type=AuditEntityType.EXECUTION,
                 entity_id=execution_id,
                 details={
+                    'execution_id': str(execution_id),
+                    'action_name': execution.action.name if execution.action else None,
                     'step_id': step_id,
                     'max_attempts': max_attempts,
                     'final_error': result.error_message,
@@ -164,6 +171,8 @@ def retry_workflow_step(self: Any, execution_id: int, step: dict, attempt: int) 
             entity_type=AuditEntityType.EXECUTION,
             entity_id=execution_id,
             details={
+                'execution_id': str(execution_id),
+                'action_name': execution.action.name if execution.action else None,
                 'step_id': step_id,
                 'attempt': attempt,
                 'max_attempts': max_attempts,

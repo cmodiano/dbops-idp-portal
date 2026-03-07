@@ -7,7 +7,7 @@
  */
 
 import React from 'react';
-import { Popover, Typography } from 'antd';
+import { Popover, Typography, theme } from 'antd';
 import { QuestionCircleOutlined } from '@ant-design/icons';
 
 const { Text, Title } = Typography;
@@ -41,26 +41,43 @@ export interface MappingHelpPopoverProps {
 }
 
 function InputHelpContent({ availableSteps }: { availableSteps?: { value: string; label: string }[] }) {
+  const { token } = theme.useToken();
+  const codeBlockStyle = {
+    background: token.colorBgElevated,
+    color: token.colorText,
+    padding: 8,
+    borderRadius: 4,
+    margin: '8px 0' as const,
+    fontSize: 12,
+    border: `1px solid ${token.colorBorder}`,
+  };
+  const inlineCodeStyle = {
+    background: token.colorFillQuaternary,
+    color: token.colorText,
+    padding: '0 4px',
+    borderRadius: 2,
+    fontFamily: 'monospace',
+  };
   return (
     <div style={{ maxWidth: 340 }} data-testid="input-help-content">
       <Title level={5} style={{ margin: '0 0 8px' }}>Syntaxe input_mapping</Title>
       <Text>
         Utilisez la syntaxe Jinja2 pour référencer les résultats des étapes précédentes :
       </Text>
-      <pre style={{ background: '#f5f5f5', padding: 8, borderRadius: 4, margin: '8px 0', fontSize: 12 }}>
+      <pre style={{ ...codeBlockStyle, margin: '8px 0' }}>
         {'{{ steps.<step_id>.<champ> }}'}
       </pre>
 
       <Text strong style={{ display: 'block', margin: '8px 0 4px' }}>Filtres autorisés :</Text>
       <ul style={{ paddingLeft: 20, margin: '0 0 8px', fontSize: 13 }}>
-        <li><code>join(', ')</code> — concatène une liste</li>
-        <li><code>length</code> — nombre d'éléments</li>
-        <li><code>first</code> — premier élément</li>
-        <li><code>default('valeur', true)</code> — valeur par défaut</li>
+        <li><code style={inlineCodeStyle}>join(', ')</code> — concatène une liste</li>
+        <li><code style={inlineCodeStyle}>length</code> — nombre d'éléments</li>
+        <li><code style={inlineCodeStyle}>first</code> — premier élément</li>
+        <li><code style={inlineCodeStyle}>default('valeur', true)</code> — valeur par défaut</li>
       </ul>
 
       <Text strong style={{ display: 'block', margin: '8px 0 4px' }}>Exemple :</Text>
-      <pre style={{ background: '#f5f5f5', padding: 8, borderRadius: 4, margin: '0 0 8px', fontSize: 12 }}>
+      <pre style={{ ...codeBlockStyle, margin: '0 0 8px' }}>
         {"{{ steps.discovery.databases | join(', ') }}"}
       </pre>
 
@@ -72,7 +89,7 @@ function InputHelpContent({ availableSteps }: { availableSteps?: { value: string
               <li key={step.value}>
                 <Text>{step.label}</Text>
                 {' — '}
-                <code>{`{{ steps.${step.value}. }}`}</code>
+                <code style={inlineCodeStyle}>{`{{ steps.${step.value}. }}`}</code>
               </li>
             ))}
           </ul>
@@ -83,7 +100,25 @@ function InputHelpContent({ availableSteps }: { availableSteps?: { value: string
 }
 
 function OutputHelpContent({ stepType }: { stepType?: string }) {
+  const { token } = theme.useToken();
   const outputs = stepType ? TYPICAL_OUTPUTS[stepType] : undefined;
+
+  const codeBlockStyle = {
+    background: token.colorBgElevated,
+    color: token.colorText,
+    padding: 8,
+    borderRadius: 4,
+    margin: '8px 0' as const,
+    fontSize: 12,
+    border: `1px solid ${token.colorBorder}`,
+  };
+  const inlineCodeStyle = {
+    background: token.colorFillQuaternary,
+    color: token.colorText,
+    padding: '0 4px',
+    borderRadius: 2,
+    fontFamily: 'monospace',
+  };
 
   return (
     <div style={{ maxWidth: 340 }} data-testid="output-help-content">
@@ -91,16 +126,16 @@ function OutputHelpContent({ stepType }: { stepType?: string }) {
       <Text>
         Utilisez la dot-notation pour extraire des champs de la réponse :
       </Text>
-      <pre style={{ background: '#f5f5f5', padding: 8, borderRadius: 4, margin: '8px 0', fontSize: 12 }}>
+      <pre style={codeBlockStyle}>
         $.chemin.vers.champ
       </pre>
       <Text type="secondary" style={{ display: 'block', margin: '0 0 8px', fontSize: 12 }}>
-        Le préfixe <code>$.</code> est optionnel — <code>data.databases</code> fonctionne aussi.
+        Le préfixe <code style={inlineCodeStyle}>$.</code> est optionnel — <code style={inlineCodeStyle}>data.databases</code> fonctionne aussi.
       </Text>
 
       <Text strong style={{ display: 'block', margin: '8px 0 4px' }}>Exemple :</Text>
       <Text style={{ fontSize: 13 }}>
-        Clé <code>databases</code> → Valeur <code>$.data.databases</code>
+        Clé <code style={inlineCodeStyle}>databases</code> → Valeur <code style={inlineCodeStyle}>$.data.databases</code>
       </Text>
 
       {outputs && (
@@ -110,7 +145,7 @@ function OutputHelpContent({ stepType }: { stepType?: string }) {
           </Text>
           <ul style={{ paddingLeft: 20, margin: '0 0 4px', fontSize: 13 }}>
             {outputs.fields.map((f) => (
-              <li key={f}><code>{f}</code></li>
+              <li key={f}><code style={inlineCodeStyle}>{f}</code></li>
             ))}
           </ul>
           <Text type="secondary" style={{ fontSize: 12 }}>{outputs.note}</Text>
@@ -119,7 +154,7 @@ function OutputHelpContent({ stepType }: { stepType?: string }) {
 
       <Text type="secondary" style={{ display: 'block', margin: '8px 0 0', fontSize: 12 }}>
         Les champs extraits seront accessibles par les étapes suivantes via{' '}
-        <code>{'{{ steps.<step_id>.<champ_extrait> }}'}</code>
+        <code style={inlineCodeStyle}>{'{{ steps.<step_id>.<champ_extrait> }}'}</code>
       </Text>
     </div>
   );
