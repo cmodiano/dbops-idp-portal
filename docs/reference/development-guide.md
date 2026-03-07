@@ -114,10 +114,10 @@ Fichier `.env` à la racine de `idp-portal/` ou dans `django_backend/` : `ORACLE
 
 Voir **CONTRIBUTING.md** à la racine du dépôt :
 
-- Onboarding : `idp-portal/django_backend/docs/onboarding/README.md`
-- ADRs : `idp-portal/django_backend/docs/decisions/README.md`
-- Checklist endpoints : `idp-portal/django_backend/docs/standards/endpoint-checklist.md`
-- Sécurité : `idp-portal/django_backend/docs/security/` (common-pitfalls, pre-pr-checklist)
+- Onboarding : [backend/onboarding/README.md](../backend/onboarding/README.md)
+- ADRs : [backend/decisions/README.md](../backend/decisions/README.md)
+- Checklist endpoints : [backend/standards/endpoint-checklist.md](../backend/standards/endpoint-checklist.md)
+- Sécurité : [common-pitfalls](../backend/security-django/common-pitfalls.md), [pre-pr-checklist](../backend/security-django/pre-pr-checklist.md)
 - Tests : viser ≥80% de couverture, pytest-django + factory_boy
 
 ---

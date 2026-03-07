@@ -293,7 +293,14 @@ class ContainerWorkflowRuntime:
         input_mapping = step.get('input_mapping', {})
         resolved_params: dict = {}
         if input_mapping and isinstance(input_mapping, dict):
-            resolver = StepTemplateResolver(self._step_outputs)
+            resolver = StepTemplateResolver(
+                self._step_outputs,
+                execution_context={
+                    'action_name': getattr(self.action, 'name', ''),
+                    'environment': self.execution.environment,
+                    'execution_id': self.execution.id,
+                },
+            )
             resolved_params = resolver.resolve(input_mapping)
         elif input_mapping and not isinstance(input_mapping, dict):
             logger.warning(

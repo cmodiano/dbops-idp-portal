@@ -7,6 +7,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { HttpRequestStepConfig } from './HttpRequestStepConfig';
 
+vi.mock('../../../hooks/useOutputSchemas', () => ({
+  useOutputSchemas: () => ({ availableVariables: [], loading: false, error: null }),
+}));
+
 const baseData = {
   name: null,
   label: 'HTTP Request',
@@ -57,5 +61,32 @@ describe('HttpRequestStepConfig — validation warnings (Story 57.20, AC5)', () 
     );
     expect(screen.getByTestId('params-editor-warning')).toBeInTheDocument();
     expect(screen.getByText(/Référence inconnue : step_id 'bad_step'/)).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Story 63.3 — VariablePicker intégration
+// ---------------------------------------------------------------------------
+
+const dataWithMapping = { ...baseData, input_mapping: { param1: 'value1' } };
+
+describe('HttpRequestStepConfig — VariablePicker (Story 63.3)', () => {
+  it('passe workflowId au composant enfant via KeyValueEditor', () => {
+    const { container } = render(
+      <HttpRequestStepConfig
+        data={dataWithMapping}
+        onUpdate={vi.fn()}
+        workflowId={42}
+        availableStepIds={['hr-1', 'hr-2']}
+      />
+    );
+    expect(container.querySelector('[data-testid="variable-picker-trigger"]')).toBeInTheDocument();
+  });
+
+  it('ne rend pas le VariablePicker si workflowId est undefined', () => {
+    const { container } = render(
+      <HttpRequestStepConfig data={dataWithMapping} onUpdate={vi.fn()} />
+    );
+    expect(container.querySelector('[data-testid="variable-picker-trigger"]')).not.toBeInTheDocument();
   });
 });

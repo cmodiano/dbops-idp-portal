@@ -1,0 +1,31 @@
+items:
+  - apiVersion: idp/v1
+    kind: OutputSchema
+    metadata:
+      name: servicenow-get-change-status
+      schema_type: integration
+      target_name: servicenow
+      operation: get_change_status
+    spec:
+      inherits_from: null
+      output_fields:
+        - name: change_id
+          path: "$.change_id"
+          type: string
+          description: "ID du change request (contrat get_change_status)"
+          required: true
+        - name: number
+          path: "$.number"
+          type: string
+          description: "Numéro du changement ServiceNow (contrat get_change_status)"
+          required: false
+        - name: state
+          path: "$.state"
+          type: string
+          description: "État actuel du changement (contrat get_change_status)"
+          required: false
+        - name: priority
+          path: "$.priority"
+          type: integer
+          description: "Priorité du changement (contrat get_change_status)"
+          required: false

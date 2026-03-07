@@ -1,0 +1,26 @@
+items:
+  - apiVersion: idp/v1
+    kind: OutputSchema
+    metadata:
+      name: servicenow-close-change
+      schema_type: integration
+      target_name: servicenow
+      operation: close_change
+    spec:
+      inherits_from: null
+      output_fields:
+        - name: sys_id
+          path: "$.sys_id"
+          type: string
+          description: "ID système ServiceNow du changement clôturé"
+          required: true
+        - name: close_code
+          path: "$.close_code"
+          type: string
+          description: "Code de clôture du changement"
+          required: false
+        - name: close_notes
+          path: "$.close_notes"
+          type: string
+          description: "Notes de clôture du changement"
+          required: false

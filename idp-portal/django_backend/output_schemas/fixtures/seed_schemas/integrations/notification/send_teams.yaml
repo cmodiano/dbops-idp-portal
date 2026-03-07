@@ -1,0 +1,21 @@
+items:
+  - apiVersion: idp/v1
+    kind: OutputSchema
+    metadata:
+      name: notification-send-teams
+      schema_type: integration
+      target_name: notification
+      operation: send_teams
+    spec:
+      inherits_from: null
+      output_fields:
+        - name: status
+          path: "$.status"
+          type: string
+          description: "Statut de l'envoi du message Teams (sent, failed)"
+          required: true
+        - name: channel_id
+          path: "$.channel_id"
+          type: string
+          description: "Identifiant du canal Teams destinataire"
+          required: false

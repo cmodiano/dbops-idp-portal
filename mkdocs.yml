@@ -1,0 +1,124 @@
+# MkDocs Material - Documentation IDP Portal
+# https://squidfunk.github.io/mkdocs-material/
+
+site_name: IDP Portal - Documentation
+site_description: Documentation technique du portail développeur interne
+site_author: DB Automation Team
+
+theme:
+  name: material
+  language: fr
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Mode sombre
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Mode clair
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.tabs.link
+    - content.code.copy
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+nav:
+  - Accueil: index.md
+  - Vue d'ensemble:
+    - overview/index.md
+    - overview/project-overview.md
+    - overview/project-structure.md
+    - overview/technology-stack.md
+    - overview/source-tree-analysis.md
+    - overview/comprehensive-analysis.md
+    - overview/existing-documentation-inventory.md
+  - Architecture:
+    - architecture/index.md
+    - architecture/frontend.md
+    - architecture/backend.md
+    - architecture/integration.md
+    - architecture/patterns.md
+    - architecture/caching-strategy.md
+    - architecture/container-architecture.md
+    - architecture/infrastructure-as-code-strategy.md
+    - architecture/infrastructure-as-code-implementation-guide.md
+  - API:
+    - api/index.md
+    - api/documentation.md
+    - api/contracts-backend.md
+    - api/contracts-frontend.md
+    - api/self-service.md
+  - Backend:
+    - backend/README.md
+    - backend/architecture.md
+    - backend/architecture-django.md
+    - backend/authentication.md
+    - backend/api-reference.md
+    - backend/services.md
+    - backend/apps-structure.md
+    - backend/models.md
+    - backend/rbac.md
+    - backend/security-architecture.md
+    - backend/observability-architecture.md
+    - backend/observability-runbook.md
+    - Décisions (ADR): backend/decisions/README.md
+    - Standards: backend/standards/endpoint-checklist.md
+    - Migration: backend/migration/fastapi-to-django-migration.md
+  - Frontend:
+    - frontend/README.md
+    - frontend/components.md
+    - frontend/component-inventory.md
+    - frontend/state-management.md
+    - frontend/routing.md
+    - frontend/api-integration.md
+    - frontend/api-client-architecture.md
+    - frontend/design-system.md
+    - frontend/folder-structure.md
+    - frontend/testing.md
+  - Opérations:
+    - operations/index.md
+    - operations/deployment.md
+    - operations/exploitation-production.md
+    - operations/polling-tasks.md
+  - Sécurité:
+    - security/index.md
+    - security/architecture-global.md
+    - security/audit-report.md
+    - security/remediation-plan.md
+    - security/compliance-soc1.md
+  - Intégrations:
+    - integrations/index.md
+  - Référence:
+    - reference/index.md
+    - reference/development-guide.md
+    - reference/contribution-guide.md
+    - reference/glossary.md
+    - reference/conventions-dates-timezone.md

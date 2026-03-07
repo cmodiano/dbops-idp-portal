@@ -951,6 +951,12 @@ class TestContainerWorkflowStepOutputs:
         # Pré-charger _step_outputs avec les outputs du step-a
         runtime._step_outputs["step-a"] = {"database": "PROD_DB"}
 
+        expected_execution_context = {
+            'action_name': getattr(runtime.action, 'name', ''),
+            'environment': runtime.execution.environment,
+            'execution_id': runtime.execution.id,
+        }
+
         # Espionner StepTemplateResolver.resolve pour vérifier qu'il est appelé
         with mock_patch('executions.container_workflow_runtime.StepTemplateResolver') as MockResolver:
             mock_resolver_instance = MagicMock()
@@ -960,8 +966,11 @@ class TestContainerWorkflowStepOutputs:
             # Exécuter uniquement step-b (order=2)
             runtime._execute_step(steps[1])
 
-            # Vérifier que StepTemplateResolver a été instancié et appelé
-            MockResolver.assert_called_once_with(runtime._step_outputs)
+            # Vérifier que StepTemplateResolver a été instancié avec les bons arguments
+            MockResolver.assert_called_once()
+            call_args = MockResolver.call_args
+            assert call_args[0][0] is runtime._step_outputs
+            assert call_args[1]['execution_context'] == expected_execution_context
             mock_resolver_instance.resolve.assert_called_once_with({"db": "{{ steps['step-a'].database }}"})
 
     @override_settings(

@@ -268,8 +268,8 @@ Pour ajouter un nouveau moteur au système :
 
 ## 7. Références
 
-- **Glossaire IDP Portal :** [django_backend/docs/glossary.md](../reference/glossary.md) — Définitions formelles engine vs engine_type
-- **Filtres RBAC par attribut :** [django_backend/docs/rbac-filter-by-attribute.md](../backend/rbac-filter-by-attribute.md) — Détails filtrage engine_type dans profils
+- **Glossaire IDP Portal :** [glossary.md](../reference/glossary.md) — Définitions formelles engine vs engine_type
+- **Filtres RBAC par attribut :** [rbac-filter-by-attribute.md](../backend/rbac-filter-by-attribute.md) — Détails filtrage engine_type dans profils
 - **Rapport technique :** [rapport-bases-moteurs-technologies-integrations.md](../integrations/rapport-bases-moteurs-technologies-integrations.md) — Analyse complète des concepts
 - **Migration V049 :** `idp-portal/database/migrations/V049__create_ref_engines.sql` (dépôt) — Création table REF_ENGINES avec valeurs initiales (Oracle, SQL Server, DB2, PostgreSQL, MySQL, Workflow)
 - **InventoryMapper :** `django_backend/inventory/mapper.py` — Mapping colonnes source → concepts business

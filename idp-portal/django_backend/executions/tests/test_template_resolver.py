@@ -194,3 +194,47 @@ class TestStepTemplateResolver:
         proxy = _StepsProxy({})
         with pytest.raises(AttributeError):
             _ = proxy._private
+
+    # --- Story 63.4 : truncate + execution_context ---
+
+    def test_resolve_filter_truncate(self):
+        """AC#2 : filtre truncate disponible — tronque à N caractères."""
+        long_text = "A" * 600
+        resolver = StepTemplateResolver({"step1": {"platform_logs": long_text}})
+        result = resolver.resolve({"logs": "{{ steps.step1.platform_logs | truncate(500) }}"})
+        # truncate(500) produit une chaîne ≤ 500 chars (ajoute '...' à la fin)
+        assert len(result["logs"]) <= 500
+        assert result["logs"].endswith("...")
+
+    def test_resolve_execution_context_variables(self):
+        """AC#1 : action_name, environment, execution_id résolus depuis execution_context."""
+        resolver = StepTemplateResolver(
+            {},
+            execution_context={
+                'action_name': 'Oracle Patching PROD',
+                'environment': 'prod',
+                'execution_id': 42,
+            },
+        )
+        result = resolver.resolve({
+            "subject": "✅ {{ action_name }} terminé dans {{ environment }}",
+            "body": "Exécution {{ execution_id }} : {{ action_name }} terminé.",
+        })
+        assert result["subject"] == "✅ Oracle Patching PROD terminé dans prod"
+        assert result["body"] == "Exécution 42 : Oracle Patching PROD terminé."
+
+    def test_resolve_missing_execution_context_variable_renders_empty(self):
+        """AC#1 : variable de contexte absente → chaîne vide (finalize)."""
+        resolver = StepTemplateResolver(
+            {},
+            execution_context={'action_name': 'Test Action'},
+        )
+        # 'environment' non fourni → Jinja2 Undefined → finalize → ''
+        result = resolver.resolve({"val": "{{ environment }}"})
+        assert result["val"] == ""
+
+    def test_resolve_backward_compatible_without_execution_context(self):
+        """AC#1/AC#5 : StepTemplateResolver({}) sans execution_context fonctionne."""
+        resolver = StepTemplateResolver({"step1": {"field": "value"}})
+        result = resolver.resolve({"out": "{{ steps.step1.field }}"})
+        assert result == {"out": "value"}

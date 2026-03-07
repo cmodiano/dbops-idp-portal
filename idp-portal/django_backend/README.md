@@ -17,6 +17,12 @@ source .venv/bin/activate  # Linux/macOS
 
 # Installer les dépendances
 uv pip install -r requirements-dev.lock --system
+
+# Appliquer les migrations
+python manage.py migrate
+
+# Charger les schémas d'output par défaut (idempotent)
+python manage.py seed_output_schemas
 ```
 
 ## Développement
@@ -62,8 +68,8 @@ mypy .
 ```
 
 **Documentation mypy :**
-- [Guide développeur mypy](docs/mypy-developer-guide.md) - Comment ajouter des annotations de type
-- [Roadmap amélioration](docs/mypy-improvement-roadmap.md) - Historique des phases
+- [Guide développeur mypy](../../docs/backend/mypy-developer-guide.md) - Comment ajouter des annotations de type
+- [Roadmap amélioration](../../docs/backend/mypy-improvement-roadmap.md) - Historique des phases
 
 ### Pre-commit Hooks
 
@@ -118,7 +124,7 @@ python manage.py runserver
 celery -A idp_backend worker -l info
 ```
 
-Voir [docs/workflow-retry-celery.md](docs/workflow-retry-celery.md) pour la documentation complète (architecture, backoff, déploiement production).
+Voir [docs/workflow-retry-celery.md](../../docs/backend/workflow-retry-celery.md) pour la documentation complète (architecture, backoff, déploiement production).
 
 ## Mode Simulation (Story 19.0)
 
@@ -131,11 +137,11 @@ SIMULATE_EXECUTION_FAILURE_RATE=0.1   # 10% d'échecs aléatoires
 SIMULATE_EXECUTION_STEP_DURATION=2    # 2 secondes par étape
 ```
 
-Voir [docs/simulation-mode.md](docs/simulation-mode.md) pour la documentation complète.
+Voir [docs/simulation-mode.md](../../docs/backend/simulation-mode.md) pour la documentation complète.
 
 ## Catalogue des Types d'Intégration (Epic 24 + 27)
 
-Voir [docs/integration-type-catalogue.md](docs/integration-type-catalogue.md) pour l'architecture du catalogue, les 7 types supportés (AAP, Tower, Azure DevOps, GitHub Actions, Terraform Cloud, Vault, ServiceNow), les endpoints API et le guide d'ajout de nouveaux types.
+Voir [docs/integration-type-catalogue.md](../../docs/backend/integration-type-catalogue.md) pour l'architecture du catalogue, les 7 types supportés (AAP, Tower, Azure DevOps, GitHub Actions, Terraform Cloud, Vault, ServiceNow), les endpoints API et le guide d'ajout de nouveaux types.
 
 ## CI/CD
 
@@ -147,7 +153,7 @@ Le pipeline GitHub Actions exécute :
 
 ## Sécurité
 
-Voir [docs/security-remediation-plan.md](docs/security-remediation-plan.md) pour le plan de remédiation des vulnérabilités.
+Voir [docs/security/remediation-plan.md](../../docs/security/remediation-plan.md) pour le plan de remédiation des vulnérabilités.
 
 ## Licence
 

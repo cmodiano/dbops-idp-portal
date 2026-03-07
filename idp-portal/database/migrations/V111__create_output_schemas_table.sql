@@ -1,0 +1,28 @@
+-- V111: Create OUTPUT_SCHEMAS table for output schema definitions
+-- Story 63.1 - Infrastructure des Schémas d'Output (Backend)
+
+CREATE TABLE OUTPUT_SCHEMAS (
+    ID               NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    NAME             VARCHAR2(255) NOT NULL,
+    SCHEMA_TYPE      VARCHAR2(30) NOT NULL,
+    TARGET_NAME      VARCHAR2(255) NOT NULL,
+    OPERATION        VARCHAR2(255),
+    INHERITS_FROM_ID NUMBER REFERENCES OUTPUT_SCHEMAS(ID) ON DELETE SET NULL,
+    SCHEMA_JSON      CLOB CHECK (SCHEMA_JSON IS JSON),
+    CREATED_AT       TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    UPDATED_AT       TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    CONSTRAINT UQ_OUTPUT_SCHEMAS_NAME UNIQUE (NAME),
+    CONSTRAINT UQ_OUTPUT_SCHEMA_TYPE_TARGET_OP UNIQUE (SCHEMA_TYPE, TARGET_NAME, OPERATION),
+    CONSTRAINT CK_OUTPUT_SCHEMAS_TYPE CHECK (
+        SCHEMA_TYPE IN ('action', 'integration', 'platform_convention')
+    )
+);
+
+CREATE INDEX IDX_OUTPUT_SCHEMAS_TYPE ON OUTPUT_SCHEMAS(SCHEMA_TYPE);
+
+COMMENT ON TABLE OUTPUT_SCHEMAS IS 'Declarative output schemas for workflow steps (Story 63.1)';
+COMMENT ON COLUMN OUTPUT_SCHEMAS.SCHEMA_TYPE IS 'action | integration | platform_convention';
+COMMENT ON COLUMN OUTPUT_SCHEMAS.TARGET_NAME IS 'action_name, integration_type, or convention_name';
+COMMENT ON COLUMN OUTPUT_SCHEMAS.OPERATION IS 'operation name for integration schemas (e.g. create_change), NULL for action/convention schemas';
+COMMENT ON COLUMN OUTPUT_SCHEMAS.INHERITS_FROM_ID IS 'FK self-ref for schema inheritance (resolved in Story 63.2)';
+COMMENT ON COLUMN OUTPUT_SCHEMAS.SCHEMA_JSON IS 'JSON: {output_fields: [...], template_variables: [...]}';

@@ -23,6 +23,10 @@ export interface HttpRequestStepConfigProps {
   disabled?: boolean;
   /** Story 57.20: Step options with readable labels for MappingHelpPopover. */
   availableStepOptions?: { value: string; label: string }[];
+  /** Story 63.3: Step IDs disponibles pour le VariablePicker. */
+  availableStepIds?: string[];
+  /** Story 63.3: ID du workflow pour le VariablePicker. */
+  workflowId?: number;
 }
 
 export const HttpRequestStepConfig: React.FC<HttpRequestStepConfigProps> = ({
@@ -30,6 +34,8 @@ export const HttpRequestStepConfig: React.FC<HttpRequestStepConfigProps> = ({
   onUpdate,
   disabled = false,
   availableStepOptions,
+  availableStepIds,
+  workflowId,
 }) => {
   // Filtrer le step courant de la liste des étapes disponibles (AC4: "étapes précédentes")
   const filteredStepOptions = useMemo(
@@ -122,6 +128,9 @@ export const HttpRequestStepConfig: React.FC<HttpRequestStepConfigProps> = ({
           valuePlaceholder="{{ steps.<step_id>.<champ> }}"
           data-testid="params-editor"
           warnings={inputMappingWarnings}
+          workflowId={workflowId}
+          currentStepId={data.step_id}
+          availableStepIds={availableStepIds}
         />
       </div>
 

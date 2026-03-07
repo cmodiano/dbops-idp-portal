@@ -3,7 +3,7 @@
 **Date :** 2026-02-28
 **Auteur :** Agent de développement (story 55.1)
 **Statut :** Document de référence pour les stories 55.2 – 55.7
-**Baseline :** Voir `idp-portal/django_backend/docs/coverage-analysis-epic-39.md`
+**Baseline :** Voir [coverage-analysis-epic-39.md](../reference/coverage-analysis-epic-39.md)
 
 ---
 

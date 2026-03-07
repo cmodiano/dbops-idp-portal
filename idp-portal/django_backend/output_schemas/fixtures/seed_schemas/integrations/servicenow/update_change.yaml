@@ -1,0 +1,26 @@
+items:
+  - apiVersion: idp/v1
+    kind: OutputSchema
+    metadata:
+      name: servicenow-update-change
+      schema_type: integration
+      target_name: servicenow
+      operation: update_change
+    spec:
+      inherits_from: null
+      output_fields:
+        - name: sys_id
+          path: "$.sys_id"
+          type: string
+          description: "ID système ServiceNow du changement mis à jour"
+          required: true
+        - name: state
+          path: "$.state"
+          type: string
+          description: "Nouvel état du changement"
+          required: false
+        - name: updated_at
+          path: "$.updated_at"
+          type: string
+          description: "Horodatage de la mise à jour"
+          required: false

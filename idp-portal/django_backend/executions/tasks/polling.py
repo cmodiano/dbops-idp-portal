@@ -194,6 +194,7 @@ def _update_execution_from_poll(
     idp_status: str,
     logs_content: str,
     correlation_id: str | None = None,
+    output_fields: dict | None = None,
 ) -> None:
     """Update execution and step records based on polling results."""
     try:
@@ -218,18 +219,23 @@ def _update_execution_from_poll(
                     correlation_id=correlation_id,
                 )
 
-        # Update platform step logs
+        # Update platform step logs and output fields
         platform_step = (
             ExecutionStep.objects.filter(
                 execution_id=execution_id,
                 platform_job_id=platform_job_id,
             ).first()
         )
-        if platform_step and logs_content:
+        if platform_step:
             output = platform_step.get_output() or {}
-            output["platform_logs"] = logs_content
-            platform_step.set_output(output)
-            platform_step.save()
+            if logs_content:
+                output["platform_logs"] = logs_content
+            # Stocker les champs AAP standard si fournis
+            if output_fields:
+                output.update(output_fields)
+            if logs_content or output_fields:
+                platform_step.set_output(output)
+                platform_step.save()
 
     except Execution.DoesNotExist:
         logger.warning(
@@ -439,6 +445,31 @@ def poll_platform_job_status(
         correlation_id=correlation_id,
     )
 
+    # Construire les champs AAP standard à stocker dans l'output du step
+    aap_status = status_data.get("aap_status") or status_data.get("status")
+    failed_tasks = status_data.get("failed_tasks") or []
+    changed_hosts = status_data.get("changed_hosts") or []
+
+    error_summary = None
+    if failed_tasks and isinstance(failed_tasks, list) and len(failed_tasks) > 0:
+        first = failed_tasks[0]
+        if isinstance(first, dict):
+            task_name = first.get("task") or first.get("name") or ""
+            host_name = first.get("host") or ""
+            if task_name:
+                error_summary = f"{task_name} sur {host_name}" if host_name else task_name
+
+    output_fields: dict = {
+        "platform_job_id": platform_job_id,
+        "job_status": aap_status,
+    }
+    if error_summary:
+        output_fields["error_summary"] = error_summary
+    if failed_tasks:
+        output_fields["failed_tasks"] = failed_tasks
+    if changed_hosts:
+        output_fields["changed_hosts"] = changed_hosts
+
     # Update execution step status in DB
     _tasks._update_execution_from_poll(
         execution_id=execution_id,
@@ -446,6 +477,7 @@ def poll_platform_job_status(
         idp_status=idp_status,
         logs_content=logs_data.get("content", ""),
         correlation_id=correlation_id,
+        output_fields=output_fields,
     )
 
     if is_terminal:

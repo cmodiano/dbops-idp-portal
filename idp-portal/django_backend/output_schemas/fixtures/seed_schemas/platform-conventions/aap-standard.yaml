@@ -1,0 +1,41 @@
+items:
+  - apiVersion: idp/v1
+    kind: OutputSchema
+    metadata:
+      name: aap-standard
+      schema_type: platform_convention
+      target_name: aap
+      operation: null
+    spec:
+      inherits_from: null
+      output_fields:
+        - name: platform_job_id
+          path: "$.platform_job_id"
+          type: string
+          description: "ID du job sur la plateforme AAP"
+          required: true
+        - name: job_status
+          path: "$.job_status"
+          type: string
+          description: "Statut du job AAP (successful, failed, running, pending)"
+          required: true
+        - name: platform_logs
+          path: "$.platform_logs"
+          type: text
+          description: "Logs stdout du job AAP"
+          required: false
+        - name: error_summary
+          path: "$.error_summary"
+          type: string
+          description: "Résumé de l'erreur si le job a échoué"
+          required: false
+        - name: failed_tasks
+          path: "$.failed_tasks"
+          type: array
+          description: "Liste des tâches en échec"
+          required: false
+        - name: changed_hosts
+          path: "$.changed_hosts"
+          type: array
+          description: "Liste des hôtes modifiés par le job"
+          required: false

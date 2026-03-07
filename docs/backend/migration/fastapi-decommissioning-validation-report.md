@@ -73,7 +73,7 @@ Le décommissionnement du backend FastAPI est **complètement validé**. L'audit
 | Action | Fichier | Détail |
 |--------|---------|--------|
 | Commentaires corrigés | `nginx/idp-portal.conf` | "Uvicorn" → "Django/Gunicorn" |
-| En-tête archive ajouté | `django_backend/docs/django-orm-migration-notes.md` | En-tête d'archivage manquant |
+| En-tête archive ajouté | [django-orm-migration-notes.md](../django-orm-migration-notes.md) | En-tête d'archivage manquant |
 | Noms jobs CI simplifiés | `.github/workflows/deploy.yml` | `lint-backend-django` → `lint-backend`, etc. |
 
 ---

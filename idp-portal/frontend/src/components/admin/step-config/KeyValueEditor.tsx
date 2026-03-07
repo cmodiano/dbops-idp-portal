@@ -8,8 +8,10 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Button, Input, Space } from 'antd';
+import { Alert, Button, Input, Space, theme } from 'antd';
+import type { InputRef } from 'antd';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
+import { VariablePicker } from '../workflow/VariablePicker';
 
 export interface KeyValueEditorProps {
   value?: Record<string, string> | null;
@@ -24,6 +26,14 @@ export interface KeyValueEditorProps {
   label?: string;
   /** Story 57.20: Avertissements à afficher sous l'éditeur. */
   warnings?: string[];
+  /** Story 57.20: Step options with readable labels for MappingHelpPopover. */
+  availableStepOptions?: { value: string; label: string }[];
+  /** Story 63.3: workflow ID for output schema context (VariablePicker). */
+  workflowId?: number;
+  /** Story 63.3: current step ID for VariablePicker. */
+  currentStepId?: string | null;
+  /** Story 63.3: available step IDs for VariablePicker. */
+  availableStepIds?: string[];
 }
 
 interface KvPair {
@@ -53,9 +63,17 @@ export const KeyValueEditor: React.FC<KeyValueEditorProps> = ({
   helpContent,
   label,
   warnings,
+  workflowId,
+  currentStepId,
+  availableStepIds,
 }) => {
+  const { token } = theme.useToken();
   // Internal state keeps empty-key rows visible during typing
   const [localPairs, setLocalPairs] = useState<KvPair[]>(() => recordToPairs(value));
+  const valueInputRefs = useRef<(InputRef | null)[]>([]);
+  // Track cursor position on blur so VariablePicker inserts at the right position
+  const lastCursorPositions = useRef<Array<{ start: number; end: number } | null>>([]);
+  const showVariablePicker = workflowId !== undefined && Boolean(currentStepId);
 
   // Track last emitted value to detect external changes without triggering on our own updates
   const lastEmitted = useRef<Record<string, string> | null | undefined>(value);
@@ -110,11 +128,35 @@ export const KeyValueEditor: React.FC<KeyValueEditorProps> = ({
     [localPairs, emitChange],
   );
 
+  const handleVariableInsert = useCallback(
+    (rowIndex: number, expression: string) => {
+      const input = valueInputRefs.current[rowIndex];
+      if (input?.input) {
+        const el = input.input;
+        const saved = lastCursorPositions.current[rowIndex];
+        const current = localPairs[rowIndex]?.value ?? '';
+        const start = saved?.start ?? current.length;
+        const end = saved?.end ?? current.length;
+        const newValue = current.slice(0, start) + expression + current.slice(end);
+        handleValueChange(rowIndex, newValue);
+        requestAnimationFrame(() => {
+          el.focus();
+          const cursor = start + expression.length;
+          el.setSelectionRange(cursor, cursor);
+        });
+      } else {
+        const current = localPairs[rowIndex]?.value ?? '';
+        handleValueChange(rowIndex, current + expression);
+      }
+    },
+    [localPairs, handleValueChange],
+  );
+
   return (
     <div data-testid={testId}>
       {label && (
         <Space style={{ marginBottom: 4 }} size={4}>
-          <span style={{ fontSize: 12, color: 'rgba(0, 0, 0, 0.45)' }}>{label}</span>
+          <span style={{ fontSize: 12, color: token.colorTextSecondary }}>{label}</span>
           {helpContent}
         </Space>
       )}
@@ -122,7 +164,7 @@ export const KeyValueEditor: React.FC<KeyValueEditorProps> = ({
         <div style={{ marginBottom: 4 }}>{helpContent}</div>
       )}
       {localPairs.map((pair, index) => (
-        <Space key={index} style={{ display: 'flex', marginBottom: 4 }} align="start">
+        <Space key={index} style={{ display: 'flex', marginBottom: 4 }} align="center">
           <Input
             size="small"
             value={pair.key}
@@ -134,13 +176,29 @@ export const KeyValueEditor: React.FC<KeyValueEditorProps> = ({
           />
           <Input
             size="small"
+            ref={(el) => { valueInputRefs.current[index] = el; }}
             value={pair.value}
             onChange={(e) => handleValueChange(index, e.target.value)}
+            onBlur={(e) => {
+              lastCursorPositions.current[index] = {
+                start: e.target.selectionStart ?? (localPairs[index]?.value ?? '').length,
+                end: e.target.selectionEnd ?? (localPairs[index]?.value ?? '').length,
+              };
+            }}
             placeholder={valuePlaceholder}
             disabled={disabled}
             style={{ width: 160 }}
             aria-label={`${valuePlaceholder} ${index + 1}`}
           />
+          {showVariablePicker && (
+            <VariablePicker
+              workflowId={workflowId}
+              currentStepId={currentStepId ?? ''}
+              availableStepIds={availableStepIds}
+              onSelect={(expr) => handleVariableInsert(index, expr)}
+              disabled={disabled}
+            />
+          )}
           {!disabled && (
             <Button
               size="small"

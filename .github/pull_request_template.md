@@ -15,7 +15,7 @@
 
 ### Checklist endpoint DRF (si applicable)
 
-> Voir [checklist complète](../idp-portal/django_backend/docs/standards/endpoint-checklist.md)
+> Voir [checklist complète](../docs/backend/standards/endpoint-checklist.md)
 
 - [ ] Validation des paramètres (serializer avec types, min/max, required)
 - [ ] Gestion des erreurs (NotFoundError, InvalidStateError, etc.)
@@ -26,7 +26,7 @@
 
 ### Checklist sécurité
 
-> Voir [pièges courants](../idp-portal/django_backend/docs/security/common-pitfalls.md) et [checklist sécurité](../idp-portal/django_backend/docs/security/pre-pr-checklist.md)
+> Voir [pièges courants](../docs/backend/security-django/common-pitfalls.md) et [checklist sécurité](../docs/backend/security-django/pre-pr-checklist.md)
 
 - [ ] Pas de SQL brut (utiliser Django ORM)
 - [ ] Pas de secrets dans les logs
@@ -42,4 +42,4 @@
 ## ADRs concernés
 
 <!-- Listez les ADRs pertinents si applicable -->
-<!-- Voir: ../idp-portal/django_backend/docs/decisions/README.md -->
+<!-- Voir: ../docs/backend/decisions/README.md -->
