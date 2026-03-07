@@ -26,6 +26,8 @@ urlpatterns = [
     path("dashboard/stats-approbations/", views.DashboardStatsApprobationsView.as_view(), name="dashboard-stats-approbations"),
     # Story 60.7: Stats planifiées vs manuelles (répartition + ventilation par type récurrence)
     path("dashboard/stats-planifiees/", views.DashboardStatsPlanifieesView.as_view(), name="dashboard-stats-planifiees"),
+    # Story 60.8: Stats retries (taux d'exécutions avec retry + top actions)
+    path("dashboard/stats-retries/", views.DashboardStatsRetriesView.as_view(), name="dashboard-stats-retries"),
     # NOTE: This endpoint returns the object directly (no {"data": ...}) per frontend apiFetchRaw usage.
     path("dashboard/filter-options/", views.DashboardFilterOptionsView.as_view(), name="dashboard-filter-options"),
     # Story 30.2: Dashboard export endpoints
