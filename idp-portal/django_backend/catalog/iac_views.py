@@ -155,7 +155,7 @@ def sync_tags(request: Request) -> Response:
             status=400,
         )
     try:
-        created, updated, unchanged = import_tags_yaml(content_bytes, user=request.user)
+        created, updated, unchanged = import_tags_yaml(content_bytes, mode=mode, user=request.user)
     except InvalidStateError as e:
         return Response(
             {"error": {"code": e.code, "message": e.message, "details": getattr(e, 'details', {})}},

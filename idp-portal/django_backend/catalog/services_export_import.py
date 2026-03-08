@@ -6,6 +6,7 @@ Most complex IaC entity: FK refs (integration, policy), M2M tags, mutex rules, 5
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from django.db import transaction
@@ -22,6 +23,8 @@ from core.services_iac_utils import (
     validate_envelope,
 )
 from integrations.models import Integration
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -84,16 +87,18 @@ def _sync_tags(action: Action, tag_names: list[str], mode: str) -> None:
     }
     target_tag_names = {n.strip().lower() for n in tag_names if n and n.strip()}
 
-    # Add missing tags
+    # Add missing tags (case-insensitive lookup to avoid duplicates with mixed-case DB names)
     for tag_name in target_tag_names - current_tag_names:
-        tag, _ = Tag.objects.get_or_create(name=tag_name)
+        tag = Tag.objects.filter(name__iexact=tag_name).first()
+        if tag is None:
+            tag = Tag.objects.create(name=tag_name)
         ActionTag.objects.get_or_create(action=action, tag=tag)
 
-    # Remove orphans in full mode
+    # Remove orphans in full mode (case-insensitive match for DB tags like "Terraform")
     if mode == "full":
         orphan_names = current_tag_names - target_tag_names
-        if orphan_names:
-            ActionTag.objects.filter(action=action, tag__name__in=orphan_names).delete()
+        for orphan_name in orphan_names:
+            ActionTag.objects.filter(action=action, tag__name__iexact=orphan_name).delete()
 
 
 # ---------------------------------------------------------------------------
@@ -214,11 +219,12 @@ def export_action_yaml(name: str) -> bytes:
     if obj.business_rule_policy_id is not None:
         spec["business_rule_policy_ref"] = obj.business_rule_policy.name
 
-    # Tags: sorted list of names
+    # Tags: sorted list of normalized names (strip + lower) to align with import
     tag_names = sorted(
-        ActionTag.objects.filter(action=obj)
-        .select_related("tag")
-        .values_list("tag__name", flat=True)
+        (n.strip().lower() for n in ActionTag.objects.filter(action=obj)
+         .select_related("tag")
+         .values_list("tag__name", flat=True)
+         if n and n.strip())
     )
     if tag_names:
         spec["tags"] = tag_names
@@ -300,14 +306,28 @@ def import_action_yaml(
 
     name = (metadata.get("name") or "").strip()
 
+    # Validate required engine and platform before building action_fields
+    engine = (spec.get("engine") or "").strip()
+    platform = (spec.get("platform") or "").strip()
+    if not engine:
+        raise InvalidStateError(
+            code="MISSING_ENGINE",
+            message="Le champ 'spec.engine' est requis et ne peut être vide.",
+        )
+    if not platform:
+        raise InvalidStateError(
+            code="MISSING_PLATFORM",
+            message="Le champ 'spec.platform' est requis et ne peut être vide.",
+        )
+
     # Resolve FK references (raises if name given but not found)
     integration_id = _resolve_integration_ref(spec.get("integration_ref"))
     policy_id = _resolve_policy_ref(spec.get("business_rule_policy_ref"))
 
     # Prepare Action scalar/JSON fields (excluding tags, mutex, runtime fields)
     action_fields: dict[str, Any] = {
-        "engine": spec.get("engine", ""),
-        "platform": spec.get("platform", ""),
+        "engine": engine,
+        "platform": platform,
         "status": spec.get("status", "draft"),
         "item_type": spec.get("item_type", "action"),
         "requires_target": spec.get("requires_target", True),
@@ -363,8 +383,19 @@ def import_action_yaml(
     mutex_specs: list[dict] = spec.get("mutex") or []
     _sync_mutex(obj, mutex_specs, mode)
 
+    # Resolve user_id for audit: explicit fallback for None or unexpected user objects
+    if user is None:
+        user_id = ""
+    elif hasattr(user, "id") and user.id is not None:
+        user_id = str(user.id)
+    else:
+        logger.warning(
+            "import_action_yaml received user without id (e.g. AnonymousUser), using empty user_id"
+        )
+        user_id = ""
+
     AuditService.create_entry(
-        user_id=str(user.id) if user and hasattr(user, "id") else "",
+        user_id=user_id,
         action_type=AuditActionType.CONFIG_SYNC_ACTION_IMPORT,
         entity_type=AuditEntityType.ACTION,
         entity_id=obj.id,

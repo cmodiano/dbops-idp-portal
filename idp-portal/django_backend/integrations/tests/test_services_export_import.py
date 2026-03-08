@@ -158,11 +158,35 @@ class ImportIntegrationYamlTests(TestCase):
         self.assertEqual(created, 0)
         self.assertEqual(updated, 0)
 
+    def test_import_unchanged_with_real_credential(self):
+        """Import with masked YAML must not overwrite real credential_ref in DB."""
+        real_credential_ref = "secret/integrations/aap-prod"
+        Integration.objects.create(
+            name="aap-prod",
+            type="aap",
+            base_url="https://aap.example.com",
+            auth_flow="token",
+            credential_ref=real_credential_ref,
+        )
+        content = _make_integration_yaml()  # credential_ref is masked in YAML
+        created, updated, unchanged = import_integration_yaml(content)
+        self.assertEqual(unchanged, 1)
+        self.assertEqual(created, 0)
+        self.assertEqual(updated, 0)
+        obj = Integration.objects.get(name="aap-prod")
+        self.assertEqual(obj.credential_ref, real_credential_ref)
+
     def test_import_invalid_type_raises(self):
         content = _make_integration_yaml(type_code="nonexistent-type")
         with self.assertRaises(InvalidStateError) as ctx:
             import_integration_yaml(content)
         self.assertEqual(ctx.exception.code, "REF_NOT_FOUND")
+
+    def test_import_empty_base_url_raises(self):
+        content = _make_integration_yaml(base_url="")
+        with self.assertRaises(InvalidStateError) as ctx:
+            import_integration_yaml(content)
+        self.assertEqual(ctx.exception.code, "INVALID_SPEC")
 
     def test_import_secret_service_ref_resolved(self):
         vault = Integration.objects.create(
@@ -236,17 +260,43 @@ class ImportIntegrationYamlTests(TestCase):
 
     def test_round_trip(self):
         IntegrationTypeCatalogue.objects.get_or_create(code="aap", defaults={"name": "AAP"})
+        original_credential_ref = "secret/integrations/aap-prod"
         Integration.objects.create(
             name="aap-prod",
             type="aap",
             base_url="https://aap.example.com",
-            credential_ref="secret/integrations/aap-prod",
+            credential_ref=original_credential_ref,
             config=json.dumps({"verify_ssl": True}, sort_keys=True),
         )
         exported1 = export_integration_yaml("aap-prod")
         import_integration_yaml(exported1)
         exported2 = export_integration_yaml("aap-prod")
         self.assertEqual(exported1, exported2)
+        # Ensure import did not overwrite/mask credential_ref in DB
+        obj = Integration.objects.get(name="aap-prod")
+        self.assertEqual(obj.credential_ref, original_credential_ref)
+
+    def test_import_full_mode_accepted(self):
+        """mode='full' est accepté et se comporte comme 'additive' (suppression orphelins réservée) (AC #1)."""
+        Integration.objects.create(name="aap-prod", type="aap", base_url="https://old.example.com")
+        content = _make_integration_yaml(base_url="https://new.example.com")
+        created, updated, unchanged = import_integration_yaml(content, mode="full")
+        self.assertEqual(updated, 1)
+        self.assertEqual(Integration.objects.get(name="aap-prod").base_url, "https://new.example.com")
+
+    def test_import_full_mode_does_not_delete_other_integrations(self):
+        """En mode full, l'import d'une intégration ne supprime pas les autres (AC #1)."""
+        Integration.objects.create(name="other-integration", type="vault", base_url="https://other.example.com")
+        content = _make_integration_yaml()
+        import_integration_yaml(content, mode="full")
+        self.assertTrue(Integration.objects.filter(name="other-integration").exists())
+
+    def test_import_invalid_yaml_syntax_raises(self):
+        """INVALID_YAML_SYNTAX levé quand le contenu YAML est syntaxiquement malformé (AC #3)."""
+        bad_yaml = b"apiVersion: idp/v1\nkind: Integration\nspec: [\nunclosed"
+        with self.assertRaises(InvalidStateError) as ctx:
+            import_integration_yaml(bad_yaml)
+        self.assertEqual(ctx.exception.code, "INVALID_YAML_SYNTAX")
 
 
 class ImportIntegrationSyncTrackingTests(TestCase):

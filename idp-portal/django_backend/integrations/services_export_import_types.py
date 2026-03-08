@@ -52,9 +52,9 @@ def export_integration_types_yaml(code: str) -> bytes:
             "action_label": a.action_label,
             "description": a.description,
             "is_active": a.is_active,
-            "required_params": json.loads(a.required_params) if a.required_params else {},
-            "optional_params": json.loads(a.optional_params) if a.optional_params else {},
-            "response_format": json.loads(a.response_format) if a.response_format else {},
+            "required_params": a.get_required_params(),
+            "optional_params": a.get_optional_params(),
+            "response_format": a.get_response_format(),
         }
         actions_spec.append(entry)
 
@@ -103,10 +103,26 @@ def import_integration_types_yaml(
     parsed = parse_yaml(content)
     validate_envelope(parsed, expected_kind="IntegrationTypeCatalogue")
 
-    metadata = parsed.get("metadata", {})
-    spec = parsed.get("spec", {})
+    metadata = parsed.get("metadata")
+    spec = parsed.get("spec")
+    if not isinstance(metadata, dict):
+        raise InvalidStateError(
+            code="INVALID_METADATA",
+            message="Le champ 'metadata' doit être un objet YAML.",
+        )
+    if not isinstance(spec, dict):
+        raise InvalidStateError(
+            code="INVALID_SPEC",
+            message="Le champ 'spec' doit être un objet YAML.",
+        )
 
-    code = metadata.get("code", "").strip()
+    code_val = metadata.get("code")
+    if not isinstance(code_val, str):
+        raise InvalidStateError(
+            code="MISSING_CODE",
+            message="Le champ 'metadata.code' est requis et doit être une chaîne.",
+        )
+    code = code_val.strip()
     if not code:
         raise InvalidStateError(
             code="MISSING_CODE",
@@ -140,7 +156,31 @@ def import_integration_types_yaml(
             created = updated = 0
 
     # --- Réconciliation des IntegrationAction ---
-    yaml_actions = spec.get("actions") or []
+    yaml_actions_raw = spec.get("actions")
+    yaml_actions: list[dict[str, Any]] = []
+    if isinstance(yaml_actions_raw, list):
+        # Pre-validate: each item must be a dict with unique non-empty action_code
+        seen_codes: set[str] = set()
+        for idx, action_item in enumerate(yaml_actions_raw):
+            if not isinstance(action_item, dict):
+                raise InvalidStateError(
+                    code="INVALID_ACTION_ITEM",
+                    message=f"L'élément actions[{idx}] doit être un objet YAML.",
+                )
+            action_code = (action_item.get("action_code") or "").strip()
+            if not action_code:
+                raise InvalidStateError(
+                    code="MISSING_ACTION_CODE",
+                    message="Chaque action doit avoir un 'action_code' non vide.",
+                )
+            if action_code in seen_codes:
+                raise InvalidStateError(
+                    code="DUPLICATE_ACTION_CODE",
+                    message=f"action_code en doublon : '{action_code}'.",
+                )
+            seen_codes.add(action_code)
+            yaml_actions.append(action_item)
+
     existing_actions = {
         a.action_code: a
         for a in IntegrationAction.objects.filter(integration_type=obj)
@@ -150,11 +190,6 @@ def import_integration_types_yaml(
 
     for action_item in yaml_actions:
         action_code = (action_item.get("action_code") or "").strip()
-        if not action_code:
-            raise InvalidStateError(
-                code="MISSING_ACTION_CODE",
-                message="Chaque action doit avoir un 'action_code' non vide.",
-            )
 
         action_defaults = {
             "action_label": action_item.get("action_label", action_code),

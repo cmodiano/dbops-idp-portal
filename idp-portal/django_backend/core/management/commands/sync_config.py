@@ -29,17 +29,17 @@ SYNC_ORDER = [
     (
         "reference/engines.yaml",
         "engines",
-        lambda c, m, u: import_reference_yaml(c, "engines", user=u),
+        lambda c, m, u: import_reference_yaml(c, "engines", mode=m, user=u),
     ),
     (
         "reference/categories.yaml",
         "categories",
-        lambda c, m, u: import_reference_yaml(c, "categories", user=u),
+        lambda c, m, u: import_reference_yaml(c, "categories", mode=m, user=u),
     ),
     (
         "tags.yaml",
         "tags",
-        lambda c, m, u: import_tags_yaml(c, user=u),
+        lambda c, m, u: import_tags_yaml(c, mode=m, user=u),
     ),
     (
         "feature-flags.yaml",

@@ -74,9 +74,20 @@ def import_feature_flags_yaml(content: bytes, user: Any | None = None) -> tuple[
                 message="Chaque feature flag doit avoir un 'flag_key' non vide.",
             )
 
+        raw_rollout = item.get("rollout_percent", 0)
+        try:
+            rollout_percent = int(raw_rollout) if raw_rollout is not None else 0
+        except (TypeError, ValueError):
+            rollout_percent = 0
+        if not (0 <= rollout_percent <= 100):
+            raise InvalidStateError(
+                code="INVALID_ROLLOUT_PERCENT",
+                message=f"rollout_percent doit être entre 0 et 100, reçu : {raw_rollout!r}.",
+            )
+
         defaults = {
             "enabled": item.get("enabled", False),
-            "rollout_percent": item.get("rollout_percent", 0),
+            "rollout_percent": rollout_percent,
             "description": item.get("description", ""),
         }
         if user:

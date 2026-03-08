@@ -55,6 +55,19 @@ class TestProfileImportExtendedResponse:
         assert payload['mode'] == 'additive'
         assert payload['unchanged'] == 0
 
+        # Re-post same YAML: identical import should be counted as unchanged
+        file.seek(0)
+        response2 = self.client.post(
+            '/api/v1/admin/profiles/import/',
+            {'file': file},
+            format='multipart',
+        )
+        assert response2.status_code in (status.HTTP_200_OK, status.HTTP_201_CREATED)
+        payload2 = response2.data['data']
+        assert payload2['created'] == 0
+        assert payload2['updated'] == 0
+        assert payload2['unchanged'] == 1
+
     def test_import_mode_param_forwarded(self):
         """mode query param forwarded to response."""
         data = {

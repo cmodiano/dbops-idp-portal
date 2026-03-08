@@ -168,6 +168,13 @@ class ImportTagsYamlValidationTests(TestCase):
             import_tags_yaml(content)
         self.assertEqual(ctx.exception.code, "INVALID_METADATA")
 
+    def test_invalid_yaml_syntax_raises(self):
+        """INVALID_YAML_SYNTAX levé quand le contenu YAML est syntaxiquement malformé (AC #3)."""
+        bad_yaml = b"key: [\nunclosed bracket"
+        with self.assertRaises(InvalidStateError) as ctx:
+            import_tags_yaml(bad_yaml)
+        self.assertEqual(ctx.exception.code, "INVALID_YAML_SYNTAX")
+
 
 class ImportTagsYamlTransactionTests(TestCase):
 

@@ -15,6 +15,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework import serializers
 from rest_framework.parsers import MultiPartParser
+
+from core.parsers import YAMLParser, extract_yaml_content
 from drf_spectacular.utils import extend_schema, extend_schema_view, inline_serializer
 from profiles.models import Profile
 from profiles.serializers import (
@@ -298,9 +300,9 @@ class ProfileExportView(APIView):
 
 
 class ProfileImportView(APIView):
-    """APIView for POST /admin/profiles/import - Import profiles from YAML."""
+    """APIView for POST /admin/profiles/import - Import profiles from YAML (file or raw body)."""
     permission_classes = [IsAuthenticated, AdminProfilePermission]
-    parser_classes = [MultiPartParser]
+    parser_classes = [YAMLParser, MultiPartParser]
 
     @extend_schema(
         tags=['profiles'],
@@ -315,15 +317,14 @@ class ProfileImportView(APIView):
         ),
     )
     def post(self, request: Request) -> Response:
-        """Import profiles from YAML file."""
-        file = request.FILES.get('file')
-        if not file:
+        """Import profiles from YAML file or raw YAML body (IaC-compatible)."""
+        content = extract_yaml_content(request)
+        if content is None:
             raise InvalidStateError(
-                code="INVALID_FILE",
-                message="Le fichier est requis",
-                details={}
+                code="EMPTY_BODY",
+                message="Aucun contenu YAML fourni (fichier ou corps de requête).",
+                details={},
             )
-        
         mode = request.query_params.get('mode', 'additive')
         if mode not in ('additive', 'full'):
             raise InvalidStateError(
@@ -331,7 +332,6 @@ class ProfileImportView(APIView):
                 message="Le paramètre 'mode' doit être 'additive' ou 'full'.",
                 details={"mode": mode},
             )
-        content = file.read()
         try:
             created, updated, unchanged = import_profiles_yaml(content, user=request.user, mode=mode)
         except InvalidStateError:

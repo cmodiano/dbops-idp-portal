@@ -21,6 +21,9 @@ from core.services_iac_utils import (
 )
 from reference.models import RefCategory, RefEngine
 
+# Actor for audit when no user context (sync command, Celery, etc.)
+SYSTEM_ACTOR = "system"
+
 
 def export_reference_yaml(ref_type: str) -> bytes:
     """
@@ -77,13 +80,16 @@ def export_reference_yaml(ref_type: str) -> bytes:
 
 
 @transaction.atomic
-def import_reference_yaml(content: bytes, ref_type: str, user: Any = None) -> tuple[int, int, int]:
+def import_reference_yaml(
+    content: bytes, ref_type: str, mode: str = "additive", user: Any = None
+) -> tuple[int, int, int]:
     """
     Import reference data from a YAML bytes envelope (create-or-update).
 
     Args:
         content: UTF-8 encoded YAML bytes.
         ref_type: Either 'engines' or 'categories'.
+        mode: "additive" (default) or "full" — reserved for future use.
         user: Optional Django user instance for audit logging.
 
     Returns:
@@ -92,6 +98,11 @@ def import_reference_yaml(content: bytes, ref_type: str, user: Any = None) -> tu
     Raises:
         InvalidStateError: If the YAML is invalid, the envelope is wrong, or ref_type is unknown.
     """
+    if mode not in ("additive", "full"):
+        raise InvalidStateError(
+            code="INVALID_IMPORT_MODE",
+            message=f"Mode invalide '{mode}'. Valeurs acceptées : 'additive', 'full'.",
+        )
     parsed = parse_yaml(content)
     validate_envelope(parsed, expected_kind="ReferenceData")
 
@@ -113,10 +124,21 @@ def import_reference_yaml(content: bytes, ref_type: str, user: Any = None) -> tu
             message=f"Type '{ref_type}' inconnu. Valeurs acceptées : 'engines', 'categories'.",
         )
 
-    spec = parsed.get("spec") or []
+    spec_raw = parsed.get("spec")
+    if not isinstance(spec_raw, list):
+        raise InvalidStateError(
+            code="INVALID_SPEC",
+            message="Le champ 'spec' doit être une liste d'objets.",
+        )
+    spec = spec_raw
     created = updated = unchanged = 0
 
     for idx, item in enumerate(spec):
+        if not isinstance(item, dict):
+            raise InvalidStateError(
+                code="INVALID_SPEC_ITEM",
+                message=f"L'élément spec[{idx}] doit être un objet (dict), reçu : {type(item).__name__}.",
+            )
         code = item.get("code")
         if not code:
             raise InvalidStateError(
@@ -151,8 +173,11 @@ def import_reference_yaml(content: bytes, ref_type: str, user: Any = None) -> tu
             else:
                 unchanged += 1
 
+    actor_id = (
+        str(user.id) if user and getattr(user, "id", None) else SYSTEM_ACTOR
+    )
     AuditService.create_entry(
-        user_id=str(user.id) if user and hasattr(user, "id") else "",
+        user_id=actor_id,
         action_type=AuditActionType.CONFIG_SYNC_REFERENCE_IMPORT,
         entity_type=AuditEntityType.REFERENCE_DATA,
         entity_id=0,  # 0 = opération groupée (BigIntegerField NOT NULL, pas de single entity)
@@ -162,6 +187,7 @@ def import_reference_yaml(content: bytes, ref_type: str, user: Any = None) -> tu
             "created": created,
             "updated": updated,
             "unchanged": unchanged,
+            "mode": mode,
         },
     )
 

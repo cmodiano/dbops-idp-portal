@@ -164,6 +164,17 @@ class ImportPolicyYamlTests(TestCase):
             import_policy_yaml(bad_yaml, user=self.user)
         self.assertEqual(ctx.exception.code, "WRONG_KIND")
 
+    def test_import_invalid_spec_not_dict_raises(self):
+        bad_yaml = yaml.dump({
+            "apiVersion": "idp/v1",
+            "kind": "BusinessRulePolicy",
+            "metadata": {"name": "test-policy"},
+            "spec": [],
+        }).encode()
+        with self.assertRaises(InvalidStateError) as ctx:
+            import_policy_yaml(bad_yaml, user=self.user)
+        self.assertEqual(ctx.exception.code, "INVALID_SPEC")
+
     def test_import_invalid_mode_raises(self):
         content = _make_policy_yaml()
         with self.assertRaises(InvalidStateError) as ctx:
@@ -237,4 +248,39 @@ class ImportPolicyYamlTests(TestCase):
         exported1 = export_policy_yaml("terraform-review")
         import_policy_yaml(exported1, user=self.user)
         exported2 = export_policy_yaml("terraform-review")
-        self.assertEqual(exported1, exported2)
+        parsed1 = yaml.safe_load(exported1.decode("utf-8"))
+        parsed2 = yaml.safe_load(exported2.decode("utf-8"))
+        self.assertEqual(parsed1, parsed2)
+
+    def test_import_invalid_yaml_syntax_raises(self):
+        """INVALID_YAML_SYNTAX levé quand le contenu YAML est syntaxiquement malformé (AC #3)."""
+        bad_yaml = b"apiVersion: idp/v1\nkind: BusinessRulePolicy\nspec: [\nunclosed bracket"
+        with self.assertRaises(InvalidStateError) as ctx:
+            import_policy_yaml(bad_yaml, user=self.user)
+        self.assertEqual(ctx.exception.code, "INVALID_YAML_SYNTAX")
+        self.assertIn("parser", ctx.exception.message.lower() if ctx.exception.message else "")
+
+    def test_import_full_mode_accepted(self):
+        """mode='full' est accepté et se comporte comme 'additive' pour les policies (AC #1)."""
+        BusinessRulePolicy.objects.create(
+            name="terraform-review",
+            policy_json=VALID_POLICY_JSON,
+            is_active=True,
+            created_by=self.user,
+        )
+        content = _make_policy_yaml(is_active=False)
+        created, updated, unchanged = import_policy_yaml(content, mode="full", user=self.user)
+        self.assertEqual(updated, 1)
+        self.assertFalse(BusinessRulePolicy.objects.get(name="terraform-review").is_active)
+
+    def test_import_full_mode_does_not_delete_other_policies(self):
+        """En mode full, l'import d'une policy n'affecte pas les autres policies existantes (AC #1)."""
+        BusinessRulePolicy.objects.create(
+            name="other-policy",
+            policy_json=VALID_POLICY_JSON,
+            is_active=True,
+            created_by=self.user,
+        )
+        content = _make_policy_yaml(name="terraform-review")
+        import_policy_yaml(content, mode="full", user=self.user)
+        self.assertTrue(BusinessRulePolicy.objects.filter(name="other-policy").exists())

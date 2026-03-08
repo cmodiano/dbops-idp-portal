@@ -4,6 +4,7 @@ Story 64.8 — API endpoints for IaC sync (export GET + sync POST).
 """
 
 import pytest
+import yaml
 from rest_framework.test import APIClient
 
 from idp_auth.models import User
@@ -76,6 +77,38 @@ class TestIntegrationSyncView:
         response = self.client.post('/api/v1/admin/integrations/sync/', data={})
         assert response.status_code == 403
 
+    def test_sync_valid_yaml_creates_and_reports_counts(self):
+        """Happy path: POST valid Integration YAML, assert 200 and DB persistence."""
+        IntegrationTypeCatalogue.objects.get_or_create(
+            code='aap', defaults={'name': 'Ansible Automation Platform'}
+        )
+        yaml_content = yaml.dump({
+            "apiVersion": "idp/v1",
+            "kind": "Integration",
+            "metadata": {"name": "sync-test-aap", "type": "aap"},
+            "spec": {
+                "base_url": "https://aap.sync.example.com",
+                "auth_flow": "token",
+            },
+        })
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.post(
+            '/api/v1/admin/integrations/sync/',
+            data=yaml_content,
+            content_type='application/x-yaml',
+        )
+        assert response.status_code == 201
+        data = response.data.get('data', {})
+        assert 'created' in data
+        assert 'updated' in data
+        assert 'unchanged' in data
+        assert data['created'] == 1
+        assert data['updated'] == 0
+        assert data['unchanged'] == 0
+        assert Integration.objects.filter(name='sync-test-aap').exists()
+        obj = Integration.objects.get(name='sync-test-aap')
+        assert obj.base_url == 'https://aap.sync.example.com'
+
 
 @pytest.mark.django_db
 class TestIntegrationTypesSyncView:
@@ -99,6 +132,36 @@ class TestIntegrationTypesSyncView:
         )
         assert response.status_code == 400
         assert response.data['error']['code'] == 'EMPTY_BODY'
+
+    def test_sync_valid_yaml_creates_and_reports_counts(self):
+        """Happy path: POST valid IntegrationTypeCatalogue YAML, assert 200 and DB persistence."""
+        yaml_content = yaml.dump({
+            "apiVersion": "idp/v1",
+            "kind": "IntegrationTypeCatalogue",
+            "metadata": {"code": "sync-test-type", "name": "Sync Test Type"},
+            "spec": {
+                "description": "Test type for sync",
+                "version": "1.0",
+                "is_active": True,
+                "integration_role": "platform",
+                "actions": [
+                    {"action_code": "run", "action_label": "Run", "is_active": True},
+                ],
+            },
+        })
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.post(
+            '/api/v1/admin/integration-types/sync/',
+            data=yaml_content,
+            content_type='application/x-yaml',
+        )
+        assert response.status_code == 201
+        data = response.data.get('data', {})
+        assert 'created' in data
+        assert 'updated' in data
+        assert 'unchanged' in data
+        assert data['created'] == 1
+        assert IntegrationTypeCatalogue.objects.filter(code='sync-test-type').exists()
 
 
 @pytest.mark.django_db

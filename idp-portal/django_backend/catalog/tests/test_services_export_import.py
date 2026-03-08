@@ -290,6 +290,44 @@ class ImportActionYamlTests(TestCase):
         self.assertIn("new-tag", tag_names)
         self.assertNotIn("old-tag", tag_names)  # removed in full mode
 
+    def test_import_tags_case_normalization(self):
+        """_sync_tags normalizes to strip().lower(); export emits normalized names.
+        Mixed-case Tag in DB is matched case-insensitively; orphans removed by iexact."""
+        action = _make_action(user=self.user)
+        mixed_case_tag, _ = Tag.objects.get_or_create(name="Terraform")
+        ActionTag.objects.create(action=action, tag=mixed_case_tag)
+        # Import with lowercase tag — should match existing "Terraform" (no duplicate)
+        content = _make_action_yaml(tags=["terraform"])
+        import_action_yaml(content, mode="additive", user=self.user)
+        tag_names = list(
+            ActionTag.objects.filter(action=action).values_list("tag__name", flat=True)
+        )
+        self.assertEqual(len(tag_names), 1)
+        self.assertEqual(tag_names[0], "Terraform")  # existing tag kept, no "terraform" duplicate
+
+        # Full mode: import ["terraform"] — "Terraform" is same (normalized), no orphan
+        content_full = _make_action_yaml(tags=["terraform"])
+        import_action_yaml(content_full, mode="full", user=self.user)
+        tag_names_full = list(
+            ActionTag.objects.filter(action=action).values_list("tag__name", flat=True)
+        )
+        self.assertEqual(len(tag_names_full), 1)
+        self.assertIn(tag_names_full[0], ("Terraform", "terraform"))
+
+        # Full mode with orphan: DB has "Terraform" + "OldTag", import ["terraform"] only
+        ActionTag.objects.filter(action=action).delete()
+        Tag.objects.filter(name__in=["Terraform", "OldTag"]).delete()
+        tag_tf, _ = Tag.objects.get_or_create(name="Terraform")
+        tag_old, _ = Tag.objects.get_or_create(name="OldTag")
+        ActionTag.objects.create(action=action, tag=tag_tf)
+        ActionTag.objects.create(action=action, tag=tag_old)
+        import_action_yaml(_make_action_yaml(tags=["terraform"]), mode="full", user=self.user)
+        remaining = set(
+            ActionTag.objects.filter(action=action).values_list("tag__name", flat=True)
+        )
+        self.assertIn("Terraform", remaining)
+        self.assertNotIn("OldTag", remaining)  # orphan removed via iexact
+
     def test_import_mutex_additive(self):
         other = _make_action(name="other-action")
         action = _make_action(user=self.user)
@@ -321,6 +359,18 @@ class ImportActionYamlTests(TestCase):
         with self.assertRaises(InvalidStateError) as ctx:
             import_action_yaml(content, user=self.user)
         self.assertEqual(ctx.exception.code, "MISSING_MUTEX_TARGET")
+
+    def test_import_missing_engine_raises(self):
+        content = _make_action_yaml(engine="")
+        with self.assertRaises(InvalidStateError) as ctx:
+            import_action_yaml(content, user=self.user)
+        self.assertEqual(ctx.exception.code, "MISSING_ENGINE")
+
+    def test_import_missing_platform_raises(self):
+        content = _make_action_yaml(platform="")
+        with self.assertRaises(InvalidStateError) as ctx:
+            import_action_yaml(content, user=self.user)
+        self.assertEqual(ctx.exception.code, "MISSING_PLATFORM")
 
     def test_import_audit_log_created(self):
         content = _make_action_yaml()
@@ -356,3 +406,20 @@ class ImportActionYamlTests(TestCase):
         import_action_yaml(exported1, user=self.user)
         exported2 = export_action_yaml("deploy-terraform")
         self.assertEqual(exported1, exported2)
+
+    def test_import_full_mode_does_not_delete_other_actions(self):
+        """En mode full, l'import d'une action ne supprime pas les autres actions existantes (AC #1).
+        import_action_yaml est single-entity : la suppression d'orphelins au niveau action
+        est du ressort de sync_config, pas du service d'import."""
+        _make_action(name="other-action", user=self.user)
+        content = _make_action_yaml()
+        import_action_yaml(content, mode="full", user=self.user)
+        # other-action doit toujours exister
+        self.assertTrue(Action.objects.filter(name="other-action").exists())
+
+    def test_import_invalid_yaml_syntax_raises(self):
+        """INVALID_YAML_SYNTAX levé quand le contenu YAML est syntaxiquement malformé (AC #3)."""
+        bad_yaml = b"apiVersion: idp/v1\nkind: Action\nspec: [\nunclosed"
+        with self.assertRaises(InvalidStateError) as ctx:
+            import_action_yaml(bad_yaml, user=self.user)
+        self.assertEqual(ctx.exception.code, "INVALID_YAML_SYNTAX")

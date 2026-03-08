@@ -178,6 +178,28 @@ class RoundTripTests(TestCase):
         second_export = export_reference_yaml("categories")
         self.assertEqual(first_export, second_export)
 
+    @patch("reference.services_export_import.AuditService.create_entry")
+    def test_import_partial_yaml_does_not_delete_absent_engines(self, mock_audit):
+        """Import d'un YAML partiel ne supprime pas les engines absents (comportement additive par défaut) (AC #1)."""
+        # Oracle + SQLServer existent en DB (créés par setUp)
+        # Import d'un YAML ne contenant qu'Oracle → SQLServer doit rester
+        content = yaml.dump({
+            "apiVersion": "idp/v1",
+            "kind": "ReferenceData",
+            "metadata": {"type": "engines"},
+            "spec": [{"code": "Oracle", "label": "Oracle DB", "display_order": 1, "is_active": True}],
+        }, default_flow_style=False, allow_unicode=True).encode("utf-8")
+        import_reference_yaml(content, "engines")
+        self.assertTrue(RefEngine.objects.filter(code="SQLServer").exists())
+        self.assertTrue(RefEngine.objects.filter(code="Oracle").exists())
+
+    def test_import_invalid_yaml_syntax_raises(self):
+        """INVALID_YAML_SYNTAX levé quand le contenu YAML est syntaxiquement malformé (AC #3)."""
+        bad_yaml = b"key: [\nunclosed"
+        with self.assertRaises(InvalidStateError) as ctx:
+            import_reference_yaml(bad_yaml, "engines")
+        self.assertEqual(ctx.exception.code, "INVALID_YAML_SYNTAX")
+
 
 class ImportEnvelopeValidationTests(TestCase):
     # Pas de @patch ici : validate_envelope échoue avant tout appel à AuditService
@@ -213,6 +235,35 @@ class ImportEnvelopeValidationTests(TestCase):
         with self.assertRaises(InvalidStateError) as ctx:
             import_reference_yaml(content, "engines")
         self.assertEqual(ctx.exception.code, "INVALID_METADATA")
+
+
+class ImportSpecValidationTests(TestCase):
+    """Validate spec is a list and each item is a dict."""
+
+    @patch("reference.services_export_import.AuditService.create_entry")
+    def test_spec_not_list_raises_invalid_spec(self, mock_audit):
+        content = yaml.dump({
+            "apiVersion": "idp/v1",
+            "kind": "ReferenceData",
+            "metadata": {"type": "engines"},
+            "spec": {"code": "Oracle"},  # dict, not list
+        }).encode("utf-8")
+        with self.assertRaises(InvalidStateError) as ctx:
+            import_reference_yaml(content, "engines")
+        self.assertEqual(ctx.exception.code, "INVALID_SPEC")
+
+    @patch("reference.services_export_import.AuditService.create_entry")
+    def test_spec_item_not_dict_raises_invalid_spec_item(self, mock_audit):
+        content = yaml.dump({
+            "apiVersion": "idp/v1",
+            "kind": "ReferenceData",
+            "metadata": {"type": "engines"},
+            "spec": [{"code": "Oracle"}, "not-a-dict", {"code": "SQLServer"}],
+        }).encode("utf-8")
+        with self.assertRaises(InvalidStateError) as ctx:
+            import_reference_yaml(content, "engines")
+        self.assertEqual(ctx.exception.code, "INVALID_SPEC_ITEM")
+        self.assertIn("spec[1]", ctx.exception.message)
 
 
 class ImportMissingCodeTests(ReferenceYamlTestMixin, TestCase):
@@ -383,3 +434,5 @@ class ImportAuditLoggingTests(ReferenceYamlTestMixin, TestCase):
         self.assertEqual(kwargs["entity_type"], AuditEntityType.REFERENCE_DATA)
         self.assertEqual(kwargs["entity_id"], 0)  # 0 = opération groupée (BigIntegerField NOT NULL)
         self.assertEqual(kwargs["details"]["ref_type"], "engines")
+        # user=None → SYSTEM_ACTOR used (no empty or "None" actor)
+        self.assertEqual(kwargs["user_id"], "system")

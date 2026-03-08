@@ -18,6 +18,8 @@ from profiles.services import ProfileService
 
 logger = structlog.get_logger(__name__)
 
+_PERMISSION_TYPE_MAP = {"LIST": "list", "PATTERN": "pattern", "ALL": "all"}
+
 
 # ──────────────────────────────────────────────────────────────────
 # Helpers — résolution action IDs ↔ noms
@@ -136,8 +138,7 @@ def export_profile_yaml(name: str) -> bytes:
     if actions_perm is None:
         spec["actions"] = {"type": "all"}
     else:
-        type_map = {"LIST": "list", "PATTERN": "pattern", "ALL": "all"}
-        actions_type = type_map.get(actions_perm.permission_type, "all")
+        actions_type = _PERMISSION_TYPE_MAP.get(actions_perm.permission_type, "all")
         if actions_type == "list":
             action_names = _resolve_action_ids_to_names(actions_perm.get_action_ids())
             spec["actions"] = _build_actions_block(actions_type, action_names, None)
@@ -153,8 +154,7 @@ def export_profile_yaml(name: str) -> bytes:
     if targets_perm is None:
         spec["targets"] = {"type": "all"}
     else:
-        type_map = {"LIST": "list", "PATTERN": "pattern", "ALL": "all"}
-        targets_type = type_map.get(targets_perm.permission_type, "all")
+        targets_type = _PERMISSION_TYPE_MAP.get(targets_perm.permission_type, "all")
         targets_block = _build_targets_block(
             targets_type,
             targets_perm.get_target_names(),
@@ -204,8 +204,7 @@ def export_profiles_yaml() -> bytes:
         if actions_perm is None:
             actions_block: dict[str, Any] = {"type": "all"}
         else:
-            type_map = {"LIST": "list", "PATTERN": "pattern", "ALL": "all"}
-            actions_type = type_map.get(actions_perm.permission_type, "all")
+            actions_type = _PERMISSION_TYPE_MAP.get(actions_perm.permission_type, "all")
             if actions_type == "list":
                 action_names = _resolve_action_ids_to_names(actions_perm.get_action_ids())
                 actions_block = _build_actions_block(actions_type, action_names, None)
@@ -217,8 +216,7 @@ def export_profiles_yaml() -> bytes:
         if targets_perm is None:
             targets_block: dict[str, Any] = {"type": "all"}
         else:
-            type_map = {"LIST": "list", "PATTERN": "pattern", "ALL": "all"}
-            targets_type = type_map.get(targets_perm.permission_type, "all")
+            targets_type = _PERMISSION_TYPE_MAP.get(targets_perm.permission_type, "all")
             targets_block = _build_targets_block(
                 targets_type,
                 targets_perm.get_target_names(),
@@ -283,6 +281,49 @@ def _yaml_item_to_action_payload(item: dict) -> dict:
         "tag_patterns": patterns,
         "environments": item.get("environments") or None,
     }
+
+
+def _permissions_differ(
+    service: ProfileService,
+    profile_id: int,
+    actions_payload: dict,
+    targets_payload: dict,
+) -> bool:
+    """Return True if incoming payload differs from current permissions."""
+    type_map = {"list": "LIST", "pattern": "PATTERN", "all": "ALL"}
+    incoming_actions_type = type_map.get(actions_payload.get("actions_type", "all"), "ALL")
+    incoming_targets_type = type_map.get(targets_payload.get("targets_type", "all"), "ALL")
+
+    actions_perm = service.get_action_permissions(profile_id)
+    current_actions_type = actions_perm.permission_type if actions_perm else "ALL"
+    if current_actions_type != incoming_actions_type:
+        return True
+    if actions_perm and incoming_actions_type == "PATTERN":
+        incoming_pt = tuple(actions_payload.get("tag_patterns") or [])
+        current_pt = tuple(actions_perm.get_tag_patterns() or [])
+        if incoming_pt != current_pt:
+            return True
+    if actions_perm and incoming_actions_type == "LIST":
+        incoming_ids = tuple(sorted(actions_payload.get("action_ids") or []))
+        current_ids = tuple(sorted(actions_perm.get_action_ids() or []))
+        if incoming_ids != current_ids:
+            return True
+
+    targets_perm = service.get_target_permissions(profile_id)
+    current_targets_type = targets_perm.permission_type if targets_perm else "ALL"
+    if current_targets_type != incoming_targets_type:
+        return True
+    if targets_perm and incoming_targets_type == "PATTERN":
+        incoming_pt = tuple(targets_payload.get("target_patterns") or [])
+        current_pt = tuple(targets_perm.get_target_patterns() or [])
+        if incoming_pt != current_pt:
+            return True
+    if targets_perm and incoming_targets_type == "LIST":
+        incoming_names = tuple(sorted(targets_payload.get("target_names") or []))
+        current_names = tuple(sorted(targets_perm.get_target_names() or []))
+        if incoming_names != current_names:
+            return True
+    return False
 
 
 def _yaml_item_to_target_payload(item: dict) -> dict:
@@ -436,18 +477,44 @@ def _validate_yaml_schema(parsed: dict[str, Any]) -> None:
 
 def _envelope_to_item(parsed: dict) -> dict:
     """Convert envelope format (apiVersion/kind/metadata/spec) to a flat item dict."""
-    metadata = parsed["metadata"]
-    spec = parsed.get("spec", {})
+    if not isinstance(parsed, dict):
+        raise InvalidStateError(
+            code="INVALID_YAML_SCHEMA",
+            message="Le document parsé doit être un objet.",
+            details={},
+        )
+    metadata = parsed.get("metadata")
+    spec = parsed.get("spec")
+    if not isinstance(metadata, dict):
+        metadata = {}
+    if not isinstance(spec, dict):
+        spec = {}
+    name = metadata.get("name")
+    if not name or not isinstance(name, str) or not str(name).strip():
+        raise InvalidStateError(
+            code="INVALID_METADATA",
+            message="Le champ 'metadata.name' est requis et doit être une chaîne non vide.",
+            details={},
+        )
+    actions = spec.get("actions")
+    if not isinstance(actions, dict):
+        actions = {"type": "all"}
+    targets = spec.get("targets")
+    if not isinstance(targets, dict):
+        targets = {"type": "all"}
+    environments = spec.get("environments")
+    if environments is not None and not isinstance(environments, list):
+        environments = None
     return {
-        "name": metadata["name"],
-        "ad_group": metadata.get("ad_group", ""),
+        "name": str(name).strip(),
+        "ad_group": metadata.get("ad_group", "") or "",
         "description": metadata.get("description"),
         "is_admin": spec.get("is_admin", False),
         "is_auditor": spec.get("is_auditor", False),
         "is_approver": spec.get("is_approver", False),
-        "actions": spec.get("actions", {"type": "all"}),
-        "targets": spec.get("targets", {"type": "all"}),
-        "environments": spec.get("environments"),
+        "actions": actions,
+        "targets": targets,
+        "environments": environments,
     }
 
 
@@ -518,6 +585,9 @@ def import_profiles_yaml(content: bytes, user: Any = None, mode: str = "additive
                 },
             })
 
+        actions_payload = _yaml_item_to_action_payload(item)
+        targets_payload = _yaml_item_to_target_payload(item)
+
         if existing:
             profile_update_data = {
                 "name": name_stripped,
@@ -527,7 +597,6 @@ def import_profiles_yaml(content: bytes, user: Any = None, mode: str = "additive
                 "is_auditor": item.get("is_auditor", False),
                 "is_approver": item.get("is_approver", False),
             }
-            # Only count as updated if fields actually changed
             fields_changed = (
                 (existing.description or None) != (profile_update_data["description"] or None)
                 or existing.ad_group != profile_update_data["ad_group"]
@@ -535,7 +604,10 @@ def import_profiles_yaml(content: bytes, user: Any = None, mode: str = "additive
                 or bool(existing.is_auditor) != bool(profile_update_data["is_auditor"])
                 or bool(existing.is_approver) != bool(profile_update_data["is_approver"])
             )
-            if fields_changed:
+            perms_changed = _permissions_differ(
+                service, existing.id, actions_payload, targets_payload
+            )
+            if fields_changed or perms_changed:
                 service.update_profile(existing.id, profile_update_data, user=user)
                 updated += 1
                 update_sync_tracking(existing, item_yaml)
@@ -556,8 +628,6 @@ def import_profiles_yaml(content: bytes, user: Any = None, mode: str = "additive
             created += 1
             update_sync_tracking(profile, item_yaml)
 
-        actions_payload = _yaml_item_to_action_payload(item)
-        targets_payload = _yaml_item_to_target_payload(item)
         service.set_action_permissions(profile_id, actions_payload)
         service.set_target_permissions(profile_id, targets_payload)
 

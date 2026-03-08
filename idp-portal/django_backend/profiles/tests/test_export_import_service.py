@@ -679,6 +679,28 @@ class TestImportProfilesYaml(TestCase):
         self.assertEqual(updated, 0)
         self.assertEqual(unchanged, 1)
 
+    def test_import_detects_permission_changes(self):
+        """Permission-only changes (actions/targets) are treated as updates, not unchanged."""
+        Profile.objects.create(
+            name="PermChange", ad_group="GRP-PERM",
+            is_admin=False, is_auditor=False, is_approver=False,
+        )
+        # Import with pattern permissions — profile has no explicit perms (defaults to all)
+        # so pattern differs from default, triggering updated=1
+        content = self._make_yaml([{
+            "name": "PermChange",
+            "ad_group": "GRP-PERM",
+            "is_admin": False,
+            "is_auditor": False,
+            "is_approver": False,
+            "actions": {"type": "pattern", "patterns": ["terraform.*"]},
+            "targets": {"type": "all"},
+        }])
+        created, updated, unchanged = import_profiles_yaml(content)
+        self.assertEqual(created, 0)
+        self.assertEqual(updated, 1)
+        self.assertEqual(unchanged, 0)
+
 
 # ──────────────────────────────────────────────────────────────────
 # import_profiles_yaml — envelope format (new)

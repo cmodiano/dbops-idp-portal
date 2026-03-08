@@ -6,6 +6,7 @@ Story 64.4 - IaC Integration management.
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 from django.db import transaction
@@ -21,6 +22,8 @@ from core.services_iac_utils import (
     validate_envelope,
 )
 from integrations.models import Integration, IntegrationTypeCatalogue
+
+logger = logging.getLogger(__name__)
 
 
 def _mask_credential_ref(credential_ref: str | None) -> str | None:
@@ -70,7 +73,16 @@ def export_integration_yaml(name: str) -> bytes:
     if obj.secret_service:
         spec["secret_service_ref"] = obj.secret_service.name
     if obj.config:
-        spec["config"] = json.loads(obj.config)
+        try:
+            spec["config"] = json.loads(obj.config)
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.warning(
+                "Integration '%s' (id=%s) has malformed config JSON: %s",
+                obj.name,
+                obj.id,
+                e,
+            )
+            spec["config"] = None
 
     root = {
         "apiVersion": "idp/v1",
@@ -134,15 +146,28 @@ def import_integration_yaml(
             message=f"Type d'intégration '{integration_type}' introuvable dans IntegrationTypeCatalogue.",
         )
 
+    # Validate base_url (required, non-empty)
+    base_url = (spec.get("base_url") or "").strip()
+    if not base_url:
+        raise InvalidStateError(
+            code="INVALID_SPEC",
+            message=f"Le champ 'spec.base_url' est requis et doit être une URL non vide pour l'intégration '{name}' (type={integration_type}).",
+        )
+
     # Pass 1: Build defaults without secret_service
+    # Use values as-is for optional string fields to avoid "" vs None spurious diffs in _apply_field_changes
     defaults: dict[str, Any] = {
         "type": integration_type,
-        "base_url": spec.get("base_url", ""),
-        "auth_flow": spec.get("auth_flow") or None,
-        "token_url": spec.get("token_url") or None,
-        "credential_ref": spec.get("credential_ref") or None,
-        "icon": spec.get("icon") or None,
+        "base_url": base_url,
+        "auth_flow": spec.get("auth_flow"),
+        "token_url": spec.get("token_url"),
+        "icon": spec.get("icon"),
     }
+    # Only set credential_ref when spec provides a non-masked value (masked export contains '***')
+    # When masked, omit from defaults so existing DB value is left untouched on update
+    cred_ref = spec.get("credential_ref")
+    if cred_ref and "***" not in str(cred_ref):
+        defaults["credential_ref"] = cred_ref
     if spec.get("config") is not None:
         defaults["config"] = json.dumps(spec["config"], sort_keys=True)
     else:

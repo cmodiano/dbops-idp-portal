@@ -117,6 +117,28 @@ class ValidateEnvelopeTests(TestCase):
             validate_envelope(doc)
         self.assertEqual(ctx.exception.code, "MISSING_NAME")
 
+    def test_metadata_name_non_string_raises_missing_name(self):
+        """metadata.name must be a non-empty string; non-string (e.g. int) raises MISSING_NAME."""
+        doc = {
+            "apiVersion": "idp/v1",
+            "kind": "Action",
+            "metadata": {"name": 123},
+        }
+        with self.assertRaises(InvalidStateError) as ctx:
+            validate_envelope(doc)
+        self.assertEqual(ctx.exception.code, "MISSING_NAME")
+
+    def test_metadata_name_empty_string_raises_missing_name(self):
+        """metadata.name must be non-empty after strip."""
+        doc = {
+            "apiVersion": "idp/v1",
+            "kind": "Action",
+            "metadata": {"name": "   "},
+        }
+        with self.assertRaises(InvalidStateError) as ctx:
+            validate_envelope(doc)
+        self.assertEqual(ctx.exception.code, "MISSING_NAME")
+
     def test_reference_data_does_not_require_metadata_name(self):
         doc = {
             "apiVersion": "idp/v1",
@@ -295,3 +317,77 @@ class UpdateSyncTrackingTests(TestCase):
             update_sync_tracking(obj2, b"content_b")
 
         self.assertNotEqual(obj1.last_synced_hash, obj2.last_synced_hash)
+
+
+class IaCErrorCodesDocumentationTests(TestCase):
+    """
+    Story 64.15 — AC #3 : Vérifie que les codes d'erreur documentés sont correctement
+    émis avec code et message par les utilitaires IaC.
+
+    Correspondance entre les codes documentés et les codes implémentés :
+      - INVALID_YAML_SYNTAX  → 'INVALID_YAML_SYNTAX'  (parse_yaml)
+      - ENVELOPE_MISSING_FIELD (apiVersion) → 'INVALID_API_VERSION' (validate_envelope)
+      - ENVELOPE_MISSING_FIELD (kind)       → 'INVALID_KIND'        (validate_envelope)
+      - ENVELOPE_MISSING_FIELD (metadata)   → 'INVALID_METADATA'    (validate_envelope)
+      - UNSUPPORTED_KIND     → 'INVALID_KIND'          (validate_envelope)
+    """
+
+    def test_invalid_yaml_syntax_has_code_and_message(self):
+        """INVALID_YAML_SYNTAX — code et message présents (AC #3)."""
+        with self.assertRaises(InvalidStateError) as ctx:
+            parse_yaml(b"key: [\nunclosed bracket")
+        exc = ctx.exception
+        self.assertEqual(exc.code, "INVALID_YAML_SYNTAX")
+        self.assertIsNotNone(exc.message)
+        self.assertGreater(len(exc.message), 0)
+
+    def test_missing_apiversion_raises_with_code(self):
+        """apiVersion absent → INVALID_API_VERSION — équivalent ENVELOPE_MISSING_FIELD (AC #3)."""
+        doc = {"kind": "Action", "metadata": {"name": "x"}}
+        with self.assertRaises(InvalidStateError) as ctx:
+            validate_envelope(doc)
+        self.assertEqual(ctx.exception.code, "INVALID_API_VERSION")
+        self.assertIn("apiVersion", ctx.exception.message)
+
+    def test_missing_kind_raises_with_code(self):
+        """kind absent → INVALID_KIND — équivalent UNSUPPORTED_KIND (AC #3)."""
+        doc = {"apiVersion": "idp/v1", "metadata": {"name": "x"}}
+        with self.assertRaises(InvalidStateError) as ctx:
+            validate_envelope(doc)
+        self.assertEqual(ctx.exception.code, "INVALID_KIND")
+
+    def test_none_kind_raises_with_code(self):
+        """kind=None → INVALID_KIND (AC #3)."""
+        doc = {"apiVersion": "idp/v1", "kind": None, "metadata": {"name": "x"}}
+        with self.assertRaises(InvalidStateError) as ctx:
+            validate_envelope(doc)
+        self.assertEqual(ctx.exception.code, "INVALID_KIND")
+
+    def test_unsupported_kind_raises_with_code(self):
+        """kind inconnu → INVALID_KIND — correspond au code UNSUPPORTED_KIND (AC #3)."""
+        doc = {"apiVersion": "idp/v1", "kind": "UnknownEntity", "metadata": {}}
+        with self.assertRaises(InvalidStateError) as ctx:
+            validate_envelope(doc)
+        self.assertEqual(ctx.exception.code, "INVALID_KIND")
+        self.assertIn("UnknownEntity", ctx.exception.message)
+
+    def test_missing_metadata_raises_with_code(self):
+        """metadata absent → INVALID_METADATA — équivalent ENVELOPE_MISSING_FIELD (AC #3)."""
+        doc = {"apiVersion": "idp/v1", "kind": "Action"}
+        with self.assertRaises(InvalidStateError) as ctx:
+            validate_envelope(doc)
+        self.assertEqual(ctx.exception.code, "INVALID_METADATA")
+
+    def test_all_error_codes_have_non_empty_message(self):
+        """Chaque code d'erreur produit un message non vide explicatif (AC #3)."""
+        cases = [
+            (b"key: [\nunclosed", "parse_yaml"),
+        ]
+        for content, label in cases:
+            with self.subTest(label=label):
+                with self.assertRaises(InvalidStateError) as ctx:
+                    parse_yaml(content)
+                self.assertTrue(
+                    ctx.exception.message,
+                    f"{label} doit produire un message non vide"
+                )

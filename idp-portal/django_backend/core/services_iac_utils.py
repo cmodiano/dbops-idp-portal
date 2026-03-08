@@ -99,7 +99,8 @@ def validate_envelope(parsed: dict, expected_kind: str | None = None) -> None:
 
     # Tags, FeatureFlags, ReferenceData n'ont pas de metadata.name individuel
     if kind not in ("Tags", "FeatureFlags", "ReferenceData"):
-        if not (parsed["metadata"].get("name") or "").strip():
+        name = parsed["metadata"].get("name")
+        if not isinstance(name, str) or not name.strip():
             raise InvalidStateError(
                 code="MISSING_NAME",
                 message="Le champ 'metadata.name' est requis pour ce type de document.",
