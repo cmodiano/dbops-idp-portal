@@ -1,0 +1,41 @@
+items:
+  - apiVersion: idp/v1
+    kind: OutputSchema
+    metadata:
+      name: github-actions-standard
+      schema_type: platform_convention
+      target_name: github_actions
+      operation: null
+    spec:
+      inherits_from: null
+      output_fields:
+        - name: platform_job_id
+          path: "$.platform_job_id"
+          type: string
+          description: "ID du workflow run sur GitHub Actions"
+          required: true
+        - name: job_status
+          path: "$.job_status"
+          type: string
+          description: "Statut IDP du run (COMPLETED, FAILED, RUNNING, SUBMITTED, CANCELLED)"
+          required: true
+        - name: job_conclusion
+          path: "$.job_conclusion"
+          type: string
+          description: "Conclusion GitHub Actions du run (success, failure, cancelled, timed_out, skipped)"
+          required: false
+        - name: outputs
+          path: "$.outputs"
+          type: object
+          description: "Conclusions des jobs du run (ex: {\"build\": \"success\", \"test\": \"failure\"})"
+          required: false
+        - name: artifacts
+          path: "$.artifacts"
+          type: array
+          description: "Artifacts uploadés pendant le run (liste de {name, archive_download_url, size_in_bytes, expired})"
+          required: false
+        - name: platform_logs
+          path: "$.platform_logs"
+          type: text
+          description: "Logs combinés des jobs GitHub Actions (ZIP extrait)"
+          required: false

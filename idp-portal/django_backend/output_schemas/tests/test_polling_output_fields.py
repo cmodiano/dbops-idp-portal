@@ -288,3 +288,78 @@ class TestPollPlatformJobStatusOutputFields:
         output_fields = call_kwargs['output_fields']
         assert 'artifacts' in output_fields
         assert output_fields['artifacts'] == {}
+
+    @patch('executions.tasks._broadcast_execution_update')
+    @patch('executions.tasks._update_execution_from_poll')
+    @patch('executions.tasks.get_correlation_id', return_value='test-corr-gha-outputs')
+    def test_github_actions_outputs_and_artifacts_in_output_fields(
+        self,
+        mock_corr: MagicMock,
+        mock_update: MagicMock,
+        mock_broadcast: MagicMock,
+    ):
+        """AC4: output_fields contient outputs et artifacts pour github_actions."""
+        from unittest.mock import AsyncMock
+        from executions.tasks.polling import poll_platform_job_status
+
+        mock_adapter = MagicMock()
+        mock_adapter.get_status = AsyncMock(return_value={
+            'status': 'COMPLETED',
+            'github_actions_status': 'completed',
+            'job_conclusion': 'success',
+            'outputs': {'build': 'success', 'deploy': 'success'},
+            'artifacts': [{'name': 'dist', 'archive_download_url': 'https://...', 'size_in_bytes': 1024, 'expired': False}],
+        })
+        mock_adapter.get_job_logs = AsyncMock(return_value={
+            'complete': True, 'content': 'logs...',
+        })
+
+        with patch('adapters.get_platform_adapter', return_value=mock_adapter):
+            with patch('adapters.utils.build_auth_headers_from_credentials', return_value={}):
+                poll_platform_job_status(
+                    execution_id=1,
+                    platform_job_id='run-gha-001',
+                    platform_type='github_actions',
+                )
+
+        call_kwargs = mock_update.call_args.kwargs
+        output_fields = call_kwargs['output_fields']
+        assert output_fields['outputs'] == {'build': 'success', 'deploy': 'success'}
+        assert output_fields['artifacts'] == [{'name': 'dist', 'archive_download_url': 'https://...', 'size_in_bytes': 1024, 'expired': False}]
+        assert output_fields['job_conclusion'] == 'success'
+
+    @patch('executions.tasks._broadcast_execution_update')
+    @patch('executions.tasks._update_execution_from_poll')
+    @patch('executions.tasks.get_correlation_id', return_value='test-corr-no-artifacts-default')
+    def test_artifacts_defaults_to_empty_dict_when_absent(
+        self,
+        mock_corr: MagicMock,
+        mock_update: MagicMock,
+        mock_broadcast: MagicMock,
+    ):
+        """AC4: non-régression AAP — artifacts={} par défaut quand status_data sans 'artifacts'."""
+        from unittest.mock import AsyncMock
+        from executions.tasks.polling import poll_platform_job_status
+
+        mock_adapter = MagicMock()
+        mock_adapter.get_status = AsyncMock(return_value={
+            'status': 'COMPLETED',
+            'aap_status': 'successful',
+            # Pas de clé "artifacts"
+        })
+        mock_adapter.get_job_logs = AsyncMock(return_value={
+            'complete': True, 'content': '',
+        })
+
+        with patch('adapters.get_platform_adapter', return_value=mock_adapter):
+            with patch('adapters.utils.build_auth_headers_from_credentials', return_value={}):
+                poll_platform_job_status(
+                    execution_id=1,
+                    platform_job_id='job-no-artifacts',
+                    platform_type='aap',
+                )
+
+        call_kwargs = mock_update.call_args.kwargs
+        output_fields = call_kwargs['output_fields']
+        assert output_fields['artifacts'] == {}
+        assert 'outputs' not in output_fields
