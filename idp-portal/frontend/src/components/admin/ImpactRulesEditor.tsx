@@ -75,7 +75,7 @@ const RuleCard: React.FC<RuleCardProps> = ({
           <Space>
             <Text strong>Regle {index + 1}</Text>
             {/* Task 2.5: Preview ImpactIndicator */}
-            {rule.level && <ImpactIndicator level={rule.level} size="small" />}
+            {rule.level ? <ImpactIndicator level={rule.level} size="small" /> : null}
           </Space>
           <Button
             size="small"

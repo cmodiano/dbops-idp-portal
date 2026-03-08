@@ -224,7 +224,7 @@ export function IntegrationForm({
           </Space>
         </Space>
       }>
-      {error && <Alert type="error" title={error} style={{ marginBottom: 16 }} showIcon />}
+      {error ? <Alert type="error" title={error} style={{ marginBottom: 16 }} showIcon /> : null}
       {isEdit && isInvalid && (
         <Alert type="error" showIcon icon={<ExclamationCircleOutlined />} title="Intégration invalide"
           description={`Cette intégration est invalide. Le type '${editIntegration?.type}' n'existe pas dans le catalogue backend. Veuillez contacter un administrateur. Les modifications ne sont pas autorisées pour les intégrations invalides.`}

@@ -81,7 +81,7 @@ export default function ApiKeysPage() {
           Créez et gérez vos clés API personnelles pour scripts et CI/CD.
         </Text>
 
-        {error && <Alert type="error" showIcon title={error} />}
+        {error ? <Alert type="error" showIcon title={error} /> : null}
 
         {lastCreatedRawKey && (
           <Alert

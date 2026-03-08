@@ -165,7 +165,7 @@ export default function AuditPage() {
         style={{ marginBottom: 8 }}
       />
 
-      {error && <Alert type="error" title="Erreur" description={error} showIcon style={{ marginBottom: 16 }} />}
+      {error ? <Alert type="error" title="Erreur" description={error} showIcon style={{ marginBottom: 16 }} /> : null}
 
       {/* Filters — Story 46.7: AuditFiltersPanel (AC2) */}
       <AuditFiltersPanel

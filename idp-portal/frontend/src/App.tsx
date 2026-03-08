@@ -1,4 +1,4 @@
-import { ConfigProvider, App as AntApp } from 'antd';
+import { ConfigProvider, App as AntApp, Spin } from 'antd';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
 import { lazy, Suspense, useEffect } from 'react';
 import { lightTheme, darkTheme } from './theme/desjardins';
@@ -100,7 +100,7 @@ function ThemedApp() {
           <AuthProvider>
             <FeatureFlagProvider>
             <DashboardProvider>
-              <Suspense fallback={null}>
+              <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}><Spin size="large" /></div>}>
                 <Routes>
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/auth/callback" element={<AuthCallbackPage />} />

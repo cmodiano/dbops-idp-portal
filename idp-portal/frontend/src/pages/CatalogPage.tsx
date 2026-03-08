@@ -92,7 +92,7 @@ export default function CatalogPage() {
   );
 
   const renderActionCard = (action: CatalogAction) => (
-    <div key={action.id}>
+    <div key={action.id} style={{ contentVisibility: 'auto', containIntrinsicSize: '0 280px' }}>
       <ActionCard
         action={toPreviewData(action)}
         onClick={() => handleActionClick(action)}

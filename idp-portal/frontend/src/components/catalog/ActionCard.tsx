@@ -17,6 +17,7 @@
  * - Keyboard accessible (focusable, Enter to activate)
  */
 
+import { memo } from 'react';
 import { Card, Tag, Typography, Space, Tooltip, Button } from 'antd';
 import {
   HeartOutlined,
@@ -79,7 +80,7 @@ function getEngineIcon(engine: ActionEngine): React.ReactNode {
 
 const MAX_VISIBLE_TAGS = 3;
 
-export function ActionCard({
+export const ActionCard = memo(function ActionCard({
   action,
   onClick,
   variant = 'default',
@@ -299,4 +300,4 @@ export function ActionCard({
       </Space>
     </Card>
   );
-}
+});

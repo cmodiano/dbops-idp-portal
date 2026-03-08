@@ -28,7 +28,7 @@ import type { ActionStats, RemediationSuggestion } from '../types/api';
 import logger from '../services/logger';
 
 /** localStorage key for view mode (AC2). */
-const CATALOG_VIEW_MODE_KEY = 'catalog-view-mode';
+const CATALOG_VIEW_MODE_KEY = 'catalog-view-mode-v1';
 
 /** View mode: grid or list (AC2). */
 export type ViewMode = 'grid' | 'list';

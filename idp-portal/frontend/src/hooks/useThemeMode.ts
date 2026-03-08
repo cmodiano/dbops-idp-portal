@@ -12,7 +12,7 @@ import { useState, useEffect, useCallback } from 'react';
 export type ThemeMode = 'light' | 'dark' | 'system';
 export type EffectiveThemeMode = 'light' | 'dark';
 
-const STORAGE_KEY = 'idp-portal-theme';
+const STORAGE_KEY = 'idp-portal-theme-v1';
 
 /**
  * Gets the system color scheme preference.
