@@ -171,8 +171,18 @@ def _transition_step_to_running(step: ExecutionStep, gate_status: dict, correlat
         )
         return
 
+    # V113: Remove from runnable queue now that step is RUNNING
+    from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
+    RunnableStepService.delete(step.id)
+
     # Refresh step to get updated fields
     step.refresh_from_db()
+
+    # V113: Durable event for UI catch-up
+    from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
+    WorkflowEventService.emit_step_status_changed(
+        step.execution_id, step, old_status=ExecutionStepStatus.WAITING,
+    )
 
     logger.info(
         "evaluate_waiting_gates_step_satisfied",
@@ -300,6 +310,10 @@ def _update_waiting_context(step: ExecutionStep, gate_status: dict, correlation_
     step.set_output(output)
     step.save()
 
+    # V113: Durable event so UI can refresh gate status on reconnect
+    from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
+    WorkflowEventService.emit_step_output_updated(step.execution_id, step)
+
     logger.info(
         "evaluate_waiting_gates_step_still_waiting",
         step_id=step.id,
@@ -332,6 +346,14 @@ def _handle_gate_timeout(step: ExecutionStep, gate_status: dict, correlation_id:
 
     step.completed_at = timezone.now()
     step.save()
+
+    # V113: Remove from runnable queue and emit durable event
+    from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
+    from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
+    RunnableStepService.delete(step.id)
+    WorkflowEventService.emit_step_status_changed(
+        step.execution_id, step, old_status=ExecutionStepStatus.WAITING,
+    )
 
     logger.info(
         "evaluate_waiting_gates_step_timeout",

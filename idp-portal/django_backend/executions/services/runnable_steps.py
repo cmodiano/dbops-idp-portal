@@ -1,0 +1,183 @@
+"""Service for RUNNABLE_STEPS — work queue of steps ready for execution.
+
+V113: Avoids scanning large partitioned EXECUTION_STEPS table for eligible work.
+When the workflow engine determines a step is eligible (prerequisites met, gates
+satisfied), it inserts a row here. Workers claim rows, then delete after dispatch.
+
+Usage:
+    from executions.services.runnable_steps import RunnableStepService
+    RunnableStepService.enqueue(step)
+    batch = RunnableStepService.claim_batch(worker_id, limit=10)
+    RunnableStepService.delete(step_id)
+"""
+from __future__ import annotations
+
+import logging
+from typing import TYPE_CHECKING
+
+from django.db import transaction
+from django.utils import timezone
+
+from executions.models import RunnableStep
+
+if TYPE_CHECKING:
+    from executions.models import ExecutionStep
+
+logger = logging.getLogger(__name__)
+
+
+class RunnableStepService:
+    """Enqueue, claim, and process runnable steps."""
+
+    @staticmethod
+    def enqueue(
+        step: "ExecutionStep",
+        priority: int = 0,
+    ) -> RunnableStep | None:
+        """Add a step to the runnable queue. Idempotent: ignores duplicates.
+
+        Args:
+            step: ExecutionStep that is ready to run.
+            priority: Higher = higher priority. Default 0.
+
+        Returns:
+            RunnableStep instance, or None if already enqueued or on error.
+        """
+        try:
+            runnable, created = RunnableStep.objects.get_or_create(
+                execution_step=step,
+                defaults={
+                    "execution_id": step.execution_id,
+                    "step_order": step.step_order,
+                    "step_type": step.step_type if isinstance(step.step_type, str) else step.step_type.value,
+                    "priority": priority,
+                },
+            )
+            if created:
+                logger.info(
+                    "runnable_step_enqueued",
+                    extra={
+                        "execution_step_id": step.id,
+                        "execution_id": step.execution_id,
+                        "priority": priority,
+                    },
+                )
+            return runnable if created else None
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "runnable_step_enqueue_failed",
+                extra={"execution_step_id": step.id},
+                exc_info=True,
+            )
+            return None
+
+    @staticmethod
+    def claim_batch(
+        worker_id: str,
+        limit: int = 10,
+        step_types: list[str] | None = None,
+    ) -> list[RunnableStep]:
+        """Atomically claim a batch of unclaimed runnable steps.
+
+        Uses SELECT FOR UPDATE SKIP LOCKED to allow concurrent workers
+        to claim without contention.
+
+        Args:
+            worker_id: Identifier of the claiming worker.
+            limit: Max steps to claim per batch.
+            step_types: Optional filter on step types for type-based routing.
+
+        Returns:
+            List of claimed RunnableStep instances.
+        """
+        now = timezone.now()
+        try:
+            with transaction.atomic():
+                qs = (
+                    RunnableStep.objects
+                    .filter(claimed_at__isnull=True)
+                    .select_for_update(skip_locked=True)
+                    .order_by('-priority', 'eligible_at')
+                )
+                if step_types:
+                    qs = qs.filter(step_type__in=step_types)
+
+                batch = list(qs[:limit])
+                if batch:
+                    ids = [r.id for r in batch]
+                    RunnableStep.objects.filter(id__in=ids).update(
+                        claimed_at=now,
+                        claimed_by=worker_id,
+                    )
+                    # Refresh instances to reflect the update
+                    for r in batch:
+                        r.claimed_at = now
+                        r.claimed_by = worker_id
+
+                    logger.info(
+                        "runnable_steps_claimed",
+                        extra={
+                            "worker_id": worker_id,
+                            "count": len(batch),
+                            "step_ids": [r.execution_step_id for r in batch],
+                        },
+                    )
+                return batch
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "runnable_steps_claim_failed",
+                extra={"worker_id": worker_id},
+                exc_info=True,
+            )
+            return []
+
+    @staticmethod
+    def delete(execution_step_id: int) -> bool:
+        """Remove a step from the runnable queue after dispatch.
+
+        Args:
+            execution_step_id: ID of the ExecutionStep to dequeue.
+
+        Returns:
+            True if deleted, False if not found or on error.
+        """
+        try:
+            deleted, _ = RunnableStep.objects.filter(
+                execution_step_id=execution_step_id
+            ).delete()
+            return deleted > 0
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "runnable_step_delete_failed",
+                extra={"execution_step_id": execution_step_id},
+                exc_info=True,
+            )
+            return False
+
+    @staticmethod
+    def delete_for_execution(execution_id: int) -> int:
+        """Remove all runnable steps for an execution (e.g. on cancellation).
+
+        Returns:
+            Number of deleted rows.
+        """
+        try:
+            deleted, _ = RunnableStep.objects.filter(
+                execution_id=execution_id
+            ).delete()
+            return deleted
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "runnable_steps_delete_for_execution_failed",
+                extra={"execution_id": execution_id},
+                exc_info=True,
+            )
+            return 0
+
+    @staticmethod
+    def pending_count(execution_id: int | None = None) -> int:
+        """Count unclaimed runnable steps (for monitoring)."""
+        qs = RunnableStep.objects.filter(claimed_at__isnull=True)
+        if execution_id:
+            qs = qs.filter(execution_id=execution_id)
+        return qs.count()

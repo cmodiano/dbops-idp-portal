@@ -655,6 +655,18 @@ class ExecutionService:
         self._create_status_audit_entry(execution, old_status, new_status, user_id)
         self._schedule_notification(execution, new_status)
 
+        # V113: Emit durable workflow event for UI catch-up
+        from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
+        WorkflowEventService.emit_execution_status_changed(execution, old_status, new_status)
+
+        # V113: Clear runnable steps on terminal status (cancellation, failure)
+        if new_status in (
+            ExecutionStatus.CANCELLED, ExecutionStatus.FAILED,
+            ExecutionStatus.REJECTED, ExecutionStatus.INTEGRATION_ERROR,
+        ):
+            from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
+            RunnableStepService.delete_for_execution(execution.id)
+
         return execution
 
     def list_by_user(self, user_id: int, status: str | None = None,

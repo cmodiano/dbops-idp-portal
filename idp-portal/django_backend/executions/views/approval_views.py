@@ -379,6 +379,11 @@ class ApproveExecutionView(APIView):
                 step.status = ExecutionStepStatus.COMPLETED
                 step.completed_at = timezone.now()
                 step.save()
+                # V113: Durable approval event + dequeue runnable step
+                from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
+                from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
+                WorkflowEventService.emit_approval_granted(execution_id, step, approved_by=user_id)
+                RunnableStepService.delete(step.id)
                 on_success_step_id = step_config.get("on_success_step_id")
                 if on_success_step_id:
                     transaction.on_commit(
@@ -551,6 +556,11 @@ class RejectExecutionView(APIView):
                 step.completed_at = timezone.now()
                 step.approval_comment = rejection_reason or ""
                 step.save()
+                # V113: Durable rejection event + dequeue runnable step
+                from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
+                from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
+                WorkflowEventService.emit_approval_rejected(execution_id, step, rejected_by=user_id)
+                RunnableStepService.delete(step.id)
                 on_error_step_id = step_config.get("on_error_step_id")
                 if on_error_step_id:
                     transaction.on_commit(
@@ -696,6 +706,13 @@ class ApproveStepView(APIView):
         step.status = ExecutionStepStatus.COMPLETED
         step.completed_at = timezone.now()
         step.save()
+
+        # V113: Durable approval event + dequeue runnable step
+        from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
+        from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
+        WorkflowEventService.emit_approval_granted(execution_id, step, approved_by=user_id)
+        RunnableStepService.delete(step.id)
+
         on_success_step_id = step_config.get("on_success_step_id")
 
         if on_success_step_id:
@@ -780,6 +797,12 @@ class RejectStepView(APIView):
         step.completed_at = timezone.now()
         step.approval_comment = request.data.get("comment", "") or ""
         step.save()
+
+        # V113: Durable rejection event + dequeue runnable step
+        from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
+        from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
+        WorkflowEventService.emit_approval_rejected(execution_id, step, rejected_by=user_id)
+        RunnableStepService.delete(step.id)
 
         on_error_step_id = step_config.get("on_error_step_id")
 

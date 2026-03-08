@@ -40,7 +40,21 @@ class ExecutionConsumer(AuthenticatedWebSocketConsumer):
         # au profit de la sécurité (un utilisateur non autorisé ne peut pas joindre le groupe).
 
     async def receive(self, text_data: str | None = None, bytes_data: bytes | None = None) -> None:
-        """Override to add execution access check after JWT authentication (SEC-2)."""
+        """Override to add execution access check after JWT authentication (SEC-2).
+
+        V113: Also handles 'catch_up' messages from authenticated clients requesting
+        events since a given sequence number.
+        """
+        # V113: Handle catch_up from already-authenticated clients
+        if text_data and self.authenticated:
+            try:
+                message = json.loads(text_data)
+            except (json.JSONDecodeError, TypeError):
+                message = {}
+            if message.get("type") == "catch_up":
+                await self._handle_catch_up(message)
+                return
+
         was_authenticated = self.authenticated
         await super().receive(text_data=text_data, bytes_data=bytes_data)
 
@@ -94,6 +108,9 @@ class ExecutionConsumer(AuthenticatedWebSocketConsumer):
     async def _replay_missed_events(self) -> None:
         """Post-join snapshot: send current execution state from DB to client.
 
+        V113 enhanced: First sends durable WORKFLOW_EVENTS (if available) for
+        catch-up, then falls back to full state replay for legacy compatibility.
+
         Mitigates CRITICAL-5 race: events broadcast between socket acceptance and
         first authenticated receive() are replayed from the same source (Execution +
         ExecutionStep) that webhook/polling broadcasters persist to.
@@ -105,6 +122,24 @@ class ExecutionConsumer(AuthenticatedWebSocketConsumer):
         except (TypeError, ValueError):
             return
 
+        # V113: Send latest sequence number so client knows where it is
+        def _get_latest_seq() -> int:
+            from executions.services.workflow_events import WorkflowEventService
+            return WorkflowEventService.get_latest_sequence(execution_id_int)
+
+        try:
+            latest_seq = await sync_to_async(_get_latest_seq)()
+            await self._safe_send({
+                "type": "sync_state",
+                "data": {
+                    "execution_id": execution_id_int,
+                    "latest_sequence": latest_seq,
+                },
+            })
+        except Exception:  # noqa: BLE001
+            pass
+
+        # Full state replay (legacy path, always sent on connect)
         def _fetch_state() -> tuple:
             from executions.models import Execution, ExecutionStep
 
@@ -202,6 +237,45 @@ class ExecutionConsumer(AuthenticatedWebSocketConsumer):
                     ),
                 },
             })
+
+    async def _handle_catch_up(self, message: dict) -> None:
+        """V113: Handle client catch-up request for missed workflow events.
+
+        Client sends: {"type": "catch_up", "since_sequence": 42}
+        Server replies with all events since that sequence number.
+        """
+        since_sequence = message.get("since_sequence", 0)
+        if not self.execution_id:
+            return
+        try:
+            execution_id_int = int(self.execution_id)
+        except (TypeError, ValueError):
+            return
+
+        def _fetch_events() -> list:
+            from executions.services.workflow_events import WorkflowEventService
+            return WorkflowEventService.get_events_since(
+                execution_id_int, since_sequence, limit=100,
+            )
+
+        try:
+            events = await sync_to_async(_fetch_events)()
+        except Exception as e:  # noqa: BLE001
+            logger.debug(
+                "ws_execution_catch_up_failed",
+                execution_id=self.execution_id,
+                error=str(e),
+            )
+            return
+
+        await self._safe_send({
+            "type": "catch_up_response",
+            "data": {
+                "execution_id": execution_id_int,
+                "since_sequence": since_sequence,
+                "events": events,
+            },
+        })
 
     async def _check_execution_access(self) -> bool:
         """Check if authenticated user (self.user_id) has access to self.execution_id.
