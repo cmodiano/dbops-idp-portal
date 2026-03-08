@@ -6,6 +6,7 @@ Story 20.5 / Story 64.7: Covers all functions in profiles/services_export_import
 import pytest
 import yaml
 from django.test import TestCase
+from unittest.mock import patch
 
 from catalog.models import Action
 from core.exceptions import InvalidStateError
@@ -941,10 +942,12 @@ class TestResolveActionHelpers(TestCase):
 
     def test_resolve_ids_orphan_skipped(self):
         """Orphan ID (no corresponding Action) is skipped with a warning."""
-        with self.assertLogs("profiles.services_export_import", level="WARNING") as log_ctx:
+        with patch("profiles.services_export_import.logger") as mock_logger:
             result = _resolve_action_ids_to_names([999999])
         self.assertEqual(result, [])
-        self.assertTrue(any("action_id_not_found_at_export" in msg for msg in log_ctx.output))
+        mock_logger.warning.assert_called_once_with(
+            "action_id_not_found_at_export", action_id=999999
+        )
 
     def test_resolve_ids_empty_list(self):
         result = _resolve_action_ids_to_names([])

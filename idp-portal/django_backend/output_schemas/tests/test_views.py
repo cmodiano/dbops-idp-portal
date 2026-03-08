@@ -6,10 +6,10 @@ Story 63.2 - Registre des Schémas & Résolution (endpoints discovery).
 
 import pytest
 import yaml
-from django.contrib.auth.models import User
 from rest_framework.test import APIClient
 
 from catalog.models import Action, ActionItemType
+from idp_auth.models import User
 from output_schemas.models import OutputSchema, SchemaType
 
 
@@ -23,7 +23,7 @@ def make_schema(name, schema_type=SchemaType.ACTION, target_name='flyway-migrate
 class TestOutputSchemaViewSetPublic:
     def setup_method(self):
         self.client = APIClient()
-        self.user = User.objects.create_user(username='testuser', password='pass')
+        self.user = User.objects.create(username='testuser', profile='DBA')
         self.client.force_authenticate(user=self.user)
 
     def test_list_returns_200(self):
@@ -93,8 +93,8 @@ class TestOutputSchemaViewSetPublic:
 class TestAdminExportView:
     def setup_method(self):
         self.client = APIClient()
-        self.admin = User.objects.create_superuser(username='admin', password='pass', email='a@b.com')
-        self.non_admin = User.objects.create_user(username='nonstaff', password='pass')
+        self.admin = User.objects.create(username='admin', profile='DBOPS')
+        self.non_admin = User.objects.create(username='nonstaff', profile='DBA')
 
     def test_export_requires_admin(self):
         self.client.force_authenticate(user=self.non_admin)
@@ -136,8 +136,8 @@ class TestAdminSyncView:
 
     def setup_method(self):
         self.client = APIClient()
-        self.admin = User.objects.create_superuser(username='admin2', password='pass', email='c@d.com')
-        self.non_admin = User.objects.create_user(username='nonstaff2', password='pass')
+        self.admin = User.objects.create(username='admin2', profile='DBOPS')
+        self.non_admin = User.objects.create(username='nonstaff2', profile='DBA')
 
     def test_sync_requires_admin(self):
         self.client.force_authenticate(user=self.non_admin)
@@ -220,7 +220,7 @@ class TestGetStepOutputSchema:
 
     def setup_method(self):
         self.client = APIClient()
-        self.user = User.objects.create_user(username='testuser-discovery', password='pass')
+        self.user = User.objects.create(username='testuser-discovery', profile='DBA')
         self.client.force_authenticate(user=self.user)
 
     def test_step_platform_with_schema(self):
@@ -317,7 +317,7 @@ class TestGetAvailableVariables:
 
     def setup_method(self):
         self.client = APIClient()
-        self.user = User.objects.create_user(username='testuser-vars', password='pass')
+        self.user = User.objects.create(username='testuser-vars', profile='DBA')
         self.client.force_authenticate(user=self.user)
 
     def test_workflow_with_multiple_steps(self):
