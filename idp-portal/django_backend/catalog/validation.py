@@ -41,6 +41,7 @@ def validate_workflow_steps(steps: list[dict[str, Any]], action_id: int | None =
 
     # Detect whether this payload uses branching/retry features (Story 16.2).
     # Backward compatibility: older workflows may only have order/name/referenced_action_id.
+    # Story 65.1: parallel_group steps also require step_id and cycle detection.
     uses_branches_or_retry = any(
         (
             'on_success_step_id' in (step or {})
@@ -49,6 +50,7 @@ def validate_workflow_steps(steps: list[dict[str, Any]], action_id: int | None =
             or 'retry_max_attempts' in (step or {})
             or 'retry_interval_seconds' in (step or {})
             or 'retry_backoff_multiplier' in (step or {})
+            or (step or {}).get('step_type') == 'parallel_group'
         )
         for step in steps
     )
@@ -121,6 +123,54 @@ def validate_workflow_steps(steps: list[dict[str, Any]], action_id: int | None =
             if ('on_success_step_id' in step and on_success is None) or ('on_error_step_id' in step and on_error is None):
                 has_exit_point = True
 
+        # Story 65.1: Validate parallel_group step-specific fields (AC #2, #3, #4, #6, #7)
+        if step.get('step_type') == 'parallel_group':
+            parallel_steps = step.get('parallel_steps')
+
+            # Task 1.2: parallel_steps must be present and a non-empty list
+            if parallel_steps is None or not isinstance(parallel_steps, list):
+                raise serializers.ValidationError(
+                    f"Step {i} (step_id={step_id}): parallel_steps is required for parallel_group steps"
+                )
+
+            # Task 1.2: parallel_steps must contain at least 2 distinct step_ids (AC #3)
+            if len(set(parallel_steps)) < 2:
+                raise serializers.ValidationError(
+                    f"Step {i} (step_id={step_id}): parallel_steps must contain at least 2 distinct step_ids"
+                )
+
+            # Task 1.5: parallel_steps cannot reference the group's own step_id (AC #7)
+            if step_id and step_id in parallel_steps:
+                raise serializers.ValidationError(
+                    f"Step {i} (step_id={step_id}): parallel_steps cannot contain the step's own step_id"
+                )
+
+            # Task 1.3: each step_id in parallel_steps must reference an existing step (AC #4)
+            for ps_id in parallel_steps:
+                if ps_id not in step_ids:
+                    raise serializers.ValidationError(
+                        f"Step {i} (step_id={step_id}): parallel_steps contains '{ps_id}' "
+                        f"which is not a valid step_id in this workflow"
+                    )
+
+            # Task 1.4: on_all_success_step_id / on_any_error_step_id must reference existing steps (AC #6)
+            on_all_success = step.get('on_all_success_step_id')
+            on_any_error = step.get('on_any_error_step_id')
+            if on_all_success is not None and on_all_success not in step_ids:
+                raise serializers.ValidationError(
+                    f"Step {i} (step_id={step_id}): on_all_success_step_id '{on_all_success}' "
+                    f"does not reference a valid step_id in this workflow"
+                )
+            if on_any_error is not None and on_any_error not in step_ids:
+                raise serializers.ValidationError(
+                    f"Step {i} (step_id={step_id}): on_any_error_step_id '{on_any_error}' "
+                    f"does not reference a valid step_id in this workflow"
+                )
+
+            # A parallel_group acts as an exit point when on_all_success or on_any_error is null
+            if on_all_success is None or on_any_error is None:
+                has_exit_point = True
+
         # AC4: Validate retry_max_attempts >= 1 if retry_enabled
         if retry_enabled:
             if retry_max_attempts is None or retry_max_attempts < 1:
@@ -137,7 +187,9 @@ def validate_workflow_steps(steps: list[dict[str, Any]], action_id: int | None =
     # AC8: Ensure at least one exit point exists when branches/retry is used.
     if uses_branches_or_retry and not has_exit_point:
         raise serializers.ValidationError(
-            "Workflow must have at least one exit point (step with on_success_step_id=null OR on_error_step_id=null)"
+            "Workflow must have at least one exit point "
+            "(step with on_success_step_id=null, on_error_step_id=null, "
+            "on_all_success_step_id=null, or on_any_error_step_id=null)"
         )
 
     # AC8: Detect cycles in branch paths using DFS
@@ -169,14 +221,27 @@ def _detect_workflow_cycles(steps: list[dict[str, Any]]) -> None:
         if not step_id:
             continue
 
-        neighbors = []
-        on_success = step.get('on_success_step_id') if 'on_success_step_id' in step else None
-        on_error = step.get('on_error_step_id') if 'on_error_step_id' in step else None
+        neighbors: list[str] = []
+        step_type = step.get('step_type') or 'platform'
 
-        if on_success is not None:
-            neighbors.append(on_success)
-        if on_error is not None:
-            neighbors.append(on_error)
+        if step_type == 'parallel_group':
+            # Task 2.1: Fan-out edges parallel_group → each parallel_step_id (Story 65.1)
+            parallel_steps = step.get('parallel_steps') or []
+            neighbors.extend(parallel_steps)
+            # Task 2.2: Add edges for on_all_success_step_id and on_any_error_step_id
+            on_all_success = step.get('on_all_success_step_id')
+            on_any_error = step.get('on_any_error_step_id')
+            if on_all_success is not None:
+                neighbors.append(on_all_success)
+            if on_any_error is not None:
+                neighbors.append(on_any_error)
+        else:
+            on_success = step.get('on_success_step_id') if 'on_success_step_id' in step else None
+            on_error = step.get('on_error_step_id') if 'on_error_step_id' in step else None
+            if on_success is not None:
+                neighbors.append(on_success)
+            if on_error is not None:
+                neighbors.append(on_error)
 
         graph[step_id] = neighbors
 

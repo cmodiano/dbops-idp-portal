@@ -435,8 +435,15 @@ class ActionSerializer(ActionFieldValidationMixin, serializers.ModelSerializer):
         'retry_max_attempts': {'type': 'integer'}, 'retry_interval_seconds': {'type': 'integer'},
         'retry_backoff_multiplier': {'type': 'number'},
         # Story 57.15: step_type and schedule_config
-        'step_type': {'type': 'string', 'enum': ['platform', 'schedule_execution'], 'default': 'platform'},
+        'step_type': {'type': 'string',
+                      'enum': ['platform', 'schedule_execution', 'gate', 'service_call',
+                               'evaluation', 'http_request', 'parallel_group'],
+                      'default': 'platform'},
         'schedule_config': {'type': 'object', 'nullable': True},
+        # Story 65.1: parallel_group fields
+        'parallel_steps': {'type': 'array', 'items': {'type': 'string'}, 'nullable': True},
+        'on_all_success_step_id': {'type': 'string', 'nullable': True},
+        'on_any_error_step_id': {'type': 'string', 'nullable': True},
     }}, 'nullable': True})
     def get_workflow_steps(self, obj: Action) -> list[dict[str, Any]] | None:
         """
@@ -509,6 +516,11 @@ class ActionSerializer(ActionFieldValidationMixin, serializers.ModelSerializer):
                 workflow_step['request_timeout'] = step.get('request_timeout')
                 workflow_step['input_mapping'] = step.get('input_mapping')
                 workflow_step['output_mapping'] = step.get('output_mapping')
+            elif step_type == 'parallel_group':
+                # Story 65.1 Task 3.1: Expose parallel_group fields
+                workflow_step['parallel_steps'] = step.get('parallel_steps', [])
+                workflow_step['on_all_success_step_id'] = step.get('on_all_success_step_id')
+                workflow_step['on_any_error_step_id'] = step.get('on_any_error_step_id')
             if step.get('condition'):
                 workflow_step['condition'] = step['condition']
 

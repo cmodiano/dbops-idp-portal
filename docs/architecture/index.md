@@ -15,3 +15,6 @@ Documentation d'architecture du projet IDP Portal.
 - [Architecture des conteneurs](container-architecture.md)
 - [Infrastructure as Code – Stratégie](infrastructure-as-code-strategy.md)
 - [Infrastructure as Code – Implémentation](infrastructure-as-code-implementation-guide.md)
+- [Configuration as Code – Stratégie](configuration-as-code-strategy.md)
+- [Configuration as Code – Implémentation](configuration-as-code-implementation-guide.md)
+- [Analyse : Actions parallèles dans les workflows](parallel-workflow-actions-analysis.md)

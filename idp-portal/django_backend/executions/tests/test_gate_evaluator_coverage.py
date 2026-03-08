@@ -147,8 +147,8 @@ class TestGateEvaluatorEnvConfig:
         assert satisfied is True
         assert gate_status['gates'][0]['type'] == 'maintenance_window'
 
-    def test_approval_granted_not_required(self):
-        """Lignes 135-140: approval_granted avec requires_approval=False → auto-satisfait."""
+    def test_approval_granted_never_auto_satisfied(self):
+        """approval_granted requires explicit approval via approve endpoint — never auto-satisfied."""
         params = {
             '_env_config': {
                 'requires_maintenance_window': False,
@@ -163,13 +163,13 @@ class TestGateEvaluatorEnvConfig:
         evaluator = GateEvaluator()
         satisfied, gate_status = evaluator.evaluate(step)
 
-        assert satisfied is True
+        assert satisfied is False
         assert gate_status['gates'][0]['type'] == 'approval_granted'
-        assert gate_status['gates'][0]['satisfied'] is True
-        assert 'non requise' in gate_status['gates'][0]['reason']
+        assert gate_status['gates'][0]['satisfied'] is False
+        assert "attente d'approbation" in gate_status['gates'][0]['reason']
 
     def test_approval_granted_required_not_satisfied(self):
-        """Lignes 138-143: approval_granted avec requires_approval=True → non satisfait."""
+        """approval_granted avec requires_approval=True → non satisfait (même comportement)."""
         params = {
             '_env_config': {
                 'requires_maintenance_window': False,
@@ -186,10 +186,10 @@ class TestGateEvaluatorEnvConfig:
 
         assert satisfied is False
         assert gate_status['gates'][0]['satisfied'] is False
-        assert 'non implémenté' in gate_status['gates'][0]['reason']
+        assert "attente d'approbation" in gate_status['gates'][0]['reason']
 
     def test_env_config_not_dict_ignored(self):
-        """env_config qui n'est pas un dict → ignoré, requires_* restent False."""
+        """env_config qui n'est pas un dict → ignoré. approval_granted never auto-satisfied."""
         params = {
             '_env_config': 'not_a_dict',
         }
@@ -201,8 +201,8 @@ class TestGateEvaluatorEnvConfig:
         evaluator = GateEvaluator()
         satisfied, gate_status = evaluator.evaluate(step)
 
-        # requires_approval = False par défaut → auto-satisfait
-        assert satisfied is True
+        # approval_granted always requires explicit approval
+        assert satisfied is False
 
     def test_no_env_config_param(self):
         """Pas de _env_config dans les params → requires_* restent False."""

@@ -643,8 +643,14 @@ class ContainerWorkflowRuntime:
                 isinstance(c, dict) and c.get('type') == 'approval_granted'
                 for c in gate_conditions
             )
-            if is_approval_gate and self._has_approval_notification_configured():
-                self._schedule_approval_notification()
+            if is_approval_gate:
+                if self._has_approval_notification_configured():
+                    self._schedule_approval_notification()
+                # V113: Durable APPROVAL_REQUESTED event — UI catch-up on reconnect
+                from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
+                WorkflowEventService.emit_approval_requested(
+                    self.execution.id, parent_step,
+                )
             return ExecutionStatus.RUNNING  # Sentinel : boucle doit s'arrêter
 
         # Extraction output_mapping pour les handlers non-gate (même pattern que platform)

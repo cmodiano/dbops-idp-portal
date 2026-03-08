@@ -70,6 +70,9 @@ nav:
     - architecture/container-architecture.md
     - architecture/infrastructure-as-code-strategy.md
     - architecture/infrastructure-as-code-implementation-guide.md
+    - architecture/configuration-as-code-strategy.md
+    - architecture/configuration-as-code-implementation-guide.md
+    - architecture/parallel-workflow-actions-analysis.md
   - API:
     - api/index.md
     - api/documentation.md
