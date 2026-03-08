@@ -452,7 +452,7 @@ def _envelope_to_item(parsed: dict) -> dict:
 
 
 @transaction.atomic
-def import_profiles_yaml(content: bytes, user: Any = None, mode: str = "additive") -> tuple[int, int]:
+def import_profiles_yaml(content: bytes, user: Any = None, mode: str = "additive") -> tuple[int, int, int]:
     """
     Import profiles from YAML. Auto-detects format:
     - Envelope format: apiVersion/kind/metadata/spec (new — single profile)
@@ -464,7 +464,7 @@ def import_profiles_yaml(content: bytes, user: Any = None, mode: str = "additive
         mode: Import mode (currently unused functionally; kept for IaC interface consistency)
 
     Returns:
-        Tuple of (created_count, updated_count)
+        Tuple of (created_count, updated_count, unchanged_count)
 
     Raises:
         InvalidStateError: If YAML syntax or schema is invalid, or action names not found
@@ -490,6 +490,7 @@ def import_profiles_yaml(content: bytes, user: Any = None, mode: str = "additive
     service = ProfileService()
     created = 0
     updated = 0
+    unchanged = 0
 
     for item in items:
         name_stripped = item["name"].strip()
@@ -504,9 +505,20 @@ def import_profiles_yaml(content: bytes, user: Any = None, mode: str = "additive
                 "is_auditor": item.get("is_auditor", False),
                 "is_approver": item.get("is_approver", False),
             }
-            service.update_profile(existing.id, profile_update_data, user=user)
+            # Only count as updated if fields actually changed
+            fields_changed = (
+                (existing.description or None) != (profile_update_data["description"] or None)
+                or existing.ad_group != profile_update_data["ad_group"]
+                or bool(existing.is_admin) != bool(profile_update_data["is_admin"])
+                or bool(existing.is_auditor) != bool(profile_update_data["is_auditor"])
+                or bool(existing.is_approver) != bool(profile_update_data["is_approver"])
+            )
+            if fields_changed:
+                service.update_profile(existing.id, profile_update_data, user=user)
+                updated += 1
+            else:
+                unchanged += 1
             profile_id = existing.id
-            updated += 1
         else:
             profile_create_data = {
                 "name": name_stripped,
@@ -525,4 +537,4 @@ def import_profiles_yaml(content: bytes, user: Any = None, mode: str = "additive
         service.set_action_permissions(profile_id, actions_payload)
         service.set_target_permissions(profile_id, targets_payload)
 
-    return (created, updated)
+    return (created, updated, unchanged)

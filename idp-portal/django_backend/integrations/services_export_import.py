@@ -197,3 +197,16 @@ def import_integration_yaml(
     )
 
     return (created, updated, unchanged)
+
+
+# ---------------------------------------------------------------------------
+# Bulk export (Story 64.8)
+# ---------------------------------------------------------------------------
+
+def export_integrations_yaml() -> bytes:
+    """Export all integrations as multi-document YAML (one document per integration)."""
+    names = list(Integration.objects.values_list('name', flat=True).order_by('name'))
+    if not names:
+        return b''
+    docs = [export_integration_yaml(n).decode('utf-8') for n in names]
+    return ('---\n' + '---\n'.join(docs)).encode('utf-8')

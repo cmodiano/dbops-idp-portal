@@ -311,20 +311,20 @@ class ProfileImportView(APIView):
                 details={}
             )
         
-        if not file.name or not (file.name.endswith('.yaml') or file.name.endswith('.yml')):
+        mode = request.query_params.get('mode', 'additive')
+        if mode not in ('additive', 'full'):
             raise InvalidStateError(
-                code="INVALID_FILE",
-                message="Le fichier doit être un YAML (.yaml ou .yml).",
-                details={"filename": file.name or ""}
+                code="INVALID_IMPORT_MODE",
+                message="Le paramètre 'mode' doit être 'additive' ou 'full'.",
+                details={"mode": mode},
             )
-        
         content = file.read()
         try:
-            created, updated = import_profiles_yaml(content, user=request.user)
+            created, updated, unchanged = import_profiles_yaml(content, user=request.user, mode=mode)
         except InvalidStateError:
             raise
-        
+
         invalidate_permissions_cache()
-        payload = {"data": {"created": created, "updated": updated}}
+        payload = {"data": {"created": created, "updated": updated, "unchanged": unchanged, "mode": mode}}
         status_code = status.HTTP_201_CREATED if created > 0 and updated == 0 else status.HTTP_200_OK
         return Response(payload, status=status_code)

@@ -168,3 +168,16 @@ def import_policy_yaml(
     )
 
     return (created, updated, unchanged)
+
+
+# ---------------------------------------------------------------------------
+# Bulk export (Story 64.8)
+# ---------------------------------------------------------------------------
+
+def export_policies_yaml() -> bytes:
+    """Export all business rule policies as multi-document YAML (one document per policy)."""
+    names = list(BusinessRulePolicy.objects.values_list('name', flat=True).order_by('name'))
+    if not names:
+        return b''
+    docs = [export_policy_yaml(n).decode('utf-8') for n in names]
+    return ('---\n' + '---\n'.join(docs)).encode('utf-8')

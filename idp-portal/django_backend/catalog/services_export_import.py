@@ -375,3 +375,16 @@ def import_action_yaml(
     )
 
     return (created, updated, unchanged)
+
+
+# ---------------------------------------------------------------------------
+# Bulk export (Story 64.8)
+# ---------------------------------------------------------------------------
+
+def export_actions_yaml() -> bytes:
+    """Export all actions as multi-document YAML (one document per action, separated by ---)."""
+    names = list(Action.objects.values_list('name', flat=True).order_by('name'))
+    if not names:
+        return b''
+    docs = [export_action_yaml(n).decode('utf-8') for n in names]
+    return ('---\n' + '---\n'.join(docs)).encode('utf-8')

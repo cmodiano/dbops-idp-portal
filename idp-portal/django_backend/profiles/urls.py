@@ -14,6 +14,9 @@ urlpatterns = [
     # Export/Import YAML: MUST be before router to avoid matching as detail routes
     path('profiles/export/', views.ProfileExportView.as_view(), name='profile-export'),
     path('profiles/import/', views.ProfileImportView.as_view(), name='profile-import'),
+    # IaC-aligned aliases (story 64.8)
+    path('profiles/export/yaml/', views.ProfileExportView.as_view(), name='profile-export-yaml'),
+    path('profiles/sync/', views.ProfileImportView.as_view(), name='profile-sync'),
 
     # Profiles CRUD: /api/v1/admin/profiles/*
     path('', include(profiles_router.urls)),

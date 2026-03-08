@@ -206,3 +206,16 @@ def import_integration_types_yaml(
     )
 
     return (created, updated, unchanged)
+
+
+# ---------------------------------------------------------------------------
+# Bulk export (Story 64.8)
+# ---------------------------------------------------------------------------
+
+def export_all_integration_types_yaml() -> bytes:
+    """Export all integration type catalogues as multi-document YAML (one document per type)."""
+    codes = list(IntegrationTypeCatalogue.objects.values_list('code', flat=True).order_by('code'))
+    if not codes:
+        return b''
+    docs = [export_integration_types_yaml(c).decode('utf-8') for c in codes]
+    return ('---\n' + '---\n'.join(docs)).encode('utf-8')

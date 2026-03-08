@@ -549,7 +549,7 @@ class TestImportProfilesYaml(TestCase):
             "actions": {"type": "all"},
             "targets": {"type": "all"},
         }])
-        created, updated = import_profiles_yaml(content)
+        created, updated, unchanged = import_profiles_yaml(content)
         self.assertEqual(created, 1)
         self.assertEqual(updated, 0)
         self.assertTrue(Profile.objects.filter(name="New").exists())
@@ -563,7 +563,7 @@ class TestImportProfilesYaml(TestCase):
             "actions": {"type": "all"},
             "targets": {"type": "all"},
         }])
-        created, updated = import_profiles_yaml(content)
+        created, updated, unchanged = import_profiles_yaml(content)
         self.assertEqual(created, 0)
         self.assertEqual(updated, 1)
         profile = Profile.objects.get(name="Existing")
@@ -608,7 +608,7 @@ class TestImportProfilesYaml(TestCase):
             {"name": "Exist", "ad_group": "GRP-E2", "actions": {"type": "all"}, "targets": {"type": "all"}},
             {"name": "Brand New", "ad_group": "GRP-BN", "actions": {"type": "all"}, "targets": {"type": "all"}},
         ])
-        created, updated = import_profiles_yaml(content)
+        created, updated, unchanged = import_profiles_yaml(content)
         self.assertEqual(created, 1)
         self.assertEqual(updated, 1)
 
@@ -659,8 +659,25 @@ class TestImportProfilesYaml(TestCase):
             "actions": {"type": "all"},
             "targets": {"type": "all"},
         }])
-        created, updated = import_profiles_yaml(content, mode="additive")
+        created, updated, unchanged = import_profiles_yaml(content, mode="additive")
         self.assertEqual(created, 1)
+
+    def test_import_unchanged_when_no_fields_differ(self):
+        """Importing a profile with identical data returns unchanged=1, not updated=1."""
+        Profile.objects.create(name="Unchanged", ad_group="GRP-UNC", is_admin=False, is_auditor=False, is_approver=False)
+        content = self._make_yaml([{
+            "name": "Unchanged",
+            "ad_group": "GRP-UNC",
+            "is_admin": False,
+            "is_auditor": False,
+            "is_approver": False,
+            "actions": {"type": "all"},
+            "targets": {"type": "all"},
+        }])
+        created, updated, unchanged = import_profiles_yaml(content)
+        self.assertEqual(created, 0)
+        self.assertEqual(updated, 0)
+        self.assertEqual(unchanged, 1)
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -686,7 +703,7 @@ class TestImportProfileEnvelopeFormat(TestCase):
     def test_envelope_creates_profile(self):
         """AC#4: envelope format creates a new profile."""
         content = self._make_envelope("envelope-new", ad_group="GRP-ENV")
-        created, updated = import_profiles_yaml(content)
+        created, updated, unchanged = import_profiles_yaml(content)
         self.assertEqual(created, 1)
         self.assertEqual(updated, 0)
         self.assertTrue(Profile.objects.filter(name="envelope-new").exists())
@@ -695,7 +712,7 @@ class TestImportProfileEnvelopeFormat(TestCase):
         """AC#4: envelope format updates existing profile."""
         Profile.objects.create(name="envelope-update", ad_group="GRP-OLD")
         content = self._make_envelope("envelope-update", ad_group="GRP-NEW")
-        created, updated = import_profiles_yaml(content)
+        created, updated, unchanged = import_profiles_yaml(content)
         self.assertEqual(created, 0)
         self.assertEqual(updated, 1)
         profile = Profile.objects.get(name="envelope-update")
@@ -865,7 +882,7 @@ class TestRoundTrip(TestCase):
         profile.delete()
 
         # Import
-        created, updated = import_profiles_yaml(exported)
+        created, updated, unchanged = import_profiles_yaml(exported)
         self.assertEqual(created, 1)
 
         # Verify
