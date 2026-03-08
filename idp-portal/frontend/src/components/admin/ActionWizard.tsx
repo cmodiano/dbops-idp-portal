@@ -38,6 +38,7 @@ import { useActionWizardValidation } from '../../hooks/useActionWizardValidation
 import { WizardStep1General } from './WizardStep1General';
 import { WizardStep2Automatisme } from './WizardStep2Automatisme';
 import { WizardStep3ImpactChangement } from './WizardStep3ImpactChangement';
+import { OutputSchemaPanel } from './OutputSchemaPanel';
 
 const STEP_ITEMS = [
   { title: 'Général', content: 'Type, nom, moteur, intégration, tags' },
@@ -54,6 +55,8 @@ export interface ActionWizardProps {
   editAction?: ActionDetail | null;
   onSuccess?: (action: ActionDetail | ActionResponse) => void;
   initialItemType?: 'action' | 'workflow';
+  /** Story 63.9: Afficher le panneau OutputSchema uniquement pour les admins. */
+  isAdmin?: boolean;
 }
 
 export function ActionWizard({
@@ -65,6 +68,7 @@ export function ActionWizard({
   editAction,
   onSuccess,
   initialItemType,
+  isAdmin = false,
 }: ActionWizardProps) {
   const { notification, modal } = App.useApp();
   const [form] = Form.useForm();
@@ -91,6 +95,8 @@ export function ActionWizard({
   const [workflowSteps, setWorkflowSteps] = useState<WorkflowStep[]>([]);
   /** Story 16.5: Toggle between list and visual mode for workflow steps. */
   const [workflowViewMode, setWorkflowViewMode] = useState<'list' | 'visual'>('list');
+  /** Story 63.9: ID du schéma d'output déclaré pour cette action (null = aucun). */
+  const [outputSchemaId, setOutputSchemaId] = useState<number | null>(null);
 
   const isEditMode = !!editAction;
   // Read-only if editing a published action (draft and disabled actions can be edited)
@@ -131,6 +137,8 @@ export function ActionWizard({
       setImpactRulesList(impactRulesToList(editAction.impact_rules ?? undefined));
       setDefaultImpactLevel(editAction.default_impact_level ?? null);
       setSelectedTags(editAction.tags ?? []);
+      // Story 63.9: Pré-remplir output_schema_id
+      setOutputSchemaId(editAction.output_schema_id ?? null);
       // Story 9.5: Load workflow steps for workflows
       if (editAction.item_type === 'workflow' && editAction.workflow_steps) {
         setWorkflowSteps(editAction.workflow_steps);
@@ -160,6 +168,7 @@ export function ActionWizard({
       setAapResourceType('job_template');
       setAapTemplateId(undefined);
       setWorkflowSteps([]);
+      setOutputSchemaId(null);
       setCurrentStep(0);
       setSubmitError(null);
     }
@@ -276,6 +285,8 @@ export function ActionWizard({
         // Règles métier et Notifications : configurées au niveau des étapes de workflow (EvaluationStepConfig, service_call)
         notification_config: null,
         business_rule_policy_id: null,
+        // Story 63.9: Schéma d'output déclaré par l'admin
+        output_schema_id: outputSchemaId,
         // category: both actions and workflows (workflows: optional, backend defaults to 'autres')
         category: (values as Record<string, unknown>).category as string | undefined ?? null,
         // Only include engine/platform/integration_id/parameters_schema for actions
@@ -486,14 +497,27 @@ export function ActionWizard({
             />
           )}
           {currentStep === 2 && (
-            <WizardStep3ImpactChangement
-              isWorkflow={isWorkflow}
-              isReadOnly={!!isReadOnly}
-              impactRulesList={impactRulesList}
-              setImpactRulesList={setImpactRulesList}
-              defaultImpactLevel={defaultImpactLevel}
-              setDefaultImpactLevel={setDefaultImpactLevel}
-            />
+            <>
+              <WizardStep3ImpactChangement
+                isWorkflow={isWorkflow}
+                isReadOnly={!!isReadOnly}
+                impactRulesList={impactRulesList}
+                setImpactRulesList={setImpactRulesList}
+                defaultImpactLevel={defaultImpactLevel}
+                setDefaultImpactLevel={setDefaultImpactLevel}
+              />
+              {/* Story 63.9: Schéma d'output — visible uniquement pour les actions admin */}
+              {!isWorkflow && (
+                <div style={{ marginTop: 16 }}>
+                  <OutputSchemaPanel
+                    value={outputSchemaId}
+                    onChange={setOutputSchemaId}
+                    isAdmin={isAdmin}
+                    disabled={!!isReadOnly}
+                  />
+                </div>
+              )}
+            </>
           )}
         </Form>
       </div>

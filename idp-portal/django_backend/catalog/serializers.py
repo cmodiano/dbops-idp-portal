@@ -370,6 +370,14 @@ class ActionSerializer(ActionFieldValidationMixin, serializers.ModelSerializer):
             validate_business_rule_policies(value)
         return value
 
+    def validate_output_schema_id(self, value: Any) -> Any:
+        """Story 63.9: Validate that output_schema_id references an existing OutputSchema."""
+        if value is not None:
+            from output_schemas.models import OutputSchema  # noqa: PLC0415
+            if not OutputSchema.objects.filter(id=value).exists():
+                raise serializers.ValidationError(f"OutputSchema id={value} introuvable.")
+        return value
+
     def validate(self, data: dict[str, Any]) -> dict[str, Any]:
         """
         Story 29.4: Validate platform ↔ integration.type consistency when both provided.
@@ -410,6 +418,8 @@ class ActionSerializer(ActionFieldValidationMixin, serializers.ModelSerializer):
             'integration_id',
             # Story 64.13: CaC drift tracking (read-only)
             'last_synced_at', 'last_synced_hash',
+            # Story 63.9: FK vers OutputSchema déclaré par l'admin
+            'output_schema_id',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'created_by', 'integration_id', 'business_rule_policy_name',
                             'last_synced_at', 'last_synced_hash']
@@ -660,9 +670,11 @@ class ActionListSerializer(serializers.ModelSerializer):
             'deleted_at', 'deleted_by', 'deletion_reason',
             # Story 64.13: CaC drift tracking (read-only)
             'last_synced_at', 'last_synced_hash',
+            # Story 63.9: FK OutputSchema (lecture seule dans la liste)
+            'output_schema_id',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'created_by',
-                            'last_synced_at', 'last_synced_hash']
+                            'last_synced_at', 'last_synced_hash', 'output_schema_id']
 
     @extend_schema_field({'type': 'array', 'items': {'type': 'string'}})
     def get_tags(self, obj: Action) -> list[str]:

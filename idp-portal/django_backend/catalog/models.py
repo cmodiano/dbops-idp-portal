@@ -241,6 +241,15 @@ class Action(models.Model):
         related_name='actions',
         db_column='BUSINESS_RULE_POLICY_ID',
     )
+    # Story 63.9: FK vers OutputSchema — schéma d'output déclaré par l'admin pour cette action
+    output_schema = models.ForeignKey(
+        'output_schemas.OutputSchema',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='actions',
+        db_column='OUTPUT_SCHEMA_ID',
+    )
     default_impact_level = models.CharField(
         max_length=20,
         choices=[

@@ -158,6 +158,21 @@ class ActionViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         partial = kwargs.get('partial', False)
 
+        # Story 63.9: Handle output_schema_id in PATCH requests (direct update, no ActionCreateSerializer)
+        if 'output_schema_id' in request.data and len(request.data) == 1:
+            raw_schema_id = request.data.get('output_schema_id')
+            if raw_schema_id is not None:
+                from output_schemas.models import OutputSchema  # noqa: PLC0415
+                if not OutputSchema.objects.filter(id=raw_schema_id).exists():
+                    raise DRFValidationError({'output_schema_id': [f'OutputSchema id={raw_schema_id} introuvable.']})
+            instance.output_schema_id = raw_schema_id
+            instance.save()
+            _catalog_cache.clear()
+            _tags_cache.clear()
+            instance.refresh_from_db()
+            response_serializer = ActionSerializer(instance)
+            return Response({"data": response_serializer.data})
+
         # Story 28.4: Handle business_rule_policy_id in PATCH requests
         if 'business_rule_policy_id' in request.data or 'business_rule_policies' in request.data:
             brp_id = request.data.get('business_rule_policy_id')
@@ -214,6 +229,19 @@ class ActionViewSet(viewsets.ModelViewSet):
 
         # Reload with relations
         action = svc.get_by_id(action.id)
+
+        # Story 63.9: Apply output_schema_id if present in combined PATCH
+        # (ActionCreateSerializer does not know this field, so handle separately)
+        if 'output_schema_id' in request.data and action is not None:
+            raw_schema_id = request.data.get('output_schema_id')
+            if raw_schema_id is not None:
+                from output_schemas.models import OutputSchema  # noqa: PLC0415
+                if not OutputSchema.objects.filter(id=raw_schema_id).exists():
+                    raise DRFValidationError({'output_schema_id': [f'OutputSchema id={raw_schema_id} introuvable.']})
+            action.output_schema_id = raw_schema_id
+            action.save(update_fields=['output_schema_id'])
+            action = svc.get_by_id(action.id)
+
         response_serializer = ActionSerializer(action)
 
         # Invalidate catalog and tags caches after write
