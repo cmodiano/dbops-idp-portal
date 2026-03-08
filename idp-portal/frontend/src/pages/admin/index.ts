@@ -6,4 +6,3 @@ export { MetricsAdminPanel } from './MetricsAdminPanel';
 export { FeatureFlagsAdminPanel } from './FeatureFlagsAdminPanel';
 export { BusinessRulesAdminPanel } from './BusinessRulesAdminPanel';
 export { EnginesAdminPanel } from './EnginesAdminPanel';
-export { ConfigSyncPanel } from './ConfigSyncPanel';

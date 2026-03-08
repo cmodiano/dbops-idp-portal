@@ -8,7 +8,6 @@ import { EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import type { TableProps } from 'antd';
 import type { ProfileListItem } from '../../types/api';
 import { formatLocalDate } from '../../utils/dateFormat';
-import { DriftBadge } from './DriftBadge';
 
 export interface ProfilesTableProps {
   dataSource: ProfileListItem[];
@@ -72,15 +71,6 @@ export function ProfilesTable({ dataSource, loading, onEdit, onDelete, onNew, on
       width: 120,
       sorter: (a, b) => (a.permission_count ?? 0) - (b.permission_count ?? 0),
       render: (n: number) => (n != null ? n : 0),
-    },
-    {
-      title: 'Sync Git',
-      dataIndex: 'last_synced_at',
-      key: 'drift',
-      width: 120,
-      render: (_: unknown, record: ProfileListItem) => (
-        <DriftBadge last_synced_at={record.last_synced_at} updated_at={record.updated_at} />
-      ),
     },
     {
       title: 'Date de création',

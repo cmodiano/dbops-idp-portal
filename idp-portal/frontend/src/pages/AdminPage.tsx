@@ -15,7 +15,6 @@ import {
   ToolOutlined,
   BarChartOutlined,
   ExperimentOutlined,
-  CloudSyncOutlined,
 } from '@ant-design/icons';
 import { useTheme } from '../contexts/ThemeContext';
 import {
@@ -27,7 +26,6 @@ import {
   EnginesAdminPanel,
   MetricsAdminPanel,
   FeatureFlagsAdminPanel,
-  ConfigSyncPanel,
 } from './admin';
 
 const { Title } = Typography;
@@ -44,7 +42,7 @@ export default function AdminPage() {
           Administration du Catalogue
         </Title>
         <Typography.Text type="secondary">
-          Gérez les actions, profils, intégrations, règles métier et configurations du portail
+          Gérez les actions, profils, intégrations et règles métier du portail
         </Typography.Text>
       </div>
 
@@ -101,12 +99,6 @@ export default function AdminPage() {
             label: 'Feature Flags',
             icon: <ExperimentOutlined />,
             children: <FeatureFlagsAdminPanel />,
-          },
-          {
-            key: 'config-sync',
-            label: 'Config Sync',
-            icon: <CloudSyncOutlined />,
-            children: <ConfigSyncPanel />,
           },
         ]}
       />
