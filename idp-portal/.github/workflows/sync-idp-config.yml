@@ -1,0 +1,78 @@
+name: Sync IDP Config
+
+on:
+  push:
+    paths:
+      - 'idp-config/**'
+  pull_request:
+    paths:
+      - 'idp-config/**'
+
+jobs:
+  validate:
+    name: Validate YAML files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install pyyaml
+      - name: Validate IDP config files
+        run: python scripts/apply_idp_config.py --validate-only --dir idp-config/
+
+  dry-run-staging:
+    name: Dry-run against staging
+    needs: validate
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      IDP_API_URL: ${{ secrets.STAGING_IDP_API_URL }}
+      IDP_API_TOKEN: ${{ secrets.STAGING_IDP_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install -r scripts/requirements-scripts.txt
+      - name: Dry-run sync against staging
+        run: python scripts/apply_idp_config.py --dry-run --dir idp-config/ --env staging
+
+  apply-staging:
+    name: Apply to staging
+    needs: validate
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    runs-on: ubuntu-latest
+    env:
+      IDP_API_URL: ${{ secrets.STAGING_IDP_API_URL }}
+      IDP_API_TOKEN: ${{ secrets.STAGING_IDP_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install -r scripts/requirements-scripts.txt
+      - name: Apply IDP config to staging
+        run: python scripts/apply_idp_config.py --dir idp-config/ --env staging
+
+  apply-production:
+    name: Apply to production (manual approval required)
+    needs: apply-staging
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      IDP_API_URL: ${{ secrets.PRODUCTION_IDP_API_URL }}
+      IDP_API_TOKEN: ${{ secrets.PRODUCTION_IDP_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install -r scripts/requirements-scripts.txt
+      - name: Apply IDP config to production
+        run: python scripts/apply_idp_config.py --dir idp-config/ --env production
