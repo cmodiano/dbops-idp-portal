@@ -39,3 +39,8 @@ items:
           type: array
           description: "Liste des hôtes modifiés par le job"
           required: false
+        - name: artifacts
+          path: "$.artifacts"
+          type: object
+          description: "Variables custom exportées par le playbook via set_stats (ex: app_version, deploy_result)"
+          required: false

@@ -7,6 +7,7 @@ from .feature_flag_views import (
     FeatureFlagStatusView,
     FeatureFlagUpdateView,
 )
+from .cac_views import export_feature_flags, sync_feature_flags
 
 app_name = 'core'
 
@@ -16,4 +17,7 @@ urlpatterns = [
     path('feature-flags/', FeatureFlagListView.as_view(), name='feature-flag-list'),
     path('feature-flags/status/', FeatureFlagStatusView.as_view(), name='feature-flag-status'),
     path('feature-flags/<str:flag_key>/', FeatureFlagUpdateView.as_view(), name='feature-flag-update'),
+    # CaC endpoints (story 64.8)
+    path('admin/feature-flags/export/yaml/', export_feature_flags, name='feature-flags-export-yaml'),
+    path('admin/feature-flags/sync/', sync_feature_flags, name='feature-flags-sync'),
 ]

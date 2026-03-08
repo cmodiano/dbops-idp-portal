@@ -705,7 +705,9 @@ async def test_ws_integration_authorized_owner_connection_stays_open():
 
     Tests the complete consumer lifecycle via WebsocketCommunicator:
     connect → send auth → auth_success → access granted → connection remains open.
+    V113: Consumer sends sync_state after group_add; drain it before asserting receive_nothing.
     """
+    import asyncio
     from channels.testing import WebsocketCommunicator
     from channels.routing import URLRouter
     from django.urls import re_path
@@ -731,6 +733,17 @@ async def test_ws_integration_authorized_owner_connection_stays_open():
             # Should receive auth_success
             response = await communicator.receive_json_from()
             assert response["type"] == "auth_success"
+
+            # Drain sync_state and any replay messages from _replay_missed_events (V113)
+            try:
+                while True:
+                    msg = await asyncio.wait_for(
+                        communicator.receive_json_from(), timeout=0.5
+                    )
+                    if msg.get("type") == "websocket.close":
+                        raise AssertionError(f"Connection closed unexpectedly: {msg}")
+            except asyncio.TimeoutError:
+                pass
 
             # Connection must remain open — no close(4003)
             assert await communicator.receive_nothing()

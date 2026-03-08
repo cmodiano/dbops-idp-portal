@@ -76,6 +76,9 @@ export const GateStepConfig: React.FC<GateStepConfigProps> = ({
           disabled={disabled}
           aria-label="Délai d'attente"
         />
+        <Text type="secondary" style={{ fontSize: 11, marginTop: 4, display: 'block' }}>
+          Laisser vide = délai infini (pas de timeout automatique)
+        </Text>
       </div>
 
       {/* On timeout action */}

@@ -370,6 +370,14 @@ class ActionSerializer(ActionFieldValidationMixin, serializers.ModelSerializer):
             validate_business_rule_policies(value)
         return value
 
+    def validate_output_schema_id(self, value: Any) -> Any:
+        """Story 63.9: Validate that output_schema_id references an existing OutputSchema."""
+        if value is not None:
+            from output_schemas.models import OutputSchema  # noqa: PLC0415
+            if not OutputSchema.objects.filter(id=value).exists():
+                raise serializers.ValidationError(f"OutputSchema id={value} introuvable.")
+        return value
+
     def validate(self, data: dict[str, Any]) -> dict[str, Any]:
         """
         Story 29.4: Validate platform ↔ integration.type consistency when both provided.
@@ -408,8 +416,13 @@ class ActionSerializer(ActionFieldValidationMixin, serializers.ModelSerializer):
             'requires_target',
             # Story 29.4: integration_id for platform consistency validation
             'integration_id',
+            # Story 64.13: CaC drift tracking (read-only)
+            'last_synced_at', 'last_synced_hash',
+            # Story 63.9: FK vers OutputSchema déclaré par l'admin
+            'output_schema_id',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'created_by', 'integration_id', 'business_rule_policy_name']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'created_by', 'integration_id', 'business_rule_policy_name',
+                            'last_synced_at', 'last_synced_hash']
     
     # Story 17.4: Removed redundant get_parameters_schema, get_impact_rules, etc.
     # OracleJSONField handles deserialization automatically - no need for SerializerMethodField
@@ -474,10 +487,12 @@ class ActionSerializer(ActionFieldValidationMixin, serializers.ModelSerializer):
                 workflow_step['schedule_config'] = step['schedule_config']
 
             # Story 57.13: Type-specific fields
+            # Story 58.4: approver_profile_ids for gate type=approval
             if step_type == 'gate':
                 workflow_step['gate_type'] = step.get('gate_type')
                 workflow_step['on_timeout'] = step.get('on_timeout')
                 workflow_step['context_from'] = step.get('context_from')
+                workflow_step['approver_profile_ids'] = step.get('approver_profile_ids')
                 workflow_step['timeout'] = step.get('timeout')
             elif step_type == 'service_call':
                 workflow_step['integration_type'] = step.get('integration_type')
@@ -653,7 +668,13 @@ class ActionListSerializer(serializers.ModelSerializer):
             'notification_config',
             # Story 18.1: soft-delete fields for admin list
             'deleted_at', 'deleted_by', 'deletion_reason',
+            # Story 64.13: CaC drift tracking (read-only)
+            'last_synced_at', 'last_synced_hash',
+            # Story 63.9: FK OutputSchema (lecture seule dans la liste)
+            'output_schema_id',
         ]
+        read_only_fields = ['id', 'created_at', 'updated_at', 'created_by',
+                            'last_synced_at', 'last_synced_hash', 'output_schema_id']
 
     @extend_schema_field({'type': 'array', 'items': {'type': 'string'}})
     def get_tags(self, obj: Action) -> list[str]:

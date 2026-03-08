@@ -235,3 +235,40 @@ app.conf.beat_schedule['purge-old-platform-logs'] = {
     'task': 'executions.tasks.purge_old_platform_logs',
     'schedule': _purge_logs_schedule,
 }
+
+# Purge old workflow events (UI sync catch-up records)
+# Default: daily at 04:00, retention: 7 days (WORKFLOW_EVENT_RETENTION_DAYS)
+# Environment variables:
+#   CELERY_BEAT_PURGE_WORKFLOW_EVENTS_CRONTAB: crontab expression (default: "0 4 * * *")
+_purge_events_crontab = os.getenv('CELERY_BEAT_PURGE_WORKFLOW_EVENTS_CRONTAB')
+if _purge_events_crontab:
+    parts = _purge_events_crontab.split()
+    if len(parts) == 5:
+        try:
+            _purge_events_schedule = crontab(
+                minute=parts[0],
+                hour=parts[1],
+                day_of_month=parts[2],
+                month_of_year=parts[3],
+                day_of_week=parts[4],
+            )
+        except Exception as exc:
+            logger.warning(
+                "celery_beat_invalid_purge_events_crontab: crontab=%r error=%s fallback=crontab(hour=4)",
+                _purge_events_crontab,
+                exc,
+            )
+            _purge_events_schedule = crontab(hour=4, minute=0)
+    else:
+        logger.warning(
+            "celery_beat_invalid_purge_events_crontab: crontab=%r fallback=crontab(hour=4)",
+            _purge_events_crontab,
+        )
+        _purge_events_schedule = crontab(hour=4, minute=0)
+else:
+    _purge_events_schedule = crontab(hour=4, minute=0)
+
+app.conf.beat_schedule['purge-old-workflow-events'] = {
+    'task': 'executions.tasks.purge_old_workflow_events',
+    'schedule': _purge_events_schedule,
+}

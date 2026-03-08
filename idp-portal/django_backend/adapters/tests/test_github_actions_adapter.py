@@ -238,6 +238,9 @@ class TestGetStatus:
         assert result["status"] == "SUBMITTED"
         assert result["github_actions_status"] == "queued"
         assert result["github_actions_conclusion"] is None
+        assert result["outputs"] == {}
+        assert result["artifacts"] == []
+        assert result["job_conclusion"] is None
 
     @pytest.mark.asyncio
     async def test_get_status_in_progress(self, adapter: GitHubActionsAdapter) -> None:
@@ -262,66 +265,126 @@ class TestGetStatus:
 
         assert result["status"] == "RUNNING"
         assert result["github_actions_status"] == "in_progress"
+        assert result["outputs"] == {}
+        assert result["artifacts"] == []
+        assert result["job_conclusion"] is None
 
     @pytest.mark.asyncio
     async def test_get_status_completed_success(self, adapter: GitHubActionsAdapter) -> None:
-        """Completed+success maps to COMPLETED."""
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "status": "completed",
-            "conclusion": "success",
-        }
-        mock_response.raise_for_status = MagicMock()
+        """Completed+success maps to COMPLETED (3 clients: main+jobs+artifacts)."""
+        main_response = MagicMock()
+        main_response.status_code = 200
+        main_response.json.return_value = {"status": "completed", "conclusion": "success"}
+        main_response.raise_for_status = MagicMock()
 
-        mock_client = AsyncMock()
-        mock_client.get = AsyncMock(return_value=mock_response)
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
+        jobs_response = MagicMock()
+        jobs_response.json.return_value = {"total_count": 0, "jobs": []}
+        jobs_response.raise_for_status = MagicMock()
 
-        with patch("adapters.github_actions_adapter.httpx.AsyncClient", return_value=mock_client):
+        artifacts_response = MagicMock()
+        artifacts_response.json.return_value = {"total_count": 0, "artifacts": []}
+        artifacts_response.raise_for_status = MagicMock()
+
+        mock_main = AsyncMock()
+        mock_main.get = AsyncMock(return_value=main_response)
+        mock_main.__aenter__ = AsyncMock(return_value=mock_main)
+        mock_main.__aexit__ = AsyncMock(return_value=False)
+
+        mock_jobs = AsyncMock()
+        mock_jobs.get = AsyncMock(return_value=jobs_response)
+        mock_jobs.__aenter__ = AsyncMock(return_value=mock_jobs)
+        mock_jobs.__aexit__ = AsyncMock(return_value=False)
+
+        mock_artifacts = AsyncMock()
+        mock_artifacts.get = AsyncMock(return_value=artifacts_response)
+        mock_artifacts.__aenter__ = AsyncMock(return_value=mock_artifacts)
+        mock_artifacts.__aexit__ = AsyncMock(return_value=False)
+
+        with patch(
+            "adapters.github_actions_adapter.httpx.AsyncClient",
+            side_effect=[mock_main, mock_jobs, mock_artifacts],
+        ):
             result = await adapter.get_status("12345")
 
         assert result["status"] == "COMPLETED"
+        assert result["job_conclusion"] == "success"
+        assert "outputs" in result
+        assert "artifacts" in result
 
     @pytest.mark.asyncio
     async def test_get_status_completed_failure(self, adapter: GitHubActionsAdapter) -> None:
-        """Completed+failure maps to FAILED."""
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "status": "completed",
-            "conclusion": "failure",
-        }
-        mock_response.raise_for_status = MagicMock()
+        """Completed+failure maps to FAILED (3 clients: main+jobs+artifacts)."""
+        main_response = MagicMock()
+        main_response.status_code = 200
+        main_response.json.return_value = {"status": "completed", "conclusion": "failure"}
+        main_response.raise_for_status = MagicMock()
 
-        mock_client = AsyncMock()
-        mock_client.get = AsyncMock(return_value=mock_response)
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
+        jobs_response = MagicMock()
+        jobs_response.json.return_value = {"total_count": 0, "jobs": []}
+        jobs_response.raise_for_status = MagicMock()
 
-        with patch("adapters.github_actions_adapter.httpx.AsyncClient", return_value=mock_client):
+        artifacts_response = MagicMock()
+        artifacts_response.json.return_value = {"total_count": 0, "artifacts": []}
+        artifacts_response.raise_for_status = MagicMock()
+
+        mock_main = AsyncMock()
+        mock_main.get = AsyncMock(return_value=main_response)
+        mock_main.__aenter__ = AsyncMock(return_value=mock_main)
+        mock_main.__aexit__ = AsyncMock(return_value=False)
+
+        mock_jobs = AsyncMock()
+        mock_jobs.get = AsyncMock(return_value=jobs_response)
+        mock_jobs.__aenter__ = AsyncMock(return_value=mock_jobs)
+        mock_jobs.__aexit__ = AsyncMock(return_value=False)
+
+        mock_artifacts = AsyncMock()
+        mock_artifacts.get = AsyncMock(return_value=artifacts_response)
+        mock_artifacts.__aenter__ = AsyncMock(return_value=mock_artifacts)
+        mock_artifacts.__aexit__ = AsyncMock(return_value=False)
+
+        with patch(
+            "adapters.github_actions_adapter.httpx.AsyncClient",
+            side_effect=[mock_main, mock_jobs, mock_artifacts],
+        ):
             result = await adapter.get_status("12345")
 
         assert result["status"] == "FAILED"
 
     @pytest.mark.asyncio
     async def test_get_status_completed_cancelled(self, adapter: GitHubActionsAdapter) -> None:
-        """Completed+cancelled maps to CANCELLED."""
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "status": "completed",
-            "conclusion": "cancelled",
-        }
-        mock_response.raise_for_status = MagicMock()
+        """Completed+cancelled maps to CANCELLED (3 clients: main+jobs+artifacts)."""
+        main_response = MagicMock()
+        main_response.status_code = 200
+        main_response.json.return_value = {"status": "completed", "conclusion": "cancelled"}
+        main_response.raise_for_status = MagicMock()
 
-        mock_client = AsyncMock()
-        mock_client.get = AsyncMock(return_value=mock_response)
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
+        jobs_response = MagicMock()
+        jobs_response.json.return_value = {"total_count": 0, "jobs": []}
+        jobs_response.raise_for_status = MagicMock()
 
-        with patch("adapters.github_actions_adapter.httpx.AsyncClient", return_value=mock_client):
+        artifacts_response = MagicMock()
+        artifacts_response.json.return_value = {"total_count": 0, "artifacts": []}
+        artifacts_response.raise_for_status = MagicMock()
+
+        mock_main = AsyncMock()
+        mock_main.get = AsyncMock(return_value=main_response)
+        mock_main.__aenter__ = AsyncMock(return_value=mock_main)
+        mock_main.__aexit__ = AsyncMock(return_value=False)
+
+        mock_jobs = AsyncMock()
+        mock_jobs.get = AsyncMock(return_value=jobs_response)
+        mock_jobs.__aenter__ = AsyncMock(return_value=mock_jobs)
+        mock_jobs.__aexit__ = AsyncMock(return_value=False)
+
+        mock_artifacts = AsyncMock()
+        mock_artifacts.get = AsyncMock(return_value=artifacts_response)
+        mock_artifacts.__aenter__ = AsyncMock(return_value=mock_artifacts)
+        mock_artifacts.__aexit__ = AsyncMock(return_value=False)
+
+        with patch(
+            "adapters.github_actions_adapter.httpx.AsyncClient",
+            side_effect=[mock_main, mock_jobs, mock_artifacts],
+        ):
             result = await adapter.get_status("12345")
 
         assert result["status"] == "CANCELLED"
@@ -349,6 +412,9 @@ class TestGetStatus:
 
         assert result["status"] == "SUBMITTED"
         assert result["github_actions_status"] == "not_found"
+        assert result["outputs"] == {}
+        assert result["artifacts"] == []
+        assert result["job_conclusion"] is None
 
     @pytest.mark.asyncio
     async def test_get_status_timeout(self, adapter: GitHubActionsAdapter) -> None:
@@ -824,3 +890,219 @@ class TestAuthHeaders:
                 owner="my-org",
                 repo="",
             )
+
+
+# ---------------------------------------------------------------------------
+# get_status outputs & artifacts (Story 63.10)
+# ---------------------------------------------------------------------------
+
+class TestGetStatusOutputsArtifacts:
+    """Tests for get_status() outputs and artifacts retrieval (Story 63.10)."""
+
+    @pytest.mark.asyncio
+    async def test_get_status_completed_returns_outputs(self, adapter: GitHubActionsAdapter) -> None:
+        """AC1: get_status() completed → outputs = {job_name: conclusion}."""
+        main_response = MagicMock()
+        main_response.json.return_value = {
+            "status": "completed", "conclusion": "success",
+            "created_at": "2026-03-08T10:00:00Z", "updated_at": "2026-03-08T10:05:00Z",
+        }
+        main_response.raise_for_status = MagicMock()
+
+        jobs_response = MagicMock()
+        jobs_response.json.return_value = {
+            "total_count": 2,
+            "jobs": [
+                {"name": "build", "conclusion": "success"},
+                {"name": "test", "conclusion": "failure"},
+            ],
+        }
+        jobs_response.raise_for_status = MagicMock()
+
+        artifacts_response = MagicMock()
+        artifacts_response.json.return_value = {"total_count": 0, "artifacts": []}
+        artifacts_response.raise_for_status = MagicMock()
+
+        mock_main = AsyncMock()
+        mock_main.get = AsyncMock(return_value=main_response)
+        mock_main.__aenter__ = AsyncMock(return_value=mock_main)
+        mock_main.__aexit__ = AsyncMock(return_value=False)
+
+        mock_jobs = AsyncMock()
+        mock_jobs.get = AsyncMock(return_value=jobs_response)
+        mock_jobs.__aenter__ = AsyncMock(return_value=mock_jobs)
+        mock_jobs.__aexit__ = AsyncMock(return_value=False)
+
+        mock_artifacts = AsyncMock()
+        mock_artifacts.get = AsyncMock(return_value=artifacts_response)
+        mock_artifacts.__aenter__ = AsyncMock(return_value=mock_artifacts)
+        mock_artifacts.__aexit__ = AsyncMock(return_value=False)
+
+        with patch(
+            "adapters.github_actions_adapter.httpx.AsyncClient",
+            side_effect=[mock_main, mock_jobs, mock_artifacts],
+        ):
+            result = await adapter.get_status("run-123")
+
+        assert result["outputs"] == {"build": "success", "test": "failure"}
+        assert result["artifacts"] == []
+        assert result["status"] == "COMPLETED"
+        assert result["job_conclusion"] == "success"
+
+    @pytest.mark.asyncio
+    async def test_get_status_completed_returns_artifacts(self, adapter: GitHubActionsAdapter) -> None:
+        """AC2: get_status() completed → artifacts list from artifacts endpoint."""
+        main_response = MagicMock()
+        main_response.json.return_value = {
+            "status": "completed", "conclusion": "success",
+            "created_at": "2026-03-08T10:00:00Z", "updated_at": "2026-03-08T10:05:00Z",
+        }
+        main_response.raise_for_status = MagicMock()
+
+        jobs_response = MagicMock()
+        jobs_response.json.return_value = {"total_count": 0, "jobs": []}
+        jobs_response.raise_for_status = MagicMock()
+
+        artifacts_response = MagicMock()
+        artifacts_response.json.return_value = {
+            "total_count": 1,
+            "artifacts": [
+                {
+                    "name": "dist-package",
+                    "archive_download_url": "https://api.github.com/repos/org/repo/actions/artifacts/5001/zip",
+                    "size_in_bytes": 102400,
+                    "expired": False,
+                }
+            ],
+        }
+        artifacts_response.raise_for_status = MagicMock()
+
+        mock_main = AsyncMock()
+        mock_main.get = AsyncMock(return_value=main_response)
+        mock_main.__aenter__ = AsyncMock(return_value=mock_main)
+        mock_main.__aexit__ = AsyncMock(return_value=False)
+
+        mock_jobs = AsyncMock()
+        mock_jobs.get = AsyncMock(return_value=jobs_response)
+        mock_jobs.__aenter__ = AsyncMock(return_value=mock_jobs)
+        mock_jobs.__aexit__ = AsyncMock(return_value=False)
+
+        mock_artifacts = AsyncMock()
+        mock_artifacts.get = AsyncMock(return_value=artifacts_response)
+        mock_artifacts.__aenter__ = AsyncMock(return_value=mock_artifacts)
+        mock_artifacts.__aexit__ = AsyncMock(return_value=False)
+
+        with patch(
+            "adapters.github_actions_adapter.httpx.AsyncClient",
+            side_effect=[mock_main, mock_jobs, mock_artifacts],
+        ):
+            result = await adapter.get_status("run-456")
+
+        assert len(result["artifacts"]) == 1
+        artifact = result["artifacts"][0]
+        assert artifact["name"] == "dist-package"
+        assert "archive_download_url" in artifact
+        assert artifact["size_in_bytes"] == 102400
+        assert artifact["expired"] is False
+        assert result["job_conclusion"] == "success"
+
+    @pytest.mark.asyncio
+    async def test_get_status_in_progress_no_additional_calls(self, adapter: GitHubActionsAdapter) -> None:
+        """AC1+AC2: run in_progress → outputs={}, artifacts=[], UN SEUL appel API."""
+        main_response = MagicMock()
+        main_response.json.return_value = {
+            "status": "in_progress", "conclusion": None,
+            "created_at": "2026-03-08T10:00:00Z", "updated_at": "2026-03-08T10:01:00Z",
+        }
+        main_response.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=main_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch(
+            "adapters.github_actions_adapter.httpx.AsyncClient",
+            return_value=mock_client,
+        ):
+            result = await adapter.get_status("run-789")
+
+        assert result["outputs"] == {}
+        assert result["artifacts"] == []
+        assert result["status"] == "RUNNING"
+        mock_client.get.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_status_jobs_failure_is_resilient(self, adapter: GitHubActionsAdapter) -> None:
+        """AC1: Échec appel jobs → outputs={}, pas d'exception."""
+        main_response = MagicMock()
+        main_response.json.return_value = {
+            "status": "completed", "conclusion": "success",
+            "created_at": "x", "updated_at": "y",
+        }
+        main_response.raise_for_status = MagicMock()
+
+        mock_main = AsyncMock()
+        mock_main.get = AsyncMock(return_value=main_response)
+        mock_main.__aenter__ = AsyncMock(return_value=mock_main)
+        mock_main.__aexit__ = AsyncMock(return_value=False)
+
+        mock_jobs = AsyncMock()
+        mock_jobs.get = AsyncMock(side_effect=httpx.TimeoutException("timeout"))
+        mock_jobs.__aenter__ = AsyncMock(return_value=mock_jobs)
+        mock_jobs.__aexit__ = AsyncMock(return_value=False)
+
+        artifacts_response = MagicMock()
+        artifacts_response.json.return_value = {"total_count": 0, "artifacts": []}
+        artifacts_response.raise_for_status = MagicMock()
+        mock_artifacts = AsyncMock()
+        mock_artifacts.get = AsyncMock(return_value=artifacts_response)
+        mock_artifacts.__aenter__ = AsyncMock(return_value=mock_artifacts)
+        mock_artifacts.__aexit__ = AsyncMock(return_value=False)
+
+        with patch(
+            "adapters.github_actions_adapter.httpx.AsyncClient",
+            side_effect=[mock_main, mock_jobs, mock_artifacts],
+        ):
+            result = await adapter.get_status("run-999")
+
+        assert result["outputs"] == {}
+        assert result["status"] == "COMPLETED"
+
+    @pytest.mark.asyncio
+    async def test_get_status_artifacts_failure_is_resilient(self, adapter: GitHubActionsAdapter) -> None:
+        """AC2: Échec appel artifacts → artifacts=[], pas d'exception."""
+        main_response = MagicMock()
+        main_response.json.return_value = {
+            "status": "completed", "conclusion": "success",
+            "created_at": "x", "updated_at": "y",
+        }
+        main_response.raise_for_status = MagicMock()
+
+        jobs_response = MagicMock()
+        jobs_response.json.return_value = {"total_count": 0, "jobs": []}
+        jobs_response.raise_for_status = MagicMock()
+
+        mock_main = AsyncMock()
+        mock_main.get = AsyncMock(return_value=main_response)
+        mock_main.__aenter__ = AsyncMock(return_value=mock_main)
+        mock_main.__aexit__ = AsyncMock(return_value=False)
+
+        mock_jobs = AsyncMock()
+        mock_jobs.get = AsyncMock(return_value=jobs_response)
+        mock_jobs.__aenter__ = AsyncMock(return_value=mock_jobs)
+        mock_jobs.__aexit__ = AsyncMock(return_value=False)
+
+        mock_artifacts = AsyncMock()
+        mock_artifacts.get = AsyncMock(side_effect=httpx.TimeoutException("timeout"))
+        mock_artifacts.__aenter__ = AsyncMock(return_value=mock_artifacts)
+        mock_artifacts.__aexit__ = AsyncMock(return_value=False)
+
+        with patch(
+            "adapters.github_actions_adapter.httpx.AsyncClient",
+            side_effect=[mock_main, mock_jobs, mock_artifacts],
+        ):
+            result = await adapter.get_status("run-888")
+
+        assert result["artifacts"] == []
+        assert result["status"] == "COMPLETED"

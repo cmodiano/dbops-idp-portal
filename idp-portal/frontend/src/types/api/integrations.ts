@@ -161,6 +161,9 @@ export interface IntegrationResponse {
   health_error_message?: string | null;
   created_at: string;
   updated_at: string;
+  // Story 64.13: IaC drift tracking
+  last_synced_at?: string | null;
+  last_synced_hash?: string | null;
 }
 
 /** Alias for list display (same as full response). */

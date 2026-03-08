@@ -120,7 +120,10 @@ class Profile(models.Model):
     is_approver = models.IntegerField(default=0, db_column='IS_APPROVER')
     created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
     updated_at = models.DateTimeField(auto_now=True, db_column='UPDATED_AT')
-    
+    # Story 64.11: CaC sync tracking
+    last_synced_at = models.DateTimeField(null=True, blank=True, db_column='LAST_SYNCED_AT')
+    last_synced_hash = models.CharField(max_length=64, null=True, blank=True, db_column='LAST_SYNCED_HASH')
+
     # Custom manager
     objects = ProfileManager()
 

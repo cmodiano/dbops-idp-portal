@@ -1,7 +1,7 @@
 # Workflow Output Schemas — Guide Développeur
 
 Documentation du système de schémas d'output pour les workflows IDP.
-Stories 63.1–63.6.
+Stories 63.1–63.11.
 
 ---
 
@@ -9,8 +9,13 @@ Stories 63.1–63.6.
 
 1. [Créer un schéma d'output](#créer-un-schéma-doutput)
 2. [API Reference](#api-reference)
-3. [Templates Jinja2](#templates-jinja2)
-4. [Architecture](#architecture)
+3. [Structure `execution_steps`](#structure-execution_steps)
+4. [`output_mapping` : extraction des données d'un step](#output_mapping--extraction-des-données-dun-step)
+5. [Templates Jinja2 / `input_mapping`](#templates-jinja2--input_mapping)
+6. [Flux complet `output_mapping` → `input_mapping`](#flux-complet-output_mapping--input_mapping)
+7. [Relation `output_mapping` vs `OutputSchema`](#relation-output_mapping-vs-outputschema)
+8. [Cas limites et comportements](#cas-limites-et-comportements)
+9. [Architecture](#architecture)
 
 ---
 
@@ -323,9 +328,132 @@ POST /api/v1/admin/output-schemas/sync/?mode=additive|full
 
 ---
 
-## Templates Jinja2
+## Structure `execution_steps`
 
-Les templates de notification utilisent des variables issues des schémas d'output pour référencer les résultats des steps du workflow.
+Le champ `execution_steps` est un tableau JSON stocké sur le modèle `Action` (`catalog/models.py`). Il décrit la séquence des steps à exécuter dans un workflow.
+
+### Tableau des champs
+
+| Champ | Type | Obligatoire | Description |
+|-------|------|-------------|-------------|
+| `order` | integer | Oui | Ordre d'exécution (1 = premier). Les steps sont exécutés par ordre croissant. |
+| `step_id` | string | Non* | Identifiant unique du step dans le workflow. Requis pour le chaînage (`{{ steps.<step_id>. }}`). |
+| `name` | string | Non | Libellé affiché dans l'interface et les logs. |
+| `step_type` | string | Oui | Type d'exécution : `platform` (action catalogue), `service_call` (intégration tierce), `http_request` (requête HTTP), `evaluation` (évaluation de condition), `gate` (validation manuelle/gate d'approbation). |
+| `integration_type` | string | Conditionnel | Requis si `step_type=service_call`. Ex : `servicenow`, `vault`, `github`. |
+| `operation` | string | Conditionnel | Requis si `step_type=service_call`. Nom de l'opération à exécuter. |
+| `referenced_action_id` | integer | Conditionnel | Requis si `step_type=platform`. ID de l'action catalogue enfant à exécuter. |
+| `input_mapping` | object | Non | Paramètres d'entrée du step, avec templates Jinja2. Défaut : `{}`. |
+| `output_mapping` | object | Non | Extraction des données de sortie du step via JSONPath. Défaut : `{}`. |
+| `condition` | string \| object | Non | Condition d'exécution. Deux formats supportés : expression Jinja2 string (`"{{ steps.X.field != '' }}"`) ou objet de condition (`{"environment_in": ["production", "pre-production"]}`). Si évaluée à `false`, le step est SKIPPED. |
+
+> **\*** `step_id` doit être **unique dans un workflow**. Un step sans `step_id` n'est pas chaînable (ses sorties ne sont pas accessibles aux steps suivants).
+
+### Exemple complet
+
+```json
+[
+  {
+    "order": 1,
+    "step_id": "create_change",
+    "name": "Créer un changement ServiceNow",
+    "step_type": "service_call",
+    "integration_type": "servicenow",
+    "operation": "create_change",
+    "input_mapping": {
+      "short_description": "Déploiement {{ action_name }}",
+      "environment": "{{ environment }}"
+    },
+    "output_mapping": {
+      "change_number": "$.number",
+      "sys_id": "$.sys_id"
+    }
+  },
+  {
+    "order": 2,
+    "step_id": "aap_deploy",
+    "name": "Déploiement via AAP",
+    "step_type": "platform",
+    "referenced_action_id": 42,
+    "input_mapping": {
+      "change": "{{ steps.create_change.change_number }}",
+      "target_env": "{{ environment }}"
+    },
+    "output_mapping": {
+      "job_id": "$.platform_job_id",
+      "job_status": "$.job_status"
+    },
+    "condition": "{{ steps.create_change.change_number != '' }}"
+  }
+]
+```
+
+---
+
+## `output_mapping` : extraction des données d'un step
+
+Le champ `output_mapping` définit comment extraire des données de la réponse brute d'un step (`raw_output`) pour les rendre disponibles aux steps suivants.
+
+### Définition
+
+```json
+"output_mapping": {
+  "<alias>": "<expression_jsonpath>"
+}
+```
+
+- **`<alias>`** : nom de la variable accessible via `{{ steps.<step_id>.<alias> }}`.
+- **`<expression_jsonpath>`** : chemin JSONPath simple pointant vers le champ dans `raw_output`.
+
+### Syntaxe JSONPath supportée
+
+Seule la **notation point simple** est supportée (`output_extractor.py`) :
+
+| Expression | Accès dans `raw_output` |
+|------------|------------------------|
+| `$.key` | `raw_output["key"]` |
+| `$.key.subkey` | `raw_output["key"]["subkey"]` |
+| `$.key.subkey.deep` | `raw_output["key"]["subkey"]["deep"]` |
+
+> **⚠️ Non supporté :** `$[0]`, `$.key[*]`, filtres JSONPath complexes, accès par index.
+> Pour accéder à un élément de liste, utiliser les filtres Jinja2 dans `input_mapping` (voir section suivante).
+
+### Exemples concrets
+
+**Réponse brute d'un step ServiceNow (`raw_output`) :**
+```json
+{"number": "CHG0012345", "sys_id": "abc123def456", "state": "new"}
+```
+
+**`output_mapping` configuré :**
+```json
+{"change_number": "$.number", "sys_id": "$.sys_id"}
+```
+
+**Résultat stocké dans `_step_outputs["create_change"]` :**
+```json
+{"change_number": "CHG0012345", "sys_id": "abc123def456"}
+```
+
+**Réponse brute d'un step avec structure imbriquée :**
+```json
+{"result": {"job": {"id": 1234, "status": "successful"}}}
+```
+
+**`output_mapping` pour accéder aux données imbriquées :**
+```json
+{"job_id": "$.result.job.id", "job_status": "$.result.job.status"}
+```
+
+### Comportement si `output_mapping` est absent
+
+Si un step ne définit pas `output_mapping` (ou si la valeur est `{}`), ses données de sortie ne sont pas extraites. Le step n'est **pas chaînable** : `_step_outputs[step_id]` vaudra `{}` et toute référence `{{ steps.<step_id>.<field> }}` retournera `''`.
+
+---
+
+## Templates Jinja2 / `input_mapping`
+
+Le champ `input_mapping` définit les paramètres d'entrée d'un step. Les valeurs peuvent contenir des templates **Jinja2** pour référencer les sorties des steps précédents ou des variables d'exécution.
 
 ### Syntaxe
 
@@ -333,47 +461,77 @@ Les templates de notification utilisent des variables issues des schémas d'outp
 {{ steps.<step_id>.<field_name> }}
 ```
 
-### Variables disponibles
+Où `<step_id>` est le `step_id` d'un step **précédent** dans le workflow (ordre inférieur) et `<field_name>` est un alias défini dans son `output_mapping`.
+
+### Variables d'exécution disponibles
 
 | Variable | Description |
 |----------|-------------|
-| `steps.<step_id>.<field_name>` | Valeur du champ `field_name` retournée par le step `step_id` |
-| `execution.id` | ID de l'exécution |
-| `execution.status` | Statut final de l'exécution |
-| `execution.started_at` | Timestamp de démarrage |
-| `execution.finished_at` | Timestamp de fin |
-| `action.name` | Nom de l'action exécutée |
-| `user.username` | Nom d'utilisateur ayant déclenché l'exécution |
+| `{{ execution_id }}` | ID de l'exécution IDP |
+| `{{ environment }}` | Environnement cible de l'exécution |
+| `{{ action_name }}` | Nom de l'action exécutée |
+| `{{ steps.<step_id>.<field> }}` | Output extrait du step `step_id`, champ `field` |
+
+> **Note :** ces variables sont des clés plates dans le contexte Jinja2 (pas d'objet `execution` imbriqué). Utiliser `{{ environment }}` et non `{{ execution.environment }}`.
 
 ### Exemples concrets
 
-**Template de notification de déploiement :**
+**Référence à un step précédent :**
 
-```jinja2
-Déploiement terminé avec succès.
-
-Changement ServiceNow : {{ steps.create_change.change_number }}
-Job AAP : #{{ steps.aap_deploy.job_id }} ({{ steps.aap_deploy.job_status }})
-Migrations appliquées : {{ steps.flyway_migrate.migrations_applied }}
-
-Exécution #{{ execution.id }} lancée par {{ user.username }}.
+```json
+"input_mapping": {
+  "change": "{{ steps.create_change.change_number }}",
+  "target_env": "{{ environment }}"
+}
 ```
 
-**Filtre `truncate` :**
+**Composition de chaînes :**
 
-```jinja2
-Description : {{ steps.create_change.description | truncate(100) }}
+```json
+"input_mapping": {
+  "description": "Déploiement {{ action_name }} sur {{ environment }}",
+  "ref_change": "CHG: {{ steps.create_change.change_number }}"
+}
 ```
 
-### Comment les variables sont-elles résolues ?
+### Filtres Jinja2 autorisés
 
-Au moment du rendu, le moteur de template :
+Le moteur Jinja2 utilise un `SandboxedEnvironment` (`template_resolver.py`). Seuls les filtres suivants sont autorisés :
 
-1. Charge l'`execution_context` de l'exécution (résultat JSON de chaque step).
-2. Pour chaque `step_id` référencé, applique le JSONPath défini dans le schéma d'output.
-3. Expose le résultat sous `steps.<step_id>.<field_name>`.
+| Filtre | Exemple | Résultat |
+|--------|---------|---------|
+| `join` | `{{ steps.step1.dbs \| join(',') }}` | `"DB1,DB2,DB3"` |
+| `length` | `{{ steps.step1.dbs \| length }}` | `3` |
+| `first` | `{{ steps.step1.dbs \| first }}` | `"DB1"` |
+| `default` | `{{ steps.step1.val \| default('N/A') }}` | `"N/A"` si absent |
+| `truncate` | `{{ steps.step1.msg \| truncate(100) }}` | 100 premiers caractères |
 
-Si un step n'a pas de schéma, ses champs ne sont pas accessibles dans le template.
+> **Filtres bloqués :** tous les autres filtres Jinja2 standard (`upper`, `lower`, `replace`, `tojson`, etc.) sont bloqués pour des raisons de sécurité. Une erreur de filtre non autorisé retourne la valeur brute (mode failsafe).
+
+**Exemple avec filtre `first` (accès à un élément de liste) :**
+
+```json
+// raw_output du step "discovery"
+{ "databases": ["DB_PROD", "DB_STAGING", "DB_DEV"] }
+
+// output_mapping du step "discovery"
+"output_mapping": { "databases": "$.databases" }
+
+// input_mapping du step suivant
+"input_mapping": {
+  "primary_db": "{{ steps.discovery.databases | first }}"
+}
+// Résultat : "DB_PROD"
+```
+
+**Exemple avec filtre `join` :**
+
+```json
+"input_mapping": {
+  "db_list": "{{ steps.discovery.databases | join(', ') }}"
+}
+// Résultat : "DB_PROD, DB_STAGING, DB_DEV"
+```
 
 ### Accéder aux variables disponibles
 
@@ -384,6 +542,238 @@ GET /api/v1/output-schemas/workflows/{workflow_id}/available-variables/
 ```
 
 Via l'interface admin, le **VariablePicker** liste automatiquement les variables disponibles lors de la configuration d'un step.
+
+---
+
+## Flux complet `output_mapping` → `input_mapping`
+
+### Diagramme
+
+```
+Définition workflow (execution_steps JSON)
+              │
+              ▼
+┌─────────────────────────────────────┐
+│  Step N exécuté                     │
+│  1. Résolution input_mapping        │
+│     StepTemplateResolver.resolve()  │
+│     → templates Jinja2 remplacés   │
+│     → paramètres finaux du step     │
+└─────────────────────────────────────┘
+              │
+              ▼
+┌─────────────────────────────────────┐
+│  Exécution du step                  │
+│  (appel intégration / child exec)   │
+│  → raw_output (dict JSON)           │
+└─────────────────────────────────────┘
+              │
+              ▼
+┌─────────────────────────────────────┐
+│  Extraction output_mapping          │
+│  OutputExtractor.extract()          │
+│  $.key → raw_output["key"]          │
+│  → extracted = {alias: valeur}      │
+└─────────────────────────────────────┘
+              │
+              ▼
+┌─────────────────────────────────────┐
+│  Stockage dans _step_outputs        │
+│  _step_outputs[step_id] = extracted │
+│  (disponible pour les steps suivants)│
+└─────────────────────────────────────┘
+              │
+              ▼
+┌─────────────────────────────────────┐
+│  Step N+1 : résolution input_mapping│
+│  {{ steps.step_id.alias }}          │
+│  → remplacé par valeur extraite     │
+└─────────────────────────────────────┘
+```
+
+### Exemple bout-en-bout : ServiceNow → AAP
+
+**Configuration des deux steps :**
+
+```json
+[
+  {
+    "order": 1,
+    "step_id": "create_change",
+    "name": "Créer un changement ServiceNow",
+    "step_type": "service_call",
+    "integration_type": "servicenow",
+    "operation": "create_change",
+    "input_mapping": {
+      "short_description": "Déploiement {{ action_name }} — {{ environment }}"
+    },
+    "output_mapping": {
+      "change_number": "$.number",
+      "sys_id": "$.sys_id"
+    }
+  },
+  {
+    "order": 2,
+    "step_id": "aap_deploy",
+    "name": "Déploiement via AAP",
+    "step_type": "platform",
+    "referenced_action_id": 42,
+    "input_mapping": {
+      "change_request": "{{ steps.create_change.change_number }}",
+      "target_env": "{{ environment }}"
+    },
+    "output_mapping": {
+      "job_id": "$.platform_job_id",
+      "job_status": "$.job_status"
+    }
+  }
+]
+```
+
+**Déroulement runtime :**
+
+| Phase | Valeur |
+|-------|--------|
+| Contexte d'exécution | `action_name = "deploy-app"`, `environment = "production"` |
+| Step 1 — `input_mapping` résolu | `short_description = "Déploiement deploy-app — production"` |
+| Step 1 — `raw_output` ServiceNow | `{"number": "CHG0012345", "sys_id": "abc123", "state": "new"}` |
+| Step 1 — `output_mapping` extrait | `{"change_number": "CHG0012345", "sys_id": "abc123"}` |
+| `_step_outputs["create_change"]` | `{"change_number": "CHG0012345", "sys_id": "abc123"}` |
+| Step 2 — `input_mapping` résolu | `change_request = "CHG0012345"`, `target_env = "production"` |
+| Step 2 — exécution AAP | Job lancé avec les paramètres résolus |
+| Step 2 — `raw_output` AAP | `{"platform_job_id": 9876, "job_status": "successful"}` |
+| `_step_outputs["aap_deploy"]` | `{"job_id": 9876, "job_status": "successful"}` |
+
+---
+
+## Relation `output_mapping` vs `OutputSchema`
+
+Ces deux mécanismes sont **orthogonaux** : ils servent des objectifs différents et peuvent être utilisés indépendamment.
+
+### Comparaison
+
+| Aspect | `output_mapping` | `OutputSchema` |
+|--------|-----------------|----------------|
+| **Rôle** | Extraction runtime des données d'un step | Déclaration des variables disponibles dans l'UI |
+| **Où défini** | Dans `execution_steps` de l'action workflow | Dans les schémas YAML (`seed_schemas/`) ou via l'API admin |
+| **Quand utilisé** | Pendant l'exécution du workflow | Dans le VariablePicker (configuration de l'UI) |
+| **Stockage** | CLOB JSON dans la table `CATALOG_ACTIONS` | Table `OUTPUT_SCHEMAS` |
+| **Consommé par** | `OutputExtractor`, `StepTemplateResolver` | `OutputSchemaRegistry`, API `/available-variables/` |
+| **Résultat** | `_step_outputs[step_id]` rempli | VariablePicker liste les variables disponibles |
+
+### Relation entre les deux systèmes
+
+```
+output_mapping (runtime)              OutputSchema (déclaratif)
+─────────────────────────             ────────────────────────────
+execution_steps[i].output_mapping     output_schemas/models.py → OutputSchema
+│ $.key → alias                      │ schémas YAML (seed_schemas/)
+▼                                     ▼
+OutputExtractor.extract()             OutputSchemaRegistry (cache)
+→ _step_outputs[step_id]             → VariablePicker API
+▼                                     ▼
+StepTemplateResolver.resolve()        GET /api/v1/output-schemas/workflows/
+→ input_mapping résolu                    {id}/available-variables/
+```
+
+### Cas d'utilisation
+
+**Cas 1 — `output_mapping` sans `OutputSchema` :**
+Le chaînage fonctionne à l'exécution, mais le VariablePicker ne liste pas les variables. L'utilisateur doit saisir `{{ steps.<step_id>.<field> }}` manuellement dans l'interface.
+
+```json
+// Step avec output_mapping mais sans OutputSchema
+{
+  "step_id": "my_step",
+  "output_mapping": { "result": "$.data.value" }
+  // → runtime OK, VariablePicker vide pour ce step
+}
+```
+
+**Cas 2 — `OutputSchema` sans `output_mapping` (ou `output_mapping: {}`) :**
+Le VariablePicker liste les variables disponibles (aide l'utilisateur à configurer les steps suivants), mais aucune donnée n'est transmise à l'exécution. Les références `{{ steps.<step_id>.<field> }}` retourneront `''`.
+
+```yaml
+# OutputSchema déclaré mais output_mapping absent dans le step
+spec:
+  output_fields:
+    - name: change_number
+      path: "$.number"
+# → VariablePicker affiche "change_number", mais si output_mapping={}, la valeur sera ''
+```
+
+**Cas 3 — Les deux définis (configuration recommandée) :**
+Cohérence complète : le VariablePicker liste les variables ET le chaînage transmet les valeurs correctement.
+
+> **Bonne pratique :** les alias définis dans `output_mapping` doivent correspondre aux `name` des `output_fields` de l'`OutputSchema` associé pour une cohérence entre UI et runtime.
+
+---
+
+## Cas limites et comportements
+
+### Tableau de référence
+
+| Situation | Comportement |
+|-----------|-------------|
+| `step_id` absent sur un step | Le step s'exécute, mais ses sorties ne sont pas stockées dans `_step_outputs`. Toute référence `{{ steps.<step_id>. }}` retourne `''`. |
+| Step SKIPPED (condition évaluée à `false`) | `_step_outputs[step_id] = {}` — le step est enregistré comme skippé, mais sans données. Références à ses champs retournent `''`. |
+| Référence à un step futur ou inexistant | `StepTemplateResolver` retourne `''` sans lever d'exception. |
+| Référence à un step existant mais champ absent | `_step_outputs[step_id]` existe mais ne contient pas le champ → retourne `''`. |
+| `output_mapping` absent ou `{}` | `_step_outputs[step_id] = {}` si `step_id` défini. Chaînage non alimenté. |
+| JSONPath introuvable dans `raw_output` | La clé est **présente** dans `_step_outputs[step_id]` avec la valeur `None`, finalisée en `''` lors de la résolution Jinja2. |
+| Valeur `None` dans `_step_outputs[step_id][field]` | Finalisée en `''` lors de la résolution Jinja2. |
+| Filtre Jinja2 non autorisé | Retourne la chaîne template non rendue (failsafe — ex: `"{{ steps.X.val \| upper }}"`) — pas d'exception levée. |
+
+### Détails par cas
+
+**Step sans `step_id` :**
+```json
+// Step sans step_id — exécuté mais non chaînable
+{
+  "order": 1,
+  "name": "Step anonyme",
+  "step_type": "service_call",
+  "integration_type": "servicenow",
+  "operation": "create_change",
+  "output_mapping": { "change_number": "$.number" }
+  // Pas de step_id → _step_outputs non mis à jour
+}
+```
+
+**Step SKIPPED :**
+```json
+{
+  "order": 2,
+  "step_id": "optional_step",
+  "condition": "{{ steps.create_change.change_number != '' }}",
+  // Si condition = false :
+  // → step SKIPPED
+  // → _step_outputs["optional_step"] = {}
+  // → {{ steps.optional_step.some_field }} retourne ''
+}
+```
+
+**JSONPath inexistant :**
+```json
+// raw_output = {"data": {"value": 42}}
+// output_mapping = {"result": "$.missing_key"}
+// → "missing_key" absent dans raw_output
+// → "result" absent de _step_outputs["my_step"]
+// → {{ steps.my_step.result }} retourne ''
+```
+
+**Référence à un step futur :**
+```json
+// Step 1 tente de référencer Step 2 (non encore exécuté)
+{
+  "order": 1,
+  "input_mapping": {
+    "param": "{{ steps.step_2.some_field }}"
+    // → steps.step_2 n'est pas dans _step_outputs (pas encore exécuté)
+    // → retourne '' sans erreur
+  }
+}
+```
 
 ---
 

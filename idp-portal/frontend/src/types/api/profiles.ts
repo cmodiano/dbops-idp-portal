@@ -28,6 +28,9 @@ export interface ProfileResponse {
   is_approver: boolean;  // Story 57.14
   created_at: string;
   updated_at: string;
+  // Story 64.13: IaC drift tracking
+  last_synced_at?: string | null;
+  last_synced_hash?: string | null;
 }
 
 export interface ProfileListItem {
@@ -39,6 +42,10 @@ export interface ProfileListItem {
   is_approver: boolean;  // Story 57.14
   permission_count: number;
   created_at: string;
+  updated_at?: string | null;
+  // Story 64.13: IaC drift tracking
+  last_synced_at?: string | null;
+  last_synced_hash?: string | null;
 }
 
 /** Story 2.10: Actions/env permissions per profile (AC2–AC5). */

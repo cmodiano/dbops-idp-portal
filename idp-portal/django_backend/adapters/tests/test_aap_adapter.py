@@ -173,17 +173,21 @@ class TestGetStatus:
 
     @pytest.mark.asyncio
     async def test_get_status_success(self, adapter: AAPAdapter) -> None:
-        response = MagicMock()
-        response.json.return_value = {
+        main_response = MagicMock()
+        main_response.json.return_value = {
             "status": "running",
             "started": "2026-02-14T10:00:00Z",
             "finished": None,
             "elapsed": 45.2,
+            "artifacts": {},
         }
-        response.raise_for_status = MagicMock()
+        main_response.raise_for_status = MagicMock()
+        summaries_response = MagicMock()
+        summaries_response.json.return_value = {"results": []}
+        summaries_response.raise_for_status = MagicMock()
 
         mock_client = AsyncMock()
-        mock_client.get = AsyncMock(return_value=response)
+        mock_client.get = AsyncMock(side_effect=[main_response, summaries_response])
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
@@ -193,11 +197,14 @@ class TestGetStatus:
         assert result["status"] == "RUNNING"
         assert result["aap_status"] == "running"
         assert result["started"] == "2026-02-14T10:00:00Z"
+        assert result["artifacts"] == {}
+        assert result["failed_tasks"] == []
+        assert result["changed_hosts"] == []
 
     @pytest.mark.asyncio
     async def test_get_status_workflow_job(self, adapter: AAPAdapter) -> None:
         response = MagicMock()
-        response.json.return_value = {"status": "successful", "started": "x", "finished": "y", "elapsed": 10}
+        response.json.return_value = {"status": "successful", "started": "x", "finished": "y", "elapsed": 10, "artifacts": {}}
         response.raise_for_status = MagicMock()
 
         mock_client = AsyncMock()
@@ -209,10 +216,118 @@ class TestGetStatus:
             result = await adapter.get_status("456", resource_type="workflow_job")
 
         assert result["status"] == "COMPLETED"
-        # Verify correct URL
+        # Verify correct URL and no summaries call for workflow_job
         mock_client.get.assert_called_once()
         call_url = str(mock_client.get.call_args)
         assert "workflow_jobs/456" in call_url
+
+    @pytest.mark.asyncio
+    async def test_get_status_returns_artifacts(self, adapter: AAPAdapter) -> None:
+        """AC1: get_status() extrait les artifacts (set_stats) de la réponse AAP."""
+        main_response = MagicMock()
+        main_response.json.return_value = {
+            "status": "successful",
+            "started": "2026-03-08T10:00:00Z",
+            "finished": "2026-03-08T10:05:00Z",
+            "elapsed": 300.0,
+            "artifacts": {"app_version": "1.2.3", "deploy_result": "ok"},
+        }
+        main_response.raise_for_status = MagicMock()
+        summaries_response = MagicMock()
+        summaries_response.json.return_value = {"results": []}
+        summaries_response.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(side_effect=[main_response, summaries_response])
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("adapters.aap_adapter.httpx.AsyncClient", return_value=mock_client):
+            result = await adapter.get_status("123", resource_type="job_template")
+
+        assert result["artifacts"] == {"app_version": "1.2.3", "deploy_result": "ok"}
+        assert result["status"] == "COMPLETED"
+
+    @pytest.mark.asyncio
+    async def test_get_status_returns_failed_tasks_and_changed_hosts(self, adapter: AAPAdapter) -> None:
+        """AC2: get_status() construit failed_tasks et changed_hosts depuis job_host_summaries."""
+        main_response = MagicMock()
+        main_response.json.return_value = {
+            "status": "failed", "started": "x", "finished": "y", "elapsed": 10,
+            "artifacts": {},
+        }
+        main_response.raise_for_status = MagicMock()
+        summaries_response = MagicMock()
+        summaries_response.json.return_value = {
+            "results": [
+                {"host_name": "web01", "failed": 1, "changed": 0, "ok": 2},
+                {"host_name": "web02", "failed": 0, "changed": 3, "ok": 5},
+            ]
+        }
+        summaries_response.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(side_effect=[main_response, summaries_response])
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("adapters.aap_adapter.httpx.AsyncClient", return_value=mock_client):
+            result = await adapter.get_status("456", resource_type="job_template")
+
+        assert result["failed_tasks"] == [{"task": "web01", "host": "web01"}]
+        assert result["changed_hosts"] == ["web02"]
+        # Vérifier que l'URL summaries inclut page_size=200 (sinon AAP tronque à ~20 résultats)
+        summaries_call = mock_client.get.call_args_list[1]
+        assert "job_host_summaries" in str(summaries_call)
+        assert "page_size=200" in str(summaries_call)
+
+    @pytest.mark.asyncio
+    async def test_get_status_job_host_summaries_failure_is_resilient(self, adapter: AAPAdapter) -> None:
+        """AC2: Échec job_host_summaries → failed_tasks=[], changed_hosts=[], pas d'exception."""
+        main_response = MagicMock()
+        main_response.json.return_value = {
+            "status": "successful", "started": "x", "finished": "y", "elapsed": 5,
+            "artifacts": {},
+        }
+        main_response.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(side_effect=[
+            main_response,
+            httpx.TimeoutException("timeout"),
+        ])
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("adapters.aap_adapter.httpx.AsyncClient", return_value=mock_client):
+            result = await adapter.get_status("789", resource_type="job_template")
+
+        assert result["failed_tasks"] == []
+        assert result["changed_hosts"] == []
+        assert result["status"] == "COMPLETED"  # pas d'exception
+
+    @pytest.mark.asyncio
+    async def test_get_status_workflow_job_no_summaries(self, adapter: AAPAdapter) -> None:
+        """AC2: workflow_job → artifacts={}, failed_tasks=[], changed_hosts=[] sans appel summaries."""
+        response = MagicMock()
+        response.json.return_value = {
+            "status": "successful", "started": "x", "finished": "y", "elapsed": 20,
+            "artifacts": {},
+        }
+        response.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("adapters.aap_adapter.httpx.AsyncClient", return_value=mock_client):
+            result = await adapter.get_status("999", resource_type="workflow_job")
+
+        assert result["artifacts"] == {}
+        assert result["failed_tasks"] == []
+        assert result["changed_hosts"] == []
+        mock_client.get.assert_called_once()  # pas d'appel job_host_summaries
 
     @pytest.mark.asyncio
     async def test_get_status_timeout(self, adapter: AAPAdapter) -> None:

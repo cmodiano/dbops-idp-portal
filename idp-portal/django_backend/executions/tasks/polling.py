@@ -445,10 +445,14 @@ def poll_platform_job_status(
         correlation_id=correlation_id,
     )
 
-    # Construire les champs AAP standard à stocker dans l'output du step
-    aap_status = status_data.get("aap_status") or status_data.get("status")
+    # Construire les champs de plateforme à stocker dans l'output du step
+    platform_status = status_data.get("aap_status") or status_data.get("status")
+    artifacts_raw = status_data.get("artifacts")
+    artifacts = artifacts_raw if artifacts_raw is not None else {}
     failed_tasks = status_data.get("failed_tasks") or []
     changed_hosts = status_data.get("changed_hosts") or []
+    outputs = status_data.get("outputs") or {}
+    job_conclusion = status_data.get("job_conclusion")
 
     error_summary = None
     if failed_tasks and isinstance(failed_tasks, list) and len(failed_tasks) > 0:
@@ -461,7 +465,8 @@ def poll_platform_job_status(
 
     output_fields: dict = {
         "platform_job_id": platform_job_id,
-        "job_status": aap_status,
+        "job_status": platform_status,
+        "artifacts": artifacts,
     }
     if error_summary:
         output_fields["error_summary"] = error_summary
@@ -469,6 +474,10 @@ def poll_platform_job_status(
         output_fields["failed_tasks"] = failed_tasks
     if changed_hosts:
         output_fields["changed_hosts"] = changed_hosts
+    if outputs:
+        output_fields["outputs"] = outputs
+    if job_conclusion is not None:
+        output_fields["job_conclusion"] = job_conclusion
 
     # Update execution step status in DB
     _tasks._update_execution_from_poll(

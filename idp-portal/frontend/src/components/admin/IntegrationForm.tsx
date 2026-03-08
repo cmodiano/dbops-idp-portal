@@ -4,7 +4,8 @@
  */
 
 import { Form, Input, Modal, Alert, Select, Avatar, Space, Button, Upload, App, Tag, Tooltip } from 'antd';
-import { UploadOutlined, ApiOutlined, InfoCircleOutlined, ExclamationCircleOutlined, WarningOutlined, ThunderboltOutlined, FileTextOutlined } from '@ant-design/icons';
+import { UploadOutlined, ApiOutlined, InfoCircleOutlined, ExclamationCircleOutlined, WarningOutlined, ThunderboltOutlined, FileTextOutlined, DownloadOutlined } from '@ant-design/icons';
+import { useEntityExport } from '../../hooks/useEntityExport';
 import type { AuthFlow, IntegrationCreate, IntegrationUpdate, IntegrationResponse, TestConnectionResponse } from '../../types/api';
 import { AUTH_FLOW_LABELS } from '../../types/api';
 import { getIconUrl } from '../../utils/iconUrl';
@@ -98,6 +99,12 @@ export function IntegrationForm({
 
   const { types: integrationTypes, loading: loadingTypes, isFallback } = useIntegrationTypes();
   const { vaultIntegrations } = useVaultIntegrations();
+  // Story 64.13: Single-entity YAML export
+  const { exportYaml, loading: exportLoading } = useEntityExport(
+    'integrations',
+    editIntegration?.id ?? 0,
+    editIntegration?.name ?? '',
+  );
   const selectedTypeData = integrationTypes.find((t) => t.code === watchedType) ?? null;
 
   const handleSubmit = async () => {
@@ -204,11 +211,20 @@ export function IntegrationForm({
 
   return (
     <Modal open={open} title={isEdit ? "Modifier l'intégration" : 'Nouvelle intégration'} onCancel={onCancel} destroyOnHidden
-      footer={<Space>
-        <Button onClick={onCancel} disabled={loading}>Annuler</Button>
-        <Button type="primary" onClick={handleSubmit} loading={loading} disabled={isSubmitDisabled}>{isEdit ? 'Enregistrer' : 'Créer'}</Button>
-      </Space>}>
-      {error && <Alert type="error" title={error} style={{ marginBottom: 16 }} showIcon />}
+      footer={
+        <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+          {isEdit ? (
+            <Button icon={<DownloadOutlined />} onClick={exportYaml} loading={exportLoading}>
+              Exporter en YAML
+            </Button>
+          ) : <span />}
+          <Space>
+            <Button onClick={onCancel} disabled={loading}>Annuler</Button>
+            <Button type="primary" onClick={handleSubmit} loading={loading} disabled={isSubmitDisabled}>{isEdit ? 'Enregistrer' : 'Créer'}</Button>
+          </Space>
+        </Space>
+      }>
+      {error ? <Alert type="error" title={error} style={{ marginBottom: 16 }} showIcon /> : null}
       {isEdit && isInvalid && (
         <Alert type="error" showIcon icon={<ExclamationCircleOutlined />} title="Intégration invalide"
           description={`Cette intégration est invalide. Le type '${editIntegration?.type}' n'existe pas dans le catalogue backend. Veuillez contacter un administrateur. Les modifications ne sont pas autorisées pour les intégrations invalides.`}

@@ -42,7 +42,7 @@ export default function AdminPage() {
           Administration du Catalogue
         </Title>
         <Typography.Text type="secondary">
-          Gérez les actions, profils, intégrations, règles métier et configurations du portail
+          Gérez les actions, profils, intégrations et règles métier du portail
         </Typography.Text>
       </div>
 

@@ -1,8 +1,11 @@
 """
-executions/tasks/cleanup.py — Purge old platform logs from ExecutionStep output.
+executions/tasks/cleanup.py — Purge old platform logs and workflow events.
 
 Logs are forwarded to Splunk at terminal state; after a retention period they can
 be safely removed from the database to save Oracle CLOB storage.
+
+Workflow events are ephemeral UI-sync records purged after a short retention
+period (default 7 days) since they are only needed for WebSocket catch-up.
 """
 from __future__ import annotations
 
@@ -114,3 +117,58 @@ def purge_old_platform_logs() -> dict:
     )
 
     return {"purged": total_purged, "errors": total_errors}
+
+
+def _parse_workflow_event_retention_days() -> int:
+    """Parse WORKFLOW_EVENT_RETENTION_DAYS defensively; default 7 on invalid value."""
+    raw = os.getenv("WORKFLOW_EVENT_RETENTION_DAYS", "7")
+    try:
+        val = int(raw)
+        return val if val > 0 else 7
+    except (ValueError, TypeError):
+        return 7
+
+
+WORKFLOW_EVENT_RETENTION_DAYS = _parse_workflow_event_retention_days()
+WORKFLOW_EVENT_PURGE_BATCH_SIZE = 1000
+
+
+@shared_task(name="executions.tasks.purge_old_workflow_events")
+def purge_old_workflow_events() -> dict:
+    """Purge workflow events older than the retention period.
+
+    Workflow events are ephemeral records used for WebSocket catch-up on
+    page reload.  Once past retention they serve no purpose and waste
+    Oracle storage.
+
+    Deletes in batches to avoid long-running transactions and excessive
+    undo/redo generation.
+
+    Returns:
+        dict with ``deleted`` count.
+    """
+    from executions.models import WorkflowEvent  # noqa: PLC0415
+
+    cutoff = timezone.now() - timedelta(days=WORKFLOW_EVENT_RETENTION_DAYS)
+    total_deleted = 0
+
+    while True:
+        # Fetch IDs in a batch to delete — avoids unbounded DELETE with WHERE
+        batch_ids = list(
+            WorkflowEvent.objects
+            .filter(created_at__lt=cutoff)
+            .values_list("id", flat=True)[:WORKFLOW_EVENT_PURGE_BATCH_SIZE]
+        )
+        if not batch_ids:
+            break
+
+        deleted, _ = WorkflowEvent.objects.filter(id__in=batch_ids).delete()
+        total_deleted += deleted
+
+    logger.info(
+        "purge_old_workflow_events_complete",
+        deleted=total_deleted,
+        retention_days=WORKFLOW_EVENT_RETENTION_DAYS,
+    )
+
+    return {"deleted": total_deleted}

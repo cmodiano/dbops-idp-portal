@@ -165,6 +165,9 @@ class Integration(models.Model):
     )
     health_checked_at = models.DateTimeField(null=True, blank=True, db_column='HEALTH_CHECKED_AT')
     health_error_message = models.TextField(null=True, blank=True, db_column='HEALTH_ERROR_MESSAGE')
+    # Story 64.11: CaC sync tracking
+    last_synced_at = models.DateTimeField(null=True, blank=True, db_column='LAST_SYNCED_AT')
+    last_synced_hash = models.CharField(max_length=64, null=True, blank=True, db_column='LAST_SYNCED_HASH')
 
     # Custom manager
     objects = IntegrationManager()
@@ -214,6 +217,9 @@ class IntegrationTypeCatalogue(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
     updated_at = models.DateTimeField(auto_now=True, db_column='UPDATED_AT')
+    # Story 64.11: CaC sync tracking
+    last_synced_at = models.DateTimeField(null=True, blank=True, db_column='LAST_SYNCED_AT')
+    last_synced_hash = models.CharField(max_length=64, null=True, blank=True, db_column='LAST_SYNCED_HASH')
 
     class Meta:
         db_table = 'INTEGRATION_TYPE_CATALOGUE'

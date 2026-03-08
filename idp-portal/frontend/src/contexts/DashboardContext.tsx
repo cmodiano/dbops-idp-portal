@@ -7,7 +7,7 @@
 
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 
-const LOCALSTORAGE_KEY = 'dbops_dashboard_seen_errors';
+const LOCALSTORAGE_KEY = 'dbops_dashboard_seen_errors-v1';
 
 interface DashboardContextValue {
   /** Number of unseen error executions (for badge). */

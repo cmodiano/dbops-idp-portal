@@ -159,6 +159,9 @@ class BusinessRulePolicy(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
     updated_at = models.DateTimeField(auto_now=True, db_column='UPDATED_AT')
     created_by = models.ForeignKey(User, on_delete=models.PROTECT, db_column='CREATED_BY_ID')
+    # Story 64.11: CaC sync tracking
+    last_synced_at = models.DateTimeField(null=True, blank=True, db_column='LAST_SYNCED_AT')
+    last_synced_hash = models.CharField(max_length=64, null=True, blank=True, db_column='LAST_SYNCED_HASH')
 
     class Meta:
         db_table = 'BUSINESS_RULE_POLICIES'
@@ -238,6 +241,15 @@ class Action(models.Model):
         related_name='actions',
         db_column='BUSINESS_RULE_POLICY_ID',
     )
+    # Story 63.9: FK vers OutputSchema — schéma d'output déclaré par l'admin pour cette action
+    output_schema = models.ForeignKey(
+        'output_schemas.OutputSchema',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='actions',
+        db_column='OUTPUT_SCHEMA_ID',
+    )
     default_impact_level = models.CharField(
         max_length=20,
         choices=[
@@ -291,6 +303,9 @@ class Action(models.Model):
     )
     deleted_at = models.DateTimeField(null=True, blank=True, db_column='DELETED_AT')
     deletion_reason = models.CharField(max_length=500, null=True, blank=True, db_column='DELETION_REASON')
+    # Story 64.11: CaC sync tracking
+    last_synced_at = models.DateTimeField(null=True, blank=True, db_column='LAST_SYNCED_AT')
+    last_synced_hash = models.CharField(max_length=64, null=True, blank=True, db_column='LAST_SYNCED_HASH')
 
     # Custom manager
     objects = ActionManager()

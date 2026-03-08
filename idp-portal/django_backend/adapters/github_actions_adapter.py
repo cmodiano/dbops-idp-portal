@@ -300,7 +300,9 @@ class GitHubActionsAdapter(BaseAdapter, IHealthCheckable):
 
         Returns:
             Dict with 'status' (IDP mapping), 'github_actions_status',
-            'github_actions_conclusion', 'created_at', 'updated_at'.
+            'github_actions_conclusion', 'job_conclusion', 'created_at', 'updated_at',
+            'outputs' (dict job→conclusion, populated only when completed),
+            'artifacts' (list of artifact dicts, populated only when completed).
 
         Raises:
             ServiceUnavailableError: If GitHub is unreachable.
@@ -346,8 +348,11 @@ class GitHubActionsAdapter(BaseAdapter, IHealthCheckable):
                     "status": "SUBMITTED",
                     "github_actions_status": "not_found",
                     "github_actions_conclusion": None,
+                    "job_conclusion": None,
                     "created_at": None,
                     "updated_at": None,
+                    "outputs": {},
+                    "artifacts": [],
                 }
             logger.error(
                 "github_actions_get_status_http_error",
@@ -390,12 +395,70 @@ class GitHubActionsAdapter(BaseAdapter, IHealthCheckable):
             correlation_id=correlation_id,
         )
 
+        # outputs et artifacts : uniquement si run completed
+        outputs: dict = {}
+        artifacts: list = []
+        if gh_status == "completed":
+            # Job outputs (conclusions par job)
+            try:
+                async with httpx.AsyncClient(
+                    headers=self.auth_headers,
+                    timeout=self.timeout,
+                    verify=self.verify_ssl,
+                ) as jobs_client:
+                    jobs_url = f"{self._repos_url()}/actions/runs/{platform_job_id}/jobs"
+                    jobs_response = await jobs_client.get(jobs_url)
+                    jobs_response.raise_for_status()
+                    jobs_data = jobs_response.json()
+                    outputs = {
+                        job["name"]: job.get("conclusion")
+                        for job in jobs_data.get("jobs", [])
+                        if job.get("name")
+                    }
+            except Exception:  # noqa: BLE001
+                logger.warning(
+                    "github_actions_get_outputs_failed",
+                    platform_job_id=platform_job_id,
+                    correlation_id=correlation_id,
+                )
+
+            # Artifacts uploadés pendant le run
+            try:
+                async with httpx.AsyncClient(
+                    headers=self.auth_headers,
+                    timeout=self.timeout,
+                    verify=self.verify_ssl,
+                ) as artifacts_client:
+                    artifacts_url = f"{self._repos_url()}/actions/runs/{platform_job_id}/artifacts"
+                    artifacts_response = await artifacts_client.get(artifacts_url)
+                    artifacts_response.raise_for_status()
+                    artifacts_data = artifacts_response.json()
+                    artifacts = [
+                        {
+                            "name": a["name"],
+                            "archive_download_url": a.get("archive_download_url", ""),
+                            "size_in_bytes": a.get("size_in_bytes", 0),
+                            "expired": a.get("expired", False),
+                        }
+                        for a in artifacts_data.get("artifacts", [])
+                        if a.get("name")
+                    ]
+            except Exception:  # noqa: BLE001
+                logger.warning(
+                    "github_actions_get_artifacts_failed",
+                    platform_job_id=platform_job_id,
+                    correlation_id=correlation_id,
+                )
+
         return {
             "status": idp_status,
             "github_actions_status": gh_status,
             "github_actions_conclusion": gh_conclusion,
+            "job_conclusion": gh_conclusion,
             "created_at": data.get("created_at"),
             "updated_at": data.get("updated_at"),
+            "outputs": outputs,
+            "artifacts": artifacts,
         }
 
     # ------------------------------------------------------------------

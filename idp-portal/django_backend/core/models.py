@@ -105,6 +105,19 @@ class AuditActionType(models.TextChoices):
     POLICY_DELETED = 'POLICY_DELETED', 'Policy Deleted'
     # Story 30.7: Polling exhaustion audit type
     EXECUTION_POLLING_EXHAUSTED = 'EXECUTION_POLLING_EXHAUSTED', 'Execution Polling Exhausted'
+    # Story 64.1: CaC Config Sync audit types
+    CONFIG_SYNC_REFERENCE_IMPORT = 'CONFIG_SYNC_REFERENCE_IMPORT', 'Config Sync - Reference Data Import'
+    # Story 64.2: CaC Config Sync - Tags and Feature Flags
+    CONFIG_SYNC_TAGS_IMPORT = 'CONFIG_SYNC_TAGS_IMPORT', 'Config Sync - Tags Import'
+    CONFIG_SYNC_FEATURE_FLAGS_IMPORT = 'CONFIG_SYNC_FEATURE_FLAGS_IMPORT', 'Config Sync - Feature Flags Import'
+    # Story 64.3: CaC Config Sync - Integration Type Catalogue
+    CONFIG_SYNC_INTEGRATION_TYPE_IMPORT = 'CONFIG_SYNC_INTEGRATION_TYPE_IMPORT', 'Config Sync - Integration Type Import'
+    # Story 64.4: CaC Config Sync - Integration
+    CONFIG_SYNC_INTEGRATION_IMPORT = 'CONFIG_SYNC_INTEGRATION_IMPORT', 'Config Sync - Integration Import'
+    # Story 64.5: CaC Config Sync - Business Rule Policy
+    CONFIG_SYNC_POLICY_IMPORT = 'CONFIG_SYNC_POLICY_IMPORT', 'Config Sync - Policy Import'
+    # Story 64.6: CaC Config Sync - Action
+    CONFIG_SYNC_ACTION_IMPORT = 'CONFIG_SYNC_ACTION_IMPORT', 'Config Sync - Action Import'
     # Additional types added in later migrations (V028-V035, V039-V041)
     # Note: Full list would include all types from migrations, but base types are sufficient for model
 
@@ -124,6 +137,10 @@ class AuditEntityType(models.TextChoices):
     INTEGRATION_ACTION = 'integration_action', 'Integration Action'
     # Story 28.4: Business rule policy entity type
     BUSINESS_RULE_POLICY = 'business_rule_policy', 'Business Rule Policy'
+    # Story 64.1: CaC Reference Data entity type
+    REFERENCE_DATA = 'reference_data', 'Reference Data'
+    # Story 64.2: CaC Tags entity type
+    TAGS = 'tags', 'Tags'
     # Additional types may exist in later migrations
 
 
@@ -315,6 +332,9 @@ class FeatureFlag(models.Model):
         default='',
         db_column='UPDATED_BY',
     )
+    # Story 64.11: CaC sync tracking
+    last_synced_at = models.DateTimeField(null=True, blank=True, db_column='LAST_SYNCED_AT')
+    last_synced_hash = models.CharField(max_length=64, null=True, blank=True, db_column='LAST_SYNCED_HASH')
 
     class Meta:
         db_table = 'CORE_FEATURE_FLAGS'

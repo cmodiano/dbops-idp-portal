@@ -120,7 +120,7 @@ class OutputSchemaRegistry:
         return resolved
 
     def get_platform_convention(self, convention_name: str) -> dict | None:
-        """Résout une convention plateforme (ex: 'aap-standard')."""
+        """Résout une convention plateforme (ex: 'aap' — c'est le target_name, pas le name du schéma)."""
         cache_key = f"platform_convention:{convention_name}"
         with self._lock:
             if cache_key in self._cache:

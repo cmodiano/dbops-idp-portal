@@ -46,6 +46,8 @@ export interface ActionCreate {
   notification_config?: NotificationConfig | null;
   /** Story 28.4: FK to predefined business rule policy. */
   business_rule_policy_id?: number | null;
+  /** Story 63.9: FK vers OutputSchema déclaré par l'admin pour cette action. */
+  output_schema_id?: number | null;
 }
 
 export interface ActionResponse {
@@ -82,6 +84,9 @@ export interface ActionResponse {
    * consistent with backend models.BooleanField(default=True).
    */
   requires_target?: boolean;
+  /** Story 64.13: IaC drift tracking. */
+  last_synced_at?: string | null;
+  last_synced_hash?: string | null;
 }
 
 /** Story 31.8: Notification channel configuration. */
@@ -268,6 +273,8 @@ export interface ActionDetail extends ActionResponse {
   business_rule_policy_id?: number | null;
   /** Story 28.4: Name of the predefined business rule policy (computed). */
   business_rule_policy_name?: string | null;
+  /** Story 63.9: FK vers OutputSchema déclaré par l'admin pour cette action. */
+  output_schema_id?: number | null;
 }
 
 // === Status Transition Types (Story 2.4) ===
@@ -301,6 +308,12 @@ export interface ActionListItem {
   deletion_reason?: string | null;
   /** Story 22.18: MED-6 fix — Whether action requires target selection (default true). */
   requires_target?: boolean;
+  /** Story 64.13: IaC drift tracking. */
+  last_synced_at?: string | null;
+  last_synced_hash?: string | null;
+  updated_at?: string | null;
+  /** Story 63.9: FK vers OutputSchema déclaré par l'admin pour cette action (lecture seule). */
+  output_schema_id?: number | null;
 }
 
 // Story 57.13: BusinessRulePolicyListItem is defined in business_rules.ts (already exists)

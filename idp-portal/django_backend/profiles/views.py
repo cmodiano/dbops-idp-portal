@@ -5,14 +5,18 @@ Implements admin profiles endpoints (Story M.5).
 
 from typing import Any
 
+from django.http import HttpResponse
+from django.shortcuts import get_object_or_404
 from rest_framework import viewsets, status
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework import serializers
 from rest_framework.parsers import MultiPartParser
+
+from core.parsers import YAMLParser, extract_yaml_content
 from drf_spectacular.utils import extend_schema, extend_schema_view, inline_serializer
 from profiles.models import Profile
 from profiles.serializers import (
@@ -25,9 +29,20 @@ from profiles.serializers import (
 )
 from profiles.cache import invalidate_permissions_cache
 from profiles.services import ProfileService
-from profiles.services_export_import import export_profiles_yaml, import_profiles_yaml
-from core.permissions import AdminProfilePermission
+from profiles.services_export_import import export_profiles_yaml, import_profiles_yaml, export_profile_yaml
+from core.permissions import AdminProfilePermission, IsAdminUser
 from core.exceptions import NotFoundError, InvalidStateError
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def export_profile_by_id(request: Request, pk: int) -> HttpResponse:
+    """GET /api/v1/admin/profiles/<pk>/export/yaml/ — Export single profile as YAML."""
+    profile = get_object_or_404(Profile, pk=pk)
+    content = export_profile_yaml(profile.name)
+    response = HttpResponse(content, content_type='application/x-yaml')
+    response['Content-Disposition'] = f'attachment; filename="{profile.name}.yaml"'
+    return response
 
 
 @extend_schema_view(
@@ -285,9 +300,9 @@ class ProfileExportView(APIView):
 
 
 class ProfileImportView(APIView):
-    """APIView for POST /admin/profiles/import - Import profiles from YAML."""
+    """APIView for POST /admin/profiles/import - Import profiles from YAML (file or raw body)."""
     permission_classes = [IsAuthenticated, AdminProfilePermission]
-    parser_classes = [MultiPartParser]
+    parser_classes = [YAMLParser, MultiPartParser]
 
     @extend_schema(
         tags=['profiles'],
@@ -302,29 +317,27 @@ class ProfileImportView(APIView):
         ),
     )
     def post(self, request: Request) -> Response:
-        """Import profiles from YAML file."""
-        file = request.FILES.get('file')
-        if not file:
+        """Import profiles from YAML file or raw YAML body (CaC-compatible)."""
+        content = extract_yaml_content(request)
+        if content is None:
             raise InvalidStateError(
-                code="INVALID_FILE",
-                message="Le fichier est requis",
-                details={}
+                code="EMPTY_BODY",
+                message="Aucun contenu YAML fourni (fichier ou corps de requête).",
+                details={},
             )
-        
-        if not file.name or not (file.name.endswith('.yaml') or file.name.endswith('.yml')):
+        mode = request.query_params.get('mode', 'additive')
+        if mode not in ('additive', 'full'):
             raise InvalidStateError(
-                code="INVALID_FILE",
-                message="Le fichier doit être un YAML (.yaml ou .yml).",
-                details={"filename": file.name or ""}
+                code="INVALID_IMPORT_MODE",
+                message="Le paramètre 'mode' doit être 'additive' ou 'full'.",
+                details={"mode": mode},
             )
-        
-        content = file.read()
         try:
-            created, updated = import_profiles_yaml(content, user=request.user)
+            created, updated, unchanged = import_profiles_yaml(content, user=request.user, mode=mode)
         except InvalidStateError:
             raise
-        
+
         invalidate_permissions_cache()
-        payload = {"data": {"created": created, "updated": updated}}
+        payload = {"data": {"created": created, "updated": updated, "unchanged": unchanged, "mode": mode}}
         status_code = status.HTTP_201_CREATED if created > 0 and updated == 0 else status.HTTP_200_OK
         return Response(payload, status=status_code)

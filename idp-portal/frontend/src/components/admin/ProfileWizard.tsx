@@ -6,6 +6,8 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
+import { DownloadOutlined } from '@ant-design/icons';
+import { useEntityExport } from '../../hooks/useEntityExport';
 import { Modal, Steps, Button, Form, Input, Select, Radio, Switch, Alert, Space, App } from 'antd';
 import type {
   ProfileCreate,
@@ -81,6 +83,13 @@ export function ProfileWizard({
   const { environmentOptions, loading: environmentsLoading } = useEnvironments();
 
   const isEditMode = !!editProfile;
+
+  // Story 64.13: Single-entity YAML export
+  const { exportYaml, loading: exportLoading } = useEntityExport(
+    'profiles',
+    editProfile?.id ?? 0,
+    editProfile?.name ?? '',
+  );
 
   // Appliquer les permissions chargées par useProfileFormState au formulaire (mode édition)
   useEffect(() => {
@@ -413,7 +422,14 @@ export function ProfileWizard({
       <div style={{ minHeight: 280 }}>{stepContent()}</div>
 
       <div style={{ marginTop: 24, display: 'flex', justifyContent: 'space-between' }}>
-        <Button onClick={onCancel}>Annuler</Button>
+        <Space>
+          <Button onClick={onCancel}>Annuler</Button>
+          {isEditMode && (
+            <Button icon={<DownloadOutlined />} onClick={exportYaml} loading={exportLoading}>
+              Exporter en YAML
+            </Button>
+          )}
+        </Space>
         <Space>
           {currentStep > 0 && <Button onClick={handlePrev}>Précédent</Button>}
           {currentStep < 2 && (

@@ -281,22 +281,26 @@ export function useWorkflowGraph({
   );
 
   // Update node data from config panel
+  // Sync immediately so approver_profile_ids and other config changes are included when user saves
   const handleNodeUpdate = useCallback(
     (nodeId: string, updates: Partial<WorkflowStepNodeData>) => {
-      setNodes((nds) =>
-        nds.map((node) =>
+      setNodes((nds) => {
+        const newNodes = nds.map((node) =>
           node.id === nodeId
             ? { ...node, data: { ...node.data, ...updates } }
             : node
-        )
-      );
+        );
+        // Defer sync to next tick so React has applied the state update
+        queueMicrotask(() => syncToParent(newNodes, edges));
+        return newNodes;
+      });
       setSelectedNode((prev) =>
         prev && prev.id === nodeId
           ? { ...prev, data: { ...prev.data, ...updates } }
           : prev
       );
     },
-    [setNodes]
+    [setNodes, syncToParent, edges]
   );
 
   // Count workflow nodes (exclude start/end)

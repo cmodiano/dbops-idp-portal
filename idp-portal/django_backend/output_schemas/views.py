@@ -118,6 +118,16 @@ def sync_output_schemas(request):
     return Response({'data': stats})
 
 
+def _resolve_action_schema(action, schema_registry) -> dict | None:
+    """
+    Story 63.9: Résout le schéma output d'une action.
+    FK en priorité (si output_schema_id défini), fallback par nom via le registre.
+    """
+    if action.output_schema_id and action.output_schema:
+        return dict(schema_registry._resolve(action.output_schema) or {}) or None
+    return dict(schema_registry.get_action_schema(action.name) or {}) or None
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_step_output_schema(request, workflow_id: int, step_id: str):
@@ -145,10 +155,14 @@ def get_step_output_schema(request, workflow_id: int, step_id: str):
         ref_action_id = step.get('referenced_action_id')
         if ref_action_id:
             try:
-                ref_action = Action.objects.get(id=ref_action_id)
-                schema = schema_registry.get_action_schema(ref_action.name)
+                ref_action = Action.objects.select_related(
+                    'output_schema', 'output_schema__inherits_from'
+                ).get(id=ref_action_id)
+                schema = _resolve_action_schema(ref_action, schema_registry)
             except Action.DoesNotExist:
                 pass
+        if schema is None:
+            schema = schema_registry.get_platform_convention('aap')
     elif step_type == 'service_call':
         integration_type = step.get('integration_type', '')
         operation = step.get('operation', '')
@@ -188,7 +202,11 @@ def get_available_variables(request, workflow_id: int):
         for s in steps
         if s.get('step_type', 'platform') == 'platform' and s.get('referenced_action_id')
     ]
-    ref_actions = {a.id: a for a in Action.objects.filter(id__in=ref_ids)} if ref_ids else {}
+    ref_actions = {
+        a.id: a for a in Action.objects.filter(id__in=ref_ids).select_related(
+            'output_schema', 'output_schema__inherits_from'
+        )
+    } if ref_ids else {}
 
     result = []
     for step in steps:
@@ -200,7 +218,9 @@ def get_available_variables(request, workflow_id: int):
         if step_type == 'platform':
             ref_id = step.get('referenced_action_id')
             if ref_id and ref_id in ref_actions:
-                schema = schema_registry.get_action_schema(ref_actions[ref_id].name)
+                schema = _resolve_action_schema(ref_actions[ref_id], schema_registry)
+            if schema is None:
+                schema = schema_registry.get_platform_convention('aap')
         elif step_type == 'service_call':
             integration_type = step.get('integration_type', '')
             operation = step.get('operation', '')
@@ -216,3 +236,36 @@ def get_available_variables(request, workflow_id: int):
             })
 
     return Response(result)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_action_output_schema(request, action_id: int):
+    """
+    Story 63.9: GET /api/v1/output-schemas/actions/{action_id}/schema/
+    Retourne le schéma résolu pour une action donnée.
+    FK en priorité si configurée, sinon résolution par nom, sinon null.
+    """
+    from catalog.models import Action  # noqa: PLC0415 — import tardif pour éviter les cycles
+    from output_schemas.registry import schema_registry  # noqa: PLC0415
+
+    try:
+        action = Action.objects.select_related(
+            'output_schema', 'output_schema__inherits_from'
+        ).get(id=action_id)
+    except Action.DoesNotExist:
+        return Response({'error': f'Action {action_id} introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+
+    schema: dict[str, object] | None
+    if action.output_schema_id and action.output_schema:
+        schema_type = 'fk'
+        schema = dict(schema_registry._resolve(action.output_schema) or {}) or None
+    else:
+        schema_type = 'name'
+        schema = dict(schema_registry.get_action_schema(action.name) or {}) or None
+
+    return Response({
+        'action_id': action_id,
+        'schema_type': schema_type,
+        'schema': schema,
+    })

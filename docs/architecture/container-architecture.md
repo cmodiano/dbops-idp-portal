@@ -22,7 +22,7 @@ C4Container
 
         Container(celery_worker, "Celery Worker", "python:3.12-slim / Celery 5.x", "Exécution asynchrone des tâches.\n4 queues : aap, azure, github, terraform (+ default).\nPas de port exposé")
 
-        Container(celery_beat, "Celery Beat", "python:3.12-slim / Celery 5.x", "Planificateur de tâches périodiques.\nEvaluate gates : 60s\nScheduled executions : 60s\nHealth check : 3600s")
+        Container(celery_beat, "Celery Beat", "python:3.12-slim / Celery 5.x", "Planificateur de tâches périodiques.\nEvaluate gates : 60s\nScheduled executions : 60s\nHealth check : 3600s\nPurge logs : daily 03:00\nPurge workflow events : daily 04:00\nVault cache warmup : 300s")
 
         ContainerDb(redis, "Redis", "redis:7-alpine", "Broker Celery + Result backend.\nCache applicatif (feature flags, sessions).\nPort 6379")
 

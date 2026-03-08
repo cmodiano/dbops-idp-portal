@@ -1,0 +1,204 @@
+"""
+Tests for integrations CaC views (integrations, integration-types export/sync).
+Story 64.8 — API endpoints for CaC sync (export GET + sync POST).
+"""
+
+import pytest
+import yaml
+from rest_framework.test import APIClient
+
+from idp_auth.models import User
+from integrations.models import Integration, IntegrationTypeCatalogue
+
+
+@pytest.mark.django_db
+class TestIntegrationExportView:
+    def setup_method(self):
+        self.client = APIClient()
+        self.admin = User.objects.create(username='admin_ie', profile='DBOPS')
+        self.non_admin = User.objects.create(username='user_ie', profile='dba')
+
+    def test_export_requires_admin(self):
+        self.client.force_authenticate(user=self.non_admin)
+        response = self.client.get('/api/v1/admin/integrations/export/yaml/')
+        assert response.status_code == 403
+
+    def test_export_returns_yaml_content_type(self):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.get('/api/v1/admin/integrations/export/yaml/')
+        assert response.status_code == 200
+        assert 'application/x-yaml' in response['Content-Type']
+
+    def test_export_has_content_disposition(self):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.get('/api/v1/admin/integrations/export/yaml/')
+        assert 'integrations.yaml' in response['Content-Disposition']
+
+    def test_export_empty_db_returns_empty_bytes(self):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.get('/api/v1/admin/integrations/export/yaml/')
+        assert response.status_code == 200
+        assert response.content == b''
+
+    def test_unauthenticated_returns_401(self):
+        response = self.client.get('/api/v1/admin/integrations/export/yaml/')
+        assert response.status_code == 401
+
+
+@pytest.mark.django_db
+class TestIntegrationSyncView:
+    def setup_method(self):
+        self.client = APIClient()
+        self.admin = User.objects.create(username='admin_is', profile='DBOPS')
+
+    def test_sync_empty_body_returns_400(self):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.post(
+            '/api/v1/admin/integrations/sync/',
+            data={},
+            format='multipart',
+        )
+        assert response.status_code == 400
+        assert response.data['error']['code'] == 'EMPTY_BODY'
+
+    def test_sync_invalid_mode_returns_400(self):
+        YAML = 'apiVersion: idp/v1\nkind: Integration\nmetadata:\n  name: test\nspec:\n  integration_type: aap\n'
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.post(
+            '/api/v1/admin/integrations/sync/?mode=invalid',
+            data=YAML,
+            content_type='application/x-yaml',
+        )
+        assert response.status_code == 400
+
+    def test_sync_requires_admin(self):
+        non_admin = User.objects.create(username='user_is', profile='dba')
+        self.client.force_authenticate(user=non_admin)
+        response = self.client.post('/api/v1/admin/integrations/sync/', data={})
+        assert response.status_code == 403
+
+    def test_sync_valid_yaml_creates_and_reports_counts(self):
+        """Happy path: POST valid Integration YAML, assert 200 and DB persistence."""
+        IntegrationTypeCatalogue.objects.get_or_create(
+            code='aap', defaults={'name': 'Ansible Automation Platform'}
+        )
+        yaml_content = yaml.dump({
+            "apiVersion": "idp/v1",
+            "kind": "Integration",
+            "metadata": {"name": "sync-test-aap", "type": "aap"},
+            "spec": {
+                "base_url": "https://aap.sync.example.com",
+                "auth_flow": "token",
+            },
+        })
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.post(
+            '/api/v1/admin/integrations/sync/',
+            data=yaml_content,
+            content_type='application/x-yaml',
+        )
+        assert response.status_code == 201
+        data = response.data.get('data', {})
+        assert 'created' in data
+        assert 'updated' in data
+        assert 'unchanged' in data
+        assert data['created'] == 1
+        assert data['updated'] == 0
+        assert data['unchanged'] == 0
+        assert Integration.objects.filter(name='sync-test-aap').exists()
+        obj = Integration.objects.get(name='sync-test-aap')
+        assert obj.base_url == 'https://aap.sync.example.com'
+
+
+@pytest.mark.django_db
+class TestIntegrationTypesSyncView:
+    def setup_method(self):
+        self.client = APIClient()
+        self.admin = User.objects.create(username='admin_it', profile='DBOPS')
+
+    def test_export_integration_types_returns_yaml(self):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.get('/api/v1/admin/integration-types/export/yaml/')
+        assert response.status_code == 200
+        assert 'application/x-yaml' in response['Content-Type']
+        assert 'integration-types.yaml' in response['Content-Disposition']
+
+    def test_sync_integration_types_empty_body_returns_400(self):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.post(
+            '/api/v1/admin/integration-types/sync/',
+            data={},
+            format='multipart',
+        )
+        assert response.status_code == 400
+        assert response.data['error']['code'] == 'EMPTY_BODY'
+
+    def test_sync_valid_yaml_creates_and_reports_counts(self):
+        """Happy path: POST valid IntegrationTypeCatalogue YAML, assert 200 and DB persistence."""
+        yaml_content = yaml.dump({
+            "apiVersion": "idp/v1",
+            "kind": "IntegrationTypeCatalogue",
+            "metadata": {"code": "sync-test-type", "name": "Sync Test Type"},
+            "spec": {
+                "description": "Test type for sync",
+                "version": "1.0",
+                "is_active": True,
+                "integration_role": "platform",
+                "actions": [
+                    {"action_code": "run", "action_label": "Run", "is_active": True},
+                ],
+            },
+        })
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.post(
+            '/api/v1/admin/integration-types/sync/',
+            data=yaml_content,
+            content_type='application/x-yaml',
+        )
+        assert response.status_code == 201
+        data = response.data.get('data', {})
+        assert 'created' in data
+        assert 'updated' in data
+        assert 'unchanged' in data
+        assert data['created'] == 1
+        assert IntegrationTypeCatalogue.objects.filter(code='sync-test-type').exists()
+
+
+@pytest.mark.django_db
+class TestIntegrationExportByIdView:
+    """Story 64.13 — Single-entity export endpoint for integrations."""
+
+    def setup_method(self):
+        self.client = APIClient()
+        self.admin = User.objects.create(username='admin_ieid', profile='DBOPS')
+        self.non_admin = User.objects.create(username='user_ieid', profile='dba')
+        itc, _ = IntegrationTypeCatalogue.objects.get_or_create(
+            code='aap', defaults={'name': 'Ansible Automation Platform'}
+        )
+        self.integration = Integration.objects.create(
+            name='test-integration-by-id',
+            type=itc,
+            base_url='https://aap.example.com',
+        )
+
+    def test_export_by_id_returns_yaml(self):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.get(f'/api/v1/admin/integrations/{self.integration.pk}/export/yaml/')
+        assert response.status_code == 200
+        assert 'application/x-yaml' in response['Content-Type']
+
+    def test_export_by_id_has_content_disposition(self):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.get(f'/api/v1/admin/integrations/{self.integration.pk}/export/yaml/')
+        assert 'Content-Disposition' in response
+        assert self.integration.name in response['Content-Disposition']
+
+    def test_export_by_id_returns_404_on_missing_pk(self):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.get('/api/v1/admin/integrations/99999/export/yaml/')
+        assert response.status_code == 404
+
+    def test_export_by_id_requires_admin(self):
+        self.client.force_authenticate(user=self.non_admin)
+        response = self.client.get(f'/api/v1/admin/integrations/{self.integration.pk}/export/yaml/')
+        assert response.status_code == 403

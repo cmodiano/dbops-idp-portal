@@ -1,0 +1,98 @@
+-- V114: Add IaC Config Sync audit types to AUDIT_LOG CHECK constraints
+-- Story 64.x: CONFIG_SYNC_*_IMPORT action types and reference_data/tags entity types
+-- Fixes ORA-02290 when sync import flow emits audit rows with new enum values.
+-- Idempotent: DROP ignores ORA-02443 if constraint does not exist.
+
+-- ACTION_TYPE: add CONFIG_SYNC_*_IMPORT values
+ALTER TABLE AUDIT_LOG DROP CONSTRAINT CK_AUDIT_LOG_ACTION_TYPE;
+
+ALTER TABLE AUDIT_LOG ADD CONSTRAINT CK_AUDIT_LOG_ACTION_TYPE CHECK (
+    ACTION_TYPE IN (
+        -- Action lifecycle
+        'ACTION_CREATED', 'ACTION_UPDATED', 'ACTION_PUBLISHED',
+        'ACTION_DISABLED', 'ACTION_DISABLED_INTEGRATION_DELETED', 'ACTION_ENABLED', 'ACTION_DELETED',
+        'ACTION_DEACTIVATED', 'ACTION_REACTIVATED',
+
+        -- Profile lifecycle
+        'PROFILE_CREATED', 'PROFILE_UPDATED', 'PROFILE_DELETED',
+        'PROFILE_UPDATE_REJECTED',
+
+        -- Integration lifecycle
+        'INTEGRATION_CREATED', 'INTEGRATION_UPDATED', 'INTEGRATION_DELETED',
+        'INTEGRATION_HEALTH_CHECK_TESTED',
+
+        -- Integration type catalogue
+        'INTEGRATION_TYPE_CREATED', 'INTEGRATION_TYPE_UPDATED',
+        'INTEGRATION_ACTION_CREATED', 'INTEGRATION_ACTION_UPDATED',
+
+        -- Integration status / migration
+        'INTEGRATION_STATUS_UPDATED', 'INTEGRATION_MARKED_LEGACY',
+
+        -- Execution lifecycle
+        'EXECUTION_SUBMITTED', 'EXECUTION_STARTED', 'EXECUTION_RUNNING',
+        'EXECUTION_COMPLETED', 'EXECUTION_FAILED', 'EXECUTION_CANCELLED',
+        'EXECUTION_PENDING_APPROVAL', 'EXECUTION_APPROVED', 'EXECUTION_REJECTED',
+        'EXECUTION_TARGET_FORBIDDEN', 'EXECUTION_INTEGRATION_ERROR',
+        'EXECUTION_BLOCKED_INVALID_INTEGRATION', 'EXECUTION_DEPRECATED_INTEGRATION_WARNING',
+        'WORKFLOW_STEP_BLOCKED_INVALID_INTEGRATION',
+
+        -- ServiceNow change
+        'SERVICENOW_CHANGE_CREATED',
+
+        -- Remediation / auto-remediation
+        'REMEDIATION_EXECUTION_CREATED',
+        'AUTO_REMEDIATION_TRIGGERED', 'AUTO_REMEDIATION_SUCCESS', 'AUTO_REMEDIATION_FAILED',
+
+        -- Scheduled executions
+        'SCHEDULED_EXECUTION_CREATED', 'SCHEDULED_EXECUTION_RECURRING_CREATED',
+        'SCHEDULED_EXECUTION_EXECUTED', 'SCHEDULED_EXECUTION_CANCELLED',
+        'SCHEDULED_EXECUTION_RECURRING_DISABLED',
+        'SCHEDULED_EXECUTION_CELERY_TRIGGERED',
+
+        -- User / Auth / Favorites
+        'USER_CREATED', 'USER_UPDATED', 'USER_LOGIN', 'USER_LOGOUT', 'USER_REFRESH',
+        'API_KEY_TOKEN_EXCHANGE', 'FAVORITE_ADDED', 'FAVORITE_REMOVED', 'SERVICE_LOGIN',
+        'AUTH_DEV_BYPASS_LOGIN',
+
+        -- Execution step retry
+        'EXECUTION_STEP_RETRY_ATTEMPT', 'EXECUTION_STEP_RETRY_SUCCESS',
+        'EXECUTION_STEP_RETRY_EXHAUSTED', 'EXECUTION_STEP_RETRY_ABORTED',
+
+        -- Condition gates
+        'EXECUTION_STEP_WAITING',
+        'EXECUTION_STEP_GATE_SATISFIED',
+        'EXECUTION_STEP_GATE_TIMEOUT',
+
+        -- Story 57.15: Workflow schedule step
+        'WORKFLOW_STEP_SCHEDULE_CREATED',
+
+        -- Feature flags
+        'FEATURE_FLAG_CREATED', 'FEATURE_FLAG_UPDATED',
+
+        -- Story 64.x: IaC Config Sync import actions
+        'CONFIG_SYNC_REFERENCE_IMPORT', 'CONFIG_SYNC_TAGS_IMPORT',
+        'CONFIG_SYNC_FEATURE_FLAGS_IMPORT', 'CONFIG_SYNC_INTEGRATION_TYPE_IMPORT',
+        'CONFIG_SYNC_INTEGRATION_IMPORT', 'CONFIG_SYNC_POLICY_IMPORT',
+        'CONFIG_SYNC_ACTION_IMPORT'
+    )
+);
+
+-- ENTITY_TYPE: add reference_data, tags
+BEGIN
+    EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG DROP CONSTRAINT CK_AUDIT_LOG_ENTITY_TYPE';
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE != -2443 THEN
+            RAISE;
+        END IF;
+END;
+/
+
+ALTER TABLE AUDIT_LOG ADD CONSTRAINT CK_AUDIT_LOG_ENTITY_TYPE CHECK (
+    ENTITY_TYPE IN (
+        'action', 'user', 'permission', 'execution',
+        'scheduled_execution', 'integration', 'profile',
+        'feature_flag', 'integration_type_catalogue', 'integration_action', 'business_rule_policy',
+        'reference_data', 'tags'
+    )
+);
