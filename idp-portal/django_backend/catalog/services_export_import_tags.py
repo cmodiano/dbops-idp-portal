@@ -1,6 +1,6 @@
 """
 Export/import YAML services for Tags.
-Story 64.2 - IaC Tags management.
+Story 64.2 - CaC Tags management.
 """
 
 import logging
@@ -12,7 +12,7 @@ from catalog.models import Tag
 from core.exceptions import InvalidStateError
 from core.models import AuditActionType, AuditEntityType
 from core.services import AuditService
-from core.services_iac_utils import parse_yaml, serialize_to_yaml, validate_envelope
+from core.services_cac_utils import parse_yaml, serialize_to_yaml, validate_envelope
 
 logger = logging.getLogger(__name__)
 

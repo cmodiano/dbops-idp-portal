@@ -1,6 +1,6 @@
 """
 Tests for catalog/services_export_import.py
-Story 64.6 - IaC Action export/import.
+Story 64.6 - CaC Action export/import.
 """
 import json
 

@@ -1,5 +1,5 @@
 """
-Shared DRF parsers and request helpers for IaC endpoints (Story 64.8).
+Shared DRF parsers and request helpers for CaC endpoints (Story 64.8).
 """
 
 from collections.abc import Mapping

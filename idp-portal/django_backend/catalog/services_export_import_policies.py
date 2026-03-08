@@ -1,6 +1,6 @@
 """
 Export/import YAML services for BusinessRulePolicy.
-Story 64.5 - IaC Business Rule Policy management.
+Story 64.5 - CaC Business Rule Policy management.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from catalog.models import BusinessRulePolicy
 from core.exceptions import InvalidStateError
 from core.models import AuditActionType, AuditEntityType
 from core.services import AuditService
-from core.services_iac_utils import (
+from core.services_cac_utils import (
     _apply_field_changes,
     parse_yaml,
     serialize_to_yaml,

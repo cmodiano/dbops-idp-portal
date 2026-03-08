@@ -4,7 +4,7 @@ Story 63.1 - Infrastructure des Schémas d'Output (Backend).
 Story 63.2 - Registre des Schémas & Résolution (endpoints discovery).
 
 Public endpoints: GET /api/v1/output-schemas/ and /api/v1/output-schemas/{id}/
-Admin IaC endpoints: GET /api/v1/admin/output-schemas/export/yaml/
+Admin CaC endpoints: GET /api/v1/admin/output-schemas/export/yaml/
                      POST /api/v1/admin/output-schemas/sync/
 Discovery endpoints: GET /api/v1/output-schemas/workflows/{id}/steps/{step_id}/output-schema/
                      GET /api/v1/output-schemas/workflows/{id}/available-variables/

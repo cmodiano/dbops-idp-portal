@@ -1,6 +1,6 @@
 """
 Tests unitaires pour integrations/services_export_import.py.
-Story 64.4 - IaC Integration export/import.
+Story 64.4 - CaC Integration export/import.
 """
 
 import json

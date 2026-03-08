@@ -1,6 +1,6 @@
 """
 Tests for catalog/services_export_import_policies.py
-Story 64.5 - IaC Business Rule Policy export/import.
+Story 64.5 - CaC Business Rule Policy export/import.
 """
 import json
 

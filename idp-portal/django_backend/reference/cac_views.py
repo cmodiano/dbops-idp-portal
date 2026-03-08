@@ -1,6 +1,6 @@
 """
-IaC export/sync views for reference data (engines, categories).
-Story 64.8 — API endpoints for IaC sync (export GET + sync POST).
+CaC export/sync views for reference data (engines, categories).
+Story 64.8 — API endpoints for CaC sync (export GET + sync POST).
 
 Pattern: FBV @api_view (Story 63.1 canonical pattern).
 """

@@ -111,7 +111,7 @@ class IntegrationSerializer(serializers.ModelSerializer):
             'secret_service_id', 'created_at', 'updated_at',
             # Story 51.4: health check fields
             'health_status', 'health_checked_at', 'health_error_message',
-            # Story 64.13: IaC drift tracking (read-only)
+            # Story 64.13: CaC drift tracking (read-only)
             'last_synced_at', 'last_synced_hash',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'status',
@@ -404,7 +404,7 @@ class IntegrationListSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at',
             # Story 51.4: health check fields (exclude health_error_message for lean list responses)
             'health_status', 'health_checked_at',
-            # Story 64.13: IaC drift tracking (read-only)
+            # Story 64.13: CaC drift tracking (read-only)
             'last_synced_at', 'last_synced_hash',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at',

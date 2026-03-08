@@ -1,6 +1,6 @@
 """
-Tests for catalog IaC views (actions, policies, tags export/sync).
-Story 64.8 — API endpoints for IaC sync (export GET + sync POST).
+Tests for catalog CaC views (actions, policies, tags export/sync).
+Story 64.8 — API endpoints for CaC sync (export GET + sync POST).
 """
 
 import pytest

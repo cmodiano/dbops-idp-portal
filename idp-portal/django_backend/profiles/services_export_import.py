@@ -1,7 +1,7 @@
 """
 Profile YAML export/import service (Story M.5 / Story 64.7).
 
-Story 64.7: Upgrade to IaC envelope format with portable action_names,
+Story 64.7: Upgrade to CaC envelope format with portable action_names,
 is_approver, exclusion_patterns, filter_by_attribute support.
 """
 
@@ -12,7 +12,7 @@ from django.db import transaction
 
 from catalog.models import Action
 from core.exceptions import InvalidStateError
-from core.services_iac_utils import parse_yaml, serialize_to_yaml, update_sync_tracking, validate_envelope
+from core.services_cac_utils import parse_yaml, serialize_to_yaml, update_sync_tracking, validate_envelope
 from profiles.models import Profile
 from profiles.services import ProfileService
 
@@ -91,12 +91,12 @@ def _build_targets_block(
 
 
 # ──────────────────────────────────────────────────────────────────
-# Single-profile export (new IaC envelope format)
+# Single-profile export (new CaC envelope format)
 # ──────────────────────────────────────────────────────────────────
 
 def export_profile_yaml(name: str) -> bytes:
     """
-    Export a single profile as YAML with IaC envelope (apiVersion/kind/metadata/spec).
+    Export a single profile as YAML with CaC envelope (apiVersion/kind/metadata/spec).
 
     Args:
         name: Profile name to export.
@@ -528,7 +528,7 @@ def import_profiles_yaml(content: bytes, user: Any = None, mode: str = "additive
     Args:
         content: YAML file content as bytes
         user: Optional user instance for audit logging
-        mode: Import mode (currently unused functionally; kept for IaC interface consistency)
+        mode: Import mode (currently unused functionally; kept for CaC interface consistency)
 
     Returns:
         Tuple of (created_count, updated_count, unchanged_count)

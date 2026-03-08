@@ -1,5 +1,5 @@
 """
-Unit tests for core/services_iac_utils.py.
+Unit tests for core/services_cac_utils.py.
 Story 64.1 - AC#11: Tests for parse_yaml, validate_envelope, compute_yaml_hash,
 serialize_to_yaml, _apply_field_changes.
 Story 64.11 - Tests for update_sync_tracking.
@@ -12,7 +12,7 @@ from unittest.mock import patch
 from django.test import TestCase
 
 from core.exceptions import InvalidStateError
-from core.services_iac_utils import (
+from core.services_cac_utils import (
     _apply_field_changes,
     compute_yaml_hash,
     parse_yaml,
@@ -148,7 +148,7 @@ class ValidateEnvelopeTests(TestCase):
         validate_envelope(doc)  # should not raise
 
     def test_all_valid_kinds_pass(self):
-        from core.services_iac_utils import VALID_KINDS
+        from core.services_cac_utils import VALID_KINDS
         for kind in VALID_KINDS:
             metadata = {"type": "test"} if kind in ("Tags", "FeatureFlags", "ReferenceData") else {"name": "test"}
             doc = {"apiVersion": "idp/v1", "kind": kind, "metadata": metadata}
@@ -268,7 +268,7 @@ class UpdateSyncTrackingTests(TestCase):
         expected_hash = hashlib.sha256(yaml_content).hexdigest()
         obj = self._make_obj()
 
-        with patch("core.services_iac_utils.timezone") as mock_tz:
+        with patch("core.services_cac_utils.timezone") as mock_tz:
             mock_tz.now.return_value = datetime(2026, 3, 7, 12, 0, 0, tzinfo=dt_timezone.utc)
             update_sync_tracking(obj, yaml_content)
 
@@ -279,7 +279,7 @@ class UpdateSyncTrackingTests(TestCase):
         frozen_now = datetime(2026, 3, 7, 10, 0, 0, tzinfo=dt_timezone.utc)
         obj = self._make_obj()
 
-        with patch("core.services_iac_utils.timezone") as mock_tz:
+        with patch("core.services_cac_utils.timezone") as mock_tz:
             mock_tz.now.return_value = frozen_now
             update_sync_tracking(obj, yaml_content)
 
@@ -289,7 +289,7 @@ class UpdateSyncTrackingTests(TestCase):
         yaml_content = b"any: content\n"
         obj = self._make_obj()
 
-        with patch("core.services_iac_utils.timezone") as mock_tz:
+        with patch("core.services_cac_utils.timezone") as mock_tz:
             mock_tz.now.return_value = datetime(2026, 3, 7, tzinfo=dt_timezone.utc)
             update_sync_tracking(obj, yaml_content)
 
@@ -300,7 +300,7 @@ class UpdateSyncTrackingTests(TestCase):
         expected = compute_yaml_hash(yaml_content)
         obj = self._make_obj()
 
-        with patch("core.services_iac_utils.timezone") as mock_tz:
+        with patch("core.services_cac_utils.timezone") as mock_tz:
             mock_tz.now.return_value = datetime(2026, 3, 7, tzinfo=dt_timezone.utc)
             update_sync_tracking(obj, yaml_content)
 
@@ -311,7 +311,7 @@ class UpdateSyncTrackingTests(TestCase):
         obj1 = self._make_obj()
         obj2 = self._make_obj()
 
-        with patch("core.services_iac_utils.timezone") as mock_tz:
+        with patch("core.services_cac_utils.timezone") as mock_tz:
             mock_tz.now.return_value = datetime(2026, 3, 7, tzinfo=dt_timezone.utc)
             update_sync_tracking(obj1, b"content_a")
             update_sync_tracking(obj2, b"content_b")
@@ -319,10 +319,10 @@ class UpdateSyncTrackingTests(TestCase):
         self.assertNotEqual(obj1.last_synced_hash, obj2.last_synced_hash)
 
 
-class IaCErrorCodesDocumentationTests(TestCase):
+class CaCErrorCodesDocumentationTests(TestCase):
     """
     Story 64.15 — AC #3 : Vérifie que les codes d'erreur documentés sont correctement
-    émis avec code et message par les utilitaires IaC.
+    émis avec code et message par les utilitaires CaC.
 
     Correspondance entre les codes documentés et les codes implémentés :
       - INVALID_YAML_SYNTAX  → 'INVALID_YAML_SYNTAX'  (parse_yaml)

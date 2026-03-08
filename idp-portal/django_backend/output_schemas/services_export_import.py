@@ -1,5 +1,5 @@
 """
-Export/import IaC service for output schemas.
+Export/import CaC service for output schemas.
 Story 63.1 - Infrastructure des Schémas d'Output (Backend).
 """
 

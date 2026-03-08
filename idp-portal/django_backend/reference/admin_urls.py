@@ -6,13 +6,13 @@ Mounted at /api/v1/admin/ in main urls.py.
 
 from django.urls import path
 from reference.views import create_category, update_category, delete_category, update_engine
-from reference.iac_views import (
+from reference.cac_views import (
     export_ref_engines, sync_ref_engines,
     export_ref_categories, sync_ref_categories,
 )
 
 urlpatterns = [
-    # IaC endpoints (story 64.8)
+    # CaC endpoints (story 64.8)
     path('reference/engines/export/yaml/', export_ref_engines, name='ref-engines-export-yaml'),
     path('reference/engines/sync/', sync_ref_engines, name='ref-engines-sync'),
     path('reference/categories/export/yaml/', export_ref_categories, name='ref-categories-export-yaml'),

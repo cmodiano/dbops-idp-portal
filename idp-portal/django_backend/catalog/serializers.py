@@ -408,7 +408,7 @@ class ActionSerializer(ActionFieldValidationMixin, serializers.ModelSerializer):
             'requires_target',
             # Story 29.4: integration_id for platform consistency validation
             'integration_id',
-            # Story 64.13: IaC drift tracking (read-only)
+            # Story 64.13: CaC drift tracking (read-only)
             'last_synced_at', 'last_synced_hash',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'created_by', 'integration_id', 'business_rule_policy_name',
@@ -477,10 +477,12 @@ class ActionSerializer(ActionFieldValidationMixin, serializers.ModelSerializer):
                 workflow_step['schedule_config'] = step['schedule_config']
 
             # Story 57.13: Type-specific fields
+            # Story 58.4: approver_profile_ids for gate type=approval
             if step_type == 'gate':
                 workflow_step['gate_type'] = step.get('gate_type')
                 workflow_step['on_timeout'] = step.get('on_timeout')
                 workflow_step['context_from'] = step.get('context_from')
+                workflow_step['approver_profile_ids'] = step.get('approver_profile_ids')
                 workflow_step['timeout'] = step.get('timeout')
             elif step_type == 'service_call':
                 workflow_step['integration_type'] = step.get('integration_type')
@@ -656,7 +658,7 @@ class ActionListSerializer(serializers.ModelSerializer):
             'notification_config',
             # Story 18.1: soft-delete fields for admin list
             'deleted_at', 'deleted_by', 'deletion_reason',
-            # Story 64.13: IaC drift tracking (read-only)
+            # Story 64.13: CaC drift tracking (read-only)
             'last_synced_at', 'last_synced_hash',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'created_by',

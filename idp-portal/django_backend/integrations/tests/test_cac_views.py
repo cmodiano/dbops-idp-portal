@@ -1,6 +1,6 @@
 """
-Tests for integrations IaC views (integrations, integration-types export/sync).
-Story 64.8 — API endpoints for IaC sync (export GET + sync POST).
+Tests for integrations CaC views (integrations, integration-types export/sync).
+Story 64.8 — API endpoints for CaC sync (export GET + sync POST).
 """
 
 import pytest

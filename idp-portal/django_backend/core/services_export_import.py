@@ -1,6 +1,6 @@
 """
 Export/import YAML services for core entities (FeatureFlags).
-Story 64.2 - IaC FeatureFlags management.
+Story 64.2 - CaC FeatureFlags management.
 """
 
 from typing import Any
@@ -10,7 +10,7 @@ from django.db import transaction
 from core.exceptions import InvalidStateError
 from core.models import AuditActionType, AuditEntityType, FeatureFlag
 from core.services import AuditService
-from core.services_iac_utils import (
+from core.services_cac_utils import (
     _apply_field_changes,
     parse_yaml,
     serialize_to_yaml,

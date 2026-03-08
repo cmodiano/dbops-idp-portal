@@ -3,7 +3,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from catalog import views
-from catalog.iac_views import (
+from catalog.cac_views import (
     export_actions, sync_actions,
     export_action_by_id,
     export_policies, sync_policies,
@@ -24,7 +24,7 @@ tags_router = DefaultRouter()
 tags_router.register(r'', views.TagViewSet, basename='tags')
 
 urlpatterns = [
-    # IaC endpoints: MUST be before router includes to avoid conflicts
+    # CaC endpoints: MUST be before router includes to avoid conflicts
     path('admin/actions/export/yaml/', export_actions, name='action-export-yaml'),
     path('admin/actions/<int:pk>/export/yaml/', export_action_by_id, name='action-export-yaml-by-id'),
     path('admin/actions/sync/', sync_actions, name='action-sync'),

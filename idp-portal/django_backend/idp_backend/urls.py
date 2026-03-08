@@ -94,7 +94,7 @@ urlpatterns = [
     path('api/v1/', include('help.urls')),  # Story 31.7 - Aide contextuelle
     # Story 2.30: Admin CRUD categories
     path('api/v1/admin/', include('reference.admin_urls')),
-    # Story 63.1: Output schemas - public read-only + admin IaC export/sync
+    # Story 63.1: Output schemas - public read-only + admin CaC export/sync
     path('api/v1/', include('output_schemas.urls')),
     path('api/v1/admin/', include('output_schemas.admin_urls')),
     # Story 27.4: GitHub Actions webhook (HMAC-secured, no DRF auth)

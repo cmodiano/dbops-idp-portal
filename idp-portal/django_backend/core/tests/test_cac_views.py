@@ -1,6 +1,6 @@
 """
-Tests for core IaC views (feature-flags export/sync).
-Story 64.8 — API endpoints for IaC sync (export GET + sync POST).
+Tests for core CaC views (feature-flags export/sync).
+Story 64.8 — API endpoints for CaC sync (export GET + sync POST).
 """
 
 import pytest

@@ -1,5 +1,5 @@
 """
-Tests for profile IaC alias endpoints and extended response format.
+Tests for profile CaC alias endpoints and extended response format.
 Story 64.8 — AC#7: ProfileImportView returns unchanged + mode; aliases /export/yaml/ and /sync/.
 """
 

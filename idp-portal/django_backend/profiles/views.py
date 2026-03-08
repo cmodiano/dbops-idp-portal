@@ -317,7 +317,7 @@ class ProfileImportView(APIView):
         ),
     )
     def post(self, request: Request) -> Response:
-        """Import profiles from YAML file or raw YAML body (IaC-compatible)."""
+        """Import profiles from YAML file or raw YAML body (CaC-compatible)."""
         content = extract_yaml_content(request)
         if content is None:
             raise InvalidStateError(

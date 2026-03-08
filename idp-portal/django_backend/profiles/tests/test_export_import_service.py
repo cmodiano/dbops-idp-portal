@@ -316,7 +316,7 @@ class TestValidateYamlSchema(TestCase):
 
 @pytest.mark.django_db
 class TestExportProfileYaml(TestCase):
-    """Tests for export_profile_yaml() — single profile with IaC envelope."""
+    """Tests for export_profile_yaml() — single profile with CaC envelope."""
 
     def test_not_found_raises(self):
         with self.assertRaises(InvalidStateError) as ctx:
@@ -709,7 +709,7 @@ class TestImportProfilesYaml(TestCase):
 
 @pytest.mark.django_db
 class TestImportProfileEnvelopeFormat(TestCase):
-    """Tests for import_profiles_yaml() — new IaC envelope format."""
+    """Tests for import_profiles_yaml() — new CaC envelope format."""
 
     def _make_envelope(self, name, ad_group="GRP-TEST", spec=None, description=None):
         metadata = {"name": name, "ad_group": ad_group}

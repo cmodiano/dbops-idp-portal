@@ -1,6 +1,6 @@
 """
 Export/import YAML services for IntegrationTypeCatalogue and IntegrationAction.
-Story 64.3 - IaC Integration Type Catalogue management.
+Story 64.3 - CaC Integration Type Catalogue management.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from django.db import transaction
 from core.exceptions import InvalidStateError
 from core.models import AuditActionType, AuditEntityType
 from core.services import AuditService
-from core.services_iac_utils import (
+from core.services_cac_utils import (
     _apply_field_changes,
     parse_yaml,
     serialize_to_yaml,

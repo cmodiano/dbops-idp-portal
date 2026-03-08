@@ -1,5 +1,5 @@
 """
-Admin IaC URL configuration for output_schemas app.
+Admin CaC URL configuration for output_schemas app.
 Story 63.1 - Infrastructure des Schémas d'Output (Backend).
 
 Registered via: path('api/v1/admin/', include('output_schemas.admin_urls'))

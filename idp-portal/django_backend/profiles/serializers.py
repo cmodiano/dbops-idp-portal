@@ -21,7 +21,7 @@ class ProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = Profile
         fields = ['id', 'name', 'description', 'ad_group', 'is_admin', 'is_auditor', 'is_approver', 'created_at', 'updated_at',
-                  # Story 64.13: IaC drift tracking (read-only)
+                  # Story 64.13: CaC drift tracking (read-only)
                   'last_synced_at', 'last_synced_hash']
         read_only_fields = ['id', 'created_at', 'updated_at', 'last_synced_at', 'last_synced_hash']
 
@@ -95,7 +95,7 @@ class ProfileListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Profile
         fields = ['id', 'name', 'ad_group', 'is_admin', 'is_auditor', 'is_approver', 'permission_count', 'created_at', 'updated_at',
-                  # Story 64.13: IaC drift tracking (read-only)
+                  # Story 64.13: CaC drift tracking (read-only)
                   'last_synced_at', 'last_synced_hash']
         read_only_fields = ['id', 'permission_count', 'created_at', 'updated_at', 'last_synced_at', 'last_synced_hash']
 

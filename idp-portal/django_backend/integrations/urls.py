@@ -7,7 +7,7 @@ from rest_framework.routers import DefaultRouter
 from integrations.views import IntegrationViewSet
 from integrations.upload_views import UploadIconView
 from integrations.catalogue_views import IntegrationTypeCatalogueViewSet
-from integrations.iac_views import (
+from integrations.cac_views import (
     export_integrations, sync_integrations,
     export_integration_by_id,
     export_integration_types, sync_integration_types,
@@ -22,7 +22,7 @@ catalogue_router = DefaultRouter()
 catalogue_router.register(r'', IntegrationTypeCatalogueViewSet, basename='integration-type')
 
 urlpatterns = [
-    # IaC endpoints: MUST be before router includes to avoid conflicts
+    # CaC endpoints: MUST be before router includes to avoid conflicts
     path('admin/integrations/export/yaml/', export_integrations, name='integration-export-yaml'),
     path('admin/integrations/<int:pk>/export/yaml/', export_integration_by_id, name='integration-export-yaml-by-id'),
     path('admin/integrations/sync/', sync_integrations, name='integration-sync'),

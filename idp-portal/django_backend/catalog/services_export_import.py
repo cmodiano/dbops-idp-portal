@@ -1,7 +1,7 @@
 """
 Export/import YAML services for Action (Actions & Workflows).
-Story 64.6 - IaC Action management.
-Most complex IaC entity: FK refs (integration, policy), M2M tags, mutex rules, 5 JSON fields.
+Story 64.6 - CaC Action management.
+Most complex CaC entity: FK refs (integration, policy), M2M tags, mutex rules, 5 JSON fields.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from catalog.models import Action, ActionMutex, ActionTag, BusinessRulePolicy, T
 from core.exceptions import InvalidStateError
 from core.models import AuditActionType, AuditEntityType
 from core.services import AuditService
-from core.services_iac_utils import (
+from core.services_cac_utils import (
     _apply_field_changes,
     parse_yaml,
     serialize_to_yaml,

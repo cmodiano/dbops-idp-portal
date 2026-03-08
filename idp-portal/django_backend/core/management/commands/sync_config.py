@@ -16,7 +16,7 @@ from catalog.services_export_import_policies import import_policy_yaml
 from catalog.services_export_import_tags import import_tags_yaml
 from core.exceptions import InvalidStateError
 from core.services_export_import import import_feature_flags_yaml
-from core.services_iac_utils import parse_yaml, validate_envelope
+from core.services_cac_utils import parse_yaml, validate_envelope
 from integrations.services_export_import import import_integration_yaml
 from integrations.services_export_import_types import import_integration_types_yaml
 from profiles.services_export_import import import_profiles_yaml

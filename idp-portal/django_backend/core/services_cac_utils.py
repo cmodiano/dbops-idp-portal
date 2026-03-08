@@ -1,6 +1,6 @@
 """
-Shared IaC utilities for YAML parsing, validation, hashing, and serialization.
-Story 64.1 - Foundation utilities for the Infrastructure-as-Code system.
+Shared CaC utilities for YAML parsing, validation, hashing, and serialization.
+Story 64.1 - Foundation utilities for the Configuration-as-Code system.
 """
 
 from __future__ import annotations
@@ -57,7 +57,7 @@ def parse_yaml(content: bytes) -> dict:
 
 def validate_envelope(parsed: dict, expected_kind: str | None = None) -> None:
     """
-    Validate the IaC YAML envelope structure.
+    Validate the CaC YAML envelope structure.
 
     Args:
         parsed: Parsed YAML dict.

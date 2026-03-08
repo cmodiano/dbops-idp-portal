@@ -1,6 +1,6 @@
 """
 Tests for integrations/services_export_import_types.py
-Story 64.3 - IaC Integration Type Catalogue export/import.
+Story 64.3 - CaC Integration Type Catalogue export/import.
 """
 
 from unittest.mock import patch

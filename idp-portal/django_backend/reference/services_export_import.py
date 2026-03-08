@@ -1,6 +1,6 @@
 """
 Export/import service for Reference Data (engines, categories) in YAML format.
-Story 64.1 - IaC round-trip for reference data.
+Story 64.1 - CaC round-trip for reference data.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from django.db import transaction
 from core.exceptions import InvalidStateError
 from core.models import AuditActionType, AuditEntityType
 from core.services import AuditService
-from core.services_iac_utils import (
+from core.services_cac_utils import (
     _apply_field_changes,
     parse_yaml,
     serialize_to_yaml,
