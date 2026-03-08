@@ -17,6 +17,7 @@ from core.services_iac_utils import (
     _apply_field_changes,
     parse_yaml,
     serialize_to_yaml,
+    update_sync_tracking,
     validate_envelope,
 )
 from integrations.models import Integration, IntegrationTypeCatalogue
@@ -150,11 +151,13 @@ def import_integration_yaml(
     obj, was_created = Integration.objects.get_or_create(name=name, defaults=defaults)
     if was_created:
         created, updated, unchanged = 1, 0, 0
+        update_sync_tracking(obj, content)
     else:
         changed = _apply_field_changes(obj, defaults)
         if changed:
             obj.save()
             created, updated, unchanged = 0, 1, 0
+            update_sync_tracking(obj, content)
         else:
             created, updated, unchanged = 0, 0, 1
 
@@ -173,12 +176,14 @@ def import_integration_yaml(
             obj.save(update_fields=["secret_service_id"])
             if unchanged:
                 unchanged, updated = 0, 1
+                update_sync_tracking(obj, content)
     elif obj.secret_service_id is not None and not was_created:
         # Clear secret_service_ref if absent from YAML but set in DB
         obj.secret_service_id = None
         obj.save(update_fields=["secret_service_id"])
         if unchanged:
             unchanged, updated = 0, 1
+            update_sync_tracking(obj, content)
 
     AuditService.create_entry(
         user_id=str(user.id) if user and hasattr(user, "id") else "",

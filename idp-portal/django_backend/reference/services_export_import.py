@@ -16,6 +16,7 @@ from core.services_iac_utils import (
     _apply_field_changes,
     parse_yaml,
     serialize_to_yaml,
+    update_sync_tracking,
     validate_envelope,
 )
 from reference.models import RefCategory, RefEngine
@@ -130,14 +131,23 @@ def import_reference_yaml(content: bytes, ref_type: str, user: Any = None) -> tu
         if ref_type == "engines":
             defaults["icon_url"] = item.get("icon_url")  # None si absent → efface le champ en DB
 
+        item_yaml = serialize_to_yaml({
+            "apiVersion": "idp/v1",
+            "kind": "ReferenceData",
+            "metadata": {"type": ref_type},
+            "spec": [item],
+        })
+
         obj, was_created = Model.objects.get_or_create(code=code, defaults=defaults)
         if was_created:
             created += 1
+            update_sync_tracking(obj, item_yaml)
         else:
             changed = _apply_field_changes(obj, defaults)
             if changed:
                 obj.save()
                 updated += 1
+                update_sync_tracking(obj, item_yaml)
             else:
                 unchanged += 1
 

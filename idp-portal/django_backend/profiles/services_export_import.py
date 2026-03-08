@@ -12,7 +12,7 @@ from django.db import transaction
 
 from catalog.models import Action
 from core.exceptions import InvalidStateError
-from core.services_iac_utils import parse_yaml, validate_envelope, serialize_to_yaml
+from core.services_iac_utils import parse_yaml, serialize_to_yaml, update_sync_tracking, validate_envelope
 from profiles.models import Profile
 from profiles.services import ProfileService
 
@@ -482,10 +482,12 @@ def import_profiles_yaml(content: bytes, user: Any = None, mode: str = "additive
                 details={"name": item.get("name", "")},
             )
         items = [item]
+        is_envelope = True
     else:
         # Flat format — backward compat
         _validate_yaml_schema(parsed)
         items = parsed["profiles"]
+        is_envelope = False
 
     service = ProfileService()
     created = 0
@@ -495,6 +497,26 @@ def import_profiles_yaml(content: bytes, user: Any = None, mode: str = "additive
     for item in items:
         name_stripped = item["name"].strip()
         existing = service.get_by_name(name_stripped)
+
+        # Determine yaml bytes for this specific entity (for sync tracking)
+        if is_envelope:
+            item_yaml: bytes = content
+        else:
+            item_yaml = serialize_to_yaml({
+                "apiVersion": "idp/v1",
+                "kind": "Profile",
+                "metadata": {
+                    "name": item["name"],
+                    "ad_group": item.get("ad_group", ""),
+                },
+                "spec": {
+                    "is_admin": bool(item.get("is_admin", False)),
+                    "is_auditor": bool(item.get("is_auditor", False)),
+                    "is_approver": bool(item.get("is_approver", False)),
+                    "actions": item.get("actions", {"type": "all"}),
+                    "targets": item.get("targets", {"type": "all"}),
+                },
+            })
 
         if existing:
             profile_update_data = {
@@ -516,6 +538,7 @@ def import_profiles_yaml(content: bytes, user: Any = None, mode: str = "additive
             if fields_changed:
                 service.update_profile(existing.id, profile_update_data, user=user)
                 updated += 1
+                update_sync_tracking(existing, item_yaml)
             else:
                 unchanged += 1
             profile_id = existing.id
@@ -531,6 +554,7 @@ def import_profiles_yaml(content: bytes, user: Any = None, mode: str = "additive
             profile = service.create_profile(profile_create_data, user=user)
             profile_id = profile.id
             created += 1
+            update_sync_tracking(profile, item_yaml)
 
         actions_payload = _yaml_item_to_action_payload(item)
         targets_payload = _yaml_item_to_target_payload(item)

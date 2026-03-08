@@ -17,6 +17,7 @@ from core.services_iac_utils import (
     _apply_field_changes,
     parse_yaml,
     serialize_to_yaml,
+    update_sync_tracking,
     validate_envelope,
 )
 
@@ -132,6 +133,7 @@ def import_policy_yaml(
         obj, was_created = BusinessRulePolicy.objects.get_or_create(name=name, defaults=defaults)
         if was_created:
             created, updated, unchanged = 1, 0, 0
+            update_sync_tracking(obj, content)
         else:
             # Race condition: created between filter and get_or_create — treat as update
             update_defaults = {"policy_json": policy_json, "is_active": is_active, "description": description}
@@ -139,6 +141,7 @@ def import_policy_yaml(
             if changed:
                 obj.save()
                 created, updated, unchanged = 0, 1, 0
+                update_sync_tracking(obj, content)
             else:
                 created, updated, unchanged = 0, 0, 1
     else:
@@ -148,6 +151,7 @@ def import_policy_yaml(
         if changed:
             existing.save()
             created, updated, unchanged = 0, 1, 0
+            update_sync_tracking(existing, content)
         else:
             created, updated, unchanged = 0, 0, 1
         obj = existing

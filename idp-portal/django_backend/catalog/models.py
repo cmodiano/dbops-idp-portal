@@ -159,6 +159,9 @@ class BusinessRulePolicy(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
     updated_at = models.DateTimeField(auto_now=True, db_column='UPDATED_AT')
     created_by = models.ForeignKey(User, on_delete=models.PROTECT, db_column='CREATED_BY_ID')
+    # Story 64.11: IaC sync tracking
+    last_synced_at = models.DateTimeField(null=True, blank=True, db_column='LAST_SYNCED_AT')
+    last_synced_hash = models.CharField(max_length=64, null=True, blank=True, db_column='LAST_SYNCED_HASH')
 
     class Meta:
         db_table = 'BUSINESS_RULE_POLICIES'
@@ -291,6 +294,9 @@ class Action(models.Model):
     )
     deleted_at = models.DateTimeField(null=True, blank=True, db_column='DELETED_AT')
     deletion_reason = models.CharField(max_length=500, null=True, blank=True, db_column='DELETION_REASON')
+    # Story 64.11: IaC sync tracking
+    last_synced_at = models.DateTimeField(null=True, blank=True, db_column='LAST_SYNCED_AT')
+    last_synced_hash = models.CharField(max_length=64, null=True, blank=True, db_column='LAST_SYNCED_HASH')
 
     # Custom manager
     objects = ActionManager()

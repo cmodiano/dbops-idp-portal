@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 
 import yaml
+from django.utils import timezone
 
 from core.exceptions import InvalidStateError
 
@@ -155,3 +156,19 @@ def _apply_field_changes(obj: object, defaults: dict) -> bool:
             setattr(obj, field, value)
             changed = True
     return changed
+
+
+def update_sync_tracking(obj: object, yaml_content: bytes) -> None:
+    """
+    Update last_synced_at and last_synced_hash on a model instance after successful sync.
+
+    Args:
+        obj: Django model instance with last_synced_at and last_synced_hash fields.
+        yaml_content: Raw YAML bytes representing this specific entity (used to compute hash).
+
+    Note:
+        Uses save(update_fields=...) — obj must already exist in DB.
+    """
+    obj.last_synced_at = timezone.now()  # type: ignore[attr-defined]
+    obj.last_synced_hash = compute_yaml_hash(yaml_content)  # type: ignore[attr-defined]
+    obj.save(update_fields=["last_synced_at", "last_synced_hash"])  # type: ignore[attr-defined]

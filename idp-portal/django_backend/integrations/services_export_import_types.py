@@ -17,6 +17,7 @@ from core.services_iac_utils import (
     _apply_field_changes,
     parse_yaml,
     serialize_to_yaml,
+    update_sync_tracking,
     validate_envelope,
 )
 from integrations.models import IntegrationAction, IntegrationTypeCatalogue
@@ -126,12 +127,14 @@ def import_integration_types_yaml(
     if was_created:
         created = 1
         updated = unchanged = 0
+        update_sync_tracking(obj, content)
     else:
         changed = _apply_field_changes(obj, defaults)
         if changed:
             obj.save()
             updated = 1
             created = unchanged = 0
+            update_sync_tracking(obj, content)
         else:
             unchanged = 1
             created = updated = 0

@@ -247,3 +247,67 @@ class ImportIntegrationYamlTests(TestCase):
         import_integration_yaml(exported1)
         exported2 = export_integration_yaml("aap-prod")
         self.assertEqual(exported1, exported2)
+
+
+class ImportIntegrationSyncTrackingTests(TestCase):
+    """Story 64.11 - AC#8: Verify last_synced_hash/at are set after import for Integration."""
+
+    def setUp(self):
+        IntegrationTypeCatalogue.objects.get_or_create(code="aap", defaults={"name": "AAP"})
+        IntegrationTypeCatalogue.objects.get_or_create(code="vault", defaults={"name": "Vault"})
+
+    def test_create_sets_last_synced_hash(self):
+        content = _make_integration_yaml()
+        import_integration_yaml(content)
+        obj = Integration.objects.get(name="aap-prod")
+        self.assertIsNotNone(obj.last_synced_hash)
+        self.assertEqual(len(obj.last_synced_hash), 64)
+
+    def test_create_sets_last_synced_at(self):
+        content = _make_integration_yaml()
+        import_integration_yaml(content)
+        obj = Integration.objects.get(name="aap-prod")
+        self.assertIsNotNone(obj.last_synced_at)
+
+    def test_update_sets_last_synced_hash(self):
+        Integration.objects.create(
+            name="aap-prod", type="aap", base_url="https://old.example.com"
+        )
+        content = _make_integration_yaml(base_url="https://new.example.com")
+        import_integration_yaml(content)
+        obj = Integration.objects.get(name="aap-prod")
+        self.assertIsNotNone(obj.last_synced_hash)
+        self.assertEqual(len(obj.last_synced_hash), 64)
+
+    def test_unchanged_does_not_update_last_synced_hash(self):
+        content = _make_integration_yaml()
+        import_integration_yaml(content)
+        # Clear tracking to verify unchanged path leaves it alone
+        Integration.objects.filter(name="aap-prod").update(
+            last_synced_hash=None, last_synced_at=None
+        )
+        # Re-import same content → unchanged
+        created, updated, unchanged = import_integration_yaml(content)
+        self.assertEqual(unchanged, 1)
+        obj = Integration.objects.get(name="aap-prod")
+        self.assertIsNone(obj.last_synced_hash)
+
+    def test_secret_service_ref_only_change_sets_last_synced_hash(self):
+        """Story 64.11 fix: secret_service_ref-only change in pass 2 must update hash."""
+        Integration.objects.create(
+            name="vault-prod", type="vault", base_url="https://vault.example.com"
+        )
+        # First import without secret_service_ref
+        content_without = _make_integration_yaml()
+        import_integration_yaml(content_without)
+        # Clear tracking
+        Integration.objects.filter(name="aap-prod").update(
+            last_synced_hash=None, last_synced_at=None
+        )
+        # Import with secret_service_ref changed only
+        content_with = _make_integration_yaml(secret_service_ref="vault-prod")
+        created, updated, unchanged = import_integration_yaml(content_with)
+        self.assertEqual(updated, 1)
+        obj = Integration.objects.get(name="aap-prod")
+        self.assertIsNotNone(obj.last_synced_hash)
+        self.assertEqual(len(obj.last_synced_hash), 64)

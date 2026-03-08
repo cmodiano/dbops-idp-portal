@@ -253,6 +253,52 @@ class ImportFeatureFlagsTransactionTests(TestCase):
             import_feature_flags_yaml(content)
         self.assertFalse(FeatureFlag.objects.filter(flag_key="my_flag").exists())
 
+
+class ImportFeatureFlagsSyncTrackingTests(TestCase):
+    """Story 64.11 - AC#8: Verify last_synced_hash is set after import."""
+
+    @patch("core.services_export_import.AuditService.create_entry")
+    def test_create_sets_last_synced_hash(self, mock_audit):
+        content = _make_flags_yaml([_flag_spec("tracked_flag")])
+        import_feature_flags_yaml(content)
+        flag = FeatureFlag.objects.get(flag_key="tracked_flag")
+        self.assertIsNotNone(flag.last_synced_hash)
+        self.assertEqual(len(flag.last_synced_hash), 64)
+
+    @patch("core.services_export_import.AuditService.create_entry")
+    def test_create_sets_last_synced_at(self, mock_audit):
+        content = _make_flags_yaml([_flag_spec("tracked_flag")])
+        import_feature_flags_yaml(content)
+        flag = FeatureFlag.objects.get(flag_key="tracked_flag")
+        self.assertIsNotNone(flag.last_synced_at)
+
+    @patch("core.services_export_import.AuditService.create_entry")
+    def test_update_sets_last_synced_hash(self, mock_audit):
+        FeatureFlag.objects.create(
+            flag_key="existing_flag", enabled=False, rollout_percent=0, description="Old"
+        )
+        content = _make_flags_yaml([_flag_spec("existing_flag", enabled=True, description="New")])
+        import_feature_flags_yaml(content)
+        flag = FeatureFlag.objects.get(flag_key="existing_flag")
+        self.assertIsNotNone(flag.last_synced_hash)
+        self.assertEqual(len(flag.last_synced_hash), 64)
+
+    @patch("core.services_export_import.AuditService.create_entry")
+    def test_unchanged_does_not_update_last_synced_hash(self, mock_audit):
+        FeatureFlag.objects.create(
+            flag_key="stable_flag", enabled=True, rollout_percent=100, description="Desc"
+        )
+        # Clear tracking fields to ensure they stay None for unchanged
+        FeatureFlag.objects.filter(flag_key="stable_flag").update(
+            last_synced_hash=None, last_synced_at=None
+        )
+        content = _make_flags_yaml([_flag_spec("stable_flag", enabled=True, rollout_percent=100, description="Desc")])
+        created, updated, unchanged = import_feature_flags_yaml(content)
+        self.assertEqual(unchanged, 1)
+        flag = FeatureFlag.objects.get(flag_key="stable_flag")
+        # unchanged → last_synced_hash must NOT be set
+        self.assertIsNone(flag.last_synced_hash)
+
     @patch("core.services_export_import.AuditService.create_entry")
     def test_transaction_rollback_on_validation_error(self, mock_audit):
         content = _make_flags_yaml([

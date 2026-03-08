@@ -14,6 +14,7 @@ from core.services_iac_utils import (
     _apply_field_changes,
     parse_yaml,
     serialize_to_yaml,
+    update_sync_tracking,
     validate_envelope,
 )
 
@@ -83,16 +84,25 @@ def import_feature_flags_yaml(content: bytes, user: Any | None = None) -> tuple[
                 user.username if hasattr(user, "username") else str(user)
             )
 
+        item_yaml = serialize_to_yaml({
+            "apiVersion": "idp/v1",
+            "kind": "FeatureFlags",
+            "metadata": {},
+            "spec": [item],
+        })
+
         obj, was_created = FeatureFlag.objects.get_or_create(
             flag_key=flag_key, defaults=defaults
         )
         if was_created:
             created += 1
+            update_sync_tracking(obj, item_yaml)
         else:
             changed = _apply_field_changes(obj, defaults)
             if changed:
                 obj.save()
                 updated += 1
+                update_sync_tracking(obj, item_yaml)
             else:
                 unchanged += 1
 

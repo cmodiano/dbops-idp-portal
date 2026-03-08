@@ -311,6 +311,63 @@ class ImportTransactionRollbackTests(ReferenceYamlTestMixin, TestCase):
         self.assertFalse(RefEngine.objects.filter(code="NewEngine").exists())
 
 
+class ImportReferenceSyncTrackingTests(ReferenceYamlTestMixin, TestCase):
+    """Story 64.11 - AC#8: Verify last_synced_hash/at are set after import for RefEngine/RefCategory."""
+
+    @patch("reference.services_export_import.AuditService.create_entry")
+    def test_create_sets_last_synced_hash(self, mock_audit):
+        content = self._make_yaml("engines", [
+            {"code": "Oracle", "label": "Oracle DB", "display_order": 1, "is_active": True},
+        ])
+        import_reference_yaml(content, "engines")
+        obj = RefEngine.objects.get(code="Oracle")
+        self.assertIsNotNone(obj.last_synced_hash)
+        self.assertEqual(len(obj.last_synced_hash), 64)
+
+    @patch("reference.services_export_import.AuditService.create_entry")
+    def test_create_sets_last_synced_at(self, mock_audit):
+        content = self._make_yaml("engines", [
+            {"code": "Oracle", "label": "Oracle DB", "display_order": 1, "is_active": True},
+        ])
+        import_reference_yaml(content, "engines")
+        obj = RefEngine.objects.get(code="Oracle")
+        self.assertIsNotNone(obj.last_synced_at)
+
+    @patch("reference.services_export_import.AuditService.create_entry")
+    def test_update_sets_last_synced_hash(self, mock_audit):
+        RefEngine.objects.create(code="Oracle", label="Old label", display_order=1, is_active=1)
+        content = self._make_yaml("engines", [
+            {"code": "Oracle", "label": "Oracle DB Updated", "display_order": 1, "is_active": True},
+        ])
+        import_reference_yaml(content, "engines")
+        obj = RefEngine.objects.get(code="Oracle")
+        self.assertIsNotNone(obj.last_synced_hash)
+        self.assertEqual(len(obj.last_synced_hash), 64)
+
+    @patch("reference.services_export_import.AuditService.create_entry")
+    def test_unchanged_does_not_update_last_synced_hash(self, mock_audit):
+        RefEngine.objects.create(code="Oracle", label="Oracle DB", display_order=1, is_active=1)
+        content = self._make_yaml("engines", [
+            {"code": "Oracle", "label": "Oracle DB", "display_order": 1, "is_active": True},
+        ])
+        # Clear tracking to confirm unchanged path leaves it None
+        RefEngine.objects.filter(code="Oracle").update(last_synced_hash=None, last_synced_at=None)
+        created, updated, unchanged = import_reference_yaml(content, "engines")
+        self.assertEqual(unchanged, 1)
+        obj = RefEngine.objects.get(code="Oracle")
+        self.assertIsNone(obj.last_synced_hash)
+
+    @patch("reference.services_export_import.AuditService.create_entry")
+    def test_category_create_sets_last_synced_hash(self, mock_audit):
+        content = self._make_yaml("categories", [
+            {"code": "PATCH", "label": "Patching", "display_order": 1, "is_active": True},
+        ])
+        import_reference_yaml(content, "categories")
+        obj = RefCategory.objects.get(code="PATCH")
+        self.assertIsNotNone(obj.last_synced_hash)
+        self.assertEqual(len(obj.last_synced_hash), 64)
+
+
 class ImportAuditLoggingTests(ReferenceYamlTestMixin, TestCase):
 
     @patch("reference.services_export_import.AuditService.create_entry")

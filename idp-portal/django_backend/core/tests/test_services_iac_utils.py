@@ -2,7 +2,12 @@
 Unit tests for core/services_iac_utils.py.
 Story 64.1 - AC#11: Tests for parse_yaml, validate_envelope, compute_yaml_hash,
 serialize_to_yaml, _apply_field_changes.
+Story 64.11 - Tests for update_sync_tracking.
 """
+
+import hashlib
+from datetime import datetime, timezone as dt_timezone
+from unittest.mock import patch
 
 from django.test import TestCase
 
@@ -12,6 +17,7 @@ from core.services_iac_utils import (
     compute_yaml_hash,
     parse_yaml,
     serialize_to_yaml,
+    update_sync_tracking,
     validate_envelope,
 )
 
@@ -221,3 +227,71 @@ class ApplyFieldChangesTests(TestCase):
         obj = self._make_obj(label="test")
         result = _apply_field_changes(obj, {})
         self.assertFalse(result)
+
+
+class UpdateSyncTrackingTests(TestCase):
+    """Story 64.11 — Tests for update_sync_tracking."""
+
+    def _make_obj(self):
+        """Create a simple in-memory object with tracking fields and a save mock."""
+        from unittest.mock import MagicMock
+
+        obj = MagicMock()
+        obj.last_synced_at = None
+        obj.last_synced_hash = None
+        return obj
+
+    def test_sets_last_synced_hash_to_sha256(self):
+        yaml_content = b"apiVersion: idp/v1\nkind: Action\n"
+        expected_hash = hashlib.sha256(yaml_content).hexdigest()
+        obj = self._make_obj()
+
+        with patch("core.services_iac_utils.timezone") as mock_tz:
+            mock_tz.now.return_value = datetime(2026, 3, 7, 12, 0, 0, tzinfo=dt_timezone.utc)
+            update_sync_tracking(obj, yaml_content)
+
+        self.assertEqual(obj.last_synced_hash, expected_hash)
+
+    def test_sets_last_synced_at_to_timezone_now(self):
+        yaml_content = b"some: yaml\n"
+        frozen_now = datetime(2026, 3, 7, 10, 0, 0, tzinfo=dt_timezone.utc)
+        obj = self._make_obj()
+
+        with patch("core.services_iac_utils.timezone") as mock_tz:
+            mock_tz.now.return_value = frozen_now
+            update_sync_tracking(obj, yaml_content)
+
+        self.assertEqual(obj.last_synced_at, frozen_now)
+
+    def test_calls_save_with_update_fields(self):
+        yaml_content = b"any: content\n"
+        obj = self._make_obj()
+
+        with patch("core.services_iac_utils.timezone") as mock_tz:
+            mock_tz.now.return_value = datetime(2026, 3, 7, tzinfo=dt_timezone.utc)
+            update_sync_tracking(obj, yaml_content)
+
+        obj.save.assert_called_once_with(update_fields=["last_synced_at", "last_synced_hash"])
+
+    def test_hash_matches_compute_yaml_hash(self):
+        yaml_content = b"apiVersion: idp/v1\nkind: FeatureFlags\n"
+        expected = compute_yaml_hash(yaml_content)
+        obj = self._make_obj()
+
+        with patch("core.services_iac_utils.timezone") as mock_tz:
+            mock_tz.now.return_value = datetime(2026, 3, 7, tzinfo=dt_timezone.utc)
+            update_sync_tracking(obj, yaml_content)
+
+        self.assertEqual(obj.last_synced_hash, expected)
+        self.assertEqual(len(obj.last_synced_hash), 64)
+
+    def test_different_yaml_content_different_hash(self):
+        obj1 = self._make_obj()
+        obj2 = self._make_obj()
+
+        with patch("core.services_iac_utils.timezone") as mock_tz:
+            mock_tz.now.return_value = datetime(2026, 3, 7, tzinfo=dt_timezone.utc)
+            update_sync_tracking(obj1, b"content_a")
+            update_sync_tracking(obj2, b"content_b")
+
+        self.assertNotEqual(obj1.last_synced_hash, obj2.last_synced_hash)

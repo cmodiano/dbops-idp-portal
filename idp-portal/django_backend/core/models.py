@@ -332,6 +332,9 @@ class FeatureFlag(models.Model):
         default='',
         db_column='UPDATED_BY',
     )
+    # Story 64.11: IaC sync tracking
+    last_synced_at = models.DateTimeField(null=True, blank=True, db_column='LAST_SYNCED_AT')
+    last_synced_hash = models.CharField(max_length=64, null=True, blank=True, db_column='LAST_SYNCED_HASH')
 
     class Meta:
         db_table = 'CORE_FEATURE_FLAGS'
