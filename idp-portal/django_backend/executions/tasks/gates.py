@@ -175,11 +175,12 @@ def _transition_step_to_running(step: ExecutionStep, gate_status: dict, correlat
     try:
         from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
         RunnableStepService.delete(step.id)
-    except Exception:
+    except Exception as e:
         logger.error(
             "evaluate_waiting_gates_runnable_step_delete_failed",
             step_id=step.id,
             execution_id=step.execution_id,
+            error=str(e),
             correlation_id=correlation_id,
             exc_info=True,
         )
@@ -193,11 +194,12 @@ def _transition_step_to_running(step: ExecutionStep, gate_status: dict, correlat
         WorkflowEventService.emit_step_status_changed(
             step.execution_id, step, old_status=ExecutionStepStatus.WAITING,
         )
-    except Exception:
+    except Exception as e:
         logger.error(
             "evaluate_waiting_gates_emit_step_status_changed_failed",
             step_id=step.id,
             execution_id=step.execution_id,
+            error=str(e),
             correlation_id=correlation_id,
             exc_info=True,
         )
@@ -369,11 +371,12 @@ def _handle_gate_timeout(step: ExecutionStep, gate_status: dict, correlation_id:
     try:
         from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
         RunnableStepService.delete(step.id)
-    except Exception:
+    except Exception as e:
         logger.error(
             "evaluate_waiting_gates_timeout_runnable_step_delete_failed",
             step_id=step.id,
             execution_id=step.execution_id,
+            error=str(e),
             correlation_id=correlation_id,
             exc_info=True,
         )
@@ -382,11 +385,12 @@ def _handle_gate_timeout(step: ExecutionStep, gate_status: dict, correlation_id:
         WorkflowEventService.emit_step_status_changed(
             step.execution_id, step, old_status=ExecutionStepStatus.WAITING,
         )
-    except Exception:
+    except Exception as e:
         logger.error(
             "evaluate_waiting_gates_timeout_emit_step_status_changed_failed",
             step_id=step.id,
             execution_id=step.execution_id,
+            error=str(e),
             correlation_id=correlation_id,
             exc_info=True,
         )

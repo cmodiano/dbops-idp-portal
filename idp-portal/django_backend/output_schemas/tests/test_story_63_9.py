@@ -12,6 +12,8 @@ from rest_framework.test import APIClient
 
 from catalog.models import Action, ActionItemType
 from profiles.models import Profile
+from reference.models import RefEngine
+from integrations.models import IntegrationTypeCatalogue, IntegrationRole
 from tests.factories import UserFactory
 from output_schemas.models import OutputSchema, SchemaType
 from output_schemas.registry import schema_registry
@@ -88,6 +90,11 @@ class TestMigration63_9:
 @pytest.mark.django_db
 class TestActionSerializerOutputSchemaId:
     def setup_method(self):
+        # RefEngine/IntegrationTypeCatalogue required for admin actions PATCH validation
+        RefEngine.objects.get_or_create(code='Oracle', defaults={'label': 'Oracle', 'display_order': 1})
+        IntegrationTypeCatalogue.objects.get_or_create(
+            code='aap', defaults={'name': 'AAP', 'integration_role': IntegrationRole.PLATFORM, 'is_active': True}
+        )
         self.client = APIClient()
         self.admin = make_admin_user('admin63_9_ser')
         self.client.force_authenticate(user=self.admin)

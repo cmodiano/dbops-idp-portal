@@ -66,10 +66,10 @@ class RunnableStepService:
         except IntegrityError:
             # Expected: race condition on get_or_create (duplicate execution_step_id)
             return None
-        except Exception:
+        except Exception as e:
             logger.exception(
                 "runnable_step_enqueue_failed",
-                extra={"execution_step_id": step.id},
+                extra={"execution_step_id": step.id, "error": str(e)},
             )
             raise
 
@@ -128,10 +128,10 @@ class RunnableStepService:
         except IntegrityError:
             # Expected: rare constraint violation during update
             return []
-        except Exception:
+        except Exception as e:
             logger.exception(
                 "runnable_steps_claim_failed",
-                extra={"worker_id": worker_id},
+                extra={"worker_id": worker_id, "error": str(e)},
             )
             raise
 
@@ -153,10 +153,10 @@ class RunnableStepService:
         except IntegrityError:
             # Expected: rare constraint violation during delete
             return False
-        except Exception:
+        except Exception as e:
             logger.exception(
                 "runnable_step_delete_failed",
-                extra={"execution_step_id": execution_step_id},
+                extra={"execution_step_id": execution_step_id, "error": str(e)},
             )
             raise
 
@@ -175,10 +175,10 @@ class RunnableStepService:
         except IntegrityError:
             # Expected: rare constraint violation during delete
             return 0
-        except Exception:
+        except Exception as e:
             logger.exception(
                 "runnable_steps_delete_for_execution_failed",
-                extra={"execution_id": execution_id},
+                extra={"execution_id": execution_id, "error": str(e)},
             )
             raise
 
