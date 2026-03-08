@@ -214,3 +214,77 @@ class TestPollPlatformJobStatusOutputFields:
         output_fields = call_kwargs['output_fields']
         assert 'error_summary' not in output_fields
         assert 'failed_tasks' not in output_fields
+
+    @patch('executions.tasks._broadcast_execution_update')
+    @patch('executions.tasks._update_execution_from_poll')
+    @patch('executions.tasks.get_correlation_id', return_value='test-corr-artifacts')
+    def test_artifacts_stored_in_output_fields(
+        self,
+        mock_corr: MagicMock,
+        mock_update: MagicMock,
+        mock_broadcast: MagicMock,
+    ):
+        """AC3: output_fields contient "artifacts" avec les vars custom set_stats."""
+        from unittest.mock import AsyncMock
+        from executions.tasks.polling import poll_platform_job_status
+
+        mock_adapter = MagicMock()
+        mock_adapter.get_status = AsyncMock(return_value={
+            'status': 'COMPLETED',
+            'aap_status': 'successful',
+            'artifacts': {'app_version': '2.0.0', 'deploy_env': 'prod'},
+        })
+        mock_adapter.get_job_logs = AsyncMock(return_value={
+            'complete': True,
+            'content': 'done',
+        })
+
+        with patch('adapters.get_platform_adapter', return_value=mock_adapter):
+            with patch('adapters.utils.build_auth_headers_from_credentials', return_value={}):
+                poll_platform_job_status(
+                    execution_id=1,
+                    platform_job_id='job-artifacts-001',
+                    platform_type='aap',
+                )
+
+        call_kwargs = mock_update.call_args.kwargs
+        output_fields = call_kwargs['output_fields']
+        assert 'artifacts' in output_fields
+        assert output_fields['artifacts'] == {'app_version': '2.0.0', 'deploy_env': 'prod'}
+
+    @patch('executions.tasks._broadcast_execution_update')
+    @patch('executions.tasks._update_execution_from_poll')
+    @patch('executions.tasks.get_correlation_id', return_value='test-corr-no-artifacts')
+    def test_artifacts_empty_when_no_set_stats(
+        self,
+        mock_corr: MagicMock,
+        mock_update: MagicMock,
+        mock_broadcast: MagicMock,
+    ):
+        """AC3: artifacts={} dans output_fields quand le playbook n'utilise pas set_stats."""
+        from unittest.mock import AsyncMock
+        from executions.tasks.polling import poll_platform_job_status
+
+        mock_adapter = MagicMock()
+        mock_adapter.get_status = AsyncMock(return_value={
+            'status': 'COMPLETED',
+            'aap_status': 'successful',
+            # pas de clé "artifacts"
+        })
+        mock_adapter.get_job_logs = AsyncMock(return_value={
+            'complete': True,
+            'content': 'done',
+        })
+
+        with patch('adapters.get_platform_adapter', return_value=mock_adapter):
+            with patch('adapters.utils.build_auth_headers_from_credentials', return_value={}):
+                poll_platform_job_status(
+                    execution_id=1,
+                    platform_job_id='job-no-artifacts-001',
+                    platform_type='aap',
+                )
+
+        call_kwargs = mock_update.call_args.kwargs
+        output_fields = call_kwargs['output_fields']
+        assert 'artifacts' in output_fields
+        assert output_fields['artifacts'] == {}

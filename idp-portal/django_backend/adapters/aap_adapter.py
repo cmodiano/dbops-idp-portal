@@ -181,7 +181,8 @@ class AAPAdapter(BaseAdapter, IHealthCheckable):
             correlation_id: Tracing correlation ID.
 
         Returns:
-            Dict with 'status' (IDP mapping), 'aap_status', 'started', 'finished'.
+            Dict with 'status' (IDP mapping), 'aap_status', 'started', 'finished',
+            'elapsed', 'artifacts', 'failed_tasks', 'changed_hosts'.
 
         Raises:
             ServiceUnavailableError: If AAP is unreachable.
@@ -198,6 +199,8 @@ class AAPAdapter(BaseAdapter, IHealthCheckable):
             correlation_id=correlation_id,
         )
 
+        failed_tasks: list = []
+        changed_hosts: list = []
         try:
             async with httpx.AsyncClient(
                 headers=self.auth_headers,
@@ -207,6 +210,26 @@ class AAPAdapter(BaseAdapter, IHealthCheckable):
                 response = await client.get(url)
                 response.raise_for_status()
                 data = response.json()
+
+                # Récupérer job_host_summaries pour failed_tasks/changed_hosts (job_template uniquement)
+                if resource_type != "workflow_job":
+                    try:
+                        summaries_url = f"{self.base_url}/api/v2/jobs/{platform_job_id}/job_host_summaries/?page_size=200"
+                        summaries_response = await client.get(summaries_url)
+                        summaries_response.raise_for_status()
+                        summaries_data = summaries_response.json()
+                        for host_summary in summaries_data.get("results", []):
+                            host_name = host_summary.get("host_name", "")
+                            if host_name and host_summary.get("failed", 0) > 0:
+                                failed_tasks.append({"task": host_name, "host": host_name})
+                            if host_name and host_summary.get("changed", 0) > 0:
+                                changed_hosts.append(host_name)
+                    except Exception:  # noqa: BLE001 — résilience: job_host_summaries non critique
+                        logger.warning(
+                            "aap_get_status_host_summaries_failed",
+                            platform_job_id=platform_job_id,
+                            correlation_id=correlation_id,
+                        )
         except httpx.TimeoutException as exc:
             logger.error("aap_get_status_timeout", platform_job_id=platform_job_id, correlation_id=correlation_id, error=str(exc))
             raise ServiceUnavailableError(code="AAP_TIMEOUT", message="AAP status check timed out", details={"platform_job_id": platform_job_id}) from exc
@@ -218,11 +241,13 @@ class AAPAdapter(BaseAdapter, IHealthCheckable):
             raise ServiceUnavailableError(code="AAP_CONNECTION_ERROR", message="Cannot connect to AAP", details={"platform_job_id": platform_job_id}) from exc
 
         aap_status = data.get("status", "pending")
+        artifacts = data.get("artifacts") or {}
 
         logger.info(
             "aap_get_status_success",
             platform_job_id=platform_job_id,
             aap_status=aap_status,
+            num_artifacts=len(artifacts),
             correlation_id=correlation_id,
         )
 
@@ -232,6 +257,9 @@ class AAPAdapter(BaseAdapter, IHealthCheckable):
             "started": data.get("started"),
             "finished": data.get("finished"),
             "elapsed": data.get("elapsed"),
+            "artifacts": artifacts,
+            "failed_tasks": failed_tasks,
+            "changed_hosts": changed_hosts,
         }
 
     # ------------------------------------------------------------------

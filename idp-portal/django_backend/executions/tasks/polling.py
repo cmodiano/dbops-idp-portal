@@ -447,6 +447,7 @@ def poll_platform_job_status(
 
     # Construire les champs AAP standard à stocker dans l'output du step
     aap_status = status_data.get("aap_status") or status_data.get("status")
+    artifacts = status_data.get("artifacts") or {}
     failed_tasks = status_data.get("failed_tasks") or []
     changed_hosts = status_data.get("changed_hosts") or []
 
@@ -462,6 +463,7 @@ def poll_platform_job_status(
     output_fields: dict = {
         "platform_job_id": platform_job_id,
         "job_status": aap_status,
+        "artifacts": artifacts,
     }
     if error_summary:
         output_fields["error_summary"] = error_summary
