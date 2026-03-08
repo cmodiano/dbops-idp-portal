@@ -171,8 +171,36 @@ def _transition_step_to_running(step: ExecutionStep, gate_status: dict, correlat
         )
         return
 
+    # V113: Remove from runnable queue now that step is RUNNING (best-effort)
+    try:
+        from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
+        RunnableStepService.delete(step.id)
+    except Exception:
+        logger.error(
+            "evaluate_waiting_gates_runnable_step_delete_failed",
+            step_id=step.id,
+            execution_id=step.execution_id,
+            correlation_id=correlation_id,
+            exc_info=True,
+        )
+
     # Refresh step to get updated fields
     step.refresh_from_db()
+
+    # V113: Durable event for UI catch-up (best-effort)
+    try:
+        from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
+        WorkflowEventService.emit_step_status_changed(
+            step.execution_id, step, old_status=ExecutionStepStatus.WAITING,
+        )
+    except Exception:
+        logger.error(
+            "evaluate_waiting_gates_emit_step_status_changed_failed",
+            step_id=step.id,
+            execution_id=step.execution_id,
+            correlation_id=correlation_id,
+            exc_info=True,
+        )
 
     logger.info(
         "evaluate_waiting_gates_step_satisfied",
@@ -300,6 +328,10 @@ def _update_waiting_context(step: ExecutionStep, gate_status: dict, correlation_
     step.set_output(output)
     step.save()
 
+    # V113: Durable event so UI can refresh gate status on reconnect
+    from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
+    WorkflowEventService.emit_step_output_updated(step.execution_id, step)
+
     logger.info(
         "evaluate_waiting_gates_step_still_waiting",
         step_id=step.id,
@@ -332,6 +364,32 @@ def _handle_gate_timeout(step: ExecutionStep, gate_status: dict, correlation_id:
 
     step.completed_at = timezone.now()
     step.save()
+
+    # V113: Remove from runnable queue and emit durable event (best-effort)
+    try:
+        from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
+        RunnableStepService.delete(step.id)
+    except Exception:
+        logger.error(
+            "evaluate_waiting_gates_timeout_runnable_step_delete_failed",
+            step_id=step.id,
+            execution_id=step.execution_id,
+            correlation_id=correlation_id,
+            exc_info=True,
+        )
+    try:
+        from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
+        WorkflowEventService.emit_step_status_changed(
+            step.execution_id, step, old_status=ExecutionStepStatus.WAITING,
+        )
+    except Exception:
+        logger.error(
+            "evaluate_waiting_gates_timeout_emit_step_status_changed_failed",
+            step_id=step.id,
+            execution_id=step.execution_id,
+            correlation_id=correlation_id,
+            exc_info=True,
+        )
 
     logger.info(
         "evaluate_waiting_gates_step_timeout",

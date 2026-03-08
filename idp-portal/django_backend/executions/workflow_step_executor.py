@@ -101,6 +101,12 @@ class StepExecutor:
             from executions.utils.websocket_broadcast import broadcast_step_update  # noqa: PLC0415
             broadcast_step_update(self.execution.id, execution_step)
 
+            # V113: Durable event for UI catch-up on reconnect
+            from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
+            WorkflowEventService.emit_step_status_changed(
+                self.execution.id, execution_step, old_status="",
+            )
+
             logger.info(
                 "workflow_step_waiting",
                 execution_id=self.execution.id,
@@ -135,6 +141,14 @@ class StepExecutor:
             )
             if is_approval_gate:
                 self._send_approval_notification_if_configured()
+                # V113: Durable approval_requested event — survives page reload
+                WorkflowEventService.emit_approval_requested(
+                    self.execution.id, execution_step,
+                )
+
+            # V113: Enqueue WAITING step as runnable (gate evaluator will process it)
+            from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
+            RunnableStepService.enqueue(execution_step)
 
             return StepResult(
                 outcome=StepOutcome.WAITING,

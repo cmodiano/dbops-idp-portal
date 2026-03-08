@@ -550,3 +550,132 @@ class RecurringPattern(models.Model):
             self.pattern_config = json.dumps(value)
         else:
             self.pattern_config = None
+
+
+class WorkflowEventType(models.TextChoices):
+    """Event types for real-time UI sync (V113)."""
+    EXECUTION_STATUS_CHANGED = 'EXECUTION_STATUS_CHANGED', 'Execution Status Changed'
+    STEP_STATUS_CHANGED = 'STEP_STATUS_CHANGED', 'Step Status Changed'
+    STEP_OUTPUT_UPDATED = 'STEP_OUTPUT_UPDATED', 'Step Output Updated'
+    STEP_STARTED = 'STEP_STARTED', 'Step Started'
+    STEP_COMPLETED = 'STEP_COMPLETED', 'Step Completed'
+    STEP_FAILED = 'STEP_FAILED', 'Step Failed'
+    APPROVAL_REQUESTED = 'APPROVAL_REQUESTED', 'Approval Requested'
+    APPROVAL_GRANTED = 'APPROVAL_GRANTED', 'Approval Granted'
+    APPROVAL_REJECTED = 'APPROVAL_REJECTED', 'Approval Rejected'
+    TARGET_ADDED = 'TARGET_ADDED', 'Target Added'
+    EXECUTION_COMPLETED = 'EXECUTION_COMPLETED', 'Execution Completed'
+    EXECUTION_FAILED = 'EXECUTION_FAILED', 'Execution Failed'
+
+
+class WorkflowEventEntityType(models.TextChoices):
+    """Entity types for workflow events (V113)."""
+    EXECUTION = 'execution', 'Execution'
+    EXECUTION_STEP = 'execution_step', 'Execution Step'
+    EXECUTION_TARGET = 'execution_target', 'Execution Target'
+
+
+class WorkflowEvent(models.Model):
+    """
+    WorkflowEvent model mapping to Oracle WORKFLOW_EVENTS table (V113).
+
+    Event sourcing table for real-time UI sync. Each state change in an
+    execution or step produces an event row. The UI subscribes via WebSocket
+    and uses sequence_num to detect missed events and request catch-up.
+    """
+    id = models.BigAutoField(primary_key=True, db_column='ID')
+    execution = models.ForeignKey(
+        Execution,
+        on_delete=models.CASCADE,
+        related_name='workflow_events',
+        db_column='EXECUTION_ID'
+    )
+    event_type = models.CharField(
+        max_length=50,
+        choices=WorkflowEventType.choices,
+        db_column='EVENT_TYPE'
+    )
+    entity_type = models.CharField(
+        max_length=30,
+        choices=WorkflowEventEntityType.choices,
+        db_column='ENTITY_TYPE'
+    )
+    entity_id = models.BigIntegerField(db_column='ENTITY_ID')
+    sequence_num = models.BigIntegerField(db_column='SEQUENCE_NUM')
+    payload = models.TextField(null=True, blank=True, db_column='PAYLOAD')
+    created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
+
+    class Meta:
+        db_table = 'WORKFLOW_EVENTS'
+        ordering = ['execution', 'sequence_num']
+        unique_together = [['execution', 'sequence_num']]
+        indexes = [
+            models.Index(fields=['execution', 'created_at'], name='idx_wf_events_exec_created'),
+            models.Index(fields=['entity_type', 'entity_id'], name='idx_wf_events_entity'),
+        ]
+
+    def __str__(self) -> str:
+        return f"WorkflowEvent {self.id} - {self.event_type} (exec={self.execution_id}, seq={self.sequence_num})"
+
+    def get_payload(self) -> dict | None:
+        """Deserialize JSON from CLOB."""
+        if self.payload:
+            try:
+                return json.loads(self.payload)  # type: ignore[no-any-return]
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning(f"Failed to deserialize payload for WorkflowEvent {self.id}: {e}")
+                return None
+        return None
+
+    def set_payload(self, value: dict | None) -> None:
+        """Serialize JSON to CLOB."""
+        if value is not None:
+            self.payload = json.dumps(value)
+        else:
+            self.payload = None
+
+
+class RunnableStep(models.Model):
+    """
+    RunnableStep model mapping to Oracle RUNNABLE_STEPS table (V113).
+
+    Work queue of execution steps ready for execution. When the workflow engine
+    determines a step is eligible (prerequisites met, gates satisfied), it inserts
+    a row here. Workers claim rows, transition the step to RUNNING, then delete
+    the row. Avoids full-table scans of EXECUTION_STEPS for PENDING rows.
+    """
+    id = models.BigAutoField(primary_key=True, db_column='ID')
+    execution_step = models.OneToOneField(
+        ExecutionStep,
+        on_delete=models.CASCADE,
+        related_name='runnable_entry',
+        db_column='EXECUTION_STEP_ID'
+    )
+    execution = models.ForeignKey(
+        Execution,
+        on_delete=models.CASCADE,
+        related_name='runnable_steps',
+        db_column='EXECUTION_ID'
+    )
+    step_order = models.IntegerField(db_column='STEP_ORDER')
+    step_type = models.CharField(max_length=50, db_column='STEP_TYPE')
+    priority = models.IntegerField(default=0, db_column='PRIORITY')
+    eligible_at = models.DateTimeField(auto_now_add=True, db_column='ELIGIBLE_AT')
+    claimed_at = models.DateTimeField(null=True, blank=True, db_column='CLAIMED_AT')
+    claimed_by = models.CharField(max_length=255, null=True, blank=True, db_column='CLAIMED_BY')
+    created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
+
+    class Meta:
+        db_table = 'RUNNABLE_STEPS'
+        ordering = ['-priority', 'eligible_at']
+        indexes = [
+            models.Index(fields=['claimed_at', '-priority', 'eligible_at'], name='idx_runnable_unclaimed'),
+        ]
+
+    def __str__(self) -> str:
+        return f"RunnableStep {self.id} - step={self.execution_step_id} (priority={self.priority})"
+
+    @property
+    def is_claimed(self) -> bool:
+        """Whether this step has been claimed by a worker."""
+        return self.claimed_at is not None

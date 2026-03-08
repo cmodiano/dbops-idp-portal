@@ -3,10 +3,19 @@
  * Three visual states: Synchronisé, Divergé, UI only.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { DriftBadge } from '../DriftBadge';
 import { getDriftStatus } from '../driftUtils';
+
+// Mock driftUtils so we can override getDriftStatus in one test for defensive branch coverage
+vi.mock('../driftUtils', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../driftUtils')>();
+  return {
+    ...actual,
+    getDriftStatus: vi.fn(actual.getDriftStatus),
+  };
+});
 
 // Mock antd theme token to avoid full Ant Design theme context
 vi.mock('antd', async (importOriginal) => {
@@ -75,5 +84,17 @@ describe('DriftBadge', () => {
     );
     expect(screen.getByText('UI only')).toBeInTheDocument();
     expect(screen.getByLabelText('Sync Git: UI only')).toBeInTheDocument();
+  });
+
+  it('affiche "Divergé" avec tooltip vide quand status diverged mais last_synced_at falsy (defensive)', () => {
+    vi.mocked(getDriftStatus).mockReturnValueOnce('diverged');
+    render(
+      <DriftBadge
+        last_synced_at={null}
+        updated_at="2026-01-02T10:00:00Z"
+      />
+    );
+    expect(screen.getByText('Divergé')).toBeInTheDocument();
+    expect(screen.getByLabelText('Sync Git: Divergé')).toBeInTheDocument();
   });
 });
