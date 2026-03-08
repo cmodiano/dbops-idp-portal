@@ -7,7 +7,7 @@ from .feature_flag_views import (
     FeatureFlagStatusView,
     FeatureFlagUpdateView,
 )
-from .iac_views import export_feature_flags, sync_feature_flags
+from .iac_views import export_feature_flags, sync_feature_flags, get_config_sync_status
 
 app_name = 'core'
 
@@ -20,4 +20,6 @@ urlpatterns = [
     # IaC endpoints (story 64.8)
     path('admin/feature-flags/export/yaml/', export_feature_flags, name='feature-flags-export-yaml'),
     path('admin/feature-flags/sync/', sync_feature_flags, name='feature-flags-sync'),
+    # Config sync dashboard (story 64.14)
+    path('admin/config-sync/status/', get_config_sync_status, name='config-sync-status'),
 ]
