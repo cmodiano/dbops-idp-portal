@@ -6,15 +6,18 @@ Pattern: FBV @api_view (Story 63.1 canonical pattern).
 """
 
 from django.http import HttpResponse
+from django.shortcuts import get_object_or_404
 from rest_framework.decorators import api_view, permission_classes, parser_classes
 from rest_framework.parsers import MultiPartParser
+from rest_framework.request import Request
 from rest_framework.response import Response
 
 from core.exceptions import InvalidStateError
 from core.parsers import YAMLParser, extract_yaml_content
 from core.permissions import IsAdminUser
 
-from integrations.services_export_import import export_integrations_yaml, import_integration_yaml
+from integrations.models import Integration
+from integrations.services_export_import import export_integrations_yaml, export_integration_yaml, import_integration_yaml
 from integrations.services_export_import_types import (
     export_all_integration_types_yaml,
     import_integration_types_yaml,
@@ -32,6 +35,17 @@ def export_integrations(request):
     content = export_integrations_yaml()
     response = HttpResponse(content, content_type='application/x-yaml')
     response['Content-Disposition'] = 'attachment; filename="integrations.yaml"'
+    return response
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def export_integration_by_id(request: Request, pk: int) -> HttpResponse:
+    """GET /api/v1/admin/integrations/<pk>/export/yaml/ — Export single integration as YAML."""
+    integration = get_object_or_404(Integration, pk=pk)
+    content = export_integration_yaml(integration.name)
+    response = HttpResponse(content, content_type='application/x-yaml')
+    response['Content-Disposition'] = f'attachment; filename="{integration.name}.yaml"'
     return response
 
 

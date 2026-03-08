@@ -4,7 +4,7 @@
  * Provides functions to fetch catalog actions, favorites, and recent actions.
  */
 
-import { apiFetch, apiFetchRaw } from './api_client';
+import { apiFetch, apiFetchBlob, apiFetchRaw } from './api_client';
 import type { ActionPreviewData, ActionStats, NotificationConfig, ImpactLevel } from '../types/api';
 import type { ItemType, WorkflowStep } from '../types/api';
 
@@ -169,4 +169,17 @@ export async function fetchCatalogActionById(
 export async function fetchActionStats(actionId: number): Promise<ActionStats | null> {
   const response = await apiFetchRaw<{ data: ActionStats | null }>(`/catalog/actions/${actionId}/stats/`);
   return response.data;
+}
+
+/** Story 64.13: Export a single action as YAML file. Triggers browser download. */
+export async function exportActionYaml(id: number, name: string): Promise<void> {
+  const blob = await apiFetchBlob(`/admin/actions/${id}/export/yaml/`);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `actions-${name}.yaml`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }

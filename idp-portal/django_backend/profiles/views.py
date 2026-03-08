@@ -5,8 +5,10 @@ Implements admin profiles endpoints (Story M.5).
 
 from typing import Any
 
+from django.http import HttpResponse
+from django.shortcuts import get_object_or_404
 from rest_framework import viewsets, status
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -25,9 +27,20 @@ from profiles.serializers import (
 )
 from profiles.cache import invalidate_permissions_cache
 from profiles.services import ProfileService
-from profiles.services_export_import import export_profiles_yaml, import_profiles_yaml
-from core.permissions import AdminProfilePermission
+from profiles.services_export_import import export_profiles_yaml, import_profiles_yaml, export_profile_yaml
+from core.permissions import AdminProfilePermission, IsAdminUser
 from core.exceptions import NotFoundError, InvalidStateError
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def export_profile_by_id(request: Request, pk: int) -> HttpResponse:
+    """GET /api/v1/admin/profiles/<pk>/export/yaml/ — Export single profile as YAML."""
+    profile = get_object_or_404(Profile, pk=pk)
+    content = export_profile_yaml(profile.name)
+    response = HttpResponse(content, content_type='application/x-yaml')
+    response['Content-Disposition'] = f'attachment; filename="{profile.name}.yaml"'
+    return response
 
 
 @extend_schema_view(

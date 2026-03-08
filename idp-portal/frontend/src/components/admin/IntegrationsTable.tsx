@@ -8,6 +8,7 @@ import type { TableProps } from 'antd';
 import { ReloadOutlined, ApiOutlined, EditOutlined, DeleteOutlined, SyncOutlined } from '@ant-design/icons';
 import type { IntegrationListItem, IntegrationStatusType, HealthStatus } from '../../types/api';
 import { AUTH_FLOW_LABELS } from '../../types/api';
+import { DriftBadge } from './DriftBadge';
 import { getIconUrl } from '../../utils/iconUrl';
 import { HEALTH_CONFIG } from '../../utils/healthConfig';
 import { useIntegrationValidation } from '../../hooks/useIntegrationValidation';
@@ -162,6 +163,15 @@ export function IntegrationsTable({
           </Tooltip>
         );
       },
+    },
+    {
+      title: 'Sync Git',
+      dataIndex: 'last_synced_at',
+      key: 'drift',
+      width: 120,
+      render: (_: unknown, record: IntegrationListItem) => (
+        <DriftBadge last_synced_at={record.last_synced_at} updated_at={record.updated_at} />
+      ),
     },
     {
       title: 'Auth Flow',

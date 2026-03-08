@@ -146,3 +146,36 @@ class TestProfileAliasEndpoints:
         payload = response.data['data']
         assert 'unchanged' in payload
         assert 'mode' in payload
+
+
+@pytest.mark.django_db
+class TestProfileExportByIdView:
+    """Story 64.13 — Single-entity export endpoint for profiles."""
+
+    def setup_method(self):
+        self.client = APIClient()
+        self.admin = User.objects.create(username='admin_peid', profile='DBOPS')
+        self.non_admin = User.objects.create(username='user_peid', profile='dba')
+        self.profile = Profile.objects.create(name='test-profile-by-id', ad_group='GRP-TEST')
+
+    def test_export_by_id_returns_yaml(self):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.get(f'/api/v1/admin/profiles/{self.profile.pk}/export/yaml/')
+        assert response.status_code == 200
+        assert 'application/x-yaml' in response['Content-Type']
+
+    def test_export_by_id_has_content_disposition(self):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.get(f'/api/v1/admin/profiles/{self.profile.pk}/export/yaml/')
+        assert 'Content-Disposition' in response
+        assert self.profile.name in response['Content-Disposition']
+
+    def test_export_by_id_returns_404_on_missing_pk(self):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.get('/api/v1/admin/profiles/99999/export/yaml/')
+        assert response.status_code == 404
+
+    def test_export_by_id_requires_admin(self):
+        self.client.force_authenticate(user=self.non_admin)
+        response = self.client.get(f'/api/v1/admin/profiles/{self.profile.pk}/export/yaml/')
+        assert response.status_code == 403

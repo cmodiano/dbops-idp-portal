@@ -226,3 +226,36 @@ spec:
         )
         assert response.status_code in (200, 201)
         assert response.data['data']['mode'] == 'full'
+
+
+@pytest.mark.django_db
+class TestActionExportByIdView:
+    """Story 64.13 — Single-entity export endpoint for actions."""
+
+    def setup_method(self):
+        self.client = APIClient()
+        self.admin = User.objects.create(username='admin_aeid', profile='DBOPS')
+        self.non_admin = User.objects.create(username='user_aeid', profile='dba')
+        self.action = Action.objects.create(name='test-action-by-id', engine='shell', platform='linux')
+
+    def test_export_by_id_returns_yaml(self):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.get(f'/api/v1/admin/actions/{self.action.pk}/export/yaml/')
+        assert response.status_code == 200
+        assert 'application/x-yaml' in response['Content-Type']
+
+    def test_export_by_id_has_content_disposition(self):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.get(f'/api/v1/admin/actions/{self.action.pk}/export/yaml/')
+        assert 'Content-Disposition' in response
+        assert self.action.name in response['Content-Disposition']
+
+    def test_export_by_id_returns_404_on_missing_pk(self):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.get('/api/v1/admin/actions/99999/export/yaml/')
+        assert response.status_code == 404
+
+    def test_export_by_id_requires_admin(self):
+        self.client.force_authenticate(user=self.non_admin)
+        response = self.client.get(f'/api/v1/admin/actions/{self.action.pk}/export/yaml/')
+        assert response.status_code == 403

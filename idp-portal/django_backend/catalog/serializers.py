@@ -408,8 +408,11 @@ class ActionSerializer(ActionFieldValidationMixin, serializers.ModelSerializer):
             'requires_target',
             # Story 29.4: integration_id for platform consistency validation
             'integration_id',
+            # Story 64.13: IaC drift tracking (read-only)
+            'last_synced_at', 'last_synced_hash',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'created_by', 'integration_id', 'business_rule_policy_name']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'created_by', 'integration_id', 'business_rule_policy_name',
+                            'last_synced_at', 'last_synced_hash']
     
     # Story 17.4: Removed redundant get_parameters_schema, get_impact_rules, etc.
     # OracleJSONField handles deserialization automatically - no need for SerializerMethodField
@@ -653,7 +656,11 @@ class ActionListSerializer(serializers.ModelSerializer):
             'notification_config',
             # Story 18.1: soft-delete fields for admin list
             'deleted_at', 'deleted_by', 'deletion_reason',
+            # Story 64.13: IaC drift tracking (read-only)
+            'last_synced_at', 'last_synced_hash',
         ]
+        read_only_fields = ['id', 'created_at', 'updated_at', 'created_by',
+                            'last_synced_at', 'last_synced_hash']
 
     @extend_schema_field({'type': 'array', 'items': {'type': 'string'}})
     def get_tags(self, obj: Action) -> list[str]:

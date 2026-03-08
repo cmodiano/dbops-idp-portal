@@ -97,3 +97,16 @@ export async function importProfilesYaml(file: File): Promise<{ created: number;
   );
   return res.data;
 }
+
+/** Story 64.13: Export a single profile as YAML file. Triggers browser download. */
+export async function exportProfileYamlById(id: number, name: string): Promise<void> {
+  const blob = await apiFetchBlob(`/admin/profiles/${id}/export/yaml/`);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `profiles-${name}.yaml`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}

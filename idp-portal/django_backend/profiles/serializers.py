@@ -20,8 +20,10 @@ class ProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Profile
-        fields = ['id', 'name', 'description', 'ad_group', 'is_admin', 'is_auditor', 'is_approver', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        fields = ['id', 'name', 'description', 'ad_group', 'is_admin', 'is_auditor', 'is_approver', 'created_at', 'updated_at',
+                  # Story 64.13: IaC drift tracking (read-only)
+                  'last_synced_at', 'last_synced_hash']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'last_synced_at', 'last_synced_hash']
 
     def to_representation(self, instance: Any) -> dict[str, Any]:
         """Convert is_admin/is_auditor/is_approver from IntegerField (0/1) to boolean."""
@@ -92,8 +94,10 @@ class ProfileListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Profile
-        fields = ['id', 'name', 'ad_group', 'is_admin', 'is_auditor', 'is_approver', 'permission_count', 'created_at']
-        read_only_fields = ['id', 'permission_count', 'created_at']
+        fields = ['id', 'name', 'ad_group', 'is_admin', 'is_auditor', 'is_approver', 'permission_count', 'created_at', 'updated_at',
+                  # Story 64.13: IaC drift tracking (read-only)
+                  'last_synced_at', 'last_synced_hash']
+        read_only_fields = ['id', 'permission_count', 'created_at', 'updated_at', 'last_synced_at', 'last_synced_hash']
 
     def to_representation(self, instance: Any) -> dict[str, Any]:
         """Convert is_admin/is_auditor/is_approver from IntegerField (0/1) to boolean."""

@@ -6,6 +6,7 @@ Pattern: FBV @api_view (Story 63.1 canonical pattern).
 """
 
 from django.http import HttpResponse
+from django.shortcuts import get_object_or_404
 from rest_framework.decorators import api_view, permission_classes, parser_classes
 from rest_framework.parsers import MultiPartParser
 from rest_framework.request import Request
@@ -15,7 +16,8 @@ from core.exceptions import InvalidStateError
 from core.parsers import YAMLParser, extract_yaml_content
 from core.permissions import IsAdminUser
 
-from catalog.services_export_import import export_actions_yaml, import_action_yaml
+from catalog.models import Action
+from catalog.services_export_import import export_actions_yaml, export_action_yaml, import_action_yaml
 from catalog.services_export_import_policies import export_policies_yaml, import_policy_yaml
 from catalog.services_export_import_tags import export_tags_yaml, import_tags_yaml
 
@@ -31,6 +33,17 @@ def export_actions(request: Request) -> HttpResponse:
     content = export_actions_yaml()
     response = HttpResponse(content, content_type='application/x-yaml')
     response['Content-Disposition'] = 'attachment; filename="actions.yaml"'
+    return response
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def export_action_by_id(request: Request, pk: int) -> HttpResponse:
+    """GET /api/v1/admin/actions/<pk>/export/yaml/ — Export single action as YAML."""
+    action = get_object_or_404(Action, pk=pk)
+    content = export_action_yaml(action.name)
+    response = HttpResponse(content, content_type='application/x-yaml')
+    response['Content-Disposition'] = f'attachment; filename="{action.name}.yaml"'
     return response
 
 

@@ -9,6 +9,7 @@ import {
   PauseCircleOutlined,
 } from '@ant-design/icons';
 import { ActionStatusBadge } from '../../components/admin/ActionStatusBadge';
+import { DriftBadge } from '../../components/admin/DriftBadge';
 import { getItemTypeIcon } from '../../utils/iconHelpers';
 import type { ActionListItem, ActionStatus, StatusTransition } from '../../types/api';
 import { getTagStyle } from '../../utils/tagStyles';
@@ -66,6 +67,15 @@ export const getActionsColumns = (
       { text: 'Desactivee', value: 'disabled' },
     ],
     onFilter: (value, record) => record.status === value,
+  },
+  {
+    title: 'Sync Git',
+    dataIndex: 'last_synced_at',
+    key: 'drift',
+    width: 120,
+    render: (_: unknown, record: ActionListItem) => (
+      <DriftBadge last_synced_at={record.last_synced_at} updated_at={record.updated_at} />
+    ),
   },
   {
     title: 'Executions',

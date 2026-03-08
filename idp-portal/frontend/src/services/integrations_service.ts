@@ -3,7 +3,7 @@
  * Uses apiFetch, routes /admin/integrations and /admin/integrations/{id}. Requires DBOPS profile.
  */
 
-import { apiFetch, apiFetchRaw } from './api_client';
+import { apiFetch, apiFetchBlob, apiFetchRaw } from './api_client';
 import type {
   IntegrationCreate,
   IntegrationUpdate,
@@ -104,4 +104,17 @@ export async function getAAPTemplates(
     `/admin/integrations/${integrationId}/aap-templates/?${params.toString()}`,
   );
   return { templates: res?.data ?? [], fallback: res?.fallback ?? false };
+}
+
+/** Story 64.13: Export a single integration as YAML file. Triggers browser download. */
+export async function exportIntegrationYaml(id: number, name: string): Promise<void> {
+  const blob = await apiFetchBlob(`/admin/integrations/${id}/export/yaml/`);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `integrations-${name}.yaml`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }

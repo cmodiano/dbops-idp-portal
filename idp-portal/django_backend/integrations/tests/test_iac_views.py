@@ -7,6 +7,7 @@ import pytest
 from rest_framework.test import APIClient
 
 from idp_auth.models import User
+from integrations.models import Integration, IntegrationTypeCatalogue
 
 
 @pytest.mark.django_db
@@ -98,3 +99,43 @@ class TestIntegrationTypesSyncView:
         )
         assert response.status_code == 400
         assert response.data['error']['code'] == 'EMPTY_BODY'
+
+
+@pytest.mark.django_db
+class TestIntegrationExportByIdView:
+    """Story 64.13 — Single-entity export endpoint for integrations."""
+
+    def setup_method(self):
+        self.client = APIClient()
+        self.admin = User.objects.create(username='admin_ieid', profile='DBOPS')
+        self.non_admin = User.objects.create(username='user_ieid', profile='dba')
+        itc, _ = IntegrationTypeCatalogue.objects.get_or_create(
+            code='aap', defaults={'name': 'Ansible Automation Platform'}
+        )
+        self.integration = Integration.objects.create(
+            name='test-integration-by-id',
+            type=itc,
+            base_url='https://aap.example.com',
+        )
+
+    def test_export_by_id_returns_yaml(self):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.get(f'/api/v1/admin/integrations/{self.integration.pk}/export/yaml/')
+        assert response.status_code == 200
+        assert 'application/x-yaml' in response['Content-Type']
+
+    def test_export_by_id_has_content_disposition(self):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.get(f'/api/v1/admin/integrations/{self.integration.pk}/export/yaml/')
+        assert 'Content-Disposition' in response
+        assert self.integration.name in response['Content-Disposition']
+
+    def test_export_by_id_returns_404_on_missing_pk(self):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.get('/api/v1/admin/integrations/99999/export/yaml/')
+        assert response.status_code == 404
+
+    def test_export_by_id_requires_admin(self):
+        self.client.force_authenticate(user=self.non_admin)
+        response = self.client.get(f'/api/v1/admin/integrations/{self.integration.pk}/export/yaml/')
+        assert response.status_code == 403

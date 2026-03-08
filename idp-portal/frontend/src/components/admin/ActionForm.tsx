@@ -12,7 +12,9 @@
  * collapse sections in ActionFormCollapseSections, impact legend in ImpactLevelsLegend.
  */
 
-import { Form, Input, Select, Modal, Alert, Row, Col } from 'antd';
+import { Form, Input, Select, Modal, Alert, Button, Space, Row, Col } from 'antd';
+import { DownloadOutlined } from '@ant-design/icons';
+import { useEntityExport } from '../../hooks/useEntityExport';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import type {
   ActionCreate,
@@ -70,6 +72,13 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
 
   const isEditMode = !!editAction;
   const isMin1280 = useMediaQuery(1280);
+
+  // Story 64.13: Single-entity YAML export
+  const { exportYaml, loading: exportLoading } = useEntityExport(
+    'actions',
+    editAction?.id ?? 0,
+    editAction?.name ?? '',
+  );
 
   // Story 33.5: All form state extracted to hook
   const {
@@ -187,7 +196,6 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
       title={isEditMode ? "Modifier l'action" : 'Nouvelle action'}
       open={open}
       onCancel={onCancel}
-      onOk={() => form.submit()}
       okText={isEditMode ? 'Enregistrer' : 'Créer'}
       cancelText="Annuler"
       confirmLoading={!!(loading || saving)}
@@ -196,6 +204,24 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
       styles={{
         body: { maxHeight: 'calc(100vh - 200px)', overflowY: 'auto' },
       }}
+      footer={(_, { OkBtn, CancelBtn }) => (
+        <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+          {isEditMode ? (
+            <Button
+              icon={<DownloadOutlined />}
+              onClick={exportYaml}
+              loading={exportLoading}
+            >
+              Exporter en YAML
+            </Button>
+          ) : <span />}
+          <Space>
+            <CancelBtn />
+            <OkBtn />
+          </Space>
+        </Space>
+      )}
+      onOk={() => form.submit()}
     >
       {error && (
         <Alert
