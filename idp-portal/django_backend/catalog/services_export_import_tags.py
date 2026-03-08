@@ -64,6 +64,19 @@ def import_tags_yaml(content: bytes, mode: str = "additive", user: Any | None = 
     spec = parsed.get("spec") or []
     created = unchanged = 0
 
+    # Detect duplicate tag names in spec (after normalization) — DUPLICATE_KEY
+    # Only check non-empty strings; empty/whitespace items are validated below as INVALID_TAG_NAME.
+    seen_normalized: set[str] = set()
+    for tag_name in spec:
+        if isinstance(tag_name, str) and tag_name.strip():
+            normalized_check = tag_name.strip().lower()
+            if normalized_check in seen_normalized:
+                raise InvalidStateError(
+                    code="DUPLICATE_KEY",
+                    message=f"Tag dupliqué dans le YAML : '{normalized_check}' apparaît plusieurs fois.",
+                )
+            seen_normalized.add(normalized_check)
+
     for tag_name in spec:
         if not isinstance(tag_name, str) or not tag_name.strip():
             raise InvalidStateError(

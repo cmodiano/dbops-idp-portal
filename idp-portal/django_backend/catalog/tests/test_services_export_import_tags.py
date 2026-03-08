@@ -115,6 +115,16 @@ class ImportTagsYamlCreateTests(TestCase):
         created, updated, unchanged = import_tags_yaml(content)
         self.assertEqual((created, updated, unchanged), (0, 0, 0))
 
+    @patch("catalog.services_export_import_tags.AuditService.create_entry")
+    def test_full_mode_accepted_behaves_as_additive(self, mock_audit):
+        """Mode 'full' accepté sans erreur et se comporte comme 'additive' (suppression orphelins réservée)."""
+        content = _make_tags_yaml(["oracle", "backup"])
+        created, updated, unchanged = import_tags_yaml(content, mode="full")
+        self.assertEqual(created, 2)
+        self.assertEqual(updated, 0)
+        self.assertEqual(unchanged, 0)
+        self.assertEqual(Tag.objects.count(), 2)
+
 
 class ImportTagsYamlRoundTripTests(TestCase):
 
@@ -174,6 +184,29 @@ class ImportTagsYamlValidationTests(TestCase):
         with self.assertRaises(InvalidStateError) as ctx:
             import_tags_yaml(bad_yaml)
         self.assertEqual(ctx.exception.code, "INVALID_YAML_SYNTAX")
+
+    def test_duplicate_tag_name_raises(self):
+        """DUPLICATE_KEY levé quand le même tag apparaît deux fois dans le spec (AC #3)."""
+        content = _make_tags_yaml(["oracle", "sqlserver", "oracle"])
+        with self.assertRaises(InvalidStateError) as ctx:
+            import_tags_yaml(content)
+        self.assertEqual(ctx.exception.code, "DUPLICATE_KEY")
+        self.assertIn("oracle", ctx.exception.message)
+
+    def test_duplicate_tag_case_insensitive_raises(self):
+        """DUPLICATE_KEY détecté après normalisation (Oracle == oracle) (AC #3)."""
+        content = _make_tags_yaml(["Oracle", "oracle"])
+        with self.assertRaises(InvalidStateError) as ctx:
+            import_tags_yaml(content)
+        self.assertEqual(ctx.exception.code, "DUPLICATE_KEY")
+        self.assertIn("oracle", ctx.exception.message)
+
+    def test_empty_string_duplicate_raises_invalid_tag_name_not_duplicate_key(self):
+        """Deux chaînes vides lèvent INVALID_TAG_NAME (pas DUPLICATE_KEY) — vide invalide avant dédoublonnage."""
+        content = _make_tags_yaml(["", ""])
+        with self.assertRaises(InvalidStateError) as ctx:
+            import_tags_yaml(content)
+        self.assertEqual(ctx.exception.code, "INVALID_TAG_NAME")
 
 
 class ImportTagsYamlTransactionTests(TestCase):
