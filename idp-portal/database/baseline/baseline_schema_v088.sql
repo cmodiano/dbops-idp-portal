@@ -1,8 +1,8 @@
 -- ===========================================================================
 -- Baseline Schema V088 — IDP Portal
 -- ===========================================================================
--- Date            : 2026-02-25
--- Version couverte: V000–V111 (incl. V110 AUTH_DEV_BYPASS_LOGIN WORKFLOW_STEP_SCHEDULE_CREATED, V111 OUTPUT_SCHEMAS)
+-- Date            : 2026-03-08
+-- Version couverte: V000–V113 (incl. V112 IaC sync tracking, V113 indexes + WORKFLOW_EVENTS + RUNNABLE_STEPS)
 -- Auteur          : Agent de développement (Story 41-2)
 --
 -- Usage           : NOUVEAUX ENVIRONNEMENTS UNIQUEMENT (base Oracle vierge)
@@ -10,14 +10,14 @@
 --
 -- Procédure de déploiement :
 --   1. sqlplus idp_user/password@HOST:1521/XEPDB1 @database/baseline/baseline_schema_v088.sql
---   2. flyway -baselineVersion=111 -baselineDescription=baseline_schema_v088 baseline
+--   2. flyway -baselineVersion=113 -baselineDescription=baseline_schema_v088 baseline
 --
--- Ce script couvre TOUTES les migrations V000–V111. Aucune migration incrémentale
--- n'est nécessaire après application. État identique à V000→V111 sans phases intermédiaires.
+-- Ce script couvre TOUTES les migrations V000–V113. Aucune migration incrémentale
+-- n'est nécessaire après application. État identique à V000→V113 sans phases intermédiaires.
 -- ===========================================================================
 --
 -- Objets créés :
---   34 tables, indexes, contraintes, trigger, package PKG_IDP_MAINTENANCE, données de référence
+--   28 tables, indexes, contraintes, trigger, package PKG_IDP_MAINTENANCE, données de référence
 --
 -- Exclusions (éléments neutralisés par les migrations) :
 --   - SCHEMA_VERSION (créée V000, droppée V015)
@@ -192,6 +192,10 @@ CREATE TABLE PROFILES (
     CREATED_AT  TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
     UPDATED_AT  TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
 
+    -- V112 IaC sync tracking
+    LAST_SYNCED_AT   TIMESTAMP NULL,
+    LAST_SYNCED_HASH VARCHAR2(64) NULL,
+
     CONSTRAINT UK_PROFILES_NAME    UNIQUE (NAME),
     CONSTRAINT CK_PROFILES_IS_ADMIN   CHECK (IS_ADMIN IN (0, 1)),
     CONSTRAINT CK_PROFILES_IS_AUDITOR CHECK (IS_AUDITOR IN (0, 1)),
@@ -225,6 +229,9 @@ CREATE TABLE INTEGRATIONS (
     HEALTH_STATUS   VARCHAR2(10) DEFAULT 'unknown' NOT NULL,
     HEALTH_CHECKED_AT TIMESTAMP NULL,
     HEALTH_ERROR_MESSAGE CLOB NULL,
+    -- V112 IaC sync tracking
+    LAST_SYNCED_AT   TIMESTAMP NULL,
+    LAST_SYNCED_HASH VARCHAR2(64) NULL,
 
     CONSTRAINT UK_INTEGRATIONS_NAME     UNIQUE (NAME),
     CONSTRAINT CK_INTEGRATIONS_AUTH_FLOW CHECK (
@@ -265,6 +272,9 @@ CREATE TABLE REF_ENGINES (
     DISPLAY_ORDER   NUMBER DEFAULT 0 NOT NULL,
     IS_ACTIVE       NUMBER(1) DEFAULT 1 NOT NULL,
     ICON_URL        VARCHAR2(500 CHAR),
+    -- V112 IaC sync tracking
+    LAST_SYNCED_AT   TIMESTAMP NULL,
+    LAST_SYNCED_HASH VARCHAR2(64) NULL,
 
     CONSTRAINT UK_REF_ENGINES_CODE   UNIQUE (CODE),
     CONSTRAINT CK_REF_ENGINES_IS_ACTIVE CHECK (IS_ACTIVE IN (0, 1))
@@ -284,7 +294,10 @@ CREATE TABLE REF_CATEGORIES (
     CODE          VARCHAR2(50)  NOT NULL UNIQUE,
     LABEL         VARCHAR2(100) NOT NULL,
     DISPLAY_ORDER NUMBER(10)    DEFAULT 0 NOT NULL,
-    IS_ACTIVE     NUMBER(1)     DEFAULT 1 NOT NULL
+    IS_ACTIVE     NUMBER(1)     DEFAULT 1 NOT NULL,
+    -- V112 IaC sync tracking
+    LAST_SYNCED_AT   TIMESTAMP NULL,
+    LAST_SYNCED_HASH VARCHAR2(64) NULL
 );
 
 CREATE INDEX IDX_REF_CATEGORIES_ACTIVE_ORDER ON REF_CATEGORIES(IS_ACTIVE, DISPLAY_ORDER);
@@ -301,6 +314,10 @@ CREATE TABLE INTEGRATION_TYPE_CATALOGUE (
     CREATED_AT       TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
     UPDATED_AT       TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
     INTEGRATION_ROLE VARCHAR2(20) DEFAULT 'platform' NOT NULL,
+
+    -- V112 IaC sync tracking
+    LAST_SYNCED_AT   TIMESTAMP NULL,
+    LAST_SYNCED_HASH VARCHAR2(64) NULL,
 
     CONSTRAINT CK_INTEGRATION_TYPE_CATALOGUE_IS_ACTIVE CHECK (IS_ACTIVE IN (0, 1)),
     CONSTRAINT CHK_INTEGRATION_ROLE CHECK (INTEGRATION_ROLE IN ('platform', 'service'))
@@ -323,6 +340,10 @@ CREATE TABLE CORE_FEATURE_FLAGS (
     UPDATED_AT      TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
     UPDATED_BY      VARCHAR2(100) DEFAULT '',
 
+    -- V112 IaC sync tracking
+    LAST_SYNCED_AT   TIMESTAMP NULL,
+    LAST_SYNCED_HASH VARCHAR2(64) NULL,
+
     CONSTRAINT CK_FEATURE_FLAGS_ENABLED  CHECK (ENABLED IN (0, 1)),
     CONSTRAINT CK_FEATURE_FLAGS_ROLLOUT  CHECK (ROLLOUT_PERCENT BETWEEN 0 AND 100)
 );
@@ -341,6 +362,10 @@ CREATE TABLE BUSINESS_RULE_POLICIES (
     CREATED_AT  TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
     UPDATED_AT  TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
     CREATED_BY_ID NUMBER NOT NULL,
+
+    -- V112 IaC sync tracking
+    LAST_SYNCED_AT   TIMESTAMP NULL,
+    LAST_SYNCED_HASH VARCHAR2(64) NULL,
 
     CONSTRAINT UK_POLICY_NAME        UNIQUE (NAME),
     CONSTRAINT FK_POLICY_CREATED_BY  FOREIGN KEY (CREATED_BY_ID) REFERENCES USERS(ID)
@@ -428,6 +453,9 @@ CREATE TABLE ACTIONS_CATALOG (
     BUSINESS_RULE_POLICY_ID NUMBER,
     -- V082
     NOTIFICATION_CONFIG     CLOB CHECK (NOTIFICATION_CONFIG IS JSON),
+    -- V112 IaC sync tracking
+    LAST_SYNCED_AT          TIMESTAMP NULL,
+    LAST_SYNCED_HASH        VARCHAR2(64) NULL,
 
     -- Contraintes inline
     CONSTRAINT UK_ACTIONS_CATALOG_NAME          UNIQUE (NAME),
@@ -1221,6 +1249,113 @@ END PKG_IDP_MAINTENANCE;
 /
 
 -- ===========================================================================
+-- PHASE 4c : Optimized indexes + WORKFLOW_EVENTS + RUNNABLE_STEPS (V113)
+-- ===========================================================================
+
+-- ---------------------------------------------------------------------------
+-- V113 Part 1: Missing indexes identified from query pattern analysis
+-- ---------------------------------------------------------------------------
+CREATE INDEX IDX_EXECUTIONS_STATUS_GLOBAL    ON EXECUTIONS(STATUS);
+CREATE INDEX IDX_EXECUTIONS_USER_GLOBAL      ON EXECUTIONS(USER_ID);
+CREATE INDEX IDX_EXECUTIONS_ENVIRONMENT_GLOBAL ON EXECUTIONS(ENVIRONMENT);
+CREATE INDEX IDX_EXECUTIONS_SN_CHANGE_ID     ON EXECUTIONS(
+    CASE WHEN SERVICENOW_CHANGE_ID IS NOT NULL THEN SERVICENOW_CHANGE_ID END
+);
+CREATE INDEX IDX_EXEC_STEPS_STATUS_GLOBAL    ON EXECUTION_STEPS(STATUS);
+CREATE INDEX IDX_EXEC_STEPS_PLATFORM_JOB     ON EXECUTION_STEPS(
+    CASE WHEN PLATFORM_JOB_ID IS NOT NULL THEN PLATFORM_JOB_ID END
+);
+CREATE INDEX IDX_SCHEDULED_EXEC_PENDING      ON SCHEDULED_EXECUTIONS(STATUS, SCHEDULED_AT);
+CREATE INDEX IDX_EXEC_TARGETS_TARGET_ID      ON EXECUTION_TARGETS(TARGET_ID);
+
+-- ---------------------------------------------------------------------------
+-- V113 Part 2: WORKFLOW_EVENTS — Event sourcing for real-time UI sync
+-- Rows older than retention period (default 7 days) are purged by Celery Beat
+-- task purge_old_workflow_events (daily at 04:00).
+-- ---------------------------------------------------------------------------
+CREATE TABLE WORKFLOW_EVENTS (
+    ID              NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    EXECUTION_ID    NUMBER NOT NULL,
+    EVENT_TYPE      VARCHAR2(50) NOT NULL,
+    ENTITY_TYPE     VARCHAR2(30) NOT NULL,
+    ENTITY_ID       NUMBER NOT NULL,
+    SEQUENCE_NUM    NUMBER NOT NULL,
+    PAYLOAD         CLOB CHECK (PAYLOAD IS JSON),
+    CREATED_AT      TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+
+    CONSTRAINT FK_WORKFLOW_EVENTS_EXEC FOREIGN KEY (EXECUTION_ID)
+        REFERENCES EXECUTIONS(ID) ON DELETE CASCADE,
+    CONSTRAINT CK_WORKFLOW_EVENTS_EVENT_TYPE CHECK (
+        EVENT_TYPE IN (
+            'EXECUTION_STATUS_CHANGED',
+            'STEP_STATUS_CHANGED',
+            'STEP_OUTPUT_UPDATED',
+            'STEP_STARTED',
+            'STEP_COMPLETED',
+            'STEP_FAILED',
+            'APPROVAL_REQUESTED',
+            'APPROVAL_GRANTED',
+            'APPROVAL_REJECTED',
+            'TARGET_ADDED',
+            'EXECUTION_COMPLETED',
+            'EXECUTION_FAILED'
+        )
+    ),
+    CONSTRAINT CK_WORKFLOW_EVENTS_ENTITY_TYPE CHECK (
+        ENTITY_TYPE IN ('execution', 'execution_step', 'execution_target')
+    ),
+    CONSTRAINT UK_WORKFLOW_EVENTS_EXEC_SEQ UNIQUE (EXECUTION_ID, SEQUENCE_NUM)
+);
+
+CREATE INDEX IDX_WORKFLOW_EVENTS_EXEC_CREATED ON WORKFLOW_EVENTS(EXECUTION_ID, CREATED_AT);
+CREATE INDEX IDX_WORKFLOW_EVENTS_CREATED       ON WORKFLOW_EVENTS(CREATED_AT);
+CREATE INDEX IDX_WORKFLOW_EVENTS_ENTITY        ON WORKFLOW_EVENTS(ENTITY_TYPE, ENTITY_ID);
+
+COMMENT ON TABLE WORKFLOW_EVENTS IS 'Event sourcing table for real-time UI sync via WebSocket. Each state change produces a row. Rows purged after 7-day retention (Celery Beat: purge_old_workflow_events).';
+COMMENT ON COLUMN WORKFLOW_EVENTS.EXECUTION_ID IS 'FK to EXECUTIONS — scopes events to a single execution for WebSocket subscription.';
+COMMENT ON COLUMN WORKFLOW_EVENTS.EVENT_TYPE IS 'Discriminator for event kind (status change, output update, approval, etc.).';
+COMMENT ON COLUMN WORKFLOW_EVENTS.ENTITY_TYPE IS 'Type of entity that changed: execution, execution_step, or execution_target.';
+COMMENT ON COLUMN WORKFLOW_EVENTS.ENTITY_ID IS 'PK of the changed entity (Execution.id, ExecutionStep.id, etc.).';
+COMMENT ON COLUMN WORKFLOW_EVENTS.SEQUENCE_NUM IS 'Monotonically increasing per execution. Clients use this to detect gaps and request catch-up.';
+COMMENT ON COLUMN WORKFLOW_EVENTS.PAYLOAD IS 'JSON snapshot of the change (new status, output diff, approval details, etc.).';
+COMMENT ON COLUMN WORKFLOW_EVENTS.CREATED_AT IS 'Event timestamp. Used for retention purge (7-day default).';
+
+-- ---------------------------------------------------------------------------
+-- V113 Part 3: RUNNABLE_STEPS — Work queue of steps ready for execution
+-- ---------------------------------------------------------------------------
+CREATE TABLE RUNNABLE_STEPS (
+    ID                NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    EXECUTION_STEP_ID NUMBER NOT NULL,
+    EXECUTION_ID      NUMBER NOT NULL,
+    STEP_ORDER        NUMBER NOT NULL,
+    STEP_TYPE         VARCHAR2(50) NOT NULL,
+    PRIORITY          NUMBER DEFAULT 0 NOT NULL,
+    ELIGIBLE_AT       TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    CLAIMED_AT        TIMESTAMP,
+    CLAIMED_BY        VARCHAR2(255),
+    CREATED_AT        TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+
+    CONSTRAINT FK_RUNNABLE_STEPS_STEP FOREIGN KEY (EXECUTION_STEP_ID)
+        REFERENCES EXECUTION_STEPS(ID) ON DELETE CASCADE,
+    CONSTRAINT FK_RUNNABLE_STEPS_EXEC FOREIGN KEY (EXECUTION_ID)
+        REFERENCES EXECUTIONS(ID) ON DELETE CASCADE,
+    CONSTRAINT UK_RUNNABLE_STEPS_STEP UNIQUE (EXECUTION_STEP_ID)
+);
+
+CREATE INDEX IDX_RUNNABLE_STEPS_UNCLAIMED ON RUNNABLE_STEPS(CLAIMED_AT, PRIORITY, ELIGIBLE_AT);
+CREATE INDEX IDX_RUNNABLE_STEPS_EXEC      ON RUNNABLE_STEPS(EXECUTION_ID);
+
+COMMENT ON TABLE RUNNABLE_STEPS IS 'Work queue of execution steps ready to run. Workers claim and process rows, then delete them. Avoids full-table scans of EXECUTION_STEPS.';
+COMMENT ON COLUMN RUNNABLE_STEPS.EXECUTION_STEP_ID IS 'FK to EXECUTION_STEPS — the step to execute. Unique: a step can only be queued once.';
+COMMENT ON COLUMN RUNNABLE_STEPS.EXECUTION_ID IS 'Denormalized FK to EXECUTIONS for fast per-execution queue queries.';
+COMMENT ON COLUMN RUNNABLE_STEPS.STEP_ORDER IS 'Denormalized from EXECUTION_STEPS for ordering without join.';
+COMMENT ON COLUMN RUNNABLE_STEPS.STEP_TYPE IS 'Denormalized from EXECUTION_STEPS for type-based worker routing.';
+COMMENT ON COLUMN RUNNABLE_STEPS.PRIORITY IS 'Higher = higher priority. Default 0. Gate steps may get elevated priority.';
+COMMENT ON COLUMN RUNNABLE_STEPS.ELIGIBLE_AT IS 'When the step became eligible. Used for FIFO ordering within same priority.';
+COMMENT ON COLUMN RUNNABLE_STEPS.CLAIMED_AT IS 'NULL = unclaimed. Set by worker to claim the step (optimistic locking).';
+COMMENT ON COLUMN RUNNABLE_STEPS.CLAIMED_BY IS 'Worker identifier that claimed this step (hostname, task_id, etc.).';
+
+-- ===========================================================================
 -- PHASE 5 : Données de référence
 -- ===========================================================================
 
@@ -1259,12 +1394,12 @@ COMMIT;
 -- FIN DU SCRIPT BASELINE V088
 -- ===========================================================================
 -- Après application de ce script :
---   flyway baseline -baselineVersion=100 -baselineDescription=baseline_schema_v088
+--   flyway baseline -baselineVersion=113 -baselineDescription=baseline_schema_v088
 --
--- Aucune migration incrémentale requise — état identique à V000→V100.
+-- Aucune migration incrémentale requise — état identique à V000→V113.
 --
 -- Validation rapide :
---   SELECT COUNT(*) FROM user_tables;             -- doit retourner 25
+--   SELECT COUNT(*) FROM user_tables;             -- doit retourner 28 (26 + WORKFLOW_EVENTS + RUNNABLE_STEPS)
 --   SELECT table_name FROM user_part_tables;      -- EXECUTIONS, EXECUTION_STEPS, AUDIT_LOG
 --   SELECT status FROM user_triggers WHERE trigger_name = 'TRG_AUDIT_LOG_IMMUTABLE'; -- ENABLED
 --   SELECT status FROM user_objects WHERE object_name = 'PKG_IDP_MAINTENANCE';       -- VALID
