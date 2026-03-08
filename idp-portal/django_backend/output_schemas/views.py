@@ -149,6 +149,8 @@ def get_step_output_schema(request, workflow_id: int, step_id: str):
                 schema = schema_registry.get_action_schema(ref_action.name)
             except Action.DoesNotExist:
                 pass
+        if schema is None:
+            schema = schema_registry.get_platform_convention('aap')
     elif step_type == 'service_call':
         integration_type = step.get('integration_type', '')
         operation = step.get('operation', '')
@@ -201,6 +203,8 @@ def get_available_variables(request, workflow_id: int):
             ref_id = step.get('referenced_action_id')
             if ref_id and ref_id in ref_actions:
                 schema = schema_registry.get_action_schema(ref_actions[ref_id].name)
+            if schema is None:
+                schema = schema_registry.get_platform_convention('aap')
         elif step_type == 'service_call':
             integration_type = step.get('integration_type', '')
             operation = step.get('operation', '')
