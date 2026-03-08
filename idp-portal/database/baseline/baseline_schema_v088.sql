@@ -680,7 +680,8 @@ COMMENT ON TABLE INTEGRATION_ACTIONS IS 'Actions supported by each integration t
 
 -- ---------------------------------------------------------------------------
 -- AUDIT_LOG (V004 + V028 + V029 + V032 + V034 + V035 + V039 + V040
---            + V044 + V045 + V047 + V058 + V065 + V068 + V069 + V079 + V086 + V096)
+--            + V044 + V045 + V047 + V058 + V065 + V068 + V069 + V079 + V086 + V096
+--            + Story 64.x: CONFIG_SYNC_*_IMPORT actions, reference_data/tags entity types)
 -- Partitionnée par TIMESTAMP (Range INTERVAL mensuel) — Story 40.4
 -- ---------------------------------------------------------------------------
 CREATE TABLE AUDIT_LOG (
@@ -765,12 +766,19 @@ ALTER TABLE AUDIT_LOG ADD CONSTRAINT CK_AUDIT_LOG_ACTION_TYPE CHECK (
             'WORKFLOW_STEP_SCHEDULE_CREATED',
 
             -- Feature flags
-            'FEATURE_FLAG_CREATED', 'FEATURE_FLAG_UPDATED'
+            'FEATURE_FLAG_CREATED', 'FEATURE_FLAG_UPDATED',
+
+            -- Story 64.x: IaC Config Sync import actions
+            'CONFIG_SYNC_REFERENCE_IMPORT', 'CONFIG_SYNC_TAGS_IMPORT',
+            'CONFIG_SYNC_FEATURE_FLAGS_IMPORT', 'CONFIG_SYNC_INTEGRATION_TYPE_IMPORT',
+            'CONFIG_SYNC_INTEGRATION_IMPORT', 'CONFIG_SYNC_POLICY_IMPORT',
+            'CONFIG_SYNC_ACTION_IMPORT'
         )
 );
 
+-- CK_AUDIT_LOG_ENTITY_TYPE: V045 + V096 (integration_type_catalogue, integration_action, feature_flag, business_rule_policy) + Story 64.x (reference_data, tags)
 ALTER TABLE AUDIT_LOG ADD CONSTRAINT CK_AUDIT_LOG_ENTITY_TYPE CHECK (
-    ENTITY_TYPE IN ('action', 'user', 'permission', 'execution', 'scheduled_execution', 'integration', 'profile', 'feature_flag', 'integration_type_catalogue', 'integration_action', 'business_rule_policy')
+    ENTITY_TYPE IN ('action', 'user', 'permission', 'execution', 'scheduled_execution', 'integration', 'profile', 'feature_flag', 'integration_type_catalogue', 'integration_action', 'business_rule_policy', 'reference_data', 'tags')
 );
 
 -- Indexes locaux prefixed (V086)

@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from executions.models import RunnableStep
@@ -63,13 +63,15 @@ class RunnableStepService:
                     },
                 )
             return runnable if created else None
-        except Exception:  # noqa: BLE001
-            logger.warning(
+        except IntegrityError:
+            # Expected: race condition on get_or_create (duplicate execution_step_id)
+            return None
+        except Exception:
+            logger.exception(
                 "runnable_step_enqueue_failed",
                 extra={"execution_step_id": step.id},
-                exc_info=True,
             )
-            return None
+            raise
 
     @staticmethod
     def claim_batch(
@@ -123,13 +125,15 @@ class RunnableStepService:
                         },
                     )
                 return batch
-        except Exception:  # noqa: BLE001
-            logger.warning(
+        except IntegrityError:
+            # Expected: rare constraint violation during update
+            return []
+        except Exception:
+            logger.exception(
                 "runnable_steps_claim_failed",
                 extra={"worker_id": worker_id},
-                exc_info=True,
             )
-            return []
+            raise
 
     @staticmethod
     def delete(execution_step_id: int) -> bool:
@@ -146,13 +150,15 @@ class RunnableStepService:
                 execution_step_id=execution_step_id
             ).delete()
             return deleted > 0
-        except Exception:  # noqa: BLE001
-            logger.warning(
+        except IntegrityError:
+            # Expected: rare constraint violation during delete
+            return False
+        except Exception:
+            logger.exception(
                 "runnable_step_delete_failed",
                 extra={"execution_step_id": execution_step_id},
-                exc_info=True,
             )
-            return False
+            raise
 
     @staticmethod
     def delete_for_execution(execution_id: int) -> int:
@@ -166,13 +172,15 @@ class RunnableStepService:
                 execution_id=execution_id
             ).delete()
             return deleted
-        except Exception:  # noqa: BLE001
-            logger.warning(
+        except IntegrityError:
+            # Expected: rare constraint violation during delete
+            return 0
+        except Exception:
+            logger.exception(
                 "runnable_steps_delete_for_execution_failed",
                 extra={"execution_id": execution_id},
-                exc_info=True,
             )
-            return 0
+            raise
 
     @staticmethod
     def pending_count(execution_id: int | None = None) -> int:
