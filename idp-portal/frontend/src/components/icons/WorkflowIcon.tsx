@@ -4,7 +4,7 @@
  * SVG source: workflows-svgrepo-com.svg (paths simplified to currentColor).
  */
 
-import React from 'react';
+import type { CSSProperties, FC, ReactElement } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 
 export interface WorkflowIconProps {
@@ -15,13 +15,13 @@ export interface WorkflowIconProps {
   /** Optional className. */
   className?: string;
   /** Optional style (merged with size). */
-  style?: React.CSSProperties;
+  style?: CSSProperties;
   /** Accessible label. */
   'aria-label'?: string;
 }
 
 /** Workflow SVG paths (viewBox 0 0 24 24) — all use currentColor for theme. */
-const WorkflowSvg: React.FC<{ size: number; color: string; ariaLabel?: string }> = ({
+const WorkflowSvg: FC<{ size: number; color: string; ariaLabel?: string }> = ({
   size,
   color,
   ariaLabel,
@@ -57,7 +57,7 @@ export function WorkflowIcon({
   className,
   style,
   'aria-label': ariaLabel = 'Workflow',
-}: WorkflowIconProps): React.ReactElement {
+}: WorkflowIconProps): ReactElement {
   const { effectiveMode } = useTheme();
   const isDark = effectiveMode === 'dark';
   const color = isDark ? '#b8a0d4' : '#722ed1';
