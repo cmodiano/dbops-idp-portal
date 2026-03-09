@@ -60,6 +60,9 @@ class AuditActionType(models.TextChoices):
     USER_LOGOUT = 'USER_LOGOUT', 'User Logout'
     USER_REFRESH = 'USER_REFRESH', 'User Refresh Token'
     API_KEY_TOKEN_EXCHANGE = 'API_KEY_TOKEN_EXCHANGE', 'API Key Token Exchange'  # pragma: allowlist secret
+    # Story 66-17 review: audit trail for API key lifecycle (SOC1 compliance)
+    API_KEY_CREATED = 'API_KEY_CREATED', 'API Key Created'  # pragma: allowlist secret
+    API_KEY_REVOKED = 'API_KEY_REVOKED', 'API Key Revoked'  # pragma: allowlist secret
     # Story 49.3: Service account LDAP login
     SERVICE_LOGIN = 'SERVICE_LOGIN', 'Service Account Login'
     # Story 59.6 SEC-6: Dev bypass authentication audit type

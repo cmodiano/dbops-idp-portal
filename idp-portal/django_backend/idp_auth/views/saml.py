@@ -210,13 +210,13 @@ class SAMLCallbackView(APIView):
             email=email,
         )
 
-        # Audit login
+        # Audit login — correlation_id included for traceability (AUTH-MED-03)
         AuditService.create_entry(
             user_id=str(user.id),
             action_type=AuditActionType.USER_LOGIN,
             entity_type=AuditEntityType.USER,
             entity_id=user.id,
-            details={"username": username, "ad_groups": ad_groups}
+            details={"username": username, "ad_groups": ad_groups, "correlation_id": correlation_id}
         )
 
         # Generate JWT tokens (include ad_groups for RBAC cumulative permissions, Story 2.12)

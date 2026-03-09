@@ -8,6 +8,7 @@ from typing import cast
 import structlog
 
 from django.conf import settings
+from django.db import transaction
 from rest_framework.views import APIView
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -179,11 +180,36 @@ class APIKeysView(APIView):
         serializer = APIKeyCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        api_key, raw_key = APIKey.objects.create_key(
-            user=cast(User, request.user),
-            name=serializer.validated_data['name'],
-            scope=serializer.validated_data.get('scope'),
-        )
+        # NEW-FIND-01 fix: wrap create_key + audit in atomic block so both succeed or both roll back
+        # (consistent with AUTH-MED-02 pattern from services.py)
+        with transaction.atomic():
+            api_key, raw_key = APIKey.objects.create_key(
+                user=cast(User, request.user),
+                name=serializer.validated_data['name'],
+                scope=serializer.validated_data.get('scope'),
+            )
+
+            # Audit: API key creation is a security-critical operation (SOC1 — AUTH-HIGH-01)
+            correlation_id = get_correlation_id()
+            logger.info(
+                'api_key_created',
+                key_name=api_key.name,
+                user_id=user_id,
+                scope=api_key.scope,
+                correlation_id=correlation_id,
+            )
+            AuditService.create_entry(
+                user_id=str(user_id),
+                action_type=AuditActionType.API_KEY_CREATED,
+                entity_type=AuditEntityType.USER,
+                entity_id=user_id,
+                details={
+                    'key_name': api_key.name,
+                    'scope': api_key.scope,
+                    'api_key_id': api_key.id,
+                    'correlation_id': correlation_id,
+                }
+            )
 
         return Response(
             {
@@ -222,8 +248,35 @@ class APIKeyDetailView(APIView):
                 details={"api_key_id": pk},
             )
 
-        if api_key.is_active:
-            api_key.is_active = False
-            api_key.save(update_fields=['is_active', 'updated_at'])
+        # NEW-FIND-01 fix: wrap soft-delete + audit in atomic block so both succeed or both roll back
+        # (consistent with AUTH-MED-02 pattern from services.py)
+        # Audit unconditionally (idempotent revoke still needs a trace for already-inactive keys)
+        with transaction.atomic():
+            if api_key.is_active:
+                api_key.is_active = False
+                api_key.save(update_fields=['is_active', 'updated_at'])
+
+            # Audit: API key revocation is a security-critical operation (SOC1 — AUTH-HIGH-02)
+            correlation_id = get_correlation_id()
+            requester_id = cast(int, request.user.id)
+            logger.info(
+                'api_key_revoked',
+                key_name=api_key.name,
+                key_id=pk,
+                user_id=api_key.user_id,
+                correlation_id=correlation_id,
+            )
+            AuditService.create_entry(
+                user_id=str(requester_id),
+                action_type=AuditActionType.API_KEY_REVOKED,
+                entity_type=AuditEntityType.USER,
+                entity_id=requester_id,
+                details={
+                    'key_name': api_key.name,
+                    'scope': api_key.scope,
+                    'api_key_id': api_key.id,
+                    'correlation_id': correlation_id,
+                }
+            )
 
         return Response(status=status.HTTP_204_NO_CONTENT)
