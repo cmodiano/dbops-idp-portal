@@ -357,8 +357,18 @@ def _update_waiting_context(step: ExecutionStep, gate_status: dict, correlation_
     # V113: Durable event so UI can refresh gate status on reconnect.
     # Skip for approval gates — no meaningful change until approval.
     if not is_approval_gate:
-        from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
-        WorkflowEventService.emit_step_output_updated(step.execution_id, step)
+        try:
+            from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
+            WorkflowEventService.emit_step_output_updated(step.execution_id, step)
+        except Exception as e:  # noqa: BLE001 — best-effort: emit must not fail evaluation
+            logger.error(
+                "evaluate_waiting_gates_emit_step_output_updated_failed",
+                step_id=step.id,
+                execution_id=step.execution_id,
+                error=str(e),
+                correlation_id=correlation_id,
+                exc_info=True,
+            )
 
     logger.info(
         "evaluate_waiting_gates_step_still_waiting",

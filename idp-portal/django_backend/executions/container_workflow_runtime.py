@@ -304,6 +304,7 @@ class ContainerWorkflowRuntime:
 
         # Dispatch immédiat pour parallel_group — gère son propre compteur (Story 65.2)
         if step_type == 'parallel_group':
+            self._step_order_counter += 1
             condition_evaluator = StepConditionEvaluator()
             if not condition_evaluator.should_execute(step, self.execution):
                 return self._create_skipped_step(step_name, step_id, step_type)

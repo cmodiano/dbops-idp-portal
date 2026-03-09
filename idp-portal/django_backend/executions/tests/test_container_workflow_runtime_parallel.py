@@ -486,9 +486,8 @@ class TestParallelGroupCancellation:
         call_count = {'n': 0}
 
         def is_cancelled_side_effect(execution_id):
+            """Call sequence: (1) before pg-1 → not cancelled; (2) before step-c (after routing) → cancelled."""
             call_count['n'] += 1
-            # Première vérification : avant pg-1 → pas annulé
-            # Deuxième vérification : avant step-c (après routing) → annulé
             return call_count['n'] > 1
 
         mock_is_cancelled.side_effect = is_cancelled_side_effect

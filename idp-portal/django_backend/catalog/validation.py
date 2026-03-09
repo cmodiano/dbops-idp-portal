@@ -195,6 +195,13 @@ def validate_workflow_steps(steps: list[dict[str, Any]], action_id: int | None =
                             f"Step {i} (step_id={step_id}): parallel_steps cannot contain "
                             f"gate step '{ps_id}' (gate steps may wait and are not supported as members)"
                         )
+                    # Members must not have on_success_step_id/on_error_step_id — runtime does not follow them
+                    if ref_step.get('on_success_step_id') is not None or ref_step.get('on_error_step_id') is not None:
+                        raise serializers.ValidationError(
+                            f"Step {i} (step_id={step_id}): parallel_group member '{ps_id}' must not have "
+                            f"on_success_step_id or on_error_step_id (ContainerWorkflowRuntime._execute_step_for_parallel "
+                            f"does not follow those edges)"
+                        )
 
             # Task 1.4: on_all_success_step_id / on_any_error_step_id must reference existing steps (AC #6)
             on_all_success = step.get('on_all_success_step_id')

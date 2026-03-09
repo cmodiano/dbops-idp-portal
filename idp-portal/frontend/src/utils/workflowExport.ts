@@ -317,6 +317,13 @@ export function validateWorkflowImport(data: unknown): string[] {
     }
   });
 
+  // Build step_id -> step lookup for member type checks
+  const stepById = new Map<string, Record<string, unknown>>();
+  (wf.steps as Record<string, unknown>[]).forEach((st) => {
+    const sid = st.step_id as string;
+    if (typeof sid === 'string' && sid) stepById.set(sid, st);
+  });
+
   // Cross-step reference validation
   (wf.steps as Record<string, unknown>[]).forEach((s, i) => {
     if (s.step_type === 'parallel_group') {
@@ -328,6 +335,14 @@ export function validateWorkflowImport(data: unknown): string[] {
           }
           if (pid === s.step_id) {
             errors.push(`Étape ${i + 1} : auto-référence interdite dans parallel_steps (step_id = "${pid}").`);
+          }
+          const refStep = stepById.get(pid);
+          const refType = (refStep?.step_type as string) ?? 'platform';
+          if (refType === 'parallel_group') {
+            errors.push(`Étape ${i + 1} : parallel_steps ne peut pas contenir de parallel_group imbriqué ("${pid}").`);
+          }
+          if (refType === 'gate') {
+            errors.push(`Étape ${i + 1} : parallel_steps ne peut pas contenir de step gate ("${pid}").`);
           }
         });
       }
@@ -408,7 +423,7 @@ export function parseWorkflowFile(
       order: typeof step.order === 'number' ? step.order : index + 1,
       step_id: step.step_id ?? null,
       name: step.name ?? null,
-      step_type: step.step_type,
+      step_type: step.step_type ?? 'platform',
     };
     // Story 65.4: parallel_group normalisation
     if (step.step_type === 'parallel_group') {

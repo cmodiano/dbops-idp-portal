@@ -243,14 +243,14 @@ def import_integration_yaml(content: bytes, mode="additive", user=None) -> tuple
         if obj.secret_service_id != ref_integration.id:
             obj.secret_service_id = ref_integration.id
             obj.save(update_fields=["secret_service_id"])
-            update_sync_tracking(obj, content)
+            update_sync_tracking(obj, content)  # Toujours si FK modifiée
             if unchanged:
                 unchanged, updated = 0, 1
     elif obj.secret_service_id is not None and not was_created:
         # Effacer la référence si absente du YAML
         obj.secret_service_id = None
         obj.save(update_fields=["secret_service_id"])
-        update_sync_tracking(obj, content)
+        update_sync_tracking(obj, content)  # Toujours si FK modifiée
         if unchanged:
             unchanged, updated = 0, 1
     # ...

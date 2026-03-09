@@ -88,16 +88,30 @@ function getStepTypeErrors(nodeId: string, data: WorkflowStepNodeData): Validati
       }
       break;
     }
-    case 'parallel_group':
-      // Story 65.4: parallel_group doit avoir au moins 2 sous-steps
-      if (!data.parallel_steps || data.parallel_steps.length < 2) {
+    case 'parallel_group': {
+      // Story 65.4: parallel_group doit avoir au moins 2 sous-steps distincts
+      const ps = data.parallel_steps;
+      if (!ps || ps.length < 2) {
         errors.push({
           nodeId,
           type: 'error',
           message: 'Un groupe parallèle doit contenir au moins 2 sous-steps (parallel_steps)',
         });
+      } else if (new Set(ps).size < 2) {
+        errors.push({
+          nodeId,
+          type: 'error',
+          message: 'parallel_steps ne doit pas contenir de doublons',
+        });
+      } else if (data.step_id && ps.includes(data.step_id)) {
+        errors.push({
+          nodeId,
+          type: 'error',
+          message: 'parallel_steps ne peut pas contenir le step_id du groupe lui-même',
+        });
       }
       break;
+    }
   }
   return errors;
 }
@@ -230,6 +244,54 @@ export function validateWorkflowGraph(nodes: Node[], edges: Edge[]): ValidationR
     const data = node.data as unknown as WorkflowStepNodeData;
     const stepErrors = getStepTypeErrors(node.id, data);
     errors.push(...stepErrors);
+  });
+
+  // 5. parallel_group: reject nested parallel_group/gate members; validate routing targets
+  const nodeIds = new Set(workflowNodes.map((n) => n.id));
+  workflowNodes.forEach((node) => {
+    const data = node.data as unknown as WorkflowStepNodeData;
+    if (data.step_type !== 'parallel_group') return;
+    const ps = data.parallel_steps;
+    if (!Array.isArray(ps)) return;
+
+    ps.forEach((memberId) => {
+      const memberNode = workflowNodes.find((n) => n.id === memberId);
+      const memberData = memberNode?.data as unknown as WorkflowStepNodeData | undefined;
+      const refType = memberData?.step_type ?? 'platform';
+      if (refType === 'parallel_group') {
+        errors.push({
+          nodeId: node.id,
+          type: 'error',
+          message: `parallel_steps ne peut pas contenir de parallel_group imbriqué ("${memberId}")`,
+        });
+      }
+      if (refType === 'gate') {
+        errors.push({
+          nodeId: node.id,
+          type: 'error',
+          message: `parallel_steps ne peut pas contenir de step gate ("${memberId}")`,
+        });
+      }
+    });
+
+    const onAllSuccess = data.on_all_success_step_id;
+    const onAnyError = data.on_any_error_step_id;
+    for (const target of [onAllSuccess, onAnyError]) {
+      if (!target || target === END_NODE_ID) continue;
+      if (!nodeIds.has(target)) {
+        errors.push({
+          nodeId: node.id,
+          type: 'error',
+          message: `Cible de routing inexistante : "${target}"`,
+        });
+      } else if (ps.includes(target)) {
+        errors.push({
+          nodeId: node.id,
+          type: 'error',
+          message: `on_all_success_step_id / on_any_error_step_id ne peut pas cibler un membre du groupe ("${target}")`,
+        });
+      }
+    }
   });
 
   return {

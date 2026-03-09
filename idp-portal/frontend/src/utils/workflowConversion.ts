@@ -253,7 +253,7 @@ export function reactFlowToWorkflowSteps(
         step_id: node.id,
         step_type: 'parallel_group' as const,
         name: data.name ?? null,
-        parallel_steps: data.parallel_steps ?? [],
+        parallel_steps: data.parallel_steps ?? null,
         on_all_success_step_id: successEdge?.target ?? null,
         on_any_error_step_id: errorEdge?.target ?? null,
         condition: data.condition ?? null,
