@@ -12,6 +12,7 @@ import {
 } from '../workflowConversion';
 import type { WorkflowStep } from '../../types/api';
 import type { WorkflowStepNodeData } from '../../components/admin/WorkflowStepNode';
+import { STYLE_TOKENS } from '../../theme/styleTokens';
 
 describe('generateStepId', () => {
   it('generates a string ID', () => {
@@ -114,7 +115,7 @@ describe('workflowStepsToReactFlow', () => {
       (e) => e.source === 'step-1' && e.sourceHandle === 'success' && e.target === 'step-2'
     );
     expect(successEdge).toBeDefined();
-    expect(successEdge!.style).toEqual(expect.objectContaining({ stroke: '#16a34a' }));
+    expect(successEdge!.style).toEqual(expect.objectContaining({ stroke: STYLE_TOKENS.iconSuccess }));
   });
 
   it('creates error edges between steps when on_error_step_id is set', () => {
@@ -127,7 +128,7 @@ describe('workflowStepsToReactFlow', () => {
       (e) => e.source === 'step-1' && e.sourceHandle === 'error' && e.target === 'step-2'
     );
     expect(errorEdge).toBeDefined();
-    expect(errorEdge!.style).toEqual(expect.objectContaining({ stroke: '#dc2626' }));
+    expect(errorEdge!.style).toEqual(expect.objectContaining({ stroke: STYLE_TOKENS.iconError }));
   });
 
   it('positions nodes in a grid layout', () => {

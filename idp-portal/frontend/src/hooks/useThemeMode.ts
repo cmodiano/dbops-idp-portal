@@ -2,7 +2,7 @@
  * useThemeMode - Hook for managing theme mode (light/dark/system).
  * Story 2-15, Task 1.1
  *
- * - Persists preference in localStorage (key: idp-portal-theme)
+ * - Persists preference in localStorage (key: idp-portal-theme-v1)
  * - Listens to prefers-color-scheme for system mode
  * - Returns both mode and effectiveMode (resolved light/dark)
  */

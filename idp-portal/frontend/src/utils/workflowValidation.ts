@@ -103,12 +103,6 @@ function getStepTypeErrors(nodeId: string, data: WorkflowStepNodeData): Validati
           type: 'error',
           message: 'parallel_steps ne doit pas contenir de doublons',
         });
-      } else if (data.step_id && ps.includes(data.step_id)) {
-        errors.push({
-          nodeId,
-          type: 'error',
-          message: 'parallel_steps ne peut pas contenir le step_id du groupe lui-même',
-        });
       }
       break;
     }
