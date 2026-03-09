@@ -34,6 +34,7 @@ function makeValidation(): UseSchedulingValidationReturn {
     validateSchedule: vi.fn(),
     validateCronDebounced: vi.fn(),
     handleCronPresetChange: vi.fn(),
+    cancelValidation: vi.fn(),
   };
 }
 

@@ -17,6 +17,7 @@
  */
 
 import React, { useMemo, useCallback } from 'react';
+import './ActionTable.css';
 import {
   Table,
   Typography,
@@ -282,39 +283,31 @@ export function ActionTable({
     [favorites, showFavoriteButton, token, onActionClick, onToggleFavorite, renderTags]
   );
 
-  // H2 fix: Extract styles to avoid inline <style> tag (CSP and performance issue)
-  const tableStyles = useMemo(() => ({
-    row: {
-      cursor: 'pointer' as const,
-      transition: 'background-color 0.2s ease',
-    },
+  // F2 fix: Row styles extracted from inline <style> block; hover color via CSS custom property
+  const tableRowStyle = useMemo(() => ({
+    cursor: 'pointer' as const,
+    transition: 'background-color 0.2s ease',
   }), []);
 
+  // L1 fix: memoize onRow to avoid creating a new object on every render
+  const onRow = useCallback((record: CatalogAction) => ({
+    onClick: () => onActionClick(record),
+    className: 'catalog-table-row',
+    style: tableRowStyle,
+  }), [onActionClick, tableRowStyle]);
+
   return (
-    <div className="action-table-container">
-      <style>
-        {`
-          /* H2 partial fix: Keep minimal CSS for pseudo-classes that can't be inlined */
-          .catalog-table-row:hover td {
-            background-color: ${token.colorBgTextHover} !important;
-          }
-          @media (max-width: 767px) {
-            .action-table-details-label {
-              display: none;
-            }
-          }
-        `}
-      </style>
+    // --catalog-row-hover-bg consumed by ActionTable.css to avoid inline <style> CSP violation
+    <div
+      className="action-table-container"
+      style={{ '--catalog-row-hover-bg': token.colorBgTextHover } as React.CSSProperties}
+    >
       <Table<CatalogAction>
         columns={columns}
         dataSource={actions}
         loading={loading}
         rowKey={(record) => record.id ?? `temp-${record.name}`}
-        onRow={(record) => ({
-          onClick: () => onActionClick(record),
-          className: 'catalog-table-row',
-          style: tableStyles.row,
-        })}
+        onRow={onRow}
         pagination={{
           pageSize: 20,
           showSizeChanger: true,

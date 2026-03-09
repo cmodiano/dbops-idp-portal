@@ -18,6 +18,7 @@
  */
 
 import { memo } from 'react';
+import type { ReactNode, MouseEvent, KeyboardEvent } from 'react';
 import { Card, Tag, Typography, Space, Tooltip, Button } from 'antd';
 import {
   HeartOutlined,
@@ -45,14 +46,14 @@ export interface ActionCardProps {
   /** When set, shows favorite heart inside the card (catalog only). */
   isFavorite?: boolean;
   /** Called when favorite is toggled; caller should stopPropagation. */
-  onToggleFavorite?: (e: React.MouseEvent) => void;
+  onToggleFavorite?: (e: MouseEvent) => void;
   /** Hide favorite button when not authenticated. */
   showFavoriteButton?: boolean;
 }
 
 /** Get engine icon with SVG override for cards (real vendor logos).
  * Story 31.3: Fallback cascade — 1) icon_url from API cache, 2) ENGINE_SVG_SOURCES hardcoded, 3) iconHelpers. */
-function getEngineIcon(engine: ActionEngine): React.ReactNode {
+function getEngineIcon(engine: ActionEngine): ReactNode {
   const apiIconUrl = getEngineIconUrl(engine);
   const svgSrc = apiIconUrl || ENGINE_SVG_SOURCES[engine];
   if (svgSrc) {
@@ -118,7 +119,7 @@ export const ActionCard = memo(function ActionCard({
     ? `${itemTypeLabel}: ${action.name || 'Sans nom'}, impact ${impactLabel}`
     : `${itemTypeLabel}: ${action.name || 'Sans nom'}`;
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: KeyboardEvent) => {
     if (isClickable && (e.key === 'Enter' || e.key === ' ')) {
       e.preventDefault();
       onClick?.();

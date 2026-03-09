@@ -20,6 +20,7 @@ import {
   Radio,
   Typography,
 } from 'antd';
+import type { InputRef } from 'antd';
 import { WarningOutlined, LoadingOutlined } from '@ant-design/icons';
 import type { CatalogActionDetail } from '../../services/catalog_service';
 import type { ExecutionEnvironment } from '../../types/api';
@@ -72,7 +73,8 @@ export const TargetSelectionStep = memo(function TargetSelectionStep({
   selectedEnvironment,
   onEnvironmentChange,
 }: TargetSelectionStepProps) {
-  const firstFieldRef = useRef<HTMLElement | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const firstFieldRef = useRef<any>(null);
   const { isBusinessProfile } = useAuth();
   const requiresTarget = action?.requires_target !== false;
 
@@ -129,7 +131,7 @@ export const TargetSelectionStep = memo(function TargetSelectionStep({
               tooltip={isBusinessProfile ? undefined : 'Selectionnez une ou plusieurs cibles dans la liste.'}
             >
               <TargetSelector
-                inputRef={firstFieldRef as React.Ref<HTMLElement>}
+                inputRef={firstFieldRef}
                 multiple
                 value={selectedTargets}
                 onChange={onTargetsChange}
@@ -146,7 +148,7 @@ export const TargetSelectionStep = memo(function TargetSelectionStep({
               tooltip="Utilisez * pour tout correspondre et ? pour un caractere (ex: srv-dev-*, assurance-*)"
             >
               <Input
-                ref={firstFieldRef as unknown as React.Ref<import('antd').InputRef>}
+                ref={firstFieldRef as unknown as React.Ref<InputRef>}
                 value={targetPattern}
                 onChange={(e) => onTargetPatternChange(e.target.value)}
                 placeholder="ex: srv-dev-* ou assurance-*"
@@ -169,7 +171,7 @@ export const TargetSelectionStep = memo(function TargetSelectionStep({
               tooltip="Entrez les noms des cibles, separes par des virgules (ex: srv-01, srv-02, srv-03)"
             >
               <Input.TextArea
-                ref={firstFieldRef as React.Ref<HTMLTextAreaElement>}
+                ref={firstFieldRef}
                 value={manualTargetInput}
                 onChange={(e) => onManualTargetInputChange(e.target.value)}
                 placeholder="ex: srv-dev-01, srv-dev-02, srv-dev-03"
@@ -213,6 +215,8 @@ export const TargetSelectionStep = memo(function TargetSelectionStep({
           >
             <Select
               ref={(ref) => {
+                // Select ref is BaseSelectRef (rc-select internal), not HTMLElement.
+                // Cast needed because firstFieldRef is typed HTMLElement for unified focus API.
                 firstFieldRef.current = ref as unknown as HTMLElement;
               }}
               value={selectedEnvironment ?? undefined}

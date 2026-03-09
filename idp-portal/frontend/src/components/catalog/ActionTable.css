@@ -1,0 +1,14 @@
+/**
+ * ActionTable styles — extracted from inline <style> block (Story 66-3 F2 fix).
+ * Hover background uses CSS custom property set dynamically from antd theme token.
+ */
+
+.catalog-table-row:hover td {
+  background-color: var(--catalog-row-hover-bg, rgba(0, 0, 0, 0.04)) !important;
+}
+
+@media (max-width: 767px) {
+  .action-table-details-label {
+    display: none;
+  }
+}
