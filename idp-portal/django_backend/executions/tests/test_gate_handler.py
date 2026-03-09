@@ -488,9 +488,9 @@ class TestTransitionStepToRunningADR007:
 
     @pytest.mark.django_db
     def test_adr007_step_without_on_success_completes_execution(self):
-        """AC#6 : step ADR-007 sans on_success_step_id (gate final) → exécution COMPLETED."""
+        """AC#6 : step ADR-007 sans on_success_step_id (gate final) → atomic update to COMPLETED."""
         from executions.tasks.gates import _transition_step_to_running
-        from executions.models import ExecutionStep, ExecutionStatus
+        from executions.models import Execution, ExecutionStep, ExecutionStatus
 
         step_def = {
             'name': 'Final Gate',
@@ -500,7 +500,9 @@ class TestTransitionStepToRunningADR007:
         }
         mock_execution = MagicMock()
         mock_execution.id = 1
+        mock_execution.user_id = 1
         mock_execution.status = ExecutionStatus.RUNNING
+        mock_execution.action.name = 'Test'
         mock_execution.action.execution_steps = [step_def]  # requis pour la recherche step_def
         mock_step = self._make_step(step_name='Final Gate', execution_steps=[step_def])
         mock_step.execution = mock_execution
@@ -511,10 +513,14 @@ class TestTransitionStepToRunningADR007:
             mock_step.refresh_from_db = MagicMock()
 
             with patch('executions.tasks.gates.AuditService'):
-                _transition_step_to_running(mock_step, gate_status, 'corr-123')
+                with patch.object(Execution.objects, 'filter') as mock_exec_filter:
+                    mock_exec_filter.return_value.update.return_value = 1
+                    _transition_step_to_running(mock_step, gate_status, 'corr-123')
 
-        assert mock_execution.status == ExecutionStatus.COMPLETED
-        mock_execution.save.assert_called()
+        mock_exec_filter.assert_called_once()
+        update_call = mock_exec_filter.return_value.update.call_args
+        assert update_call[1]['status'] == ExecutionStatus.COMPLETED
+        assert 'completed_at' in update_call[1]
 
     @pytest.mark.django_db
     def test_old_style_step_uses_retry_workflow_step(self):

@@ -14,8 +14,10 @@ from celery import shared_task  # type: ignore[import-untyped]
 from django.utils import timezone
 
 from executions.models import (
+    Execution,
     ExecutionStatus,
-    ExecutionStep, ExecutionStepStatus,
+    ExecutionStep,
+    ExecutionStepStatus,
 )
 from core.services import AuditService
 from core.middleware import get_correlation_id
@@ -267,15 +269,28 @@ def _transition_step_to_running(step: ExecutionStep, gate_status: dict, correlat
             try:
                 execution = step.execution
                 if execution.status == ExecutionStatus.RUNNING:
-                    execution.status = ExecutionStatus.COMPLETED
-                    execution.completed_at = timezone.now()
-                    execution.save()
-                    logger.info(
-                        "evaluate_waiting_gates_step_container_workflow_completed",
-                        step_id=step.id,
-                        execution_id=step.execution_id,
+                    AuditService.create_entry(
+                        user_id=str(execution.user_id),
+                        action_type=AuditActionType.EXECUTION_COMPLETED,
+                        entity_type=AuditEntityType.EXECUTION,
+                        entity_id=execution.id,
+                        details={'execution_id': str(execution.id), 'action_name': execution.action.name if execution.action else None},
                         correlation_id=correlation_id,
                     )
+                    updated = Execution.objects.filter(
+                        id=execution.id,
+                        status=ExecutionStatus.RUNNING,
+                    ).update(
+                        status=ExecutionStatus.COMPLETED,
+                        completed_at=timezone.now(),
+                    )
+                    if updated:
+                        logger.info(
+                            "evaluate_waiting_gates_step_container_workflow_completed",
+                            step_id=step.id,
+                            execution_id=step.execution_id,
+                            correlation_id=correlation_id,
+                        )
             except Exception as exc:  # noqa: BLE001 — resilience-boundary: gate completion update failure logged
                 logger.error(
                     "evaluate_waiting_gates_step_container_workflow_complete_error",
@@ -364,6 +379,39 @@ def _get_next_step_id_by_order(execution_steps: list, current_step_config: dict)
     for s in sorted_steps:
         if s.get('order', 0) > current_order:
             return s.get('step_id')
+    return None
+
+
+def _get_next_step_def_by_order(
+    execution_steps: list, current_step_config: dict
+) -> dict | None:
+    """Return next step definition by order (for old-style workflows; uses order field)."""
+    steps = [s for s in execution_steps if isinstance(s, dict)]
+    if not steps:
+        return None
+    # Sort by (order, index) so steps without order use array position as tiebreaker
+    sorted_steps = sorted(
+        enumerate(steps),
+        key=lambda ix: (ix[1].get('order', 0), ix[0]),
+    )
+    current_order = current_step_config.get('order', 0)
+    # Find current step index in sorted list (match by identity or name/step_id)
+    current_name = current_step_config.get('name')
+    current_sid = current_step_config.get('step_id')
+    current_idx = None
+    for i, (_, s) in enumerate(sorted_steps):
+        if s.get('name') == current_name or s.get('step_id') == current_sid:
+            current_idx = i
+            break
+        if s.get('order', 0) > current_order:
+            # Passed current by order before finding match — use first with higher order
+            return s
+    if current_idx is not None and current_idx + 1 < len(sorted_steps):
+        return sorted_steps[current_idx + 1][1]
+    # Fallback: first step with order > current_order
+    for _, s in sorted_steps:
+        if s.get('order', 0) > current_order:
+            return s
     return None
 
 
@@ -488,15 +536,28 @@ def _handle_gate_timeout(step: ExecutionStep, gate_status: dict, correlation_id:
             try:
                 execution = step.execution
                 if execution.status == ExecutionStatus.RUNNING:
-                    execution.status = ExecutionStatus.COMPLETED
-                    execution.completed_at = timezone.now()
-                    execution.save()
-                    logger.info(
-                        "evaluate_waiting_gates_step_timeout_container_workflow_completed",
-                        step_id=step.id,
-                        execution_id=step.execution_id,
+                    AuditService.create_entry(
+                        user_id=str(execution.user_id),
+                        action_type=AuditActionType.EXECUTION_COMPLETED,
+                        entity_type=AuditEntityType.EXECUTION,
+                        entity_id=execution.id,
+                        details={'execution_id': str(execution.id), 'action_name': execution.action.name if execution.action else None},
                         correlation_id=correlation_id,
                     )
+                    updated = Execution.objects.filter(
+                        id=execution.id,
+                        status=ExecutionStatus.RUNNING,
+                    ).update(
+                        status=ExecutionStatus.COMPLETED,
+                        completed_at=timezone.now(),
+                    )
+                    if updated:
+                        logger.info(
+                            "evaluate_waiting_gates_step_timeout_container_workflow_completed",
+                            step_id=step.id,
+                            execution_id=step.execution_id,
+                            correlation_id=correlation_id,
+                        )
             except Exception as exc:  # noqa: BLE001
                 logger.error(
                     "evaluate_waiting_gates_step_timeout_execution_update_error",
@@ -506,16 +567,12 @@ def _handle_gate_timeout(step: ExecutionStep, gate_status: dict, correlation_id:
                     exc_info=True,
                 )
         else:
-            # Old-style workflow: find next step by order, trigger retry_workflow_step
-            next_step_def = None
-            found_current = False
-            for s in execution_steps:
-                if isinstance(s, dict) and s.get('name') == step.step_name:
-                    found_current = True
-                    continue
-                if found_current and isinstance(s, dict):
-                    next_step_def = s
-                    break
+            # Old-style workflow: find next step by order (same logic as ADR-007 path)
+            next_step_def = (
+                _get_next_step_def_by_order(execution_steps, step_def)
+                if step_def
+                else None
+            )
 
             if next_step_def and next_step_def.get('name'):
                 import executions.tasks as _tasks

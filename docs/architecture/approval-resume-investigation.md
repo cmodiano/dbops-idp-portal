@@ -35,13 +35,12 @@ ApproveStepView.post()
 
 ### 2. Computing `on_success_step_id`
 
-**`_get_step_config(step)`** (lines 150–165):
+**`_get_step_config(step)`** (`approval_views.py`):
 - Matches `step.step_name` against `s.get("step_id")` OR `s.get("name")` in `action.execution_steps`
 - Returns `{}` if no match → `step_config_not_found` warning
 
-**`_get_next_step_id_by_order(execution_steps, step_config)`** (lines 167–177):
-- Filters: `[s for s in execution_steps if isinstance(s, dict) and s.get("step_id")]`
-- **Only steps with `step_id` are considered**
+**`_get_next_step_id_by_order(execution_steps, step_config)`** (`approval_views.py`):
+- Filters to steps with `s.get("step_id")` and excludes parallel group members
 - Sorts by `order`, returns first step with `order > current_order` → `step_id`
 
 **Root cause hypothesis 1:** If the workflow has no `step_id` on any step:
@@ -105,7 +104,7 @@ resume_container_workflow_from_gate(execution_id, on_success_step_id)
 
 **Container workflow** expects:
 - `step_id` for step lookup in `resume_container_workflow_from_gate`
-- `_step_lookup_by_id` and `steps_to_execute` filter by `step_id`; steps without `step_id` are excluded from `steps_to_execute` (line 1286: `s.get('step_id') not in self._member_step_ids` → steps without `step_id` have `s.get('step_id')` = None, and `None not in frozenset()` is True, so they stay in the list—actually `None in frozenset()` is False, so they'd be included)
+- `_step_lookup_by_id` and `steps_to_execute` filter by `step_id`; the condition `s.get('step_id') not in self._member_step_ids` in `container_workflow_runtime.py` excludes parallel group members from direct routing
 
 Actually: `s.get('step_id') not in self._member_step_ids` — if `step_id` is None, `None not in member_ids` is True (member_ids contains step_id strings), so the step stays in `steps_to_execute`. So steps without step_id can still be executed.
 
