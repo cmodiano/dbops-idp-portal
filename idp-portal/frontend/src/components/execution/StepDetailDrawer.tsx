@@ -59,23 +59,28 @@ export function StepDetailDrawer({
     const workflowStep = workflowSteps.find((s) => s.step_id === stepId);
     if (!workflowStep) return null;
 
-    // Match ExecutionStep by step_order
-    const executionStep = executionSteps.find(
-      (es) => es.step_order === workflowStep.order,
-    ) ?? null;
+    // Match ExecutionStep by config_step_id (robust), fallback to step_order for legacy
+    const executionStep =
+      executionSteps.find((es) => es.config_step_id === workflowStep.step_id) ??
+      executionSteps.find((es) => es.step_order === workflowStep.order) ??
+      null;
 
     return { workflowStep, executionStep };
   }, [stepId, workflowSteps, executionSteps]);
 
   // Story 65.6: Compute effective status — aggregated for parallel_group, direct otherwise.
-  // Must be before statusCfg/statusIcon (React hooks ordering).
+  // Uses config_step_id mapping with legacy fallback to step_name.
   const effectiveStatus = useMemo(() => {
     const wfStep = selectedStep?.workflowStep;
     if (wfStep?.step_type === 'parallel_group') {
-      const subStepNames = wfStep.parallel_steps
-        ?.map((id) => workflowSteps.find((s) => s.step_id === id)?.name)
-        .filter((n): n is string => Boolean(n)) ?? [];
-      const subSteps = executionSteps.filter((es) => subStepNames.includes(es.step_name));
+      const subSteps =
+        wfStep.parallel_steps?.flatMap((stepId) => {
+          const byConfig = executionSteps.find((es) => es.config_step_id === stepId);
+          if (byConfig) return [byConfig];
+          const wf = workflowSteps.find((s) => s.step_id === stepId);
+          const byName = wf?.name ? executionSteps.find((es) => es.step_name === wf.name) : undefined;
+          return byName ? [byName] : [];
+        }) ?? [];
       return computeParallelGroupStatus(subSteps);
     }
     return selectedStep?.executionStep?.status ?? 'PENDING';

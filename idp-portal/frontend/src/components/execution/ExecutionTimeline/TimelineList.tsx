@@ -54,11 +54,13 @@ export function TimelineList({
   const stepsInGroups =
     workflowSteps?.length ? getStepNamesInParallelGroups(workflowSteps) : new Set<string>();
 
-  // Map: step_name → step_id of the group it belongs to
+  // Map: step_id (config) or step_name (legacy) → group step_id
+  const stepIdToGroupId = new Map<string, string>();
   const stepNameToGroupId = new Map<string, string>();
   if (workflowSteps?.length) {
     for (const [groupId, { groupStep }] of parallelGroupMap) {
       for (const subStepId of groupStep.parallel_steps ?? []) {
+        stepIdToGroupId.set(subStepId, groupId);
         const subStep = workflowSteps.find((s) => s.step_id === subStepId);
         if (subStep?.name) stepNameToGroupId.set(subStep.name, groupId);
       }
@@ -111,9 +113,14 @@ export function TimelineList({
       )}
 
       {steps.map((step, idx) => {
-        // Story 65.6: parallel group grouping
-        if (stepsInGroups.has(step.step_name)) {
-          const groupId = stepNameToGroupId.get(step.step_name);
+        // Story 65.6: parallel group grouping — prefer config_step_id, fallback to step_name
+        const isInGroup =
+          (step.config_step_id && stepsInGroups.has(step.config_step_id)) ||
+          stepsInGroups.has(step.step_name);
+        if (isInGroup) {
+          const groupId =
+            (step.config_step_id && stepIdToGroupId.get(step.config_step_id)) ??
+            stepNameToGroupId.get(step.step_name);
           if (groupId) {
             if (renderedGroups.has(groupId)) {
               // Already rendered as part of the group section — skip

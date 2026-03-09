@@ -305,6 +305,15 @@ class ContainerWorkflowRuntime:
         # Dispatch immédiat pour parallel_group — gère son propre compteur (Story 65.2)
         if step_type == 'parallel_group':
             self._step_order_counter += 1
+            self._transition_count += 1  # every parallel_group counts as a transition (loop detection)
+            if self._transition_count > MAX_STEP_TRANSITIONS:
+                logger.error(
+                    "container_workflow_loop_detected",
+                    execution_id=self.execution.id,
+                    transition_count=self._transition_count,
+                    correlation_id=self.correlation_id,
+                )
+                return ExecutionStatus.FAILED
             condition_evaluator = StepConditionEvaluator()
             if not condition_evaluator.should_execute(step, self.execution):
                 return self._create_skipped_step(step_name, step_id, step_type)
@@ -493,7 +502,12 @@ class ContainerWorkflowRuntime:
             correlation_id=self.correlation_id,
         )
 
-        return ExecutionStatus.COMPLETED if all_succeeded else ExecutionStatus.FAILED
+        # Precedence: CANCELLED > FAILED, COMPLETED only if all succeeded
+        if any(s == ExecutionStatus.CANCELLED for s in results.values()):
+            return ExecutionStatus.CANCELLED
+        if all_succeeded:
+            return ExecutionStatus.COMPLETED
+        return ExecutionStatus.FAILED
 
     def _execute_step_for_parallel(self, step: Dict[str, Any], step_order: int) -> ExecutionStatus:
         """
@@ -657,67 +671,89 @@ class ContainerWorkflowRuntime:
             parent_execution_id=self.execution.id,
             correlation_id=self.correlation_id,
         )
-        child_execution = self.execution_service.create_execution(exec_req)
-        with self._step_lock:  # Thread-safe append (Story 65.2)
-            self.child_executions.append(child_execution)
+        child_execution = None
+        try:
+            child_execution = self.execution_service.create_execution(exec_req)
+            with self._step_lock:  # Thread-safe append (Story 65.2)
+                self.child_executions.append(child_execution)
 
-        parent_step.platform_job_id = str(child_execution.id)
-        parent_step.save(update_fields=['platform_job_id'])
+            parent_step.platform_job_id = str(child_execution.id)
+            parent_step.save(update_fields=['platform_job_id'])
 
-        if SimulationService.is_enabled():
-            SimulationService.create_simulated_steps(child_execution)
-            try:
-                SimulationService._run_simulation(child_execution.id, force_success=True)
-            except Exception as sim_error:  # noqa: BLE001
-                logger.error(
-                    "container_workflow_simulation_failed",
-                    child_execution_id=child_execution.id,
-                    parent_execution_id=self.execution.id,
-                    error=str(sim_error),
-                    correlation_id=self.correlation_id,
-                    exc_info=True,
+            if SimulationService.is_enabled():
+                SimulationService.create_simulated_steps(child_execution)
+                try:
+                    SimulationService._run_simulation(child_execution.id, force_success=True)
+                except Exception as sim_error:  # noqa: BLE001
+                    logger.error(
+                        "container_workflow_simulation_failed",
+                        child_execution_id=child_execution.id,
+                        parent_execution_id=self.execution.id,
+                        error=str(sim_error),
+                        correlation_id=self.correlation_id,
+                        exc_info=True,
+                    )
+                    Execution.objects.filter(id=child_execution.id).update(
+                        status=ExecutionStatus.FAILED,
+                        completed_at=timezone.now(),
+                        error_message=f"Simulation failed: {sim_error}",
+                    )
+            else:
+                now = timezone.now()
+                Execution.objects.filter(id=child_execution.id).update(
+                    status=ExecutionStatus.COMPLETED,
+                    started_at=now,
+                    completed_at=now,
                 )
+
+            child_execution.refresh_from_db()
+
+            parent_step.status = (
+                ExecutionStepStatus.FAILED
+                if child_execution.status == ExecutionStatus.FAILED
+                else ExecutionStepStatus.COMPLETED
+            )
+            parent_step.completed_at = timezone.now()
+            parent_step.set_output({
+                'child_execution_id': child_execution.id,
+                'referenced_action_id': referenced_action.id,
+                'referenced_action_name': referenced_action.name,
+                'child_status': child_execution.status,
+                'parameters_injected': bool(child_params),
+            })
+            parent_step.save()
+
+            if step_id is not None:
+                output_mapping = step.get('output_mapping', {})
+                if not isinstance(output_mapping, dict):
+                    output_mapping = {}
+                extractor = OutputExtractor()
+                raw_output = parent_step.get_output() or {}
+                extracted = extractor.extract(raw_output, output_mapping)
+                with self._step_outputs_lock:
+                    self._step_outputs[step_id] = extracted
+
+            return cast(ExecutionStatus, child_execution.status)
+        except Exception as exc:  # noqa: BLE001
+            parent_step.status = ExecutionStepStatus.FAILED
+            parent_step.completed_at = timezone.now()
+            parent_step.error_message = f"Platform step failed: {exc}"
+            parent_step.save()
+            if child_execution is not None:
                 Execution.objects.filter(id=child_execution.id).update(
                     status=ExecutionStatus.FAILED,
                     completed_at=timezone.now(),
-                    error_message=f"Simulation failed: {sim_error}",
+                    error_message=str(exc),
                 )
-        else:
-            now = timezone.now()
-            Execution.objects.filter(id=child_execution.id).update(
-                status=ExecutionStatus.COMPLETED,
-                started_at=now,
-                completed_at=now,
+            logger.error(
+                "container_workflow_platform_step_exception",
+                execution_id=self.execution.id,
+                step_def_order=step_def_order,
+                correlation_id=self.correlation_id,
+                error=str(exc),
+                exc_info=True,
             )
-
-        child_execution.refresh_from_db()
-
-        parent_step.status = (
-            ExecutionStepStatus.FAILED
-            if child_execution.status == ExecutionStatus.FAILED
-            else ExecutionStepStatus.COMPLETED
-        )
-        parent_step.completed_at = timezone.now()
-        parent_step.set_output({
-            'child_execution_id': child_execution.id,
-            'referenced_action_id': referenced_action.id,
-            'referenced_action_name': referenced_action.name,
-            'child_status': child_execution.status,
-            'parameters_injected': bool(child_params),
-        })
-        parent_step.save()
-
-        if step_id is not None:
-            output_mapping = step.get('output_mapping', {})
-            if not isinstance(output_mapping, dict):
-                output_mapping = {}
-            extractor = OutputExtractor()
-            raw_output = parent_step.get_output() or {}
-            extracted = extractor.extract(raw_output, output_mapping)
-            with self._step_outputs_lock:
-                self._step_outputs[step_id] = extracted
-
-        return cast(ExecutionStatus, child_execution.status)
+            return ExecutionStatus.FAILED
 
     def _execute_handler_step_for_parallel(
         self,

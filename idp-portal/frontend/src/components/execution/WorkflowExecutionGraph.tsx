@@ -201,11 +201,13 @@ function WorkflowExecutionGraphInner({
   useEffect(() => {
     if (baseNodes.length === 0) return;
 
-    // Map execution steps by step_order to find corresponding workflow step
+    // Map execution steps to workflow nodes: config_step_id first, step_order fallback for legacy
     const stepStatusMap = new Map<string, ExecutionStepResponse>();
     executionSteps.forEach((execStep) => {
-      // Match by step_order (1-based) to workflowSteps index (0-based)
-      const wfStep = workflowSteps[execStep.step_order - 1];
+      const wfStep: WorkflowStep | undefined =
+        (execStep.config_step_id
+          ? workflowSteps.find((s) => s.step_id === execStep.config_step_id)
+          : undefined) ?? workflowSteps[execStep.step_order - 1];
       if (wfStep?.step_id) {
         stepStatusMap.set(wfStep.step_id, execStep);
       }
@@ -288,7 +290,10 @@ function WorkflowExecutionGraphInner({
 
     const stepStatusMap = new Map<string, ExecutionStepResponse>();
     executionSteps.forEach((execStep) => {
-      const wfStep = workflowSteps[execStep.step_order - 1];
+      const wfStep: WorkflowStep | undefined =
+        (execStep.config_step_id
+          ? workflowSteps.find((s) => s.step_id === execStep.config_step_id)
+          : undefined) ?? workflowSteps[execStep.step_order - 1];
       if (wfStep?.step_id) {
         stepStatusMap.set(wfStep.step_id, execStep);
       }

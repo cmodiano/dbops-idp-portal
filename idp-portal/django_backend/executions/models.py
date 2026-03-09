@@ -346,8 +346,8 @@ class ExecutionStep(models.Model):
     # config_step_id: stores the step_id from action.execution_steps config.
     # Used as the reliable identifier to match an ExecutionStep back to its
     # workflow step definition (replaces fragile name-based matching).
-    config_step_id = models.CharField(
-        max_length=255,
+    # TextField supports arbitrarily long step_ids (no truncation).
+    config_step_id = models.TextField(
         null=True,
         blank=True,
         db_column='CONFIG_STEP_ID',

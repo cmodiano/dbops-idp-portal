@@ -11,7 +11,7 @@ import type { ExecutionStepResponse, ExecutionStepStatus } from '../types/api/ex
 
 /**
  * Finds the ExecutionSteps corresponding to the sub-steps of a parallel_group.
- * Matching is done via WorkflowStep.name ↔ ExecutionStep.step_name.
+ * Prefers config_step_id matching; falls back to step_name for legacy data.
  */
 export function findExecutionStepsForParallelGroup(
   parallelGroupStep: WorkflowStep,
@@ -20,12 +20,13 @@ export function findExecutionStepsForParallelGroup(
 ): ExecutionStepResponse[] {
   if (!parallelGroupStep.parallel_steps?.length) return [];
 
-  // Resolve sub-step names from their step_id
-  const subStepNames = parallelGroupStep.parallel_steps
-    .map((stepId) => workflowSteps.find((s) => s.step_id === stepId)?.name)
-    .filter((name): name is string => !!name);
-
-  return executionSteps.filter((es) => subStepNames.includes(es.step_name));
+  return parallelGroupStep.parallel_steps.flatMap((stepId) => {
+    const byConfig = executionSteps.find((es) => es.config_step_id === stepId);
+    if (byConfig) return [byConfig];
+    const wf = workflowSteps.find((s) => s.step_id === stepId);
+    const byName = wf?.name ? executionSteps.find((es) => es.step_name === wf.name) : undefined;
+    return byName ? [byName] : [];
+  });
 }
 
 /**
@@ -70,20 +71,25 @@ export function buildParallelGroupMap(
 }
 
 /**
- * Returns the set of step_names belonging to any parallel_group.
+ * Returns the set of step_ids and step_names belonging to any parallel_group.
+ * Callers should prefer config_step_id when matching; use step_name for legacy.
+ * Only includes step_ids that resolve to a workflow step (ignores orphans).
  * Used by TimelineList to know if a step should be skipped (rendered inside its group section).
  */
 export function getStepNamesInParallelGroups(
   workflowSteps: WorkflowStep[],
 ): Set<string> {
-  const names = new Set<string>();
+  const ids = new Set<string>();
   for (const step of workflowSteps) {
     if (step.step_type === 'parallel_group' && step.parallel_steps) {
       for (const subStepId of step.parallel_steps) {
         const subStep = workflowSteps.find((s) => s.step_id === subStepId);
-        if (subStep?.name) names.add(subStep.name);
+        if (subStep) {
+          ids.add(subStepId);
+          if (subStep.name) ids.add(subStep.name);
+        }
       }
     }
   }
-  return names;
+  return ids;
 }

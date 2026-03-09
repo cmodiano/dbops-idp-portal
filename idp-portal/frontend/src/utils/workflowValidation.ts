@@ -97,7 +97,7 @@ function getStepTypeErrors(nodeId: string, data: WorkflowStepNodeData): Validati
           type: 'error',
           message: 'Un groupe parallèle doit contenir au moins 2 sous-steps (parallel_steps)',
         });
-      } else if (new Set(ps).size < 2) {
+      } else if (new Set(ps).size !== ps.length) {
         errors.push({
           nodeId,
           type: 'error',
@@ -256,8 +256,16 @@ export function validateWorkflowGraph(nodes: Node[], edges: Edge[]): ValidationR
 
     ps.forEach((memberId) => {
       const memberNode = workflowNodes.find((n) => n.id === memberId);
-      const memberData = memberNode?.data as unknown as WorkflowStepNodeData | undefined;
-      const refType = memberData?.step_type ?? 'platform';
+      if (!memberNode) {
+        errors.push({
+          nodeId: node.id,
+          type: 'error',
+          message: `parallel_steps : le membre "${memberId}" n'existe pas`,
+        });
+        return;
+      }
+      const memberData = memberNode.data as unknown as WorkflowStepNodeData;
+      const refType = memberData.step_type ?? 'platform';
       if (refType === 'parallel_group') {
         errors.push({
           nodeId: node.id,

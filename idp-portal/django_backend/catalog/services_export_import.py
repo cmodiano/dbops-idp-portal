@@ -326,8 +326,8 @@ def import_action_yaml(
 
     # Validate execution_steps for workflow items (Story 65.7 — AC #2, #3)
     execution_steps_raw = spec.get("execution_steps")
-    item_type_raw = spec.get("item_type", "action")
-    if execution_steps_raw is not None and item_type_raw == "workflow":
+    normalized_item_type = (str(spec.get("item_type") or "action").strip().lower()) or "action"
+    if execution_steps_raw is not None and normalized_item_type == "workflow":
         from catalog.validation import validate_workflow_steps  # local import to avoid circular deps
         from rest_framework.exceptions import ValidationError as DRFValidationError
         try:
@@ -349,7 +349,7 @@ def import_action_yaml(
         "engine": engine,
         "platform": platform,
         "status": spec.get("status", "draft"),
-        "item_type": spec.get("item_type", "action"),
+        "item_type": normalized_item_type,
         "requires_target": spec.get("requires_target", True),
         "description": spec.get("description") or None,
         "category": spec.get("category") or None,

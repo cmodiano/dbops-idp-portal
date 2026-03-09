@@ -47,6 +47,18 @@ describe('WorkflowBuilderToolbar', () => {
     expect(importBtn).toBeDisabled();
   });
 
+  it('disables Export button when disabled=true', () => {
+    renderToolbar({ disabled: true });
+    const exportBtn = screen.getByRole('button', { name: 'Exporter le workflow' });
+    expect(exportBtn).toBeDisabled();
+  });
+
+  it('disables Export button when exporting=true', () => {
+    renderToolbar({ exporting: true });
+    const exportBtn = screen.getByRole('button', { name: 'Exporter le workflow' });
+    expect(exportBtn).toBeDisabled();
+  });
+
   it('calls onImportClick when Import button is clicked', () => {
     const onImportClick = vi.fn();
     renderToolbar({ onImportClick });

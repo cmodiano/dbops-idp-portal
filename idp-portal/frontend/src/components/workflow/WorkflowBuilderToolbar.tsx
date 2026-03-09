@@ -4,7 +4,7 @@
  * Extracted from WorkflowBuilderCanvas.tsx.
  * Toolbar with import, export dropdown, validate, and report buttons.
  */
-import React from 'react';
+import type { FC, ReactNode } from 'react';
 import { Button, Dropdown, Space, Typography, theme } from 'antd';
 import {
   CheckCircleOutlined,
@@ -19,14 +19,14 @@ export interface WorkflowBuilderToolbarProps {
   disabled: boolean;
   exporting: boolean;
   validation: ValidationResult | null;
-  exportMenuItems: Array<{ key: string; label: string; icon: React.ReactNode; onClick: () => void }>;
+  exportMenuItems: Array<{ key: string; label: string; icon: ReactNode; onClick: () => void }>;
   onImportClick: () => void;
   onValidate: () => void;
   onShowReport: () => void;
   onClearValidation: () => void;
 }
 
-export const WorkflowBuilderToolbar: React.FC<WorkflowBuilderToolbarProps> = ({
+export const WorkflowBuilderToolbar: FC<WorkflowBuilderToolbarProps> = ({
   disabled,
   exporting,
   validation,
@@ -62,6 +62,7 @@ export const WorkflowBuilderToolbar: React.FC<WorkflowBuilderToolbarProps> = ({
             size="small"
             icon={<ExportOutlined />}
             loading={exporting}
+            disabled={disabled || exporting}
             aria-label="Exporter le workflow"
           >
             Exporter

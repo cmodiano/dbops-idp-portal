@@ -343,12 +343,31 @@ describe('validateWorkflowGraph — Story 57.13 AC8 — validation per step_type
   });
 
   it('valide sans erreur si parallel_group avec parallel_steps ≥ 2', () => {
+    const s1 = makeNodeWithData('s1', { step_type: 'platform' });
+    const s2 = makeNodeWithData('s2', { step_type: 'platform' });
+    const node = makeNodeWithData('pg-1', { step_type: 'parallel_group', parallel_steps: ['s1', 's2'] });
+    const result = validateWorkflowGraph(
+      [startNode, node, s1, s2, endNode],
+      [
+        makeEdge(START_NODE_ID, 'pg-1', 'output'),
+        makeEdge('pg-1', END_NODE_ID, 'success'),
+        makeEdge('pg-1', END_NODE_ID, 'error'),
+        makeEdge('s1', END_NODE_ID, 'success'),
+        makeEdge('s2', END_NODE_ID, 'success'),
+      ],
+    );
+    const typeErrors = result.errors.filter((e) => e.nodeId === 'pg-1' && e.type === 'error');
+    expect(typeErrors).toHaveLength(0);
+  });
+
+  it('error si parallel_steps référence un membre inexistant', () => {
     const node = makeNodeWithData('pg-1', { step_type: 'parallel_group', parallel_steps: ['s1', 's2'] });
     const result = validateWorkflowGraph(
       [startNode, node, endNode],
       [makeEdge('pg-1', END_NODE_ID, 'success'), makeEdge('pg-1', END_NODE_ID, 'error')],
     );
     const typeErrors = result.errors.filter((e) => e.nodeId === 'pg-1' && e.type === 'error');
-    expect(typeErrors).toHaveLength(0);
+    expect(typeErrors.length).toBeGreaterThan(0);
+    expect(typeErrors.some((e) => e.message.includes('n\'existe pas'))).toBe(true);
   });
 });

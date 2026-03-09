@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi } from 'vitest';
 import { ParallelGroupStepConfig } from './ParallelGroupStepConfig';
 import type { WorkflowStepNodeData } from '../WorkflowStepNode';
@@ -74,11 +75,22 @@ describe('ParallelGroupStepConfig', () => {
     expect(screen.queryByText('Groupe parallèle (pg-1)')).not.toBeInTheDocument();
   });
 
-  it('appelle onUpdate avec les step_ids sélectionnés', () => {
+  it('appelle onUpdate avec les step_ids sélectionnés', async () => {
     const onUpdate = vi.fn();
-    const data = { ...baseData, parallel_steps: ['bk-db', 'bk-cfg'] };
+    const data = { ...baseData, parallel_steps: ['bk-db'] };
     render(<ParallelGroupStepConfig data={data} onUpdate={onUpdate} availableStepOptions={availableStepOptions} />);
     expect(screen.getByTestId('parallel-group-step-config')).toBeInTheDocument();
-    // onUpdate is wired to Select onChange — callback binding verified by component rendering without errors
+
+    const select = screen.getByLabelText('Étapes parallèles');
+    fireEvent.mouseDown(select);
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('option').length).toBeGreaterThan(0);
+    });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByText('Backup Config'));
+
+    expect(onUpdate).toHaveBeenCalledWith({ parallel_steps: ['bk-db', 'bk-cfg'] });
   });
 });

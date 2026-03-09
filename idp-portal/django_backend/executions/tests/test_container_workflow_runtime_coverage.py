@@ -794,8 +794,9 @@ class TestPlatformStepOutputMappingNotDict(TestCase):
             created_by=self.user,
         )
 
+    @patch('executions.container_workflow_runtime.logger')
     @patch('executions.container_workflow_runtime.AuditService')
-    def test_output_mapping_not_dict_logs_warning_and_continues(self, mock_audit):
+    def test_output_mapping_not_dict_logs_warning_and_continues(self, mock_audit, mock_logger):
         """output_mapping est une liste → warning loggé, fallback {}, step COMPLETED."""
         execution = Execution.objects.create(
             action=self.wf, user=self.user, environment=TEST_ENV, status=ExecutionStatus.RUNNING,
@@ -807,6 +808,11 @@ class TestPlatformStepOutputMappingNotDict(TestCase):
 
         self.assertEqual(result, ExecutionStatus.COMPLETED)
         self.assertEqual(runtime._step_outputs.get('ps1', {}), {})
+        mock_logger.warning.assert_called_once()
+        self.assertEqual(
+            mock_logger.warning.call_args[0][0],
+            "container_workflow_output_mapping_not_dict",
+        )
 
 
 # ─── Tests _execute_step — input_mapping non-dict ────────────────────────────

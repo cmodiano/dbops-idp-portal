@@ -13,8 +13,8 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="executionstep",
             name="config_step_id",
-            field=models.CharField(
-                blank=True, db_column="CONFIG_STEP_ID", max_length=255, null=True
+            field=models.TextField(
+                blank=True, db_column="CONFIG_STEP_ID", null=True
             ),
         ),
     ]

@@ -195,8 +195,10 @@ describe('getStepNamesInParallelGroups', () => {
       { ...workflowSteps[0], parallel_steps: ['bk-db', 'nonexistent'] },
       workflowSteps[1],
     ];
-    const names = getStepNamesInParallelGroups(steps);
-    expect(names.has('Backup DB')).toBe(true);
-    expect(names.size).toBe(1);
+    const ids = getStepNamesInParallelGroups(steps);
+    expect(ids.has('Backup DB')).toBe(true);
+    expect(ids.has('bk-db')).toBe(true);
+    expect(ids.has('nonexistent')).toBe(false);
+    expect(ids.size).toBe(2);
   });
 });
