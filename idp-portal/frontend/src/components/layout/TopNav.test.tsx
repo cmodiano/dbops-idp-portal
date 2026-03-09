@@ -307,8 +307,8 @@ describe('TopNav', () => {
         expect(screen.getByLabelText('Activer le theme clair')).toBeInTheDocument();
       });
 
-      // Verify localStorage persistence
-      expect(localStorage.getItem('idp-portal-theme')).toBe('dark');
+      // Verify localStorage persistence (key: idp-portal-theme-v1)
+      expect(localStorage.getItem('idp-portal-theme-v1')).toBe('dark');
 
       // Toggle back to light
       await user.click(screen.getByRole('switch'));
@@ -317,7 +317,7 @@ describe('TopNav', () => {
       });
 
       // Verify localStorage updated
-      expect(localStorage.getItem('idp-portal-theme')).toBe('light');
+      expect(localStorage.getItem('idp-portal-theme-v1')).toBe('light');
     });
   });
 
@@ -340,11 +340,23 @@ describe('TopNav', () => {
   describe('Story 8.8 — Bell Icon Notification', () => {
     it('shows bell icon for DBA user (AC4, AC9)', async () => {
       vi.mocked(executionService.getPendingApprovalsCount).mockResolvedValue(3);
-      mockAuthSession('DBA', ['catalog', 'executions', 'dashboard']);
+      // Story 66.2 F2: use real DBA profile 'dba_applicatif' instead of artificial 'DBA'
+      mockAuthSession('dba_applicatif', ['catalog', 'executions', 'dashboard']);
       renderTopNav('/catalog');
 
       await waitFor(() => {
         expect(screen.getByLabelText(/3 approbations en attente/)).toBeInTheDocument();
+      });
+    });
+
+    it('shows bell icon for DBA Infrastructure user (AC4, AC9)', async () => {
+      vi.mocked(executionService.getPendingApprovalsCount).mockResolvedValue(2);
+      // Story 66.2 F2: verify dba_infrastructure also sees the bell
+      mockAuthSession('dba_infrastructure', ['catalog', 'executions', 'dashboard']);
+      renderTopNav('/catalog');
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/2 approbations en attente/)).toBeInTheDocument();
       });
     });
 
@@ -371,7 +383,7 @@ describe('TopNav', () => {
 
     it('shows correct singular label for 1 approval (AC4)', async () => {
       vi.mocked(executionService.getPendingApprovalsCount).mockResolvedValue(1);
-      mockAuthSession('DBA', ['catalog', 'executions', 'dashboard']);
+      mockAuthSession('dba_applicatif', ['catalog', 'executions', 'dashboard']);
       renderTopNav('/catalog');
 
       await waitFor(() => {
@@ -381,7 +393,7 @@ describe('TopNav', () => {
 
     it('hides badge when count is 0 (AC6)', async () => {
       vi.mocked(executionService.getPendingApprovalsCount).mockResolvedValue(0);
-      mockAuthSession('DBA', ['catalog', 'executions', 'dashboard']);
+      mockAuthSession('dba_applicatif', ['catalog', 'executions', 'dashboard']);
       renderTopNav('/catalog');
 
       await waitFor(() => {
@@ -397,7 +409,7 @@ describe('TopNav', () => {
     it('navigates to executions page on bell click (AC5)', async () => {
       const user = userEvent.setup();
       vi.mocked(executionService.getPendingApprovalsCount).mockResolvedValue(2);
-      mockAuthSession('DBA', ['catalog', 'executions', 'dashboard']);
+      mockAuthSession('dba_applicatif', ['catalog', 'executions', 'dashboard']);
       renderTopNav('/catalog');
 
       await waitFor(() => {
@@ -415,7 +427,7 @@ describe('TopNav', () => {
     it('bell icon is keyboard accessible (AC10)', async () => {
       const user = userEvent.setup();
       vi.mocked(executionService.getPendingApprovalsCount).mockResolvedValue(2);
-      mockAuthSession('DBA', ['catalog', 'executions', 'dashboard']);
+      mockAuthSession('dba_applicatif', ['catalog', 'executions', 'dashboard']);
       renderTopNav('/catalog');
 
       await waitFor(() => {
@@ -443,7 +455,7 @@ describe('TopNav', () => {
       document.getElementById = getElementByIdMock;
 
       vi.mocked(executionService.getPendingApprovalsCount).mockResolvedValue(2);
-      mockAuthSession('DBA', ['catalog', 'executions', 'dashboard']);
+      mockAuthSession('dba_applicatif', ['catalog', 'executions', 'dashboard']);
       renderTopNav('/catalog');
 
       await waitFor(() => {
@@ -464,7 +476,7 @@ describe('TopNav', () => {
 
     it('shows aria-label "Aucune approbation" when count is 0 (AC6)', async () => {
       vi.mocked(executionService.getPendingApprovalsCount).mockResolvedValue(0);
-      mockAuthSession('DBA', ['catalog', 'executions', 'dashboard']);
+      mockAuthSession('dba_applicatif', ['catalog', 'executions', 'dashboard']);
       renderTopNav('/catalog');
 
       await waitFor(() => {
@@ -479,7 +491,7 @@ describe('TopNav', () => {
       vi.mocked(executionService.getPendingApprovalsCount).mockRejectedValue(
         new Error('Network error')
       );
-      mockAuthSession('DBA', ['catalog', 'executions', 'dashboard']);
+      mockAuthSession('dba_applicatif', ['catalog', 'executions', 'dashboard']);
       renderTopNav('/catalog');
 
       await waitFor(() => {

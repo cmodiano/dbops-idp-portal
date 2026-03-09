@@ -37,6 +37,34 @@ describe('ProtectedRoute', () => {
     expect(screen.queryByText('Secret Content')).toBeNull();
   });
 
+  it('shows spinner while loading (Story 66.2 F6)', () => {
+    // Fetch never resolves → isLoading stays true
+    global.fetch = vi.fn().mockImplementation(() => new Promise(() => {}));
+
+    const { container } = render(
+      <MemoryRouter initialEntries={['/protected']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/login" element={<span>Login Page</span>} />
+            <Route
+              path="/protected"
+              element={
+                <ProtectedRoute>
+                  <span>Secret Content</span>
+                </ProtectedRoute>
+              }
+            />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+
+    // While loading: Ant Design Spin renders, content and login page are not shown
+    expect(container.querySelector('.ant-spin')).toBeTruthy();
+    expect(screen.queryByText('Secret Content')).toBeNull();
+    expect(screen.queryByText('Login Page')).toBeNull();
+  });
+
   it('renders children when authenticated', async () => {
     // Refresh succeeds → authenticated
     global.fetch = vi.fn()

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { ConfigProvider } from 'antd';
+import { ConfigProvider, App as AntApp } from 'antd';
 import { AppLayout } from './AppLayout';
 import { AuthProvider } from '../../contexts/AuthContext';
 import { ThemeProvider } from '../../contexts/ThemeContext';
@@ -40,11 +40,13 @@ function renderLayout(initialPath = '/test') {
   return render(
     <ThemeProvider>
       <ConfigProvider theme={lightTheme}>
-        <AuthProvider>
-          <DashboardProvider>
-            <RouterProvider router={router} />
-          </DashboardProvider>
-        </AuthProvider>
+        <AntApp>
+          <AuthProvider>
+            <DashboardProvider>
+              <RouterProvider router={router} />
+            </DashboardProvider>
+          </AuthProvider>
+        </AntApp>
       </ConfigProvider>
     </ThemeProvider>,
   );
@@ -109,11 +111,13 @@ describe('AppLayout', () => {
     render(
       <ThemeProvider>
         <ConfigProvider theme={lightTheme}>
-          <AuthProvider>
-            <DashboardProvider>
-              <RouterProvider router={router} />
-            </DashboardProvider>
-          </AuthProvider>
+          <AntApp>
+            <AuthProvider>
+              <DashboardProvider>
+                <RouterProvider router={router} />
+              </DashboardProvider>
+            </AuthProvider>
+          </AntApp>
         </ConfigProvider>
       </ThemeProvider>,
     );
