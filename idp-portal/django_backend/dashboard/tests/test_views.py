@@ -8,7 +8,7 @@ Couvre :
 - DashboardStatsView, DashboardRecentView, DashboardTimeSeriesView
 - DashboardStatsByTechnologyView, DashboardStatsByEnvironmentView
 - DashboardFilterOptionsView
-- _stats_for_queryset, _delta_pct
+- _stats_for_queryset, _delta_pct, _compute_avg_duration_s
 - DashboardCompareView
 """
 from __future__ import annotations
@@ -774,6 +774,103 @@ class TestStatsForQueryset:
         # Durée valide → avg_time non None et ≈ 60s
         assert stats['avg_time'] is not None
         assert stats['avg_time'] > 0
+
+
+@pytest.mark.django_db
+class TestComputeAvgDurationS:
+    """Tests unitaires directs pour _compute_avg_duration_s — REVIEW-LOW-02 (Story 66.23).
+
+    Extrait via DASH-MED-02 depuis la boucle dupliquée de _stats_for_queryset /
+    DashboardStatsOperationsView.
+    """
+
+    def setup_method(self):
+        self.user = UserFactory.create(profile='DBA')
+        self.integration = IntegrationFactory.create()
+
+    def test_returns_none_when_queryset_is_empty(self):
+        """Queryset vide → None."""
+        from dashboard.views import _compute_avg_duration_s
+        from executions.models import Execution
+
+        qs = Execution.objects.none()
+        assert _compute_avg_duration_s(qs) is None
+
+    def test_returns_none_when_no_completed_executions(self):
+        """Aucune exécution COMPLETED → None."""
+        from dashboard.views import _compute_avg_duration_s
+        from executions.models import Execution
+
+        action = ActionFactory.create(integration=self.integration)
+        now = timezone.now()
+        ExecutionFactory.create(
+            action=action, user=self.user, status='FAILED',
+            started_at=now - timedelta(seconds=30), completed_at=now,
+        )
+        qs = Execution.objects.all()
+        assert _compute_avg_duration_s(qs) is None
+
+    def test_returns_none_when_timestamps_missing(self):
+        """COMPLETED sans timestamps → None."""
+        from dashboard.views import _compute_avg_duration_s
+        from executions.models import Execution
+
+        action = ActionFactory.create(integration=self.integration)
+        ExecutionFactory.create(
+            action=action, user=self.user, status='COMPLETED',
+            started_at=None, completed_at=None,
+        )
+        qs = Execution.objects.all()
+        assert _compute_avg_duration_s(qs) is None
+
+    def test_computes_average_for_single_execution(self):
+        """Un COMPLETED avec timestamps valides → durée calculée."""
+        from dashboard.views import _compute_avg_duration_s
+        from executions.models import Execution
+
+        action = ActionFactory.create(integration=self.integration)
+        now = timezone.now()
+        ExecutionFactory.create(
+            action=action, user=self.user, status='COMPLETED',
+            started_at=now - timedelta(seconds=100), completed_at=now,
+        )
+        qs = Execution.objects.all()
+        result = _compute_avg_duration_s(qs)
+        assert result is not None
+        assert 99 <= result <= 101  # ≈ 100s
+
+    def test_ignores_negative_duration(self):
+        """completed_at < started_at → durée ignorée → None si seule durée."""
+        from dashboard.views import _compute_avg_duration_s
+        from executions.models import Execution
+
+        action = ActionFactory.create(integration=self.integration)
+        now = timezone.now()
+        ExecutionFactory.create(
+            action=action, user=self.user, status='COMPLETED',
+            started_at=now, completed_at=now - timedelta(seconds=10),
+        )
+        qs = Execution.objects.all()
+        assert _compute_avg_duration_s(qs) is None
+
+    def test_averages_multiple_executions(self):
+        """Deux COMPLETED avec durées 60s et 40s → moyenne = 50s."""
+        from dashboard.views import _compute_avg_duration_s
+        from executions.models import Execution
+
+        action = ActionFactory.create(integration=self.integration)
+        now = timezone.now()
+        ExecutionFactory.create(
+            action=action, user=self.user, status='COMPLETED',
+            started_at=now - timedelta(seconds=60), completed_at=now,
+        )
+        ExecutionFactory.create(
+            action=action, user=self.user, status='COMPLETED',
+            started_at=now - timedelta(seconds=40), completed_at=now,
+        )
+        qs = Execution.objects.all()
+        result = _compute_avg_duration_s(qs)
+        assert result == 50.0
 
 
 @pytest.mark.django_db
