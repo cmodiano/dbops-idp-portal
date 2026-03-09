@@ -855,3 +855,7 @@ class TestStepExecutorParallelGroupGuard:
         assert "parallel_group" not in result.error_message
         # Vérifie que le code a bien dépassé le guard et atteint la création de ExecutionStep
         mock_create.assert_called_once()
+        # story 66-16 review: le chemin ValueError déclenche un audit EXECUTION_FAILED (HIGH-1 fix)
+        from core.models import AuditActionType
+        mock_audit.assert_called_once()
+        assert mock_audit.call_args.kwargs['action_type'] == AuditActionType.EXECUTION_FAILED

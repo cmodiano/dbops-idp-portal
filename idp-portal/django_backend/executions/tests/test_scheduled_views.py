@@ -641,6 +641,54 @@ class TestScheduledExecutionRecurringPatternPatch(TestCase):
         rp.refresh_from_db()
         self.assertEqual(rp.is_active, 0)
 
+    # story 66-16 review: audit trail sur activation d'un recurring pattern
+    @patch("executions.views.scheduled_views.AuditService.create_entry")
+    def test_recurring_patch_activate_creates_audit_entry(self, mock_audit, mock_allowed, mock_validate):
+        from core.models import AuditActionType, AuditEntityType
+        se = ScheduledExecutionFactory(user=self.user, action=self.action)
+        RecurringPatternFactory(
+            scheduled_execution=se,
+            pattern_type="daily",
+            is_active=0,
+            pattern_config='{"hour": 9, "minute": 0}',
+        )
+        response = self.client.patch(
+            f"/api/v1/scheduled-executions/{se.id}/recurring-pattern/",
+            data={"is_active": True},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        mock_audit.assert_called_once()
+        assert mock_audit.call_args.kwargs['action_type'] == AuditActionType.SCHEDULED_EXECUTION_RECURRING_ENABLED
+        # story 66-16 code-review fix NEW-HIGH-01: vérifier entity_type SCHEDULED_EXECUTION (pas EXECUTION)
+        assert mock_audit.call_args.kwargs['entity_type'] == AuditEntityType.SCHEDULED_EXECUTION
+        assert mock_audit.call_args.kwargs['entity_id'] == se.id
+        assert mock_audit.call_args.kwargs['details']['is_active'] is True
+
+    # story 66-16 review: audit trail sur désactivation d'un recurring pattern
+    @patch("executions.views.scheduled_views.AuditService.create_entry")
+    def test_recurring_patch_deactivate_creates_audit_entry(self, mock_audit, mock_allowed, mock_validate):
+        from core.models import AuditActionType, AuditEntityType
+        se = ScheduledExecutionFactory(user=self.user, action=self.action)
+        RecurringPatternFactory(
+            scheduled_execution=se,
+            pattern_type="daily",
+            is_active=1,
+            next_execution_date=timezone.now() + timedelta(days=1),
+        )
+        response = self.client.patch(
+            f"/api/v1/scheduled-executions/{se.id}/recurring-pattern/",
+            data={"is_active": False},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        mock_audit.assert_called_once()
+        assert mock_audit.call_args.kwargs['action_type'] == AuditActionType.SCHEDULED_EXECUTION_RECURRING_DISABLED
+        # story 66-16 code-review fix NEW-HIGH-01: vérifier entity_type SCHEDULED_EXECUTION (pas EXECUTION)
+        assert mock_audit.call_args.kwargs['entity_type'] == AuditEntityType.SCHEDULED_EXECUTION
+        assert mock_audit.call_args.kwargs['entity_id'] == se.id
+        assert mock_audit.call_args.kwargs['details']['is_active'] is False
+
 
 # ---------------------------------------------------------------------------
 # ScheduledExecutionValidateCronView — GET

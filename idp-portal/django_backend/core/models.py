@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import json
-import logging
+import structlog
 from typing import Any
 from django.db import models
 from django.db import IntegrityError
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class AuditActionType(models.TextChoices):
@@ -49,6 +49,8 @@ class AuditActionType(models.TextChoices):
     SCHEDULED_EXECUTION_EXECUTED = 'SCHEDULED_EXECUTION_EXECUTED', 'Scheduled Execution Executed'
     SCHEDULED_EXECUTION_CANCELLED = 'SCHEDULED_EXECUTION_CANCELLED', 'Scheduled Execution Cancelled'
     SCHEDULED_EXECUTION_RECURRING_DISABLED = 'SCHEDULED_EXECUTION_RECURRING_DISABLED', 'Scheduled Execution Recurring Disabled'
+    # story 66-16 review: ENABLED for toggle re-activation (distinct from CREATED which is for new pattern insert)
+    SCHEDULED_EXECUTION_RECURRING_ENABLED = 'SCHEDULED_EXECUTION_RECURRING_ENABLED', 'Scheduled Execution Recurring Enabled'
     # Story 42.1: Celery Beat triggered a scheduled execution
     SCHEDULED_EXECUTION_CELERY_TRIGGERED = 'SCHEDULED_EXECUTION_CELERY_TRIGGERED', 'Scheduled Execution Celery Triggered'
     # User types (added for AuthService)

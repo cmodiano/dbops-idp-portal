@@ -418,19 +418,24 @@ class StepExecutor:
                 correlation_id=self.correlation_id,
             )
             # AC: audit trail sur toutes les transitions FAILED (story 66-16 finding HIGH-1)
-            AuditService.create_entry(
-                user_id=str(self.execution.user_id),
-                action_type=AuditActionType.EXECUTION_FAILED,
-                entity_type=AuditEntityType.EXECUTION,
-                entity_id=self.execution.id,
-                details={
-                    'error': str(e),
-                    'error_type': 'validation',
-                    'step_id': getattr(execution_step, 'id', None),
-                    'step_name': step_name,
-                },
-                correlation_id=self.correlation_id,
-            )
+            # story 66-16 review: wrapped in try/except to prevent audit failure from suppressing StepResult
+            try:
+                AuditService.create_entry(
+                    user_id=str(self.execution.user_id) if self.execution.user_id is not None else '',
+                    action_type=AuditActionType.EXECUTION_FAILED,
+                    entity_type=AuditEntityType.EXECUTION,
+                    entity_id=self.execution.id,
+                    details={
+                        'error': str(e),
+                        'error_type': 'validation',
+                        'step_id': getattr(execution_step, 'id', None),
+                        'step_name': step_name,
+                    },
+                    correlation_id=self.correlation_id,
+                )
+            except Exception:  # noqa: BLE001
+                logger.warning("audit_create_entry_failed_in_step_error_handler",
+                               execution_id=self.execution.id, step_name=step_name)
 
             return StepResult(
                 outcome=StepOutcome.ERROR,
@@ -460,19 +465,24 @@ class StepExecutor:
                 exc_info=True,
             )
             # AC: audit trail sur toutes les transitions FAILED (story 66-16 finding HIGH-2)
-            AuditService.create_entry(
-                user_id=str(self.execution.user_id),
-                action_type=AuditActionType.EXECUTION_FAILED,
-                entity_type=AuditEntityType.EXECUTION,
-                entity_id=self.execution.id,
-                details={
-                    'error': f"{type(e).__name__}: {str(e)}",
-                    'error_type': type(e).__name__,
-                    'step_id': getattr(execution_step, 'id', None),
-                    'step_name': step_name,
-                },
-                correlation_id=self.correlation_id,
-            )
+            # story 66-16 review: wrapped in try/except to prevent audit failure from suppressing StepResult
+            try:
+                AuditService.create_entry(
+                    user_id=str(self.execution.user_id) if self.execution.user_id is not None else '',
+                    action_type=AuditActionType.EXECUTION_FAILED,
+                    entity_type=AuditEntityType.EXECUTION,
+                    entity_id=self.execution.id,
+                    details={
+                        'error': f"{type(e).__name__}: {str(e)}",
+                        'error_type': type(e).__name__,
+                        'step_id': getattr(execution_step, 'id', None),
+                        'step_name': step_name,
+                    },
+                    correlation_id=self.correlation_id,
+                )
+            except Exception:  # noqa: BLE001
+                logger.warning("audit_create_entry_failed_in_step_error_handler",
+                               execution_id=self.execution.id, step_name=step_name)
 
             return StepResult(
                 outcome=StepOutcome.ERROR,
@@ -924,20 +934,25 @@ class StepExecutor:
                 exc_info=True,
             )
             # AC: audit trail sur toutes les transitions FAILED (story 66-16 finding HIGH-3)
-            AuditService.create_entry(
-                user_id=str(self.execution.user_id),
-                action_type=AuditActionType.EXECUTION_FAILED,
-                entity_type=AuditEntityType.EXECUTION,
-                entity_id=self.execution.id,
-                details={
-                    'error': f"{type(e).__name__}: {str(e)}",
-                    'error_type': type(e).__name__,
-                    'step_id': getattr(execution_step, 'id', None),
-                    'step_name': step_name,
-                    'step_context': 'schedule_step',
-                },
-                correlation_id=self.correlation_id,
-            )
+            # story 66-16 review: wrapped in try/except to prevent audit failure from suppressing StepResult
+            try:
+                AuditService.create_entry(
+                    user_id=str(self.execution.user_id) if self.execution.user_id is not None else '',
+                    action_type=AuditActionType.EXECUTION_FAILED,
+                    entity_type=AuditEntityType.EXECUTION,
+                    entity_id=self.execution.id,
+                    details={
+                        'error': f"{type(e).__name__}: {str(e)}",
+                        'error_type': type(e).__name__,
+                        'step_id': getattr(execution_step, 'id', None),
+                        'step_name': step_name,
+                        'step_context': 'schedule_step',
+                    },
+                    correlation_id=self.correlation_id,
+                )
+            except Exception:  # noqa: BLE001
+                logger.warning("audit_create_entry_failed_in_step_error_handler",
+                               execution_id=self.execution.id, step_name=step_name)
 
             return StepResult(
                 outcome=StepOutcome.ERROR,

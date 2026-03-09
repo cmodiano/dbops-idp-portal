@@ -548,15 +548,19 @@ class ScheduledExecutionRecurringPatternView(APIView):
         rp.save(update_fields=["is_active", "next_execution_date", "updated_at"])
 
         # AC: audit trail sur toggle is_active (story 66-16 finding HIGH — SCHED-BE-002)
+        # story 66-16 review: CREATED est réservé à l'INSERT d'un nouveau pattern ;
+        # ENABLED est le type sémantiquement correct pour la réactivation d'un pattern existant
         action_type = (
             AuditActionType.SCHEDULED_EXECUTION_RECURRING_DISABLED
             if not is_active
-            else AuditActionType.SCHEDULED_EXECUTION_RECURRING_CREATED
+            else AuditActionType.SCHEDULED_EXECUTION_RECURRING_ENABLED
         )
+        # story 66-16 code-review fix NEW-HIGH-01: entity_type SCHEDULED_EXECUTION (pas EXECUTION)
+        # se est un ScheduledExecution — utiliser EXECUTION ici cassait list_by_entity('scheduled_execution', ...)
         AuditService.create_entry(
             user_id=str(request.user.id),
             action_type=action_type,
-            entity_type=AuditEntityType.EXECUTION,
+            entity_type=AuditEntityType.SCHEDULED_EXECUTION,
             entity_id=se.id,
             details={
                 'recurring_pattern_id': rp.id,
