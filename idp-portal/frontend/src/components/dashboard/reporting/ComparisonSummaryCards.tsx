@@ -6,6 +6,7 @@
  * Each card shows value1, value2, and delta badge.
  */
 
+import type { ReactNode } from 'react';
 import { Row, Col, Card, Typography } from 'antd';
 import {
   CheckCircleOutlined,
@@ -32,8 +33,7 @@ export interface ComparisonSummaryCardsProps {
 const METRIC_CONFIG: Array<{
   key: ComparisonMetric;
   label: string;
-  icon: React.ReactNode;
-  suffix?: string;
+  icon: ReactNode;
   invertDelta?: boolean;
   formatter?: (val: number | null) => string;
 }> = [
@@ -41,7 +41,6 @@ const METRIC_CONFIG: Array<{
     key: 'success_rate',
     label: 'Taux de succès',
     icon: <CheckCircleOutlined style={{ color: STYLE_TOKENS.iconSuccess }} />,
-    suffix: '%',
     invertDelta: false,
     formatter: (v) => v !== null ? `${v.toFixed(1)}%` : 'N/A',
   },
@@ -55,14 +54,14 @@ const METRIC_CONFIG: Array<{
   {
     key: 'execution_count',
     label: 'Exécutions',
-    icon: <RocketOutlined style={{ color: '#722ed1' }} />,
+    icon: <RocketOutlined style={{ color: STYLE_TOKENS.workflowColor }} />,
     invertDelta: false,
     formatter: (v) => v !== null ? v.toString() : 'N/A',
   },
   {
     key: 'incident_count',
     label: 'Incidents',
-    icon: <ExclamationCircleOutlined style={{ color: '#ff4d4f' }} />,
+    icon: <ExclamationCircleOutlined style={{ color: STYLE_TOKENS.iconError }} />,
     invertDelta: true, // Lower is better
     formatter: (v) => v !== null ? v.toString() : 'N/A',
   },

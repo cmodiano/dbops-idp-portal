@@ -8,7 +8,9 @@
  * Extrait de AuditPage.tsx.
  */
 
+import type { ReactNode } from 'react';
 import { Typography, Drawer, Card, Descriptions, Tag, Skeleton, Alert, Divider, Table } from 'antd';
+import type { TableProps } from 'antd';
 import { ExecutionTimeline } from '../execution/ExecutionTimeline';
 import type {
   AuditExecutionEntry,
@@ -49,7 +51,7 @@ export interface AuditEntryDrawerProps {
 }
 
 /** Renders a change value: null/undefined → '—', object → <pre>JSON</pre>, else String(v). */
-function renderChangeValue(v: unknown): React.ReactNode {
+function renderChangeValue(v: unknown): ReactNode {
   if (v === null || v === undefined) return '—';
   if (typeof v === 'object') {
     return (
@@ -60,6 +62,16 @@ function renderChangeValue(v: unknown): React.ReactNode {
   }
   return String(v);
 }
+
+/** Row type for the changes table (Modifications section). */
+type ChangeRow = { key: string; field: string; old: unknown; new: unknown };
+
+/** Typed columns for the changes table — FRONTEND-STANDARDS: TableProps<T>['columns']. */
+const CHANGE_COLUMNS: TableProps<ChangeRow>['columns'] = [
+  { title: 'Champ', dataIndex: 'field', key: 'field' },
+  { title: 'Avant', dataIndex: 'old', key: 'old', render: renderChangeValue },
+  { title: 'Après', dataIndex: 'new', key: 'new', render: renderChangeValue },
+];
 
 export function AuditEntryDrawer({
   open,
@@ -138,11 +150,7 @@ export function AuditEntryDrawer({
                   old: vals.old,
                   new: vals.new,
                 }))}
-                columns={[
-                  { title: 'Champ', dataIndex: 'field', key: 'field' },
-                  { title: 'Avant', dataIndex: 'old', key: 'old', render: renderChangeValue },
-                  { title: 'Après', dataIndex: 'new', key: 'new', render: renderChangeValue },
-                ]}
+                columns={CHANGE_COLUMNS}
                 pagination={false}
                 size="small"
               />
