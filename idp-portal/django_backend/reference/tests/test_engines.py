@@ -43,7 +43,7 @@ class RefEngineAdminPatchTests(APITestCase):
         self.assertEqual(self.engine.icon_url, 'https://example.com/icon.svg')
 
     def test_patch_icon_url_returned_in_response(self):
-        """La réponse PATCH contient icon_url mis à jour."""
+        """La réponse PATCH contient icon_url mis à jour dans le wrapper {"data": ...} (REF-MED-01)."""
         self.client.force_authenticate(self.dbops_user)
         response = self.client.patch(
             f'/api/v1/admin/engines/{self.engine.pk}/',
@@ -51,7 +51,21 @@ class RefEngineAdminPatchTests(APITestCase):
             format='json',
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['icon_url'], '/icons/engines/test.svg')
+        self.assertIn('data', response.data)
+        self.assertEqual(response.data['data']['icon_url'], '/icons/engines/test.svg')
+
+    def test_patch_engine_response_wrapped_in_data(self):
+        """REF-MED-01: update_engine retourne {"data": ...} comme update_category et create_category."""
+        self.client.force_authenticate(self.dbops_user)
+        response = self.client.patch(
+            f'/api/v1/admin/engines/{self.engine.pk}/',
+            {'label': 'Updated Label'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('data', response.data)
+        self.assertEqual(response.data['data']['code'], 'TEST_ENGINE')
+        self.assertEqual(response.data['data']['label'], 'Updated Label')
 
     def test_patch_label_and_display_order(self):
         """DBOPS peut mettre à jour label et display_order."""

@@ -4,8 +4,6 @@ Story 13.7 - Reference endpoints for engines and platforms.
 Story 2.30 - Category endpoints (list + CRUD admin).
 """
 
-from typing import Any
-
 import structlog
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -21,6 +19,7 @@ from reference.serializers import (
     RefCategorySerializer, RefCategoryWriteSerializer,
 )
 from integrations.models import IntegrationTypeCatalogue, IntegrationRole
+from core.exceptions import NotFoundError
 from core.middleware import get_correlation_id
 from core.permissions import AdminProfilePermission
 
@@ -129,10 +128,7 @@ def update_engine(request: Request, pk: int) -> Response:
     try:
         engine = RefEngine.objects.get(pk=pk)
     except RefEngine.DoesNotExist:
-        return Response(
-            {"detail": "Moteur introuvable."},
-            status=status.HTTP_404_NOT_FOUND,
-        )
+        raise NotFoundError(message="Moteur introuvable.")
 
     serializer = RefEngineWriteSerializer(engine, data=request.data, partial=True)
     if not serializer.is_valid():
@@ -140,9 +136,8 @@ def update_engine(request: Request, pk: int) -> Response:
 
     serializer.save()
     logger.info("engine_updated", engine_id=pk, correlation_id=correlation_id)
-    # Returns engine object directly (no {"data":...} wrapper) per convention for PATCH endpoints.
-    # Note: update_category wraps in {"data":...} for historical reasons — known inconsistency (code-review M2).
-    return Response(RefEngineSerializer(engine).data)
+    # REF-MED-01: Aligner sur le pattern {"data": ...} utilisé par update_category et create_category.
+    return Response({"data": RefEngineSerializer(engine).data})
 
 
 # ─── Story 2.30: Category endpoints ────────────────────────────────────────
@@ -208,7 +203,7 @@ def create_category(request: Request) -> Response:
 )
 @api_view(['PATCH'])
 @permission_classes([IsAuthenticated, AdminProfilePermission])
-def update_category(request: Request, pk: Any) -> Response:
+def update_category(request: Request, pk: int) -> Response:
     """Update an existing category (admin only). Story 2.30, AC5."""
     correlation_id = get_correlation_id()
     logger.info("updating_category", category_id=pk, correlation_id=correlation_id)
@@ -216,10 +211,7 @@ def update_category(request: Request, pk: Any) -> Response:
     try:
         category = RefCategory.objects.get(pk=pk)
     except RefCategory.DoesNotExist:
-        return Response(
-            {"detail": f"Catégorie {pk} introuvable."},
-            status=status.HTTP_404_NOT_FOUND
-        )
+        raise NotFoundError(message=f"Catégorie {pk} introuvable.")
 
     serializer = RefCategoryWriteSerializer(category, data=request.data, partial=True)
     serializer.is_valid(raise_exception=True)
@@ -229,9 +221,14 @@ def update_category(request: Request, pk: Any) -> Response:
     return Response({"data": RefCategorySerializer(category).data})
 
 
+@extend_schema(
+    tags=['reference'],
+    summary='Supprimer une catégorie (soft-delete)',
+    responses={204: None},
+)
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated, AdminProfilePermission])
-def delete_category(request: Request, pk: Any) -> Response:
+def delete_category(request: Request, pk: int) -> Response:
     """Soft-delete a category (set is_active=0). admin only. Story 2.30, AC5."""
     correlation_id = get_correlation_id()
     logger.info("deleting_category", category_id=pk, correlation_id=correlation_id)
@@ -239,10 +236,7 @@ def delete_category(request: Request, pk: Any) -> Response:
     try:
         category = RefCategory.objects.get(pk=pk)
     except RefCategory.DoesNotExist:
-        return Response(
-            {"detail": f"Catégorie {pk} introuvable."},
-            status=status.HTTP_404_NOT_FOUND
-        )
+        raise NotFoundError(message=f"Catégorie {pk} introuvable.")
 
     category.is_active = 0
     category.save(update_fields=['is_active'])

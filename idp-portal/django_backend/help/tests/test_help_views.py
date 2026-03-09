@@ -64,3 +64,21 @@ class HelpViewsTest(APITestCase):
         """Tentative de path traversal → 404 (hors mapping)"""
         resp = self.client.get('/api/v1/help/..%2F..%2F..%2Fetc%2Fpasswd/')
         self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_get_help_topic_invalid_yaml_frontmatter(self):
+        """HELP-MED-01: Frontmatter YAML malformé → pas de 500 (fallback propre)."""
+        # Frontmatter détecté (---...---) mais YAML invalide à l'intérieur
+        md_content = "---\nshort: [invalid: yaml: {\n---\n# Titre\n\nCorps du document."
+        with patch('help.views.HELP_DIR', Path('/fake')):
+            with patch('pathlib.Path.exists', return_value=True):
+                with patch('pathlib.Path.read_text', return_value=md_content):
+                    resp = self.client.get('/api/v1/help/action-form-integration/')
+        # Doit retourner 200 avec fallback meta={} (short='', markdown=body)
+        self.assertNotEqual(resp.status_code, 500)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        data = resp.json()
+        self.assertEqual(data['topic_id'], 'action-form-integration')
+        # short vide car meta={} (pas de clé 'short')
+        self.assertEqual(data['short'], '')
+        # markdown = le corps après le frontmatter
+        self.assertIn('# Titre', data['markdown'])

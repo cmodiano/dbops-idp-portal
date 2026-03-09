@@ -8,6 +8,8 @@ from django.http import HttpResponse
 from rest_framework.viewsets import ReadOnlyModelViewSet
 from rest_framework.permissions import IsAuthenticated
 
+from core.exceptions import NotFoundError
+from core.middleware import get_correlation_id
 from core.permissions import IsAdminUser
 from rest_framework.decorators import api_view, permission_classes, parser_classes
 from rest_framework.parsers import MultiPartParser, BaseParser
@@ -21,6 +23,8 @@ from output_schemas.services_export_import import (
     export_output_schemas_yaml,
     import_output_schemas_yaml,
 )
+
+logger = structlog.get_logger(__name__)
 
 
 class YAMLParser(BaseParser):
@@ -59,7 +63,10 @@ class OutputSchemaViewSet(ReadOnlyModelViewSet):
 @permission_classes([IsAdminUser])
 def export_output_schemas(request):
     """Export all output schemas as YAML."""
+    correlation_id = get_correlation_id()
+    logger.info("exporting_output_schemas", correlation_id=correlation_id)
     content = export_output_schemas_yaml()
+    logger.info("output_schemas_exported", correlation_id=correlation_id)
     return HttpResponse(content, content_type='application/x-yaml')
 
 
@@ -72,6 +79,7 @@ def sync_output_schemas(request):
     Query param: mode=additive (default) | full
     Accepts: application/x-yaml body or multipart file upload (key: 'file').
     """
+    correlation_id = get_correlation_id()
     mode = request.query_params.get('mode', 'additive')
     if mode not in ('additive', 'full'):
         return Response(
@@ -84,9 +92,9 @@ def sync_output_schemas(request):
         try:
             content = request.FILES['file'].read().decode('utf-8')
         except UnicodeDecodeError:
-            structlog.get_logger(__name__).exception(
+            logger.exception(
                 "sync_output_schemas_decode_error",
-                exc_info=True,
+                correlation_id=correlation_id,
             )
             return Response(
                 {'error': 'Aucun contenu YAML fourni ou encodage non valide.'},
@@ -100,21 +108,23 @@ def sync_output_schemas(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
+    logger.info("syncing_output_schemas", mode=mode, correlation_id=correlation_id)
     try:
         stats = import_output_schemas_yaml(content, mode=mode)
     except ValueError as exc:
         return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
-        structlog.get_logger(__name__).exception(
+        logger.exception(
             "sync_output_schemas_import_error",
-            exc_info=True,
             error=str(e),
+            correlation_id=correlation_id,
         )
         return Response(
             {'error': "Erreur lors de l'import."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
+    logger.info("output_schemas_synced", mode=mode, stats=stats, correlation_id=correlation_id)
     return Response({'data': stats})
 
 
@@ -122,9 +132,14 @@ def _resolve_action_schema(action, schema_registry) -> dict | None:
     """
     Story 63.9: Résout le schéma output d'une action.
     FK en priorité (si output_schema_id défini), fallback par nom via le registre.
+
+    Note OS-LOW-03: On appelle schema_registry._resolve() directement (méthode privée) car
+    l'objet OutputSchema est déjà chargé via select_related — pas d'appel DB supplémentaire.
+    Choix intentionnel : évite le cache (résolution directe sur l'objet FK déjà en mémoire).
+    Alternative : ajouter resolve_schema(schema) public dans OutputSchemaRegistry.
     """
     if action.output_schema_id and action.output_schema:
-        return dict(schema_registry._resolve(action.output_schema) or {}) or None
+        return dict(schema_registry._resolve(action.output_schema) or {}) or None  # noqa: SLF001
     return dict(schema_registry.get_action_schema(action.name) or {}) or None
 
 
@@ -138,15 +153,16 @@ def get_step_output_schema(request, workflow_id: int, step_id: str):
     from catalog.models import Action  # noqa: PLC0415 — import tardif pour éviter les cycles
     from output_schemas.registry import schema_registry  # noqa: PLC0415
 
+    correlation_id = get_correlation_id()
     try:
         workflow = Action.objects.get(id=workflow_id, item_type='workflow')
     except Action.DoesNotExist:
-        return Response({'error': f'Workflow {workflow_id} introuvable.'}, status=404)
+        raise NotFoundError(message=f'Workflow {workflow_id} introuvable.')
 
     steps = workflow.execution_steps or []
     step = next((s for s in steps if s.get('step_id') == step_id), None)
     if step is None:
-        return Response({'error': f'Step "{step_id}" introuvable dans le workflow {workflow_id}.'}, status=404)
+        raise NotFoundError(message=f'Step "{step_id}" introuvable dans le workflow {workflow_id}.')
 
     step_type = step.get('step_type', 'platform')
     schema = None
@@ -169,6 +185,14 @@ def get_step_output_schema(request, workflow_id: int, step_id: str):
         if integration_type and operation:
             schema = schema_registry.get_integration_schema(integration_type, operation)
 
+    logger.info(
+        "step_output_schema_resolved",
+        workflow_id=workflow_id,
+        step_id=step_id,
+        step_type=step_type,
+        has_schema=schema is not None,
+        correlation_id=correlation_id,
+    )
     return Response({
         'step_id': step_id,
         'step_name': step.get('name', ''),
@@ -187,10 +211,11 @@ def get_available_variables(request, workflow_id: int):
     from catalog.models import Action  # noqa: PLC0415 — import tardif pour éviter les cycles
     from output_schemas.registry import schema_registry  # noqa: PLC0415
 
+    correlation_id = get_correlation_id()
     try:
         workflow = Action.objects.get(id=workflow_id, item_type='workflow')
     except Action.DoesNotExist:
-        return Response({'error': f'Workflow {workflow_id} introuvable.'}, status=404)
+        raise NotFoundError(message=f'Workflow {workflow_id} introuvable.')
 
     steps = sorted(
         workflow.execution_steps or [],
@@ -235,6 +260,12 @@ def get_available_variables(request, workflow_id: int):
                 'variables': schema['output_fields'],
             })
 
+    logger.info(
+        "available_variables_resolved",
+        workflow_id=workflow_id,
+        steps_with_schema=len(result),
+        correlation_id=correlation_id,
+    )
     return Response(result)
 
 
@@ -249,21 +280,26 @@ def get_action_output_schema(request, action_id: int):
     from catalog.models import Action  # noqa: PLC0415 — import tardif pour éviter les cycles
     from output_schemas.registry import schema_registry  # noqa: PLC0415
 
+    correlation_id = get_correlation_id()
+    logger.info("resolving_action_output_schema", action_id=action_id, correlation_id=correlation_id)
+
     try:
         action = Action.objects.select_related(
             'output_schema', 'output_schema__inherits_from'
         ).get(id=action_id)
     except Action.DoesNotExist:
-        return Response({'error': f'Action {action_id} introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+        raise NotFoundError(message=f'Action {action_id} introuvable.')
 
-    schema: dict[str, object] | None
-    if action.output_schema_id and action.output_schema:
-        schema_type = 'fk'
-        schema = dict(schema_registry._resolve(action.output_schema) or {}) or None
-    else:
-        schema_type = 'name'
-        schema = dict(schema_registry.get_action_schema(action.name) or {}) or None
+    schema_type = 'fk' if (action.output_schema_id and action.output_schema) else 'name'
+    schema = _resolve_action_schema(action, schema_registry)
 
+    logger.info(
+        "action_output_schema_resolved",
+        action_id=action_id,
+        schema_type=schema_type,
+        has_schema=schema is not None,
+        correlation_id=correlation_id,
+    )
     return Response({
         'action_id': action_id,
         'schema_type': schema_type,

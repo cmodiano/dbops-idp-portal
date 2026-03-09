@@ -15,9 +15,15 @@ ENVELOPE_KIND = 'OutputSchema'
 
 
 def _topological_sort_schemas(schemas: list) -> list:
-    """Order schemas so parents precede children (inherits_from dependency order)."""
+    """Order schemas so parents precede children (inherits_from dependency order).
+
+    OS-LOW-02: Complexité O(n²) acceptable à l'échelle actuelle (dizaines de schémas).
+    Optimisation appliquée : result_names est un set incrémental, évitant la reconstruction
+    à chaque itération (was: {x.name for x in result} recréé à chaque tour de boucle).
+    """
     by_name = {s.name: s for s in schemas}
     result: list[OutputSchema] = []
+    result_names: set[str] = set()  # OS-LOW-02: set incrémental, O(1) lookup au lieu de O(n) rebuild
     remaining = list(schemas)
     while remaining:
         added = [
@@ -25,13 +31,14 @@ def _topological_sort_schemas(schemas: list) -> list:
             if s.inherits_from_id is None
             or s.inherits_from is None
             or s.inherits_from.name not in by_name
-            or s.inherits_from.name in {x.name for x in result}
+            or s.inherits_from.name in result_names
         ]
         if not added:
             raise ValueError("Circular inheritance or missing parent in schemas")
         for s in added:
             remaining.remove(s)
             result.append(s)
+            result_names.add(s.name)
     return result
 
 
