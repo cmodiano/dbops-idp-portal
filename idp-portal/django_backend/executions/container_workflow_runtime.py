@@ -401,6 +401,82 @@ class ContainerWorkflowRuntime:
             return [next_step['step_id']]
         return []  # exit point
 
+    def _apply_join_policy(
+        self,
+        wave_steps: list[dict],
+        results: dict[str, tuple[ExecutionStatus, list[str]]],
+    ) -> list[str]:
+        """
+        Construit la prochaine vague en appliquant join_policy pour les steps convergents.
+
+        Pour chaque step cible candidat :
+        - Si 1 seul prédécesseur dans la vague → inclus inconditionnellement
+        - Si 2+ prédécesseurs dans la vague → apply join_policy du step cible (défaut all_success)
+
+        Limitation connue : join_policy s'applique uniquement aux prédécesseurs de la vague COURANTE.
+        Les convergences cross-waves (prédécesseurs dans des vagues BFS différentes) ne sont pas
+        gérées dans cette story.
+
+        Story 67.3 — AC: #1, #5, #6, #7, #8.
+        """
+        # Build: target_step_id → [(source_step_id, source_outcome)]
+        # Considère TOUS les targets possibles de la vague (success ET error paths)
+        target_preds: dict[str, list[tuple[str, ExecutionStatus]]] = {}
+        for step in wave_steps:
+            sid = step.get('step_id', '')
+            if not sid:
+                continue
+            status, _ = results.get(sid, (ExecutionStatus.FAILED, []))
+            all_targets: set[str] = set()
+            for t in (step.get('on_success_step_ids') or []):
+                if t:
+                    all_targets.add(t)
+            if sv := step.get('on_success_step_id'):
+                all_targets.add(sv)
+            for t in (step.get('on_error_step_ids') or []):
+                if t:
+                    all_targets.add(t)
+            if ev := step.get('on_error_step_id'):
+                all_targets.add(ev)
+            for target_id in all_targets:
+                target_preds.setdefault(target_id, []).append((sid, status))
+
+        # Collecter les candidats : union déduplicée des next_ids per-branch (déjà routés)
+        candidate_ids: list[str] = []
+        for _, (_, next_ids) in results.items():
+            for nid in next_ids:
+                if nid not in candidate_ids:
+                    candidate_ids.append(nid)
+
+        # Appliquer join_policy pour chaque candidat
+        result: list[str] = []
+        for target_id in candidate_ids:
+            preds = target_preds.get(target_id, [])
+            if len(preds) <= 1:
+                # Prédécesseur unique → inclure sans condition
+                result.append(target_id)
+                continue
+
+            target_step = self._step_lookup_by_id.get(target_id)
+            join_policy = (target_step or {}).get('join_policy', 'all_success')
+            pred_statuses = [s for _, s in preds]
+
+            if join_policy == 'all_success':
+                if all(s == ExecutionStatus.COMPLETED for s in pred_statuses):
+                    result.append(target_id)
+            elif join_policy == 'one_success':
+                if any(s == ExecutionStatus.COMPLETED for s in pred_statuses):
+                    result.append(target_id)
+            elif join_policy == 'all_done':
+                # Tous terminés par définition dans le contexte fan-out
+                result.append(target_id)
+            else:
+                # Politique inconnue → all_success par défaut (défensif)
+                if all(s == ExecutionStatus.COMPLETED for s in pred_statuses):
+                    result.append(target_id)
+
+        return result
+
     def _execute_fan_out(
         self, step_ids: list[str]
     ) -> tuple[ExecutionStatus, list[str]]:
@@ -491,18 +567,15 @@ class ContainerWorkflowRuntime:
         # as FAILED (they cannot pause the fan-out — ThreadPoolExecutor has already joined).
         # Full gate support in fan-out is deferred to a future story.
 
-        # Agrégation résultats — précédence : CANCELLED > FAILED > COMPLETED
+        # CANCELLED prioritaire sur tout
         if any(s == ExecutionStatus.CANCELLED for s, _ in results.values()):
             return ExecutionStatus.CANCELLED, []
-        if any(s == ExecutionStatus.FAILED for s, _ in results.values()):
-            return ExecutionStatus.FAILED, []
 
-        # Combinaison des next_step_ids (join implicite — dédupliquer ordre préservé)
-        combined_next: list[str] = []
-        for _, next_ids in results.values():
-            for nid in next_ids:
-                if nid not in combined_next:
-                    combined_next.append(nid)
+        # Story 67.3 : routage par branche indépendant + join_policy configurable
+        combined_next = self._apply_join_policy(sub_steps, results)
+
+        if not combined_next and any(s == ExecutionStatus.FAILED for s, _ in results.values()):
+            return ExecutionStatus.FAILED, []
 
         logger.info(
             "container_workflow_fan_out_finished",

@@ -434,6 +434,8 @@ class ActionSerializer(ActionFieldValidationMixin, serializers.ModelSerializer):
         # Story 67.1: multi-target routing (replaces singular on_success_step_id / on_error_step_id)
         'on_success_step_ids': {'type': 'array', 'items': {'type': 'string'}, 'nullable': True},
         'on_error_step_ids': {'type': 'array', 'items': {'type': 'string'}, 'nullable': True},
+        # Story 67.3: join_policy for convergence steps (optional)
+        'join_policy': {'type': 'string', 'enum': ['all_success', 'one_success', 'all_done'], 'nullable': True},
         'retry_enabled': {'type': 'boolean'},
         'retry_max_attempts': {'type': 'integer'}, 'retry_interval_seconds': {'type': 'integer'},
         'retry_backoff_multiplier': {'type': 'number'},
@@ -540,6 +542,11 @@ class ActionSerializer(ActionFieldValidationMixin, serializers.ModelSerializer):
                 error_ids = [v] if v else []
             if error_ids is not None or 'on_error_step_ids' in step or 'on_error_step_id' in step:
                 workflow_step['on_error_step_ids'] = error_ids if error_ids is not None else []
+
+            # Story 67.3: join_policy (optional) — all_success | one_success | all_done
+            join_policy = step.get('join_policy')
+            if join_policy is not None:
+                workflow_step['join_policy'] = join_policy
 
             if 'retry_enabled' in step:
                 workflow_step['retry_enabled'] = step['retry_enabled']

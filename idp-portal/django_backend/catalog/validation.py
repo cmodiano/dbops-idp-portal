@@ -3,10 +3,13 @@ Validation utilities for catalog models.
 Story 16.2: Workflow steps validation (branches, retry, cycles).
 Story 67.1: Multi-target support — on_success_step_ids / on_error_step_ids (arrays).
             Removes parallel_group validation.
+Story 67.3: join_policy validation — all_success | one_success | all_done.
 """
 
 from typing import Any
 from rest_framework import serializers
+
+VALID_JOIN_POLICIES = frozenset({'all_success', 'one_success', 'all_done'})
 
 
 def validate_workflow_steps(steps: list[dict[str, Any]], action_id: int | None = None) -> list[dict[str, Any]]:
@@ -164,6 +167,14 @@ def validate_workflow_steps(steps: list[dict[str, Any]], action_id: int | None =
             error_is_exit = 'on_error_step_ids' in step and (error_ids is None or error_ids == [])
             if success_is_exit or error_is_exit:
                 has_exit_point = True
+
+        # Story 67.3 AC #4: Validate join_policy if present
+        join_policy = step.get('join_policy')
+        if join_policy is not None and join_policy not in VALID_JOIN_POLICIES:
+            raise serializers.ValidationError(
+                f"Step '{step_id}': join_policy must be one of "
+                f"{sorted(VALID_JOIN_POLICIES)}, got '{join_policy}'"
+            )
 
         # AC4: Validate retry_max_attempts >= 1 if retry_enabled
         if retry_enabled:

@@ -848,7 +848,7 @@ development_status:
     epic-67: in-progress
     67-1-schema-json-validation-backend-multi-cibles: done
     67-2-runtime-backend-execution-parallele-multi-cibles: done
-    67-3-runtime-backend-routing-par-branche-join-policy: backlog
+    67-3-runtime-backend-routing-par-branche-join-policy: done
     67-4-frontend-workflow-builder-multi-connexions: backlog
     67-5-frontend-suppression-step-groupe-parallele: backlog
     67-6-migration-parallel-group-vers-multi-connexion: backlog
@@ -863,3 +863,12 @@ development_status:
     68-3-authentification-explicite-sans-sso-transparent: backlog
     68-4-validation-non-regression-saml: backlog
     epic-68-retrospective: optional
+    # === Epic 69: Représentation enrichie des workflows dans le catalogue ===
+    # Réf: planning-artifacts/epic-69-representation-workflows-catalogue.md
+    # Icônes technologies, indicateur workflow (bas gauche, couleur thème), extrait enrichi, drawer actions+paramètres
+    epic-69: backlog
+    69-1-backend-exposition-technologies-actions-workflow: backlog
+    69-2-cartes-catalogue-icones-technologies-indicateur-workflow: backlog
+    69-3-cartes-catalogue-extrait-enrichi-technologies-actions: backlog
+    69-4-drawer-detail-liste-actions-parametres: backlog
+    epic-69-retrospective: optional
