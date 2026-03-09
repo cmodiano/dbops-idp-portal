@@ -813,7 +813,7 @@ development_status:
     # === Epic 66: Revue complète pré-release — Code, documentation et standards ===
     # Réf: planning-artifacts/epic-66-revue-complete-pre-release.md
     # Revue exhaustive module par module : bugs, logique, duplication, code mort, consolidation, SOLID, doc, FRONTEND-STANDARDS
-    epic-66: in-progress
+    epic-66: done
     66-1-revue-frontend-components-common-shared: done
     66-2-revue-frontend-components-layout-auth: done
     66-3-revue-frontend-components-catalog: done
@@ -840,5 +840,5 @@ development_status:
     66-24-revue-backend-output-schemas-reference-help: done
     66-25-revue-backend-services-utils: done
     66-26-revue-documentation-docs-readme: done
-    66-27-consolidation-synthese-findings-plan-correction: backlog
+    66-27-consolidation-synthese-findings-plan-correction: done
     epic-66-retrospective: optional

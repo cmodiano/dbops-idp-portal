@@ -2,7 +2,7 @@
 -- Baseline Schema V088 — IDP Portal
 -- ===========================================================================
 -- Date            : 2026-03-08
--- Version couverte: V000–V113 (incl. V112 IaC sync tracking, V113 indexes + WORKFLOW_EVENTS + RUNNABLE_STEPS)
+-- Version couverte: V000–V116 (incl. V112 IaC sync, V113 indexes+WORKFLOW_EVENTS+RUNNABLE_STEPS, V114–V116)
 -- Auteur          : Agent de développement (Story 41-2)
 --
 -- Usage           : NOUVEAUX ENVIRONNEMENTS UNIQUEMENT (base Oracle vierge)
@@ -10,10 +10,10 @@
 --
 -- Procédure de déploiement :
 --   1. sqlplus idp_user/password@HOST:1521/XEPDB1 @database/baseline/baseline_schema_v088.sql
---   2. flyway -baselineVersion=113 -baselineDescription=baseline_schema_v088 baseline
+--   2. flyway -baselineVersion=116 -baselineDescription=baseline_schema_v088 baseline
 --
--- Ce script couvre TOUTES les migrations V000–V113. Aucune migration incrémentale
--- n'est nécessaire après application. État identique à V000→V113 sans phases intermédiaires.
+-- Ce script couvre TOUTES les migrations V000–V116. Aucune migration incrémentale
+-- n'est nécessaire après application. État identique à V000→V116 sans phases intermédiaires.
 -- ===========================================================================
 --
 -- Objets créés :
@@ -409,7 +409,7 @@ COMMENT ON COLUMN OUTPUT_SCHEMAS.SCHEMA_JSON IS 'JSON: {output_fields: [...], te
 -- ---------------------------------------------------------------------------
 -- ACTIONS_CATALOG (V002 + V003 + V008 + V013 + V014 + V017 + V018 + V022
 --                  + V027 + V031 + V036 + V037 + V046 + V056 + V074 + V076
---                  + V080 + V082) — V081 GATE_CONFIG droppée V109
+--                  + V080 + V082 + V115) — V081 GATE_CONFIG droppée V109
 -- Exclusions : RBAC_POLICIES (col. V002, droppée V013), CHANGE_MODEL_CODE (ajoutée V017, droppée V019),
 --   CHANGE_TYPE_CONFIG (V019, droppée V109), GATE_CONFIG (V081, droppée V109)
 -- Contraintes exclues (car droppées) : CK_ACTIONS_CATALOG_CATEGORY (V018),
@@ -456,6 +456,8 @@ CREATE TABLE ACTIONS_CATALOG (
     -- V112 IaC sync tracking
     LAST_SYNCED_AT          TIMESTAMP NULL,
     LAST_SYNCED_HASH        VARCHAR2(64) NULL,
+    -- V115: FK vers OUTPUT_SCHEMAS (Story 63.9)
+    OUTPUT_SCHEMA_ID        NUMBER(19),
 
     -- Contraintes inline
     CONSTRAINT UK_ACTIONS_CATALOG_NAME          UNIQUE (NAME),
@@ -475,6 +477,7 @@ CREATE TABLE ACTIONS_CATALOG (
         (DELETED_AT IS NULL AND STATUS IN ('draft', 'published'))
     ),
     CONSTRAINT FK_ACTION_BUSINESS_RULE_POLICY   FOREIGN KEY (BUSINESS_RULE_POLICY_ID) REFERENCES BUSINESS_RULE_POLICIES(ID) ON DELETE SET NULL,
+    CONSTRAINT FK_ACTION_OUTPUT_SCHEMA         FOREIGN KEY (OUTPUT_SCHEMA_ID) REFERENCES OUTPUT_SCHEMAS(ID) ON DELETE SET NULL,
     CONSTRAINT CHK_ACTION_POLICY_XOR CHECK (
         (BUSINESS_RULE_POLICY_ID IS NOT NULL AND BUSINESS_RULE_POLICIES IS NULL) OR
         (BUSINESS_RULE_POLICY_ID IS NULL AND BUSINESS_RULE_POLICIES IS NOT NULL) OR
@@ -489,7 +492,9 @@ CREATE INDEX IDX_ACTIONS_CATALOG_REMEDIATION    ON ACTIONS_CATALOG(CASE WHEN REM
 CREATE INDEX IDX_ACTIONS_CATALOG_INTEGRATION_ID ON ACTIONS_CATALOG(INTEGRATION_ID);
 CREATE INDEX IDX_ACTIONS_CATALOG_DELETED_AT     ON ACTIONS_CATALOG(DELETED_AT);
 CREATE INDEX IDX_ACTION_BUSINESS_RULE_POLICY    ON ACTIONS_CATALOG(BUSINESS_RULE_POLICY_ID);
+CREATE INDEX IDX_ACTION_OUTPUT_SCHEMA           ON ACTIONS_CATALOG(OUTPUT_SCHEMA_ID);
 
+COMMENT ON COLUMN ACTIONS_CATALOG.OUTPUT_SCHEMA_ID IS 'FK vers OUTPUT_SCHEMAS — schéma d''output déclaré par l''admin pour cette action (Story 63.9)';
 COMMENT ON COLUMN ACTIONS_CATALOG.PARAMETERS_SCHEMA IS 'JSON Schema (draft-07) defining action parameters.';
 COMMENT ON COLUMN ACTIONS_CATALOG.IMPACT_RULES IS 'JSON object mapping environment to impact level.';
 COMMENT ON COLUMN ACTIONS_CATALOG.EXECUTION_STEPS IS 'JSON array of execution steps (V003).';
@@ -1406,9 +1411,9 @@ COMMIT;
 -- FIN DU SCRIPT BASELINE V088
 -- ===========================================================================
 -- Après application de ce script :
---   flyway baseline -baselineVersion=113 -baselineDescription=baseline_schema_v088
+--   flyway baseline -baselineVersion=116 -baselineDescription=baseline_schema_v088
 --
--- Aucune migration incrémentale requise — état identique à V000→V113.
+-- Aucune migration incrémentale requise — état identique à V000→V116.
 --
 -- Validation rapide :
 --   SELECT COUNT(*) FROM user_tables;             -- doit retourner 28 (26 + WORKFLOW_EVENTS + RUNNABLE_STEPS)
