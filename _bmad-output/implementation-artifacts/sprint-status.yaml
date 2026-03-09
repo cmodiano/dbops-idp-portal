@@ -832,7 +832,7 @@ development_status:
     66-16-revue-backend-executions: done
     66-17-revue-backend-idp-auth: done
     66-18-revue-backend-integrations: done
-    66-19-revue-backend-audit: backlog
+    66-19-revue-backend-audit: done
     66-20-revue-backend-profiles: backlog
     66-21-revue-backend-inventory: backlog
     66-22-revue-backend-adapters: backlog

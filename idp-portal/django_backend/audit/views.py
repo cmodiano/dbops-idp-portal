@@ -5,12 +5,14 @@ import io
 from datetime import datetime
 from math import ceil
 
+import structlog
 from django.db.models import Q
 from django.http import HttpResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -20,6 +22,8 @@ from core.models import AuditLog, AuditEntityType, AuditActionType
 from executions.models import Execution, ExecutionStatus
 from idp_auth.models import User
 from profiles.models import Profile
+
+logger = structlog.get_logger(__name__)
 
 
 def _parse_int(value: str | None, default: int, *, name: str) -> int:
@@ -45,7 +49,11 @@ def _parse_dt(value: str | None, *, name: str) -> datetime | None:
 def _is_auditor(user) -> bool:
     """
     Determine if user is auditor based on resolved profiles.
-    Mirrors logic used in /auth/me.
+
+    Note (AUD-MED-03): This mirrors the auditor-check logic used in /auth/me (idp_auth).
+    The duplication is intentional to avoid a circular import between `audit` and `idp_auth`.
+    If the auditor logic changes, both places must be updated.
+    Consider extracting to `profiles.utils.is_auditor()` to consolidate in a future refactor.
     """
     if not user or not getattr(user, "is_authenticated", False):
         return False
@@ -147,7 +155,7 @@ def _resolve_user_names(user_ids: list[str]) -> dict[str, str]:
     return result
 
 
-def _build_audit_queryset(request):
+def _build_audit_queryset(request: Request):
     # Story 43.1: base sans filtre — toutes les entités
     qs = AuditLog.objects.all()
 
@@ -312,8 +320,15 @@ class AuditExecutionsView(APIView):
             OpenApiParameter('order', str, description='asc | desc'),
         ],
     )
-    def get(self, request):
+    def get(self, request: Request):
         if not _is_auditor(request.user):
+            logger.warning(
+                "audit.unauthorized_access",
+                view="AuditExecutionsView",
+                user_id=getattr(request.user, "id", None),
+                username=getattr(request.user, "username", None),
+                ip_address=request.META.get("REMOTE_ADDR"),
+            )
             raise ForbiddenError(
                 code="FORBIDDEN",
                 message="Accès réservé aux auditeurs",
@@ -410,16 +425,16 @@ class AuditExecutionsView(APIView):
 class AuditExportView(APIView):
     """
     GET /audit/export (Story 6.4)
-    format=csv|pdf
+    format=csv
     """
 
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
         tags=['audit'],
-        summary='Exporter les entrées d\'audit (CSV ou PDF)',
+        summary='Exporter les entrées d\'audit (CSV)',
         parameters=[
-            OpenApiParameter('fmt', str, description='Format: csv | pdf (ou export_format)'),
+            OpenApiParameter('fmt', str, description='Format: csv (ou export_format pour rétro-compatibilité)'),
             OpenApiParameter('export_format', str, description='Alias pour fmt'),
             OpenApiParameter('limit', int, description='Max 10000 lignes'),
             OpenApiParameter('offset', int, description='Décalage'),
@@ -435,8 +450,15 @@ class AuditExportView(APIView):
             OpenApiParameter('correlation_id', str, description='Filtre correlation_id'),
         ],
     )
-    def get(self, request):
+    def get(self, request: Request):
         if not _is_auditor(request.user):
+            logger.warning(
+                "audit.unauthorized_access",
+                view="AuditExportView",
+                user_id=getattr(request.user, "id", None),
+                username=getattr(request.user, "username", None),
+                ip_address=request.META.get("REMOTE_ADDR"),
+            )
             raise ForbiddenError(
                 code="FORBIDDEN",
                 message="Accès réservé aux auditeurs",
@@ -444,9 +466,12 @@ class AuditExportView(APIView):
             )
 
         # Use 'fmt' param (not 'format') to avoid DRF content negotiation conflict
+        # AUD-LOW-06: export_format is kept as a backward-compat alias for fmt.
         fmt = (request.query_params.get("fmt") or request.query_params.get("export_format") or "").strip().lower()
-        if fmt not in ("csv", "pdf"):
-            raise BadRequestError(code="BAD_REQUEST", message="format invalide (use ?fmt=csv or ?fmt=pdf)", details={"fmt": fmt})
+        # AUD-MED-02: only "csv" is valid; "pdf" was previously in the whitelist but immediately
+        # rejected with a misleading 400/NOT_IMPLEMENTED. Removed to align validation with behaviour.
+        if fmt not in ("csv",):
+            raise BadRequestError(code="BAD_REQUEST", message="format invalide (use ?fmt=csv)", details={"fmt": fmt})
 
         qs = _build_audit_queryset(request)
         total = qs.count()
@@ -457,12 +482,12 @@ class AuditExportView(APIView):
                 details={"total": int(total), "max": 10_000},
             )
 
-        # PDF export not implemented without a PDF library
-        if fmt == "pdf":
-            raise BadRequestError(
-                code="NOT_IMPLEMENTED",
-                message="Export PDF non disponible (utiliser CSV)",
-                details={},
+        if total > 5_000:
+            logger.info(
+                "audit.large_export",
+                total=int(total),
+                user_id=getattr(request.user, "id", None),
+                username=getattr(request.user, "username", None),
             )
 
         # Build CSV
@@ -514,7 +539,7 @@ class AuditExportView(APIView):
                     r.action_type,
                     r.entity_type,          # Story 43.6
                     ("" if r.entity_id is None else int(r.entity_id)) if r.entity_type == AuditEntityType.EXECUTION else "",
-                    details.get("action_id") or (exec_obj.action_id if exec_obj else ""),
+                    (details["action_id"] if "action_id" in details else (exec_obj.action_id if exec_obj else "")),
                     (exec_obj.action.name if exec_obj and getattr(exec_obj, "action", None) else "")
                     or details.get("action_name", ""),      # Story 43.6 : fallback depuis details
                     details.get("environment") or (exec_obj.environment if exec_obj else ""),
