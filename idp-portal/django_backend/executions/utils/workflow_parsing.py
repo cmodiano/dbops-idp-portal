@@ -92,9 +92,10 @@ def extract_workflow_step_map(workflow_action: Action) -> dict[int, int]:
     return out
 
 
-def extract_workflow_step_names(workflow_action: Action) -> dict[int, str]:
+def extract_workflow_step_ids_by_order(workflow_action: Action) -> dict[int, str]:
     """
-    Build mapping step_order -> step name for a workflow.
+    Build mapping step_order -> step_id for a workflow.
+    step_id is the canonical identifier (routing, validation, edges).
     Used to enrich workflow_step_parameters for approval modal display.
     """
     steps = workflow_action.execution_steps or []
@@ -106,12 +107,71 @@ def extract_workflow_step_names(workflow_action: Action) -> dict[int, str]:
             continue
         try:
             order = int(step.get("order", idx + 1))
-            name = step.get("name") or step.get("step_id") or f"Étape {order}"
-            if isinstance(name, str):
-                out[order] = name
+            step_id = step.get("step_id")
+            if isinstance(step_id, str) and step_id.strip():
+                out[order] = step_id
+            else:
+                out[order] = f"step-{order}"
         except (TypeError, ValueError):
             continue
     return out
+
+
+def extract_workflow_step_names_by_order(workflow_action: Action) -> dict[int, str]:
+    """
+    Build mapping step_order -> step_name for a workflow.
+    step_name is the human-readable label for UI display (approval modal).
+    Includes all steps (platform, gate, etc.) so keys match workflow_step_parameters.
+    """
+    steps = workflow_action.execution_steps or []
+    if not isinstance(steps, list):
+        return {}
+    out: dict[int, str] = {}
+    for idx, step in enumerate(steps):
+        if not isinstance(step, dict):
+            continue
+        try:
+            order = int(step.get("order", idx + 1))
+            name = step.get("name")
+            if isinstance(name, str) and name.strip():
+                out[order] = name.strip()
+            else:
+                out[order] = f"Étape {order}"
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def enrich_workflow_step_parameters_for_display(
+    parameters: dict | None,
+    workflow_action: Action | None,
+) -> dict | None:
+    """
+    Enrich workflow_step_parameters with step_name from workflow definition.
+    Used when serializing execution for display (approval modal).
+    Ensures step names are shown even for executions created before step_name was stored.
+    """
+    if not parameters or not workflow_action:
+        return parameters
+    wsp = parameters.get("workflow_step_parameters")
+    if not isinstance(wsp, dict):
+        return parameters
+    step_names = extract_workflow_step_names_by_order(workflow_action)
+    if not step_names:
+        return parameters
+    result = dict(parameters)
+    wsp_copy = dict(wsp)
+    for key, entry in wsp_copy.items():
+        if not isinstance(entry, dict):
+            continue
+        try:
+            order_int = int(key)
+        except (TypeError, ValueError):
+            continue
+        step_name = step_names.get(order_int, f"Étape {order_int}")
+        wsp_copy[key] = {**entry, "step_name": step_name}
+    result["workflow_step_parameters"] = wsp_copy
+    return result
 
 
 def validate_workflow_step_parameters(
@@ -136,7 +196,8 @@ def validate_workflow_step_parameters(
         )
 
     step_map = extract_workflow_step_map(workflow_action)
-    step_names = extract_workflow_step_names(workflow_action)
+    step_ids_by_order = extract_workflow_step_ids_by_order(workflow_action)
+    step_names_by_order = extract_workflow_step_names_by_order(workflow_action)
     valid_orders = sorted(step_map.keys())
 
     # Batch-load all referenced actions upfront to avoid N+1 queries
@@ -188,8 +249,9 @@ def validate_workflow_step_parameters(
                     message="Cette étape n'accepte pas de paramètres",
                     details={"step_order": order_int},
                 )
-            step_name = step_names.get(order_int, f"Étape {order_int}")
-            normalized[str(order_int)] = {"name": step_name, "parameters": {}}
+            step_id = step_ids_by_order.get(order_int, f"step-{order_int}")
+            step_name = step_names_by_order.get(order_int, f"Étape {order_int}")
+            normalized[str(order_int)] = {"step_id": step_id, "step_name": step_name, "parameters": {}}
             continue
 
         if JSONSCHEMA_AVAILABLE:
@@ -217,8 +279,9 @@ def validate_workflow_step_parameters(
                     details={"step_order": order_int, "error": err},
                 )
 
-        step_name = step_names.get(order_int, f"Étape {order_int}")
-        normalized[str(order_int)] = {"name": step_name, "parameters": params}
+        step_id = step_ids_by_order.get(order_int, f"step-{order_int}")
+        step_name = step_names_by_order.get(order_int, f"Étape {order_int}")
+        normalized[str(order_int)] = {"step_id": step_id, "step_name": step_name, "parameters": params}
 
     if invalid_orders:
         valid_str = ", ".join(str(o) for o in valid_orders) if valid_orders else "(aucun)"

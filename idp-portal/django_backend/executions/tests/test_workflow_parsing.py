@@ -16,6 +16,8 @@ from core.exceptions import BadRequestError, NotFoundError
 from executions.utils.workflow_parsing import (
     extract_workflow_referenced_action_ids,
     extract_workflow_step_map,
+    extract_workflow_step_names_by_order,
+    enrich_workflow_step_parameters_for_display,
     validate_workflow_step_parameters,
     validate_workflow_referenced_actions,
 )
@@ -133,6 +135,69 @@ class TestExtractWorkflowStepMap(TestCase):
 
 
 # ============================================================================
+# extract_workflow_step_names_by_order
+# ============================================================================
+
+class TestExtractWorkflowStepNamesByOrder(TestCase):
+
+    def test_returns_name_for_each_step(self):
+        """Steps with name → mapping order -> name."""
+        action = _make_action_mock(execution_steps=[
+            {"order": 1, "name": "Départ"},
+            {"order": 2, "name": "Approbation"},
+            {"order": 3, "name": "Database Health Check"},
+            {"order": 4, "name": "Backup Oracle Database"},
+        ])
+        result = extract_workflow_step_names_by_order(action)
+        self.assertEqual(result[1], "Départ")
+        self.assertEqual(result[2], "Approbation")
+        self.assertEqual(result[3], "Database Health Check")
+        self.assertEqual(result[4], "Backup Oracle Database")
+
+    def test_fallback_etape_when_no_name(self):
+        """Step without name → Étape {order}."""
+        action = _make_action_mock(execution_steps=[
+            {"order": 2},
+        ])
+        result = extract_workflow_step_names_by_order(action)
+        self.assertEqual(result[2], "Étape 2")
+
+
+# ============================================================================
+# enrich_workflow_step_parameters_for_display
+# ============================================================================
+
+class TestEnrichWorkflowStepParametersForDisplay(TestCase):
+
+    def test_enriches_with_step_name_from_workflow(self):
+        """Adds step_name to each workflow_step_parameters entry from workflow definition."""
+        action = _make_action_mock(execution_steps=[
+            {"order": 2, "name": "Database Health Check"},
+            {"order": 3, "name": "Backup Oracle Database"},
+        ])
+        params = {
+            "workflow_step_parameters": {
+                "2": {"step_id": "s2", "parameters": {"db": "test"}},
+                "3": {"step_id": "s3", "parameters": {"backup_type": "incr"}},
+            },
+        }
+        result = enrich_workflow_step_parameters_for_display(params, action)
+        self.assertEqual(result["workflow_step_parameters"]["2"]["step_name"], "Database Health Check")
+        self.assertEqual(result["workflow_step_parameters"]["3"]["step_name"], "Backup Oracle Database")
+
+    def test_returns_none_unchanged(self):
+        """None params → None."""
+        action = _make_action_mock(execution_steps=[])
+        self.assertIsNone(enrich_workflow_step_parameters_for_display(None, action))
+
+    def test_returns_unchanged_when_no_workflow_action(self):
+        """No workflow action → params unchanged."""
+        params = {"workflow_step_parameters": {"1": {"parameters": {}}}}
+        result = enrich_workflow_step_parameters_for_display(params, None)
+        self.assertEqual(result, params)
+
+
+# ============================================================================
 # validate_workflow_step_parameters
 # ============================================================================
 
@@ -155,8 +220,8 @@ class TestValidateWorkflowStepParameters(TestCase):
         self.workflow_action = ActionFactory(
             status='published',
             execution_steps=[
-                {"order": 1, "referenced_action_id": self.ref_action1.id},
-                {"order": 2, "referenced_action_id": self.ref_action2.id},
+                {"order": 1, "name": "Vérification DB", "referenced_action_id": self.ref_action1.id},
+                {"order": 2, "name": "Backup", "referenced_action_id": self.ref_action2.id},
             ]
         )
 
@@ -224,7 +289,7 @@ class TestValidateWorkflowStepParameters(TestCase):
             workflow_action=self.workflow_action,
             workflow_step_parameters={"2": {"parameters": None}},
         )
-        self.assertEqual(result, {"2": {"name": "Étape 2", "parameters": {}}})
+        self.assertEqual(result, {"2": {"step_id": "step-2", "step_name": "Backup", "parameters": {}}})
 
     # Tâche 5.13c — step value avec "parameters": valeur non-dict (ex: string) → BadRequestError
     def test_step_parameters_non_dict_raises_invalid_parameters(self):
@@ -244,7 +309,7 @@ class TestValidateWorkflowStepParameters(TestCase):
             workflow_action=self.workflow_action,
             workflow_step_parameters={"2": {"parameters": {}}},
         )
-        self.assertEqual(result, {"2": {"name": "Étape 2", "parameters": {}}})
+        self.assertEqual(result, {"2": {"step_id": "step-2", "step_name": "Backup", "parameters": {}}})
 
     # Tâche 5.15 — pas de schema, params non-vides → BadRequestError(INVALID_PARAMETERS)
     def test_no_schema_non_empty_params_raises_bad_request(self):
@@ -265,6 +330,7 @@ class TestValidateWorkflowStepParameters(TestCase):
         )
         self.assertIn("1", result)
         self.assertEqual(result["1"]["parameters"]["db_name"], "TESTDB")
+        self.assertEqual(result["1"]["step_name"], "Vérification DB")
 
     # Tâche 5.17 — schema valide, params invalides → BadRequestError(INVALID_PARAMETERS)
     def test_valid_schema_invalid_params_raises_bad_request(self):

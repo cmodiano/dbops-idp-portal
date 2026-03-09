@@ -3,9 +3,10 @@ from __future__ import annotations
 from rest_framework import serializers
 from drf_spectacular.utils import extend_schema_serializer
 
-from catalog.models import Action
+from catalog.models import Action, ActionItemType
 from core.utils import ensure_utc_isoformat
 from executions.models import Execution, ExecutionStep, ExecutionTarget, ScheduledExecution, RecurringPattern
+from executions.utils.workflow_parsing import enrich_workflow_step_parameters_for_display
 
 
 class ExecutionTargetSerializer(serializers.Serializer):
@@ -67,6 +68,10 @@ class ExecutionSerializer(serializers.Serializer):
         action: Action | None = getattr(obj, "action", None)
         user = getattr(obj, "user", None)
         integration = getattr(action, "integration", None) if action else None
+        params = obj.get_parameters()
+        # Enrich workflow_step_parameters with step_name for display (approval modal)
+        if action and getattr(action, "item_type", None) == ActionItemType.WORKFLOW:
+            params = enrich_workflow_step_parameters_for_display(params, action)
 
         return {
             "id": obj.id,
@@ -75,7 +80,7 @@ class ExecutionSerializer(serializers.Serializer):
             "user_id": obj.user_id,
             "user_display_name": getattr(user, "display_name", None) if user else None,
             "environment": obj.environment,
-            "parameters": obj.get_parameters(),
+            "parameters": params,
             "status": obj.status,
             "servicenow_change_id": obj.servicenow_change_id,
             "started_at": ensure_utc_isoformat(obj.started_at),
