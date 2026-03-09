@@ -9,6 +9,7 @@
  * WCAG 2.1 AA compliant with aria-label for accessibility.
  */
 
+import type { ReactNode } from 'react';
 import { Tag } from 'antd';
 import {
   CheckCircleOutlined,
@@ -28,7 +29,7 @@ export interface ImpactIndicatorProps {
 interface ImpactConfig {
   color: string;
   label: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
 }
 
 const IMPACT_CONFIG: Record<ImpactLevel, ImpactConfig> = {
