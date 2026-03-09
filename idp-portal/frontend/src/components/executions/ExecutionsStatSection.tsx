@@ -6,6 +6,7 @@
  * Story 9.10: TrendLineChart under StatCards.
  * Durée moy. d'exéc. is only shown in the statistics view (OperationsActivitySection).
  */
+import type { FC } from 'react';
 import { Row, Col } from 'antd';
 import {
   RocketOutlined,
@@ -29,7 +30,7 @@ export interface ExecutionsStatSectionProps {
   filters: ExecutionFilters;
 }
 
-export const ExecutionsStatSection: React.FC<ExecutionsStatSectionProps> = ({
+export const ExecutionsStatSection: FC<ExecutionsStatSectionProps> = ({
   statsData,
   statsLoading,
   timeSeriesData,

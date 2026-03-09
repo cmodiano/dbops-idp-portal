@@ -8,6 +8,7 @@
  */
 
 import { Card, Space, Tag, Typography } from 'antd';
+import './TimelineList.css';
 import { LinkOutlined } from '@ant-design/icons';
 import { TimelineStepItem } from './TimelineStepItem';
 import { ParallelGroupTimelineSection } from './ParallelGroupTimelineSection';
@@ -69,13 +70,7 @@ export function TimelineList({
 
   return (
     <div role="list" aria-label="Timeline d'exécution" style={{ padding: '16px 0' }}>
-      {/* @keyframes pulse — defined once at list level, used by TimelineStepItem for RUNNING steps */}
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.6; }
-        }
-      `}</style>
+      {/* @keyframes pulse — defined in TimelineList.css, used by TimelineStepItem for RUNNING steps */}
       {/* Single aria-live region for status announcements (AC4) */}
       <div
         aria-live="polite"

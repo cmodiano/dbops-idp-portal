@@ -212,6 +212,7 @@ secret_service_ref: vault-prod   # Référence vault-prod qui peut ne pas encore
 ```python
 @transaction.atomic
 def import_integration_yaml(content: bytes, mode="additive", user=None) -> tuple[int, int, int]:
+    created = updated = unchanged = 0
     parsed = parse_yaml(content)
     validate_envelope(parsed, expected_kind="Integration")
     spec = parsed.get("spec", {})
@@ -225,10 +226,15 @@ def import_integration_yaml(content: bytes, mode="additive", user=None) -> tuple
         # credential_ref exclu si masqué (voir section 6)
     }
     obj, was_created = Integration.objects.get_or_create(name=name, defaults=defaults)
-    if not was_created:
+    if was_created:
+        created += 1
+    else:
         changed = _apply_field_changes(obj, defaults)
         if changed:
             obj.save()
+            updated += 1
+        else:
+            unchanged += 1
 
     # ---------- Pass 2 : résoudre secret_service_ref ----------
     secret_service_ref = spec.get("secret_service_ref")
@@ -245,15 +251,18 @@ def import_integration_yaml(content: bytes, mode="additive", user=None) -> tuple
             obj.save(update_fields=["secret_service_id"])
             update_sync_tracking(obj, content)  # Toujours si FK modifiée
             if unchanged:
-                unchanged, updated = 0, 1
+                unchanged -= 1
+                updated += 1
     elif obj.secret_service_id is not None and not was_created:
         # Effacer la référence si absente du YAML
         obj.secret_service_id = None
         obj.save(update_fields=["secret_service_id"])
         update_sync_tracking(obj, content)  # Toujours si FK modifiée
         if unchanged:
-            unchanged, updated = 0, 1
-    # ...
+            unchanged -= 1
+            updated += 1
+
+    return (created, updated, unchanged)
 ```
 
 ### Quand utiliser ce pattern

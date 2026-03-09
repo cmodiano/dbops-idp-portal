@@ -6,7 +6,7 @@
  * when ≥2 sub-steps are RUNNING simultaneously, and the sub-steps indented below.
  */
 
-import React from 'react';
+import type { FC } from 'react';
 import { Badge } from 'antd';
 import { BranchesOutlined } from '@ant-design/icons';
 import type { ExecutionStepResponse } from '../../../types/api/executions';
@@ -20,7 +20,7 @@ interface ParallelGroupTimelineSectionProps {
   onOpenLogs: (id: number) => void;
 }
 
-export const ParallelGroupTimelineSection: React.FC<ParallelGroupTimelineSectionProps> = ({
+export const ParallelGroupTimelineSection: FC<ParallelGroupTimelineSectionProps> = ({
   groupName,
   subSteps,
   expandedId,
@@ -68,5 +68,3 @@ export const ParallelGroupTimelineSection: React.FC<ParallelGroupTimelineSection
     </div>
   );
 };
-
-export default ParallelGroupTimelineSection;

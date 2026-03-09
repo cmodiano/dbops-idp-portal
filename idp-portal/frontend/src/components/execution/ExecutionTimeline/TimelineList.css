@@ -1,0 +1,10 @@
+/**
+ * TimelineList — Animations pour les étapes en cours (Story 34.12, SOLID-FE-1).
+ * Extrait depuis TimelineList.tsx (F-inline-style correction, Story 66.5).
+ */
+
+/* Pulse animation for RUNNING step indicator circles in TimelineStepItem */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}

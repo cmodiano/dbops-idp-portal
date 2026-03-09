@@ -5,6 +5,7 @@
  * Renders a single step: icon, expand button, expanded detail, ServiceNow badge.
  */
 
+import './TimelineList.css';
 import { Button, Typography, Badge } from 'antd';
 import {
   CheckCircleOutlined,

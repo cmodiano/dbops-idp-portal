@@ -4,6 +4,7 @@
  * Story 26.4 - AC5: Extracted from ExecutionsPage.tsx.
  * Shows execution detail with conditional rendering based on item_type.
  */
+import type { FC } from 'react';
 import { Drawer, Skeleton, Alert, Button } from 'antd';
 import { ExecutionTimeline } from '../execution/ExecutionTimeline';
 import { WorkflowExecutionGraph } from '../execution/WorkflowExecutionGraph';
@@ -22,7 +23,7 @@ export interface ExecutionDetailDrawerProps {
   onExecutionUpdate: (updated: ExecutionResponse) => void;
 }
 
-export const ExecutionDetailDrawer: React.FC<ExecutionDetailDrawerProps> = ({
+export const ExecutionDetailDrawer: FC<ExecutionDetailDrawerProps> = ({
   open,
   execution,
   steps,

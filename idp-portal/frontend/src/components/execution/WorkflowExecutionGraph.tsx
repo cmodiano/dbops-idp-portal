@@ -16,6 +16,8 @@
  */
 
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import type { CSSProperties, MouseEvent } from 'react';
+import './WorkflowExecutionGraph.css';
 import { useExecutionSteps } from '../../hooks/useExecutionSteps';
 import {
   ReactFlow,
@@ -81,6 +83,8 @@ const edgeTypes = {
   customEdge: CustomEdge,
 };
 
+const TERMINAL_STATUSES = ['COMPLETED', 'FAILED', 'CANCELLED', 'REJECTED'] as const;
+
 /** Calculate human-readable duration between two timestamps. */
 function calculateStepDuration(step: ExecutionStepResponse): string | null {
   if (!step.started_at || !step.completed_at) return null;
@@ -94,7 +98,7 @@ function calculateStepDuration(step: ExecutionStepResponse): string | null {
 }
 
 /** Get subtle border style for the React Flow wrapper (AC3, AC4). */
-function getNodeStyle(status: ExecutionStepStatus | undefined): React.CSSProperties {
+function getNodeStyle(status: ExecutionStepStatus | undefined): CSSProperties {
   // The actual visible border is handled by WorkflowStepNode's inner div.
   // These wrapper styles provide minimal reinforcement.
   switch (status) {
@@ -135,7 +139,7 @@ function WorkflowExecutionGraphInner({
   }, []);
 
   // Story 19.3 AC1, AC8: Handle node click — open drawer for action nodes, ignore Start/End
-  const handleNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
+  const handleNodeClick = useCallback((_event: MouseEvent, node: Node) => {
     if (node.id === START_NODE_ID || node.id === END_NODE_ID) {
       return;
     }
@@ -144,8 +148,7 @@ function WorkflowExecutionGraphInner({
 
   // AC5: Real-time updates via WebSocket + polling fallback
   // Skip real-time for terminal executions (no need to poll/WS for completed/failed/cancelled)
-  const TERMINAL_STATUSES = ['COMPLETED', 'FAILED', 'CANCELLED', 'REJECTED'];
-  const isTerminal = execution ? TERMINAL_STATUSES.includes(execution.status) : false;
+  const isTerminal = execution ? (TERMINAL_STATUSES as readonly string[]).includes(execution.status) : false;
 
   // Story 38.6: DIP — use hook instead of direct service import for terminal steps
   const { steps: staticSteps, error: stepsError } = useExecutionSteps(executionId, isTerminal);
@@ -456,20 +459,7 @@ function WorkflowExecutionGraphInner({
         onClose={() => setSelectedStepId(null)}
       />
 
-      {/* AC3: Subtle pulse animation for active (RUNNING) step */}
-      <style>{`
-        @keyframes workflow-node-pulse {
-          0%, 100% {
-            box-shadow: 0 0 4px ${STATUS_COLORS.RUNNING}30;
-          }
-          50% {
-            box-shadow: 0 0 10px ${STATUS_COLORS.RUNNING}50;
-          }
-        }
-        .workflow-node-running > div {
-          animation: workflow-node-pulse 1.5s ease-in-out infinite;
-        }
-      `}</style>
+      {/* AC3: Subtle pulse animation for active (RUNNING) step — defined in WorkflowExecutionGraph.css */}
     </div>
   );
 }
