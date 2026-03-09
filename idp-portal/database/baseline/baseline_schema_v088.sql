@@ -847,7 +847,7 @@ COMMENT ON COLUMN EXECUTIONS.CREATED_AT IS 'UTC TIMESTAMP used as partition key 
 COMMENT ON COLUMN EXECUTIONS.ID IS 'Primary key, IDENTITY column. Backed by global unique index (PK_EXECUTIONS). V084.';
 
 -- ---------------------------------------------------------------------------
--- EXECUTION_STEPS (V025 + V048 + V067 + V085 + V099 + V102 + V107)
+-- EXECUTION_STEPS (V025 + V048 + V067 + V085 + V099 + V102 + V107 + V116)
 -- Reference Partitioning via FK EXECUTION_ID → EXECUTIONS (Story 40.3)
 -- V099: APPROVED_BY, APPROVED_AT, APPROVAL_COMMENT; CHK_STEP_TYPE + service_call, http_request, evaluation, gate (ADR-007)
 -- V102: APPROVED_AT → plain TIMESTAMP (UTC convention)
@@ -869,6 +869,7 @@ CREATE TABLE EXECUTION_STEPS (
     APPROVED_BY      NUMBER(10),
     APPROVED_AT      TIMESTAMP,
     APPROVAL_COMMENT VARCHAR2(1000),
+    CONFIG_STEP_ID   VARCHAR2(255),
 
     CONSTRAINT PK_EXECUTION_STEPS PRIMARY KEY (ID),
     CONSTRAINT FK_EXEC_STEPS_EXECUTION
@@ -898,6 +899,9 @@ COMMENT ON COLUMN EXECUTION_STEPS.ID IS 'Primary key, IDENTITY column. Backed by
 COMMENT ON COLUMN EXECUTION_STEPS.APPROVED_BY IS 'FK vers USERS(ID) — utilisateur ayant approuvé ce step (ADR-007)';
 COMMENT ON COLUMN EXECUTION_STEPS.APPROVED_AT IS 'Date/heure de l''approbation du step (ADR-007). UTC timestamp (plain TIMESTAMP). V102.';
 COMMENT ON COLUMN EXECUTION_STEPS.APPROVAL_COMMENT IS 'Commentaire d''approbation du step, max 1000 caractères (ADR-007)';
+COMMENT ON COLUMN EXECUTION_STEPS.CONFIG_STEP_ID IS 'step_id from action.execution_steps config (UUID). Used to reliably match an ExecutionStep back to its workflow definition. V116.';
+
+CREATE INDEX IDX_EXEC_STEPS_CONFIG_STEP_ID ON EXECUTION_STEPS(CONFIG_STEP_ID);
 
 -- ---------------------------------------------------------------------------
 -- EXECUTION_TARGETS (V066)
