@@ -592,6 +592,13 @@ def resume_container_workflow_from_gate(self: Any, execution_id: int, on_success
             if step_id_key:
                 runtime._step_outputs[step_id_key] = step_output
         runtime.workflow_steps = remaining_steps
+        # Resume: _step_order_counter must continue from max existing step_order
+        # to avoid UK_EXEC_STEPS_EXEC_ORDER violation (step_order already used by gate)
+        from django.db.models import Max
+        max_order = ExecutionStep.objects.filter(execution=execution).aggregate(
+            Max('step_order')
+        )['step_order__max']
+        runtime._step_order_counter = max_order if max_order is not None else 0
         runtime._execute_workflow_steps()
 
         logger.info(
