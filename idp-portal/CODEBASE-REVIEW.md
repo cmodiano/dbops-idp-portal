@@ -907,4 +907,38 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | Fichiers FE > 500 LOC | — | — | — | — | **4** (IntegrationForm, ActionWizard, execution_service, ProfileForm) | Nouveau |
 | God classes/methods | — | — | — | — | **3** (QueryExecutor, idp_auth/views, IntegrationForm) | -1 (update_status story 54.6) |
 
-**Bilan global (audit #5) :** Sur 133 findings cumulés, **117 sont résolus** (88%). Les 13 issues restantes de l'audit #5 se concentrent sur la **maintenabilité structurelle** : god classes/modules qui, bien que fonctionnellement corrects, posent des risques de maintenabilité à terme. Aucune issue CRITICAL. La posture sécurité est **entièrement résolue** (0 ouvertes — SEC-13, SEC-14 corrigés story 54.4). L'architecture SOLID est globalement excellente (registries, ISP, DI, hooks) — les findings restants sont du polissage structurel et des extractions de responsabilités dans les fichiers les plus volumineux.
+**Bilan global (audit #5) :** Sur 133 findings cumulés, **117 sont résolus** (88%). Les 13 issues restantes de l'audit #5 se concentrent sur la **maintenabilité structurelle** : god classes/modules qui, bien que fonctionnellement corrects, posent des risques de maintenabilité à terme. Aucune issue CRITICAL. La posture sécurité est **entièrement résolue** (0 ouvertes — SEC-13, SEC-14 corrigés story 54.4). L'architecture SOLID est globalement exemplaire (registries, ISP, DI, hooks) — les findings restants sont du polissage structurel et des extractions de responsabilités dans les fichiers les plus volumineux.
+
+---
+
+## 22. Mise à jour post-Epics 54–66 (Story 66-26, 2026-03-09)
+
+**Date de révision :** 2026-03-09 — Story 66-26 (revue documentation)
+
+### Corrections apportées à ce document
+
+Les éléments suivants étaient listés comme OUVERTS dans §21 mais ont été résolus dans les Epics postérieurs :
+
+| # | Correction | Résolution |
+|---|-----------|------------|
+| ~~NEW-FE-1~~ | Nested key props redondants (TopNav) | ✅ RÉSOLU Story 54.3 (2026-02-27) — ignoré dans §21 LOW |
+| ~~NEW-FE-3~~ | `.catch()` silencieux (ReportingDashboard) | ✅ RÉSOLU Story 54.3 (2026-02-27) — ignoré dans §21 LOW |
+| ~~NEW-FE-4~~ | Prop `allowedEnvironments` ignorée (code mort) | ✅ RÉSOLU Story 54.3 (2026-02-27) — ignoré dans §21 LOW |
+| ~~MAINT-BE-2~~ | `idp_auth/views.py` module monolithique | ✅ RÉSOLU Story 54.7 (2026-02-27) — figurait encore en §21 priorités |
+
+### Corrections au résumé §21
+
+Le tableau §21 "Sécurité 12/14 | 2" est inexact — SEC-13 et SEC-14 ont été résolus en Story 54.4 :
+- **Sécurité** : **14/14 résolus** (0 ouvertes) ✅
+
+### Issues OUVERTES réelles (post-Story 66-26)
+
+| # | Sévérité | Description | Statut |
+|---|----------|-------------|--------|
+| **SOLID-FE-4** | HIGH | ~8 composants restants importent directement les services (~17/~25 migrés, Stories 35.3–54.15) | Ouvert — backlog |
+| **MAINT-BE-9** | LOW | Validation en 4 couches dans vues d'exécution | Ouvert — backlog |
+| **INCON-2** | LOW | MD5 hash collision (documenté, acceptable pour N<1000) | Documenté — acceptable |
+| **PERF-4** | LOW | `<style>` inline dans 3 composants (impact négligeable) | Documenté — acceptable |
+| **16.4** | INFO | STATUS_CONFIG locals potentiellement consolidables | Info — backlog |
+
+**Bilan mis à jour (2026-03-09) :** Sur 133 findings, **129 sont résolus** (97%). 4 issues ouvertes en backlog, 1 INFO. Posture sécurité : 0 ouvertes. Architecture SOLID : excellente.

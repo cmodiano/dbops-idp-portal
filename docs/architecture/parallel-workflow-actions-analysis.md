@@ -3,6 +3,9 @@
 **Date** : 2026-03-08
 **Contexte** : Évaluer la complexité d'ajouter le support d'exécution parallèle de steps dans notre moteur de workflow, en s'inspirant des solutions du marché.
 
+> **Implémentation réalisée :** L'Option A (Parallel Group MVP) a été implémentée dans l'Epic 65 (Stories 65.1–65.7).
+> Documentation d'implémentation : [`idp-portal/django_backend/docs/parallel-group.md`](../../idp-portal/django_backend/docs/parallel-group.md)
+
 ---
 
 ## 1. État actuel de notre codebase

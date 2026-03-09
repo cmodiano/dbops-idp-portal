@@ -1,7 +1,11 @@
 # Infrastructure as Code Strategy — IDP Portal
 
+> ⚠️ **OBSOLÈTE** — Ce document a été remplacé par la Story 64-17 (renommage IaC→CaC).
+> Le document de référence actuel est : [Configuration as Code – Stratégie](configuration-as-code-strategy.md)
+> Ce document est conservé à titre historique uniquement.
+
 **Date:** 2026-03-07
-**Status:** Proposal (v2 — Git as Source of Truth)
+**Status:** Proposal (v2 — Git as Source of Truth) — ⚠️ OBSOLÈTE, remplacé par CaC
 **Authors:** Architecture Team
 
 ---
