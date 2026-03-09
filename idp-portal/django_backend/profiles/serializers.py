@@ -10,8 +10,22 @@ from core.middleware import get_correlation_id
 
 logger = structlog.get_logger(__name__)
 
+# Performance limit for exclusion_patterns (RBAC evaluation cost scales with pattern count)
+MAX_EXCLUSION_PATTERNS = 100
 
-class ProfileSerializer(serializers.ModelSerializer):
+
+class ProfileBoolFieldsMixin:
+    """Mixin to convert Oracle IntegerField (0/1) is_admin/is_auditor/is_approver to bool in API output."""
+
+    def to_representation(self, instance: Any) -> dict[str, Any]:
+        data: dict[str, Any] = super().to_representation(instance)  # type: ignore[misc]
+        for field in ('is_admin', 'is_auditor', 'is_approver'):
+            if field in data:
+                data[field] = bool(getattr(instance, field, 0))
+        return data
+
+
+class ProfileSerializer(ProfileBoolFieldsMixin, serializers.ModelSerializer):
     """Serializer for Profile read/write operations."""
 
     is_admin = serializers.BooleanField()
@@ -24,14 +38,6 @@ class ProfileSerializer(serializers.ModelSerializer):
                   # Story 64.13: CaC drift tracking (read-only)
                   'last_synced_at', 'last_synced_hash']
         read_only_fields = ['id', 'created_at', 'updated_at', 'last_synced_at', 'last_synced_hash']
-
-    def to_representation(self, instance: Any) -> dict[str, Any]:
-        """Convert is_admin/is_auditor/is_approver from IntegerField (0/1) to boolean."""
-        data = super().to_representation(instance)
-        data['is_admin'] = bool(instance.is_admin)
-        data['is_auditor'] = bool(instance.is_auditor)
-        data['is_approver'] = bool(instance.is_approver)
-        return data
 
 
 class ProfileCreateSerializer(serializers.Serializer):
@@ -84,7 +90,7 @@ class ProfileUpdateSerializer(serializers.Serializer):
         return stripped if stripped else None
 
 
-class ProfileListSerializer(serializers.ModelSerializer):
+class ProfileListSerializer(ProfileBoolFieldsMixin, serializers.ModelSerializer):
     """Serializer for GET /admin/profiles list (with permission_count)."""
 
     is_admin = serializers.BooleanField()
@@ -98,14 +104,6 @@ class ProfileListSerializer(serializers.ModelSerializer):
                   # Story 64.13: CaC drift tracking (read-only)
                   'last_synced_at', 'last_synced_hash']
         read_only_fields = ['id', 'permission_count', 'created_at', 'updated_at', 'last_synced_at', 'last_synced_hash']
-
-    def to_representation(self, instance: Any) -> dict[str, Any]:
-        """Convert is_admin/is_auditor/is_approver from IntegerField (0/1) to boolean."""
-        data = super().to_representation(instance)
-        data['is_admin'] = bool(instance.is_admin)
-        data['is_auditor'] = bool(instance.is_auditor)
-        data['is_approver'] = bool(instance.is_approver)
-        return data
 
 
 @extend_schema_serializer(
@@ -314,7 +312,6 @@ class ProfileTargetPermissionsSerializer(serializers.Serializer):
         stripped_patterns = [p.strip() for p in value if isinstance(p, str) and p.strip()]
         
         # Code review fix: Enforce performance limit (max 100 patterns)
-        MAX_EXCLUSION_PATTERNS = 100
         if len(stripped_patterns) > MAX_EXCLUSION_PATTERNS:
             raise serializers.ValidationError(
                 f"Too many exclusion patterns ({len(stripped_patterns)}). "

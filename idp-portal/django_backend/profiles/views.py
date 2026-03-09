@@ -5,6 +5,7 @@ Implements admin profiles endpoints (Story M.5).
 
 from typing import Any
 
+import structlog
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from rest_framework import viewsets, status
@@ -16,6 +17,7 @@ from rest_framework.views import APIView
 from rest_framework import serializers
 from rest_framework.parsers import MultiPartParser
 
+from core.middleware import get_correlation_id
 from core.parsers import YAMLParser, extract_yaml_content
 from drf_spectacular.utils import extend_schema, extend_schema_view, inline_serializer
 from profiles.models import Profile
@@ -32,6 +34,8 @@ from profiles.services import ProfileService
 from profiles.services_export_import import export_profiles_yaml, import_profiles_yaml, export_profile_yaml
 from core.permissions import AdminProfilePermission, IsAdminUser
 from core.exceptions import NotFoundError, InvalidStateError
+
+logger = structlog.get_logger(__name__)
 
 
 @api_view(['GET'])
@@ -148,6 +152,13 @@ class ProfileViewSet(viewsets.ViewSet):
             )
         
         invalidate_permissions_cache()
+        logger.info(
+            "profile_created",
+            profile_id=profile.id,
+            profile_name=profile.name,
+            user_id=str(request.user.id) if hasattr(request.user, 'id') else None,
+            correlation_id=get_correlation_id(),
+        )
         response_serializer = ProfileSerializer(profile)
         return Response({"data": response_serializer.data}, status=status.HTTP_201_CREATED)
     
@@ -176,15 +187,22 @@ class ProfileViewSet(viewsets.ViewSet):
                 message=str(e),
                 details={"name": serializer.validated_data.get('name')}
             )
-        
+
         if profile is None:
             raise NotFoundError(
                 code="NOT_FOUND",
                 message=f"Profil {profile_id} introuvable",
                 details={"profile_id": profile_id}
             )
-        
+
         invalidate_permissions_cache()
+        logger.info(
+            "profile_updated",
+            profile_id=profile_id,
+            profile_name=profile.name,
+            user_id=str(request.user.id) if hasattr(request.user, 'id') else None,
+            correlation_id=get_correlation_id(),
+        )
         response_serializer = ProfileSerializer(profile)
         return Response({"data": response_serializer.data})
     
@@ -203,6 +221,12 @@ class ProfileViewSet(viewsets.ViewSet):
             )
 
         invalidate_permissions_cache()
+        logger.info(
+            "profile_deleted",
+            profile_id=profile_id,
+            user_id=str(request.user.id) if hasattr(request.user, 'id') else None,
+            correlation_id=get_correlation_id(),
+        )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=['get', 'put'])
@@ -269,7 +293,7 @@ class ProfileViewSet(viewsets.ViewSet):
         
         else:  # PUT
             # PUT /admin/profiles/{id}/targets
-            serializer = ProfileTargetPermissionsSerializer(data=request.data)
+            serializer = ProfileTargetPermissionsSerializer(data=request.data, context={'request': request})
             serializer.is_valid(raise_exception=True)
             
             perm = service.set_target_permissions(profile_id, serializer.validated_data, user=request.user)
@@ -293,7 +317,6 @@ class ProfileExportView(APIView):
     def get(self, request: Request) -> Any:
         """Export all profiles as YAML."""
         content = export_profiles_yaml()
-        from django.http import HttpResponse
         response = HttpResponse(content, content_type="application/x-yaml")
         response['Content-Disposition'] = 'attachment; filename=profiles.yaml'
         return response

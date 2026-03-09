@@ -156,6 +156,8 @@ class ProfileService:
         Raises:
             IntegrityError: If new name already exists
         """
+        correlation_id = get_correlation_id()
+
         try:
             profile = Profile.objects.get(id=profile_id)
         except Profile.DoesNotExist:
@@ -202,7 +204,8 @@ class ProfileService:
                 action_type=AuditActionType.PROFILE_UPDATED,
                 entity_type=AuditEntityType.PROFILE,
                 entity_id=profile.id,
-                details={'name': profile.name, 'changes': changes}
+                details={'name': profile.name, 'changes': changes},
+                correlation_id=correlation_id
             )
 
         return profile
@@ -219,13 +222,15 @@ class ProfileService:
         Returns:
             True if deleted, False if not found
         """
+        correlation_id = get_correlation_id()
+
         try:
             profile = Profile.objects.get(id=profile_id)
             profile_name = profile.name  # Save name before deletion for audit
-            
+
             # Permissions will be deleted automatically via CASCADE
             profile.delete()
-            
+
             # Audit if user provided
             if user:
                 AuditService.create_entry(
@@ -233,9 +238,10 @@ class ProfileService:
                     action_type=AuditActionType.PROFILE_DELETED,
                     entity_type=AuditEntityType.PROFILE,
                     entity_id=profile_id,
-                    details={'name': profile_name}
+                    details={'name': profile_name},
+                    correlation_id=correlation_id
                 )
-            
+
             return True
         except Profile.DoesNotExist:
             return False
@@ -278,9 +284,24 @@ class ProfileService:
         if 'environments' in permission_data:
             perm.set_environments(permission_data['environments'])
         perm.save()
-        
+
+        # Audit trail for permission changes — SOC1 compliance (PROF-MED-02 fix)
+        if user:
+            AuditService.create_entry(
+                user_id=str(user.id),
+                action_type=AuditActionType.PROFILE_UPDATED,
+                entity_type=AuditEntityType.PROFILE,
+                entity_id=profile_id,
+                details={
+                    'action': 'set_action_permissions',
+                    'permission_type': perm.permission_type,
+                    'created': created,
+                },
+                correlation_id=get_correlation_id()
+            )
+
         return perm
-    
+
     def get_action_permissions(self, profile_id: int) -> ProfileActionPermission | None:
         """
         Get action permissions for a profile.
@@ -299,10 +320,14 @@ class ProfileService:
     def delete_action_permissions(self, profile_id: int) -> bool:
         """
         Delete action permissions for a profile.
-        
+
+        NOTE (PROF-LOW-02): This method has no callers in production code (views.py,
+        services_export_import.py). It is used exclusively in tests for setup/teardown.
+        Keeping as a utility for test fixtures and potential future admin endpoint.
+
         Args:
             profile_id: ID of the profile
-        
+
         Returns:
             True if deleted, False if not found
         """
@@ -355,6 +380,21 @@ class ProfileService:
             perm.set_exclusion_patterns(permission_data['exclusion_patterns'])
         perm.save()
 
+        # Audit trail for permission changes — SOC1 compliance (PROF-MED-02 fix)
+        if user:
+            AuditService.create_entry(
+                user_id=str(user.id),
+                action_type=AuditActionType.PROFILE_UPDATED,
+                entity_type=AuditEntityType.PROFILE,
+                entity_id=profile_id,
+                details={
+                    'action': 'set_target_permissions',
+                    'permission_type': perm.permission_type,
+                    'created': created,
+                },
+                correlation_id=get_correlation_id()
+            )
+
         return perm
     
     def get_target_permissions(self, profile_id: int) -> ProfileTargetPermission | None:
@@ -375,6 +415,10 @@ class ProfileService:
     def delete_target_permissions(self, profile_id: int) -> bool:
         """
         Delete target permissions for a profile.
+
+        NOTE (PROF-LOW-02): This method has no callers in production code (views.py,
+        services_export_import.py). It is used exclusively in tests for setup/teardown.
+        Keeping as a utility for test fixtures and potential future admin endpoint.
 
         Args:
             profile_id: ID of the profile
@@ -414,19 +458,22 @@ class ProfileService:
             'profileactionpermission', 'profiletargetpermission'
         )
         
-        # Aggregate action permissions
+        # Aggregate action and target permissions in a single pass (PROF-HIGH-01 fix)
         action_permissions = []
+        target_permissions = []
         for profile in profiles:
-            # Use prefetched permissions instead of .get() to avoid N+1
-            perm = getattr(profile, 'profileactionpermission', None)
-            if perm:
+            is_admin = getattr(profile, 'is_admin', 0) == 1
+
+            # Action permissions — use prefetched relation to avoid N+1
+            perm_a = getattr(profile, 'profileactionpermission', None)
+            if perm_a:
                 action_permissions.append({
-                    'actions_type': perm.permission_type.lower(),
-                    'action_ids': perm.get_action_ids(),
-                    'tag_patterns': perm.get_tag_patterns(),
-                    'environments': perm.get_environments(),
+                    'actions_type': perm_a.permission_type.lower(),
+                    'action_ids': perm_a.get_action_ids(),
+                    'tag_patterns': perm_a.get_tag_patterns(),
+                    'environments': perm_a.get_environments(),
                 })
-            elif getattr(profile, 'is_admin', 0) == 1:
+            elif is_admin:
                 # Admin profiles (DBOPS, DBA) without explicit ProfileActionPermission
                 # get full access (actions=all, environments=all)
                 action_permissions.append({
@@ -435,19 +482,16 @@ class ProfileService:
                     'tag_patterns': [],
                     'environments': [],
                 })
-        
-        # Aggregate target permissions
-        target_permissions = []
-        for profile in profiles:
-            # Use prefetched permissions instead of .get() to avoid N+1
-            perm = getattr(profile, 'profiletargetpermission', None)
-            if perm:
+
+            # Target permissions — use prefetched relation to avoid N+1
+            perm_t = getattr(profile, 'profiletargetpermission', None)
+            if perm_t:
                 target_permissions.append({
-                    'targets_type': perm.permission_type.lower(),
-                    'target_names': perm.get_target_names(),
-                    'target_patterns': perm.get_target_patterns(),
+                    'targets_type': perm_t.permission_type.lower(),
+                    'target_names': perm_t.get_target_names(),
+                    'target_patterns': perm_t.get_target_patterns(),
                 })
-            elif getattr(profile, 'is_admin', 0) == 1:
+            elif is_admin:
                 # Admin profiles (DBOPS, DBA) without explicit ProfileTargetPermission
                 # get full access (targets=all)
                 target_permissions.append({
