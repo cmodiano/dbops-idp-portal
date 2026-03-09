@@ -71,3 +71,8 @@ CHANNEL_LAYERS = {
         "BACKEND": "channels.layers.InMemoryChannelLayer",
     },
 }
+
+# Story 65.2 — 1 worker en tests pour éviter les "database table is locked" SQLite
+# (SQLite ne supporte pas les écritures simultanées multi-threads)
+# Le code path ThreadPoolExecutor est toujours exercé, mais séquentiellement.
+PARALLEL_GROUP_MAX_WORKERS = 1

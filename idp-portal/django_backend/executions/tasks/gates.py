@@ -314,6 +314,15 @@ def _update_waiting_context(step: ExecutionStep, gate_status: dict, correlation_
     Story 25.3: Updates ExecutionStep.output with the latest gate_status evaluation.
     """
     output = step.get_output() or {}
+    gate_conditions = output.get('gate_conditions', [])
+
+    # Skip emit for approval_granted gates: status never changes until user approves.
+    # Avoids ~1 STEP_OUTPUT_UPDATED per minute while waiting (noisy, wasteful).
+    is_approval_gate = any(
+        isinstance(c, dict) and c.get('type') == 'approval_granted'
+        for c in gate_conditions
+    )
+
     output['gate_status'] = gate_status.get('gates', [])
     output['last_evaluated_at'] = timezone.now().isoformat()
 
@@ -330,9 +339,11 @@ def _update_waiting_context(step: ExecutionStep, gate_status: dict, correlation_
     step.set_output(output)
     step.save()
 
-    # V113: Durable event so UI can refresh gate status on reconnect
-    from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
-    WorkflowEventService.emit_step_output_updated(step.execution_id, step)
+    # V113: Durable event so UI can refresh gate status on reconnect.
+    # Skip for approval gates — no meaningful change until approval.
+    if not is_approval_gate:
+        from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
+        WorkflowEventService.emit_step_output_updated(step.execution_id, step)
 
     logger.info(
         "evaluate_waiting_gates_step_still_waiting",

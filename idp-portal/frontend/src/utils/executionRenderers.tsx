@@ -10,6 +10,7 @@
 
 /* eslint-disable react-refresh/only-export-components */
 
+import type { CSSProperties } from 'react';
 import { Tooltip, Avatar } from 'antd';
 import {
   DatabaseOutlined,
@@ -39,6 +40,27 @@ export function getEnvironmentBadgeColor(env: string | undefined | null): string
   const key = env.toLowerCase().replace(/[^a-z]/g, '');
   return (STYLE_TOKENS.environmentBadgeColor as Record<string, string>)[key]
     ?? STYLE_TOKENS.environmentBadgeColor.default;
+}
+
+/**
+ * Dark-mode-friendly styles for environment Tag (fixes low contrast in dark theme).
+ * Uses darker tint background + light text for readability.
+ */
+export function getEnvironmentTagDarkStyle(env: string | undefined | null): CSSProperties {
+  const color = getEnvironmentBadgeColor(env);
+  const hex = color.startsWith('#') ? color.slice(1) : null;
+  if (!hex || hex.length < 6) {
+    // Non-hex color (named color): fall back to a neutral dark-mode tint
+    return { color: STYLE_TOKENS.tagTextOnDark };
+  }
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  return {
+    backgroundColor: `rgba(${r}, ${g}, ${b}, 0.35)`,
+    color: STYLE_TOKENS.tagTextOnDark,
+    borderColor: `rgba(${r}, ${g}, ${b}, 0.5)`,
+  };
 }
 
 /** Engine icon size in execution tables (px) - clearly visible vendor logos.

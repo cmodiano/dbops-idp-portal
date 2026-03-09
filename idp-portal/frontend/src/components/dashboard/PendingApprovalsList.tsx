@@ -6,7 +6,7 @@
  */
 
 import { useState } from 'react';
-import { App, Table, Button, Space, Modal, Input, Tag, Typography, Tooltip } from 'antd';
+import { App, Table, Button, Space, Modal, Input, Tag, Typography, Tooltip, theme } from 'antd';
 import type { TableProps } from 'antd';
 import {
   CheckCircleOutlined,
@@ -17,10 +17,11 @@ import {
 
 import type { ExecutionResponse } from '../../types/api';
 import { usePendingApprovals } from '../../hooks/usePendingApprovals';
-import { getEnvironmentBadgeColor } from '../../utils/executionRenderers';
+import { getEnvironmentBadgeColor, getEnvironmentTagDarkStyle } from '../../utils/executionRenderers';
 import { getEnvironmentLabel } from '../../utils/environmentHelpers';
 import { STYLE_TOKENS } from '../../theme/styleTokens';
 import { humanizeKey, formatParamValue, partitionParameters, ENV_CONFIG_LABELS, IMPACT_LEVEL_LABELS } from './approvalContextUtils';
+import { useThemeMode } from '../../hooks/useThemeMode';
 
 const { Text } = Typography;
 const { TextArea } = Input;
@@ -36,6 +37,7 @@ interface ApprovalContextProps {
 }
 
 function ApprovalContext({ parameters, targets, compact, isPendingApproval }: ApprovalContextProps) {
+  const { token } = theme.useToken();
   const { targets: paramTargets, envConfig, stepParams, businessParams } = partitionParameters(parameters);
 
   // Use targets prop (rich objects) first, fallback to _targets from parameters
@@ -52,7 +54,7 @@ function ApprovalContext({ parameters, targets, compact, isPendingApproval }: Ap
 
   const containerStyle = compact
     ? { fontSize: 12 }
-    : { padding: 8, background: '#f5f5f5', borderRadius: 4, fontSize: 12 };
+    : { padding: 8, background: token.colorFillQuaternary, borderRadius: 4, fontSize: 12 };
 
   const formatEnvConfigValue = (key: string, value: unknown): string => {
     if (key === 'impact_level' && typeof value === 'string') {
@@ -180,6 +182,8 @@ export function PendingApprovalsList({
   onActionComplete,
 }: PendingApprovalsListProps) {
   const { message } = App.useApp();
+  const { token } = theme.useToken();
+  const { effectiveMode } = useThemeMode();
   // Story 38.6: DIP — use hook instead of direct service imports
   const { approve, reject, approveLoading, rejectLoading } = usePendingApprovals(onActionComplete);
   const [approveModalOpen, setApproveModalOpen] = useState(false);
@@ -245,7 +249,10 @@ export function PendingApprovalsList({
       dataIndex: 'environment',
       key: 'environment',
       render: (env: string | null) => (
-        <Tag color={getEnvironmentBadgeColor(env)}>
+        <Tag
+          color={getEnvironmentBadgeColor(env)}
+          style={effectiveMode === 'dark' ? getEnvironmentTagDarkStyle(env) : undefined}
+        >
           {getEnvironmentLabel(env ?? '')}
         </Tag>
       ),
@@ -332,9 +339,15 @@ export function PendingApprovalsList({
             <p>
               Vous êtes sur le point d'approuver l'exécution de{' '}
               <strong>{selectedExecution.action_name || `Action #${selectedExecution.action_id}`}</strong>{' '}
-              en environnement <Tag color={getEnvironmentBadgeColor(selectedExecution.environment)}>{getEnvironmentLabel(selectedExecution.environment ?? '')}</Tag>
+              en environnement{' '}
+              <Tag
+                color={getEnvironmentBadgeColor(selectedExecution.environment)}
+                style={effectiveMode === 'dark' ? getEnvironmentTagDarkStyle(selectedExecution.environment) : undefined}
+              >
+                {getEnvironmentLabel(selectedExecution.environment ?? '')}
+              </Tag>
             </p>
-            <p style={{ color: '#666', fontSize: 13 }}>
+            <p style={{ color: token.colorTextSecondary, fontSize: 13 }}>
               L'exécution sera lancée immédiatement après approbation.
             </p>
             <ApprovalContext parameters={selectedExecution.parameters} targets={selectedExecution.targets} isPendingApproval />
@@ -369,9 +382,15 @@ export function PendingApprovalsList({
             <p>
               Vous êtes sur le point de refuser l'exécution de{' '}
               <strong>{selectedExecution.action_name || `Action #${selectedExecution.action_id}`}</strong>{' '}
-              en environnement <Tag color={getEnvironmentBadgeColor(selectedExecution.environment)}>{getEnvironmentLabel(selectedExecution.environment ?? '')}</Tag>
+              en environnement{' '}
+              <Tag
+                color={getEnvironmentBadgeColor(selectedExecution.environment)}
+                style={effectiveMode === 'dark' ? getEnvironmentTagDarkStyle(selectedExecution.environment) : undefined}
+              >
+                {getEnvironmentLabel(selectedExecution.environment ?? '')}
+              </Tag>
             </p>
-            <p style={{ color: '#666', fontSize: 13 }}>
+            <p style={{ color: token.colorTextSecondary, fontSize: 13 }}>
               Le demandeur sera notifié du refus.
             </p>
             <ApprovalContext parameters={selectedExecution.parameters} targets={selectedExecution.targets} isPendingApproval />
