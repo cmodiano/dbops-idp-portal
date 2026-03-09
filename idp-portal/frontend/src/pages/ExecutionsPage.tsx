@@ -206,7 +206,7 @@ export default function ExecutionsPage() {
     [activeScope, sortField, sortOrder, integrationIconsMap, user, canViewAll, canApprove, cancellingId, handleCancelExecution, restartLoadingId, handleRestartExecution]
   );
 
-  const handleTableChange = (
+  const handleTableChange = useCallback((
     pagination: TablePaginationConfig,
     _filters: Record<string, FilterValue | null>,
     sorter: SorterResult<ExecutionResponse> | SorterResult<ExecutionResponse>[],
@@ -217,7 +217,7 @@ export default function ExecutionsPage() {
       setSortField(singleSorter.field as string);
       setSortOrder(singleSorter.order || 'descend');
     }
-  };
+  }, [currentPage, setCurrentPage, setSortField, setSortOrder]);
 
   // Skeleton loading
   if (loading && executions.length === 0) {

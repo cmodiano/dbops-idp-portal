@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Card, App } from 'antd';
-
-type NotificationInstance = ReturnType<typeof App.useApp>['notification'];
 import { ProfileWizard } from '../../components/admin/ProfileWizard';
 import { ProfilesTable } from '../../components/admin/ProfilesTable';
 import { ProfileImportModal } from '../../components/admin/ProfileImportModal';
 import { getProfiles, getProfile, deleteProfile, exportProfilesYaml } from '../../services/profiles_service';
 import type { ProfileResponse, ProfileListItem } from '../../types/api';
+
+type NotificationInstance = ReturnType<typeof App.useApp>['notification'];
 
 export interface ProfilesAdminPanelProps {
   notification: NotificationInstance;
@@ -54,7 +54,7 @@ export function ProfilesAdminPanel({ notification }: ProfilesAdminPanelProps) {
   const handleProfileDelete = async (record: ProfileListItem) => {
     try {
       await deleteProfile(record.id);
-      notification.success({ title: 'Succes', description: `Profil "${record.name}" supprime` });
+      notification.success({ title: 'Succès', description: `Profil "${record.name}" supprimé` });
       fetchProfiles();
     } catch (err) {
       notification.error({
@@ -68,8 +68,8 @@ export function ProfilesAdminPanel({ notification }: ProfilesAdminPanelProps) {
     setProfileModalOpen(false);
     setEditProfile(null);
     notification.success({
-      title: 'Succes',
-      description: editProfile ? `Profil "${profile.name}" mis a jour` : `Profil "${profile.name}" cree`,
+      title: 'Succès',
+      description: editProfile ? `Profil "${profile.name}" mis à jour` : `Profil "${profile.name}" créé`,
     });
     fetchProfiles();
   };
@@ -99,7 +99,7 @@ export function ProfilesAdminPanel({ notification }: ProfilesAdminPanelProps) {
     setImportYamlModalOpen(false);
     notification.success({
       title: 'Import YAML',
-      description: `Import reussi : ${created} cree(s), ${updated} mis a jour.`,
+      description: `Import réussi : ${created} créé(s), ${updated} mis à jour.`,
     });
     fetchProfiles();
   }, [notification, fetchProfiles]);

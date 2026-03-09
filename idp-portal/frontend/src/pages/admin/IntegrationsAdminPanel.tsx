@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Card, App } from 'antd';
-
-type NotificationInstance = ReturnType<typeof App.useApp>['notification'];
 import { IntegrationsTable } from '../../components/admin/IntegrationsTable';
 import { IntegrationForm } from '../../components/admin/IntegrationForm';
 import { getIntegrations, getIntegration, createIntegration, updateIntegration, deleteIntegration } from '../../services/integrations_service';
 import type { IntegrationResponse, IntegrationListItem, IntegrationCreate, IntegrationUpdate, TestConnectionResponse } from '../../types/api';
+
+type NotificationInstance = ReturnType<typeof App.useApp>['notification'];
 
 export interface IntegrationsAdminPanelProps {
   notification: NotificationInstance;
