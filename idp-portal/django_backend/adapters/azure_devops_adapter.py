@@ -55,7 +55,7 @@ class AzureDevOpsAdapter(BaseAdapter, IHealthCheckable):
         base_url: str,
         auth_headers: dict[str, str],
         timeout: float = AZURE_DEVOPS_DEFAULT_TIMEOUT,
-        verify_ssl: bool = False,
+        verify_ssl: bool = True,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.auth_headers = auth_headers

@@ -835,7 +835,7 @@ development_status:
     66-19-revue-backend-audit: done
     66-20-revue-backend-profiles: done
     66-21-revue-backend-inventory: done
-    66-22-revue-backend-adapters: backlog
+    66-22-revue-backend-adapters: done
     66-23-revue-backend-dashboard-admin-analytics: backlog
     66-24-revue-backend-output-schemas-reference-help: backlog
     66-25-revue-backend-services-utils: backlog

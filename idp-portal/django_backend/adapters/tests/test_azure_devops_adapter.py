@@ -612,6 +612,31 @@ class TestFactory:
         )
         assert isinstance(adapter, AzureDevOpsAdapter)
 
+    def test_factory_azure_devops_default_verify_ssl_true(self) -> None:
+        """ADP-HIGH-01: AzureDevOpsAdapter factory default verify_ssl=True (cloud public service)."""
+        from adapters import get_platform_adapter
+
+        adapter = get_platform_adapter(
+            platform_type="azure_devops",
+            base_url="https://dev.azure.com/org/proj",
+            auth_headers={"Authorization": "Basic abc"},
+        )
+        assert isinstance(adapter, AzureDevOpsAdapter)
+        assert adapter.verify_ssl is True
+
+    def test_factory_azure_devops_can_override_verify_ssl_false(self) -> None:
+        """AzureDevOpsAdapter factory can set verify_ssl=False for on-prem Azure DevOps Server."""
+        from adapters import get_platform_adapter
+
+        adapter = get_platform_adapter(
+            platform_type="azure_devops",
+            base_url="https://ado.internal.example.com/org/proj",
+            auth_headers={"Authorization": "Basic abc"},
+            verify_ssl=False,
+        )
+        assert isinstance(adapter, AzureDevOpsAdapter)
+        assert adapter.verify_ssl is False
+
     def test_factory_aap_still_works(self) -> None:
         """Factory still returns AAPAdapter for 'aap' (non-regression)."""
         from adapters import get_platform_adapter

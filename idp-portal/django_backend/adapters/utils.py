@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import base64
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import requests
 import structlog
@@ -52,8 +52,7 @@ def resolve_credential(
     if integration and getattr(integration, 'secret_service_id', None):
         from integrations.models import Integration as IntegrationModel
 
-        sid = getattr(integration, 'secret_service_id', None)
-        assert sid is not None  # we only enter when getattr returned truthy
+        sid = cast(str, integration.secret_service_id)  # ADP-LOW-01: cast() pour type narrowing, évite assert en production
         try:
             vault_integration = IntegrationModel.objects.get(id=int(sid))
         except IntegrationModel.DoesNotExist:
@@ -96,7 +95,7 @@ def build_auth_headers_from_credentials(
 
     Args:
         credential_ref: Already-resolved credential (e.g. token or "user:pass" for basic).
-        auth_flow: "basic", "pat", or "token" (default).
+        auth_flow: "basic", "api_key", "pat", or "token" (default).
 
     Returns:
         Dict of HTTP headers (e.g. {"Authorization": "Bearer <token>"}).

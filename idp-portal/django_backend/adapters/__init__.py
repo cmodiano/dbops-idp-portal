@@ -29,9 +29,9 @@ def _factory_aap(base_url: str, auth_headers: dict, timeout: float | None = None
     return AAPAdapter(**kw)
 
 
-def _factory_tower(base_url: str, auth_headers: dict, timeout: float | None = None, **kwargs) -> BaseAdapter:
+def _factory_tower(base_url: str, auth_headers: dict, timeout: float | None = None, ssl_verify: bool = False, **kwargs) -> BaseAdapter:
     from adapters.tower_adapter import TowerAdapter
-    kw: dict = {"base_url": base_url, "auth_headers": auth_headers, **kwargs}
+    kw: dict = {"base_url": base_url, "auth_headers": auth_headers, "ssl_verify": ssl_verify, **kwargs}
     if timeout is not None:
         kw["timeout"] = timeout
     return TowerAdapter(**kw)
