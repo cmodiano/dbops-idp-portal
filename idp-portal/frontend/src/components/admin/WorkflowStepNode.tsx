@@ -149,6 +149,10 @@ const WorkflowStepNode: React.FC<NodeProps> = ({ data, selected }) => {
     if (stepType === 'schedule_execution') {
       return nodeData.name ?? nodeData.action_name ?? 'Planifier une exécution';
     }
+    // Story 65.5: parallel_group
+    if (stepType === 'parallel_group') {
+      return nodeData.name ?? 'Groupe parallèle';
+    }
     return nodeData.name ?? '';
   }, [stepType, nodeData]);
 
@@ -174,7 +178,7 @@ const WorkflowStepNode: React.FC<NodeProps> = ({ data, selected }) => {
           : token.colorBorderSecondary;
 
   // Subtle 2px border for all states, no heavy glow
-  const borderWidth = nodeData.executionStatus === 'RUNNING' ? 2 : 2;
+  const borderWidth = 2;
   const boxShadowNode = nodeData.executionStatus === 'RUNNING'
     ? '0 0 6px #fa8c1640'
     : selected
@@ -200,6 +204,29 @@ const WorkflowStepNode: React.FC<NodeProps> = ({ data, selected }) => {
           <div style={{ marginBottom: 4, fontWeight: 600 }}>{primaryTitle}</div>
           <div>Statut: {executionStatusLabels[nodeData.executionStatus] ?? nodeData.executionStatus}</div>
           {nodeData.executionDuration && <div>Durée: {nodeData.executionDuration}</div>}
+        </div>
+      );
+    }
+
+    // Story 65.5: Tooltip parallel_group — liste des sous-steps + routage
+    if (stepType === 'parallel_group') {
+      const steps = nodeData.parallel_steps ?? [];
+      const allSuccess = nodeData.on_all_success_step_id ?? 'Fin';
+      const anyError = nodeData.on_any_error_step_id ?? 'Fin';
+      return (
+        <div style={{ fontSize: 12 }}>
+          <div style={{ marginBottom: 4, fontWeight: 600 }}>{primaryTitle}</div>
+          <div style={{ marginBottom: 2 }}>
+            Étapes parallèles : {steps.length === 0 ? 'Non configuré' : steps.join(', ')}
+          </div>
+          <div>
+            <CheckCircleOutlined style={{ color: '#52c41a', marginRight: 4 }} />
+            Tout succès → {allSuccess}
+          </div>
+          <div>
+            <CloseCircleOutlined style={{ color: '#ff4d4f', marginRight: 4 }} />
+            Une erreur → {anyError}
+          </div>
         </div>
       );
     }
@@ -281,6 +308,12 @@ const WorkflowStepNode: React.FC<NodeProps> = ({ data, selected }) => {
             {nodeData.schedule_config.schedule_source === 'parameter' && 'Paramètre utilisateur'}
             {nodeData.schedule_config.schedule_source === 'fixed_offset' && `Offset: ${nodeData.schedule_config.fixed_offset ?? '?'}`}
             {nodeData.schedule_config.schedule_source === 'recurring' && 'Récurrent'}
+          </div>
+        )}
+        {/* Story 65.5: Nombre de sous-steps parallèles */}
+        {stepType === 'parallel_group' && nodeData.parallel_steps && nodeData.parallel_steps.length > 0 && (
+          <div style={{ fontSize: 11, color: token.colorTextSecondary, marginTop: 2 }}>
+            {nodeData.parallel_steps.length} étapes parallèles
           </div>
         )}
         {/* Secondary info for platform steps */}

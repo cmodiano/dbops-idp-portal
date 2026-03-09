@@ -7,6 +7,8 @@
  * - evaluation: EvaluationStepConfig
  * - gate: GateStepConfig
  * - http_request: HttpRequestStepConfig
+ * - schedule_execution: ScheduleStepConfig (Story 57.16)
+ * - parallel_group: ParallelGroupStepConfig (Story 65.5)
  */
 
 import React, { useMemo } from 'react';
@@ -20,6 +22,7 @@ import { EvaluationStepConfig } from './step-config/EvaluationStepConfig';
 import { GateStepConfig } from './step-config/GateStepConfig';
 import { HttpRequestStepConfig } from './step-config/HttpRequestStepConfig';
 import { ScheduleStepConfig } from './step-config/ScheduleStepConfig';
+import { ParallelGroupStepConfig } from './step-config/ParallelGroupStepConfig'; // Story 65.5
 import type { WorkflowStepType } from '../../types/api';
 import { getStepLabel } from '../../utils/workflowStepLabels';
 
@@ -311,6 +314,16 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({
         {/* schedule_execution — Story 57.16 */}
         {stepType === 'schedule_execution' && (
           <ScheduleStepConfig data={data} onUpdate={handleUpdate} disabled={disabled} />
+        )}
+
+        {/* parallel_group — Story 65.5 */}
+        {stepType === 'parallel_group' && (
+          <ParallelGroupStepConfig
+            data={data}
+            onUpdate={handleUpdate}
+            disabled={disabled}
+            availableStepOptions={availableStepOptions}
+          />
         )}
 
         <Divider style={{ margin: '8px 0' }} />
