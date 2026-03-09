@@ -189,12 +189,31 @@ If steps lack `step_id`:
 2. Ensure `resume_container_workflow_from_gate` can find the next step by `order` when `step_id` is absent, or
 3. Require `step_id` for all workflow steps (including linear gates) in validation.
 
+## Similar Cases for Other Gate Types
+
+### Gate types that can pause and resume
+
+| Gate type | Satisfied by | Resume path | step_order fix |
+|-----------|--------------|-------------|----------------|
+| **approval_granted** | User approval (endpoint) | approval_views → resume_container_workflow_from_gate | ✓ Applied |
+| **maintenance_window** | evaluate_waiting_gates (in window) | _transition_step_to_running → resume_container_workflow_from_gate | ✓ Applied |
+| **Timeout (on_timeout=SKIP)** | evaluate_waiting_gates (timeout_triggered) | _handle_gate_timeout → resume_container_workflow_from_gate (ADR-007) or retry_workflow_step (old-style) | ✓ Fixed |
+
+### Conclusion
+
+- **approval** and **maintenance_window** both use `resume_container_workflow_from_gate` when the gate is satisfied. The `_step_order_counter` fix applies to both.
+- **Timeout with on_timeout=SKIP** (fixed): `_handle_gate_timeout` now detects container workflows (ADR-007) and uses `resume_container_workflow_from_gate` instead of `retry_workflow_step`. Old-style workflows continue to use `retry_workflow_step`.
+
+### Other resume entry points
+
+- **resume_container_workflow_from_gate** is the only code path that creates a ContainerWorkflowRuntime with `workflow_steps = remaining_steps` (subset). All gate-satisfied resumes (approval, maintenance_window) go through it. No other similar case for step_order.
+
 ## Files Reference
 
 | File | Relevance |
 |------|------------|
 | `executions/views/approval_views.py` | ApproveStepView, _get_step_config, _get_next_step_id_by_order |
-| `executions/tasks/gates.py` | resume_container_workflow_from_gate |
+| `executions/tasks/gates.py` | resume_container_workflow_from_gate, _transition_step_to_running, _handle_gate_timeout |
 | `executions/container_workflow_runtime.py` | _execute_workflow_steps, _load_workflow_steps |
 | `catalog/validation.py` | step_id requirement, uses_branches_or_retry |
 | `executions/services/runnable_steps.py` | RUNNABLE_STEPS (not used for container workflows) |
