@@ -406,8 +406,10 @@ class TestResumeContainerWorkflowFromGate:
         ]
 
         # Step COMPLETED avant le gate (step_name = nom humain, pas step_id)
+        # config_step_id=None pour forcer le fallback name→step_id (step_name_to_id)
         mock_db_step = MagicMock()
         mock_db_step.step_name = 'Terraform Plan'
+        mock_db_step.config_step_id = None
         mock_db_step.get_output.return_value = {'plan_output': 'some value'}
 
         captured_runtime = {}
@@ -452,6 +454,8 @@ class TestTransitionStepToRunningADR007:
         mock_step.step_name = step_name
         mock_step.step_order = 1
         mock_step.execution_id = execution_id
+        # config_step_id=None pour que le fallback step_name matche step_def
+        mock_step.config_step_id = None
         mock_exec = MagicMock()
         mock_exec.id = execution_id
         mock_exec.status.RUNNING = 'RUNNING'
@@ -485,7 +489,10 @@ class TestTransitionStepToRunningADR007:
                 with patch.object(resume_container_workflow_from_gate, 'apply_async') as mock_apply:
                     _transition_step_to_running(mock_step, gate_status, 'corr-123')
 
-        mock_apply.assert_called_once_with(args=[mock_step.execution_id, 'next-step'])
+        mock_apply.assert_called_once_with(
+            args=[mock_step.execution_id, 'next-step'],
+            queue='default',
+        )
 
     @pytest.mark.django_db
     def test_adr007_step_without_on_success_completes_execution(self):

@@ -355,6 +355,7 @@ class TestHandleGateTimeout:
             execution=execution,
             status=ExecutionStepStatus.WAITING,
             step_name="gate-step",
+            config_step_id="s1",  # match action step pour step_def lookup
         )
 
         gate_status = {"action": "SKIPPED", "timeout_hours": 1}
@@ -396,6 +397,7 @@ class TestHandleGateTimeout:
             execution=execution,
             status=ExecutionStepStatus.WAITING,
             step_name="gate-step",
+            config_step_id="gate-1",  # match action step pour step_def lookup
         )
 
         gate_status = {"action": "SKIPPED", "timeout_hours": 1}
