@@ -829,19 +829,27 @@ class TestVaultServiceRegistry:
 class TestWarmupVaultCache:
     """Test warmup_vault_cache pre-loading."""
 
+    @staticmethod
+    def _make_mock_qs(rows: list) -> MagicMock:
+        """Crée un mock QuerySet supportant .count() et __iter__ (VAULT-LOW-02)."""
+        mock_qs = MagicMock()
+        mock_qs.count.return_value = len(rows)
+        mock_qs.__iter__ = MagicMock(return_value=iter(rows))
+        return mock_qs
+
     @patch("adapters.utils.resolve_credential")
     def test_warmup_resolves_vault_credentials(self, mock_resolve):
         """warmup_vault_cache calls resolve_credential for each vault: integration."""
         from collections import namedtuple
 
         Row = namedtuple("Row", ["id", "credential_ref", "secret_service_id"])
-        mock_qs = [
+        rows = [
             Row(id=1, credential_ref="vault:secret/data/app1#token", secret_service_id=None),
             Row(id=2, credential_ref="vault:secret/data/app2#password", secret_service_id=None),
         ]
 
         with patch("integrations.models.Integration") as MockIntegration:
-            MockIntegration.objects.filter.return_value.exclude.return_value.values_list.return_value = mock_qs
+            MockIntegration.objects.filter.return_value.exclude.return_value.values_list.return_value = self._make_mock_qs(rows)
 
             from services.vault_service import warmup_vault_cache
             stats = warmup_vault_cache()
@@ -857,14 +865,14 @@ class TestWarmupVaultCache:
         from collections import namedtuple
 
         Row = namedtuple("Row", ["id", "credential_ref", "secret_service_id"])
-        mock_qs = [
+        rows = [
             Row(id=1, credential_ref="vault:secret/data/shared#token", secret_service_id=None),
             Row(id=2, credential_ref="vault:secret/data/shared#token", secret_service_id=None),
             Row(id=3, credential_ref="vault:secret/data/other#key", secret_service_id=None),
         ]
 
         with patch("integrations.models.Integration") as MockIntegration:
-            MockIntegration.objects.filter.return_value.exclude.return_value.values_list.return_value = mock_qs
+            MockIntegration.objects.filter.return_value.exclude.return_value.values_list.return_value = self._make_mock_qs(rows)
 
             from services.vault_service import warmup_vault_cache
             stats = warmup_vault_cache()
@@ -880,13 +888,13 @@ class TestWarmupVaultCache:
         from collections import namedtuple
 
         Row = namedtuple("Row", ["id", "credential_ref", "secret_service_id"])
-        mock_qs = [
+        rows = [
             Row(id=1, credential_ref="vault:secret/data/app1#token", secret_service_id=None),
             Row(id=2, credential_ref="vault:secret/data/app2#token", secret_service_id=None),
         ]
 
         with patch("integrations.models.Integration") as MockIntegration:
-            MockIntegration.objects.filter.return_value.exclude.return_value.values_list.return_value = mock_qs
+            MockIntegration.objects.filter.return_value.exclude.return_value.values_list.return_value = self._make_mock_qs(rows)
 
             from services.vault_service import warmup_vault_cache
             stats = warmup_vault_cache()
@@ -898,7 +906,7 @@ class TestWarmupVaultCache:
     def test_warmup_no_integrations(self):
         """No vault integrations → early return with zero counts."""
         with patch("integrations.models.Integration") as MockIntegration:
-            MockIntegration.objects.filter.return_value.exclude.return_value.values_list.return_value = []
+            MockIntegration.objects.filter.return_value.exclude.return_value.values_list.return_value = self._make_mock_qs([])
 
             from services.vault_service import warmup_vault_cache
             stats = warmup_vault_cache()

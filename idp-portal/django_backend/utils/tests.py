@@ -225,14 +225,30 @@ class TestValidateJsonSchemaTypeBranches:
             result = safe_serialize_json({'key': 'value'})
         assert result is None
 
+    # 3.9b — bool non accepté comme "number" (JSON Schema: boolean ≠ number, Story 66.25 review)
+    def test_number_schema_rejects_boolean_true(self):
+        """True/False ne doivent pas passer la validation de type 'number' (bool sous-classe de int)."""
+        is_valid, error = validate_json_schema(True, {'type': 'number'})
+        assert is_valid is False
+        assert error is not None
+
+    def test_number_schema_rejects_boolean_false(self):
+        """False ne doit pas passer la validation de type 'number'."""
+        is_valid, error = validate_json_schema(False, {'type': 'number'})
+        assert is_valid is False
+        assert error is not None
+
     # 3.9 — serialize_json avec entity_id fourni
     def test_serialize_json_error_log_includes_entity_id(self):
-        """serialize_json avec entity_id → le log inclut entity_id dans le message de log."""
+        """serialize_json avec entity_id → le log inclut entity_id comme kwarg structlog (JSON-MED-01)."""
         import pytest
         from structlog.testing import capture_logs
         with capture_logs() as cap_logs:
             with pytest.raises(TypeError, match="Cannot serialize"):
                 serialize_json(object(), field_name="test_field", entity_id=42)
         assert len(cap_logs) >= 1
-        log_event = cap_logs[0].get("event", "")
-        assert "42" in log_event, f"entity_id '42' absent du log: {log_event}"
+        log_entry = cap_logs[0]
+        # JSON-MED-01: event est un nom structuré, entity_id est un kwarg
+        assert log_entry.get("event") == "json_serialize_error", f"event inattendu: {log_entry.get('event')}"
+        assert log_entry.get("entity_id") == 42, f"entity_id '42' absent du log: {log_entry}"
+        assert log_entry.get("field_name") == "test_field"

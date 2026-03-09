@@ -838,7 +838,7 @@ development_status:
     66-22-revue-backend-adapters: done
     66-23-revue-backend-dashboard-admin-analytics: done
     66-24-revue-backend-output-schemas-reference-help: done
-    66-25-revue-backend-services-utils: backlog
+    66-25-revue-backend-services-utils: done
     66-26-revue-documentation-docs-readme: backlog
     66-27-consolidation-synthese-findings-plan-correction: backlog
     epic-66-retrospective: optional

@@ -8,6 +8,8 @@ consumed by the portal for logging, not for executing jobs.
 from __future__ import annotations
 
 import asyncio
+import json
+import time
 from typing import cast
 
 import httpx
@@ -25,6 +27,10 @@ SPLUNK_DEFAULT_TIMEOUT = 30.0
 SPLUNK_MAX_RETRIES = 2
 SPLUNK_RETRY_DELAY = 5.0
 _TRANSIENT_STATUS_CODES = frozenset({500, 503})
+
+# SPLUNK-LOW-01: Max wait time for a single Splunk search poll cycle (seconds).
+# Capped independently from self.timeout to avoid blocking the event loop too long per poll.
+_SPLUNK_POLL_TIMEOUT_MAX: float = 5.0
 
 
 class SplunkService(IHealthCheckable):
@@ -131,7 +137,6 @@ class SplunkService(IHealthCheckable):
             lines.append(payload)
 
         # For batch, concatenate JSON objects (Splunk HEC accepts this)
-        import json
         body = "\n".join(json.dumps(p) for p in lines)
 
         logger.info(
@@ -180,7 +185,6 @@ class SplunkService(IHealthCheckable):
         self, url: str, payload: dict, *, correlation_id: str | None = None
     ) -> dict:
         """POST JSON payload to Splunk HEC with retry on transient errors."""
-        import json
         return await self._post_raw_with_retry(
             url, json.dumps(payload), correlation_id=correlation_id
         )
@@ -196,7 +200,7 @@ class SplunkService(IHealthCheckable):
             try:
                 async with httpx.AsyncClient(
                     timeout=self.timeout,
-                    verify=False,  # nosec B501  # noqa: S501 — corporate CAs handled externally
+                    verify=False,  # nosec B501 — Corporate CA not trusted by httpx bundle; requests made on internal network only  # noqa: S501
                 ) as client:
                     response = await client.post(url, content=body, headers=headers)
 
@@ -307,15 +311,13 @@ class SplunkService(IHealthCheckable):
         Returns:
             List of result dicts (each has _raw etc.), or None on error.
         """
-        import time  # noqa: PLC0415
-
         search_url = f"{self.base_url}/services/search/jobs"
         headers = {**self.auth_headers, "Content-Type": "application/x-www-form-urlencoded"}
 
         try:
             async with httpx.AsyncClient(
                 timeout=self.timeout,
-                verify=False,  # nosec B501  # noqa: S501
+                verify=False,  # nosec B501 — Corporate CA not trusted by httpx bundle; requests made on internal network only  # noqa: S501
             ) as client:
                 resp = await client.post(
                     search_url,
@@ -329,7 +331,7 @@ class SplunkService(IHealthCheckable):
                     return None
 
                 job_url = f"{search_url}/{sid}"
-                poll_timeout = min(self.timeout, 5.0)
+                poll_timeout = min(self.timeout, _SPLUNK_POLL_TIMEOUT_MAX)
                 deadline = time.monotonic() + poll_timeout_sec
                 while time.monotonic() < deadline:
                     status_resp = await client.get(
@@ -380,8 +382,6 @@ class SplunkService(IHealthCheckable):
         Returns:
             The log content string, or ``None`` if not found / error.
         """
-        import json  # noqa: PLC0415
-
         def _escape_spl_value(val: str) -> str:
             """Escape backslash and double-quote for safe SPL string interpolation."""
             return val.replace("\\", "\\\\").replace('"', '\\"')
@@ -414,8 +414,6 @@ class SplunkService(IHealthCheckable):
         platform_job_id in Splunk are skipped. Best-effort: returns empty dict
         on any error or timeout.
         """
-        import json  # noqa: PLC0415
-
         spl = f'search sourcetype="idp:platform_log" execution_id={execution_id}'
         results = await self._run_splunk_search_job(spl, execution_id)
         if results is None:
@@ -446,7 +444,7 @@ class SplunkService(IHealthCheckable):
             async with httpx.AsyncClient(
                 headers=self.auth_headers,
                 timeout=self.timeout,
-                verify=False,  # nosec B501  # noqa: S501 — match send_event path, corporate CAs handled externally
+                verify=False,  # nosec B501 — Corporate CA not trusted by httpx bundle; requests made on internal network only  # noqa: S501
             ) as client:
                 response = await client.get(url)
                 response.raise_for_status()

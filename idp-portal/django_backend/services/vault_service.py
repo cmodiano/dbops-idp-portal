@@ -29,6 +29,10 @@ from integrations.health_check import HealthCheckResult, HealthCheckStatus, IHea
 
 logger = structlog.get_logger(__name__)
 
+# VAULT-LOW-01: Renew Vault token when TTL is below this threshold (seconds).
+# 30s gives enough window for in-flight requests to complete before expiry.
+_TOKEN_RENEWAL_THRESHOLD_S: int = 30
+
 # Transient HTTP status codes that trigger retry
 _TRANSIENT_STATUS_CODES = frozenset({500, 502, 503})
 
@@ -466,16 +470,16 @@ class VaultService(IHealthCheckable):
         if not self._token_renewable or not self._token_expire_time:
             return
 
-        # Renew if less than 30s remaining
+        # Renew if less than _TOKEN_RENEWAL_THRESHOLD_S remaining (VAULT-LOW-01)
         remaining = self._token_expire_time - time.monotonic()
-        if remaining > 30:
+        if remaining > _TOKEN_RENEWAL_THRESHOLD_S:
             return
 
         # CRIT-2 FIX: Acquire lock for thread-safe token renewal
         with self._cache_lock:
             # Double-check under lock (another thread may have renewed already)
             remaining = self._token_expire_time - time.monotonic()
-            if remaining > 30:
+            if remaining > _TOKEN_RENEWAL_THRESHOLD_S:
                 return
 
             url = f"{self.vault_addr}/v1/auth/token/renew-self"
@@ -624,7 +628,9 @@ def warmup_vault_cache() -> dict[str, int]:
         .values_list("id", "credential_ref", "secret_service_id", named=True)
     )
 
-    stats["total"] = len(integrations)
+    # VAULT-LOW-02: Use .count() instead of len() to avoid loading entire QuerySet
+    # into memory just to count — executes SELECT COUNT(*) efficiently.
+    stats["total"] = integrations.count()
 
     if stats["total"] == 0:
         logger.info("vault_cache_warmup_skip", reason="no vault credential_refs found")
