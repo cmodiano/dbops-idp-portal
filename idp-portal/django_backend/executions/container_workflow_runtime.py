@@ -298,7 +298,7 @@ class ContainerWorkflowRuntime:
             ExecutionStatus of the step (COMPLETED for SKIPPED steps)
         """
         step_order = step.get('order', 0)
-        step_name = step.get('name') or f"Step {step_order}"
+        step_name = step.get('name') or step.get('step_id') or f"Step {step_order}"
         step_id = step.get('step_id')
         step_type = step.get('step_type') or 'platform'  # ADR-007 §3d, coalesce null/"" to platform
 
@@ -500,7 +500,7 @@ class ContainerWorkflowRuntime:
 
         Story 65.2 — AC4, AC7.
         """
-        step_name = step.get('name') or f"Step {step_order}"
+        step_name = step.get('name') or step.get('step_id') or f"Step {step_order}"
         step_id = step.get('step_id')
         step_type = step.get('step_type') or 'platform'
 

@@ -167,6 +167,7 @@ def _get_step_config(step: ExecutionStep) -> dict:
 def _get_next_step_id_by_order(execution_steps: list, current_step_config: dict) -> str | None:
     """Retourne le step_id du step suivant par ordre (fallback quand on_success_step_id absent).
     Exclut les members de parallel_group (non routables directement, comme dans le runtime).
+    Utilise un fallback par identité (step_id/name) quand la comparaison par order échoue.
     """
     # Collect member step_ids from parallel_group steps
     member_step_ids: set[str] = set()
@@ -185,9 +186,26 @@ def _get_next_step_id_by_order(execution_steps: list, current_step_config: dict)
         and s.get("step_id")
         and s.get("step_id") not in member_step_ids
     ]
-    sorted_steps = sorted(candidate_steps, key=lambda s: s.get("order", 0))
+    sorted_steps = sorted(
+        enumerate(candidate_steps),
+        key=lambda ix: (ix[1].get("order", 0), ix[0]),
+    )
     current_order = current_step_config.get("order", 0)
-    for s in sorted_steps:
+    current_sid = current_step_config.get("step_id")
+    current_name = current_step_config.get("name")
+
+    # Try identity-based match first: find current step in sorted list, return next
+    if current_sid or current_name:
+        for i, (_orig_idx, s) in enumerate(sorted_steps):
+            if (current_sid and s.get("step_id") == current_sid) or (
+                current_name and s.get("name") == current_name
+            ):
+                if i + 1 < len(sorted_steps):
+                    return sorted_steps[i + 1][1].get("step_id")
+                return None  # current step is last
+
+    # Fallback: first step with strictly greater order
+    for _orig_idx, s in sorted_steps:
         if s.get("order", 0) > current_order:
             return s.get("step_id")
     return None

@@ -239,7 +239,9 @@ def _transition_step_to_running(step: ExecutionStep, gate_status: dict, correlat
     # Match by step_order from output's gate_conditions context or by name
     step_def = None
     for s in execution_steps:
-        if isinstance(s, dict) and s.get('name') == step.step_name:
+        if isinstance(s, dict) and (
+            s.get('name') == step.step_name or s.get('step_id') == step.step_name
+        ):
             step_def = s
             break
 
@@ -248,6 +250,10 @@ def _transition_step_to_running(step: ExecutionStep, gate_status: dict, correlat
         # Les steps ADR-007 ont un step_type ; les old-style steps n'en ont pas
         is_adr007_step = bool(step_def.get('step_type'))
         on_success_step_id = step_def.get('on_success_step_id')
+
+        # Fallback: linear order when gate has no explicit on_success_step_id
+        if is_adr007_step and not on_success_step_id:
+            on_success_step_id = _get_next_step_id_by_order(execution_steps, step_def)
 
         # Access through package namespace for testability (retry_workflow_step)
         import executions.tasks as _tasks
@@ -370,13 +376,32 @@ def _update_waiting_context(step: ExecutionStep, gate_status: dict, correlation_
 
 
 def _get_next_step_id_by_order(execution_steps: list, current_step_config: dict) -> str | None:
-    """Return step_id of next step by order (fallback when on_success_step_id absent)."""
+    """Return step_id of next step by order (fallback when on_success_step_id absent).
+
+    Uses identity-based matching (step_id/name) as primary strategy, falling back
+    to strict order comparison.
+    """
+    candidate_steps = [s for s in execution_steps if isinstance(s, dict) and s.get('step_id')]
     sorted_steps = sorted(
-        [s for s in execution_steps if isinstance(s, dict) and s.get('step_id')],
-        key=lambda s: s.get('order', 0),
+        enumerate(candidate_steps),
+        key=lambda ix: (ix[1].get('order', 0), ix[0]),
     )
     current_order = current_step_config.get('order', 0)
-    for s in sorted_steps:
+    current_sid = current_step_config.get('step_id')
+    current_name = current_step_config.get('name')
+
+    # Try identity-based match first: find current step in sorted list, return next
+    if current_sid or current_name:
+        for i, (_orig_idx, s) in enumerate(sorted_steps):
+            if (current_sid and s.get('step_id') == current_sid) or (
+                current_name and s.get('name') == current_name
+            ):
+                if i + 1 < len(sorted_steps):
+                    return sorted_steps[i + 1][1].get('step_id')
+                return None  # current step is last
+
+    # Fallback: first step with strictly greater order
+    for _orig_idx, s in sorted_steps:
         if s.get('order', 0) > current_order:
             return s.get('step_id')
     return None
