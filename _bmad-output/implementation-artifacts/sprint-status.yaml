@@ -828,7 +828,7 @@ development_status:
     66-12-revue-frontend-contexts-utils-theme-types: done
     66-13-revue-frontend-app-main-routing: done
     66-14-revue-backend-core: done
-    66-15-revue-backend-catalog: review
+    66-15-revue-backend-catalog: done
     66-16-revue-backend-executions: backlog
     66-17-revue-backend-idp-auth: backlog
     66-18-revue-backend-integrations: backlog

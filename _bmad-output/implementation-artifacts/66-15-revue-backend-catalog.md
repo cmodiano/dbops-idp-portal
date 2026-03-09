@@ -1,6 +1,6 @@
 # Story 66.15 : Revue Backend — `catalog/`
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -152,8 +152,8 @@ Afin d'identifier et corriger bugs, lacunes de tests, code mort, violations de c
 
 - [x] Tâche 16 : Finalisation (AC: #15, #16, #17, #19)
   - [x] Appliquer toutes les corrections HIGH et MEDIUM identifiées
-  - [ ] Exécuter `pytest catalog/tests/ -x` après corrections — pas de régression
-  - [ ] Consolider le rapport de findings dans la section ci-dessous
+  - [x] Exécuter `pytest catalog/tests/ -x` après corrections — pas de régression
+  - [x] Consolider le rapport de findings dans la section ci-dessous
 
 ## Dev Notes
 
@@ -268,6 +268,11 @@ Pattern commit pour cette story : `feat(story-66-15): revue qualité du module c
 | BE-CAT-008 | `serializers.py` | Qualité | LOW | `parameters_schema` non validé comme JSON Schema Draft 7 complet (pas de dépendance `jsonschema`) | Documenté — validation métier suffisante pour l'API, JSON Schema full-validate hors périmètre |
 | BE-CAT-009 | `services_export_import.py` | Perf | LOW | `export_actions_yaml()` appelle `export_action_yaml()` N fois (N requêtes DB) — pas d'`iterator()` pour gros catalogues | Documenté — acceptable pour usage CaC manuel, optimisation future si volumétrie importante |
 | BE-CAT-013 | `views/business_rule_views.py` | Convention | LOW | `AuditLog.objects.create_entry()` au lieu de `AuditService.create_entry()` — fonctionnellement équivalent mais incohérent | Documenté — équivalent fonctionnel (AuditService délègue à AuditLog.objects.create_entry) |
+| CAT-NEW-01 | `services_export_import_tags.py:104` | Convention | MEDIUM | `logger.exception(..., extra={"normalized": normalized})` — pattern stdlib subsistant malgré le fix BE-CAT-014 (logger migré vers structlog, mais `extra={}` non corrigé) | **Appliqué** (code review) : `logger.exception("...", normalized=normalized)` |
+| CAT-NEW-02 | `views/action_views.py:mutex_rules` | Bug | MEDIUM | `mutex_rules` POST crée règle primaire A→B puis symétrique B→A sans `transaction.atomic` — règle orpheline si 2ème create() échoue | **Appliqué** (code review) : `with transaction.atomic():` autour des deux créations |
+| CAT-NEW-03 | `views/action_views.py:update_remediation_rules` | Convention | MEDIUM | `update_remediation_rules` sauvegarde sans audit log — incohérent avec toutes les autres mutations du module | **Appliqué** (code review) : ajout `AuditService.create_entry()` avec `AuditActionType.ACTION_UPDATED` |
+| CAT-NEW-04 | `services_export_import.py:import_action_yaml` | Convention | LOW | `AuditService.create_entry()` sans `correlation_id` — incohérent avec les autres audits | **Appliqué** (code review) : import `get_correlation_id` + ajout `correlation_id=get_correlation_id()` |
+| CAT-NEW-05 | `views/catalog_views.py:get_queryset` | Qualité | LOW | Paramètre OpenAPI `favorites_only` déclaré (l.39) mais non implémenté dans `get_queryset()` — feature stub sans comportement | Documenté — implémentation future (hors périmètre pre-release) |
 
 ### References
 
@@ -304,10 +309,10 @@ claude-sonnet-4-6
 
 - Revue complète des 20+ fichiers Python du module `catalog/` passée avec checklist qualité backend
 - 1 finding HIGH corrigé : filtrage RBAC déplacé de Python (list-in-memory) vers DB (queryset.filter) dans `catalog_views.py`
-- 4 findings MEDIUM corrigés : cap `MAX_PAGE_SIZE` dans `services.py`, `@transaction.atomic` sur `sync_tags()`, migration stdlib→structlog dans `services_export_import.py` et `services_export_import_tags.py`, pagination sur `list_eligible_for_workflow()` dans `action_views.py`
-- 5 findings LOW corrigés : `correlation_id` dans `update_status()`, suppression double `.count()` debug, pattern structlog dans `validators.py`, assertion test élargie dans `test_parallel_group_validation.py`
-- 5 findings LOW documentés (hors périmètre pre-release) : validation cron schedule, bornes retry, JSON Schema Draft 7, iterator() exports, cohérence AuditService vs AuditLog
-- Tests : 871 tests passés sans régression après corrections
+- 7 findings MEDIUM corrigés : cap `MAX_PAGE_SIZE` dans `services.py`, `@transaction.atomic` sur `sync_tags()`, migration stdlib→structlog dans `services_export_import.py` et `services_export_import_tags.py`, pagination sur `list_eligible_for_workflow()` dans `action_views.py`; + code review: pattern structlog `extra={}` résiduel dans `services_export_import_tags.py`, atomicité mutex POST dans `action_views.py`, audit manquant dans `update_remediation_rules`
+- 5 findings LOW corrigés : `correlation_id` dans `update_status()`, suppression double `.count()` debug, pattern structlog dans `validators.py`, assertion test élargie dans `test_parallel_group_validation.py`, `correlation_id` dans `import_action_yaml`
+- 6 findings LOW documentés (hors périmètre pre-release) : validation cron schedule, bornes retry, JSON Schema Draft 7, iterator() exports, cohérence AuditService vs AuditLog, paramètre `favorites_only` non implémenté
+- Tests : 871 tests passés sans régression après corrections (re-vérifiés post code review)
 
 ### File List
 
@@ -324,3 +329,4 @@ claude-sonnet-4-6
 | Date | Version | Description | Author |
 |------|---------|-------------|--------|
 | 2026-03-09 | 1.0 | Revue qualité module catalog/ — 10 corrections appliquées (1 HIGH, 4 MEDIUM, 5 LOW) | claude-sonnet-4-6 |
+| 2026-03-09 | 1.1 | Code review adversarial — 3 MEDIUM corrigés (structlog extra= résiduel, atomicité mutex POST, audit update_remediation_rules) + 1 LOW corrigé (correlation_id import audit) | claude-sonnet-4-6 |

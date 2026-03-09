@@ -103,7 +103,7 @@ def import_tags_yaml(content: bytes, mode: str = "additive", user: Any | None = 
             else:
                 logger.exception(
                     "tag_import_integrity_error",
-                    extra={"normalized": normalized},
+                    normalized=normalized,
                 )
                 raise
 
