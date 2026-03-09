@@ -76,6 +76,19 @@ def validate_workflow_steps(steps: list[dict[str, Any]], action_id: int | None =
             f"Duplicate step_id values are not allowed: {', '.join(sorted(duplicates))}"
         )
 
+    # Build step_id -> step lookup and collect parallel_group member step_ids for routing validation.
+    step_id_to_step: dict[str, dict] = {}
+    for s in steps:
+        sid = s.get('step_id')
+        if isinstance(sid, str) and sid:
+            step_id_to_step[sid] = s
+    member_step_ids: set[str] = set()
+    for s in steps:
+        if s.get('step_type') == 'parallel_group':
+            for ps_id in s.get('parallel_steps') or []:
+                if isinstance(ps_id, str) and ps_id.strip():
+                    member_step_ids.add(ps_id)
+
     # Track if at least one exit point exists (for branching workflows only).
     has_exit_point = False
 
@@ -108,6 +121,11 @@ def validate_workflow_steps(steps: list[dict[str, Any]], action_id: int | None =
                     f"Step {i} (step_id={step_id}): on_success_step_id '{on_success}' "
                     f"does not reference a valid step_id in this workflow"
                 )
+            if on_success is not None and on_success in member_step_ids:
+                raise serializers.ValidationError(
+                    f"Step {i} (step_id={step_id}): on_success_step_id cannot target "
+                    f"parallel_group member '{on_success}' (members are not directly routable)"
+                )
 
         # AC8: Validate on_error_step_id reference (only when using branching features)
         if uses_branches_or_retry and 'on_error_step_id' in step:
@@ -115,6 +133,11 @@ def validate_workflow_steps(steps: list[dict[str, Any]], action_id: int | None =
                 raise serializers.ValidationError(
                     f"Step {i} (step_id={step_id}): on_error_step_id '{on_error}' "
                     f"does not reference a valid step_id in this workflow"
+                )
+            if on_error is not None and on_error in member_step_ids:
+                raise serializers.ValidationError(
+                    f"Step {i} (step_id={step_id}): on_error_step_id cannot target "
+                    f"parallel_group member '{on_error}' (members are not directly routable)"
                 )
 
         # AC8: Check for exit points (only meaningful when branching is configured).
@@ -131,6 +154,12 @@ def validate_workflow_steps(steps: list[dict[str, Any]], action_id: int | None =
             if parallel_steps is None or not isinstance(parallel_steps, list):
                 raise serializers.ValidationError(
                     f"Step {i} (step_id={step_id}): parallel_steps is required for parallel_group steps"
+                )
+
+            # Element types: every element must be a non-empty string before set()/distinct checks
+            if not all(isinstance(x, str) and x for x in parallel_steps):
+                raise serializers.ValidationError(
+                    f"Step {i} (step_id={step_id}): parallel_steps must be a list of non-empty string step_ids"
                 )
 
             # Task 1.2: parallel_steps must contain at least 2 distinct step_ids (AC #3)
@@ -152,6 +181,20 @@ def validate_workflow_steps(steps: list[dict[str, Any]], action_id: int | None =
                         f"Step {i} (step_id={step_id}): parallel_steps contains '{ps_id}' "
                         f"which is not a valid step_id in this workflow"
                     )
+                # Reject member step types the runtime cannot handle in _execute_step_for_parallel
+                ref_step = step_id_to_step.get(ps_id)
+                if ref_step:
+                    ref_type = ref_step.get('step_type') or 'platform'
+                    if ref_type == 'parallel_group':
+                        raise serializers.ValidationError(
+                            f"Step {i} (step_id={step_id}): parallel_steps cannot contain "
+                            f"nested parallel_group step '{ps_id}'"
+                        )
+                    if ref_type == 'gate':
+                        raise serializers.ValidationError(
+                            f"Step {i} (step_id={step_id}): parallel_steps cannot contain "
+                            f"gate step '{ps_id}' (gate steps may wait and are not supported as members)"
+                        )
 
             # Task 1.4: on_all_success_step_id / on_any_error_step_id must reference existing steps (AC #6)
             on_all_success = step.get('on_all_success_step_id')
@@ -161,10 +204,20 @@ def validate_workflow_steps(steps: list[dict[str, Any]], action_id: int | None =
                     f"Step {i} (step_id={step_id}): on_all_success_step_id '{on_all_success}' "
                     f"does not reference a valid step_id in this workflow"
                 )
+            if on_all_success is not None and on_all_success in member_step_ids:
+                raise serializers.ValidationError(
+                    f"Step {i} (step_id={step_id}): on_all_success_step_id cannot target "
+                    f"parallel_group member '{on_all_success}' (members are not directly routable)"
+                )
             if on_any_error is not None and on_any_error not in step_ids:
                 raise serializers.ValidationError(
                     f"Step {i} (step_id={step_id}): on_any_error_step_id '{on_any_error}' "
                     f"does not reference a valid step_id in this workflow"
+                )
+            if on_any_error is not None and on_any_error in member_step_ids:
+                raise serializers.ValidationError(
+                    f"Step {i} (step_id={step_id}): on_any_error_step_id cannot target "
+                    f"parallel_group member '{on_any_error}' (members are not directly routable)"
                 )
 
             # A parallel_group acts as an exit point when on_all_success or on_any_error is null

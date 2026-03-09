@@ -191,5 +191,5 @@ permettant le déclenchement de synchronisation manuelle.
 ## Références
 
 - [Guide d'implémentation CaC](configuration-as-code-implementation-guide.md) — patterns techniques
-- [idp-config/ README](../idp-portal/idp-config/README.md) — structure et commandes
-- [Codes d'erreur CaC](../idp-portal/idp-config/README.md#codes-derreur) — liste complète avec remédiation
+- [idp-config/ README](../../idp-portal/idp-config/README.md) — structure et commandes
+- [Codes d'erreur CaC](../../idp-portal/idp-config/README.md#codes-derreur) — liste complète avec remédiation

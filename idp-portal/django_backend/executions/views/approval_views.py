@@ -165,11 +165,27 @@ def _get_step_config(step: ExecutionStep) -> dict:
 
 
 def _get_next_step_id_by_order(execution_steps: list, current_step_config: dict) -> str | None:
-    """Retourne le step_id du step suivant par ordre (fallback quand on_success_step_id absent)."""
-    sorted_steps = sorted(
-        [s for s in execution_steps if isinstance(s, dict) and s.get("step_id")],
-        key=lambda s: s.get("order", 0),
-    )
+    """Retourne le step_id du step suivant par ordre (fallback quand on_success_step_id absent).
+    Exclut les members de parallel_group (non routables directement, comme dans le runtime).
+    """
+    # Collect member step_ids from parallel_group steps
+    member_step_ids: set[str] = set()
+    for s in execution_steps:
+        if isinstance(s, dict) and s.get("step_type") == "parallel_group":
+            parallel_steps = s.get("parallel_steps")
+            if isinstance(parallel_steps, list):
+                for ps_id in parallel_steps:
+                    if isinstance(ps_id, str) and ps_id:
+                        member_step_ids.add(ps_id)
+    # Filter to non-member steps only (same sequence the runtime uses for direct routing)
+    candidate_steps = [
+        s
+        for s in execution_steps
+        if isinstance(s, dict)
+        and s.get("step_id")
+        and s.get("step_id") not in member_step_ids
+    ]
+    sorted_steps = sorted(candidate_steps, key=lambda s: s.get("order", 0))
     current_order = current_step_config.get("order", 0)
     for s in sorted_steps:
         if s.get("order", 0) > current_order:

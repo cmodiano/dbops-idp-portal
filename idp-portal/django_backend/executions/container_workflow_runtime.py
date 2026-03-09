@@ -505,12 +505,14 @@ class ContainerWorkflowRuntime:
         step_type = step.get('step_type') or 'platform'
 
         # Résoudre les input_mapping depuis _step_outputs
-        # Note: lecture de _step_outputs sans lock — post-join des steps précédents
+        # Snapshot under lock to avoid "dictionary changed size during iteration" from sibling workers
         input_mapping = step.get('input_mapping', {})
         resolved_params: dict = {}
         if input_mapping and isinstance(input_mapping, dict):
+            with self._step_outputs_lock:
+                step_outputs_snapshot = dict(self._step_outputs)
             resolver = StepTemplateResolver(
-                self._step_outputs,
+                step_outputs_snapshot,
                 execution_context={
                     'action_name': getattr(self.action, 'name', ''),
                     'environment': self.execution.environment,

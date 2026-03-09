@@ -11,7 +11,7 @@ After approving a workflow step (execution 406), the gate shows `satisfied: true
 **Entry point:** `POST /executions/{execution_id}/steps/{step_id}/approve/`  
 **Handler:** `ApproveStepView.post()` in `executions/views/approval_views.py`
 
-```
+```text
 ApproveStepView.post()
 ├── _get_step_or_404(execution_id, step_id)
 ├── _validate_approval_gate_step(step)
@@ -60,7 +60,7 @@ ApproveStepView.post()
 
 **Entry:** `executions/tasks/gates.py` – Celery Beat task
 
-```
+```text
 resume_container_workflow_from_gate(execution_id, on_success_step_id)
 ├── if is_cancelled(execution_id): return {'outcome': 'cancelled'}
 ├── execution = Execution.objects.select_related('action').get(id=execution_id)

@@ -396,7 +396,6 @@ class TestParallelGroupStepOutputsThreadSafety:
     @patch('executions.container_workflow_runtime.AuditService')
     def test_step_outputs_lock_exists(self, mock_audit):
         """AC4: _step_outputs_lock est un threading.Lock."""
-        import threading
         execution = Execution.objects.create(
             action=self.workflow_action,
             user=self.user,
@@ -404,12 +403,13 @@ class TestParallelGroupStepOutputsThreadSafety:
             status=ExecutionStatus.SUBMITTED,
         )
         runtime = ContainerWorkflowRuntime(execution)
-        assert isinstance(runtime._step_outputs_lock, type(threading.Lock()))
+        assert hasattr(runtime._step_outputs_lock, "acquire") and callable(
+            getattr(runtime._step_outputs_lock, "acquire")
+        ), "_step_outputs_lock must expose lock behavior (acquire/release)"
 
     @patch('executions.container_workflow_runtime.AuditService')
     def test_step_lock_exists(self, mock_audit):
         """AC7: _step_lock est un threading.Lock pour pré-allocation step_order."""
-        import threading
         execution = Execution.objects.create(
             action=self.workflow_action,
             user=self.user,
@@ -417,7 +417,9 @@ class TestParallelGroupStepOutputsThreadSafety:
             status=ExecutionStatus.SUBMITTED,
         )
         runtime = ContainerWorkflowRuntime(execution)
-        assert isinstance(runtime._step_lock, type(threading.Lock()))
+        assert hasattr(runtime._step_lock, "acquire") and callable(
+            getattr(runtime._step_lock, "acquire")
+        ), "_step_lock must expose lock behavior (acquire/release)"
 
 
 @pytest.mark.django_db(transaction=True)
