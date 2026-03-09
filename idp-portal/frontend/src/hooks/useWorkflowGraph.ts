@@ -56,6 +56,8 @@ export interface UseWorkflowGraphReturn {
   onNodesChange: OnNodesChange;
   onEdgesChange: OnEdgesChange;
   onConnect: (params: Connection) => void;
+  /** Story 67.4: Autorise les multi-connexions (fan-out) depuis le même handle */
+  isValidConnection?: (params: Connection) => boolean;
   onDrop: (event: React.DragEvent) => void;
   onDragOver: (event: React.DragEvent) => void;
   onNodeDoubleClick: (event: React.MouseEvent, node: Node) => void;
@@ -172,6 +174,13 @@ export function useWorkflowGraph({
       });
     },
     [disabled, notification, setEdges]
+  );
+
+  // Story 67.4: Autoriser explicitement les multi-connexions depuis le même handle (fan-out).
+  // Sans ce callback, React Flow peut bloquer la connexion avant d'appeler onConnect.
+  const isValidConnection = useCallback(
+    (params: Connection) => params.source !== params.target,
+    []
   );
 
   // Handle drop from palette
@@ -486,6 +495,7 @@ export function useWorkflowGraph({
     onNodesChange,
     onEdgesChange,
     onConnect,
+    isValidConnection,
     onDrop,
     onDragOver,
     onNodeDoubleClick,

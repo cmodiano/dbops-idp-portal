@@ -221,6 +221,38 @@ describe('useWorkflowGraph — onConnect', () => {
     expect(result.current.edges.length).toBe(edgesBefore);
     expect(mockNotificationWarning).not.toHaveBeenCalled();
   });
+
+  it('Story 67.4: autorise plusieurs edges depuis le même handle (fan-out)', () => {
+    const { result } = renderHook(() =>
+      useWorkflowGraph({ steps: makeSteps(3), onChange: vi.fn() })
+    );
+
+    act(() => {
+      result.current.onConnect({
+        source: 'step-1',
+        target: 'step-2',
+        sourceHandle: 'success',
+        targetHandle: 'input',
+      });
+    });
+
+    act(() => {
+      result.current.onConnect({
+        source: 'step-1',
+        target: 'step-3',
+        sourceHandle: 'success',
+        targetHandle: 'input',
+      });
+    });
+
+    const successEdgesFromStep1 = result.current.edges.filter(
+      (e) => e.source === 'step-1' && e.sourceHandle === 'success'
+    );
+    // step-1 a au moins 2 edges vers step-2 et step-3 (+ éventuellement end selon état initial)
+    expect(successEdgesFromStep1.length).toBeGreaterThanOrEqual(2);
+    expect(successEdgesFromStep1.map((e) => e.target)).toContain('step-2');
+    expect(successEdgesFromStep1.map((e) => e.target)).toContain('step-3');
+  });
 });
 
 describe('useWorkflowGraph — onDrop', () => {

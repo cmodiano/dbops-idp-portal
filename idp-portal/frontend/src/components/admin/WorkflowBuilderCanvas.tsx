@@ -129,6 +129,7 @@ function WorkflowBuilderCanvasInner({
             onNodesChange={disabled ? undefined : graph.onNodesChange}
             onEdgesChange={disabled ? undefined : graph.onEdgesChange}
             onConnect={graph.onConnect}
+            isValidConnection={disabled ? undefined : graph.isValidConnection}
             onDrop={graph.onDrop}
             onDragOver={graph.onDragOver}
             onNodeDoubleClick={graph.onNodeDoubleClick}
