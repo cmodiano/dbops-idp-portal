@@ -294,7 +294,6 @@ describe('validateWorkflowImport', () => {
     expect(errors.some((e) => e.includes('100'))).toBe(true);
   });
 
-  // MEDIUM-4 FIX: Additional edge case tests
   it('accepts retry_backoff_multiplier exactly 1.0 (minimum boundary)', () => {
     const data = {
       version: '1.0',
@@ -472,5 +471,212 @@ describe('Round-trip JSON ↔ YAML', () => {
     expect(result.valid).toBe(true);
     expect(result.data!.workflow.steps).toHaveLength(exportObj.workflow.steps.length);
     expect(result.data!.workflow.name).toBe(exportObj.workflow.name);
+  });
+});
+
+// ── Story 65.4 — parallel_group ────────────────────────────────────────────
+
+describe('buildWorkflowExport — parallel_group (AC #4)', () => {
+  it('inclut step_type, parallel_steps, on_all_success_step_id pour parallel_group', () => {
+    const steps: WorkflowStep[] = [
+      {
+        order: 1, step_id: 'pg-1', step_type: 'parallel_group', name: 'PG',
+        parallel_steps: ['s1', 's2'], on_all_success_step_id: 's3', on_any_error_step_id: null,
+      },
+    ];
+    const result = buildWorkflowExport(steps, { name: 'Test', description: null, tags: [] });
+    const exported = result.workflow.steps[0];
+
+    expect(exported.step_type).toBe('parallel_group');
+    expect((exported as unknown as Record<string, unknown>).parallel_steps).toEqual(['s1', 's2']);
+    expect((exported as unknown as Record<string, unknown>).on_all_success_step_id).toBe('s3');
+    expect((exported as unknown as Record<string, unknown>).on_any_error_step_id).toBeNull();
+    expect((exported as unknown as Record<string, unknown>).referenced_action_id).toBeUndefined();
+    expect((exported as unknown as Record<string, unknown>).retry_enabled).toBeUndefined();
+  });
+
+  it('inclut step_type pour les steps non-parallel_group', () => {
+    const steps: WorkflowStep[] = [
+      { order: 1, step_id: 'step-1', step_type: 'platform', name: 'Test', referenced_action_id: 42 },
+    ];
+    const result = buildWorkflowExport(steps, { name: 'W', description: null, tags: [] });
+    expect(result.workflow.steps[0].step_type).toBe('platform');
+  });
+});
+
+describe('validateWorkflowImport — parallel_group (AC #5)', () => {
+  const makeParallelGroupImport = (parallel_steps: unknown) => ({
+    version: '1.0',
+    workflow: {
+      name: 'Test',
+      description: null,
+      tags: [],
+      steps: [
+        { step_id: 'pg-1', step_type: 'parallel_group', name: 'PG',
+          parallel_steps, on_all_success_step_id: null, on_any_error_step_id: null },
+        { step_id: 's1', step_type: 'platform', name: 'S1', referenced_action_id: 1 },
+        { step_id: 's2', step_type: 'platform', name: 'S2', referenced_action_id: 2 },
+      ],
+    },
+  });
+
+  it('accepte un parallel_group valide avec parallel_steps ≥ 2', () => {
+    const errors = validateWorkflowImport(makeParallelGroupImport(['s1', 's2']));
+    expect(errors).toHaveLength(0);
+  });
+
+  it('rejette parallel_group avec parallel_steps < 2 (1 élément)', () => {
+    const errors = validateWorkflowImport(makeParallelGroupImport(['s1']));
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors.some((e) => e.includes('parallel_steps'))).toBe(true);
+  });
+
+  it('rejette parallel_group avec parallel_steps absent', () => {
+    const errors = validateWorkflowImport(makeParallelGroupImport(undefined));
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors.some((e) => e.includes('parallel_steps'))).toBe(true);
+  });
+
+  it('rejette parallel_group avec parallel_steps vide', () => {
+    const errors = validateWorkflowImport(makeParallelGroupImport([]));
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors.some((e) => e.includes('parallel_steps'))).toBe(true);
+  });
+
+  it('rejette parallel_group dont parallel_steps référence un step_id inexistant', () => {
+    const data = {
+      version: '1.0',
+      workflow: {
+        name: 'Test', description: null, tags: [],
+        steps: [
+          { step_id: 'pg-1', step_type: 'parallel_group', name: 'PG',
+            parallel_steps: ['s1', 'inexistant'], on_all_success_step_id: null, on_any_error_step_id: null },
+          { step_id: 's1', step_type: 'platform', name: 'S1', referenced_action_id: 1 },
+        ],
+      },
+    };
+    const errors = validateWorkflowImport(data);
+    expect(errors.some((e) => e.includes('inexistant'))).toBe(true);
+  });
+
+  it('rejette parallel_group avec parallel_steps contenant des doublons', () => {
+    const errors = validateWorkflowImport(makeParallelGroupImport(['s1', 's1']));
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors.some((e) => e.includes('dupliqués'))).toBe(true);
+  });
+
+  it('rejette parallel_group dont parallel_steps contient son propre step_id (auto-référence)', () => {
+    const data = {
+      version: '1.0',
+      workflow: {
+        name: 'Test', description: null, tags: [],
+        steps: [
+          { step_id: 'pg-1', step_type: 'parallel_group', name: 'PG',
+            parallel_steps: ['pg-1', 's1'], on_all_success_step_id: null, on_any_error_step_id: null },
+          { step_id: 's1', step_type: 'platform', name: 'S1', referenced_action_id: 1 },
+        ],
+      },
+    };
+    const errors = validateWorkflowImport(data);
+    expect(errors.some((e) => e.includes('auto-référence'))).toBe(true);
+  });
+
+  it('rejette parallel_group avec on_all_success_step_id auto-référencé', () => {
+    const data = {
+      version: '1.0',
+      workflow: {
+        name: 'Test', description: null, tags: [],
+        steps: [
+          { step_id: 'pg-1', step_type: 'parallel_group', name: 'PG',
+            parallel_steps: ['s1', 's2'], on_all_success_step_id: 'pg-1', on_any_error_step_id: null },
+          { step_id: 's1', step_type: 'platform', name: 'S1', referenced_action_id: 1 },
+          { step_id: 's2', step_type: 'platform', name: 'S2', referenced_action_id: 2 },
+        ],
+      },
+    };
+    const errors = validateWorkflowImport(data);
+    expect(errors.some((e) => e.includes('auto-référence'))).toBe(true);
+  });
+
+  it('rejette parallel_group avec on_any_error_step_id auto-référencé', () => {
+    const data = {
+      version: '1.0',
+      workflow: {
+        name: 'Test', description: null, tags: [],
+        steps: [
+          { step_id: 'pg-1', step_type: 'parallel_group', name: 'PG',
+            parallel_steps: ['s1', 's2'], on_all_success_step_id: null, on_any_error_step_id: 'pg-1' },
+          { step_id: 's1', step_type: 'platform', name: 'S1', referenced_action_id: 1 },
+          { step_id: 's2', step_type: 'platform', name: 'S2', referenced_action_id: 2 },
+        ],
+      },
+    };
+    const errors = validateWorkflowImport(data);
+    expect(errors.some((e) => e.includes('auto-référence'))).toBe(true);
+  });
+});
+
+describe('parseWorkflowFile — parallel_group (AC #6)', () => {
+  it('normalise correctement les steps parallel_group depuis JSON', () => {
+    const data = {
+      version: '1.0',
+      workflow: {
+        name: 'Test', description: null, tags: [],
+        steps: [
+          { step_id: 'pg-1', step_type: 'parallel_group', name: 'PG',
+            parallel_steps: ['s1', 's2'], on_all_success_step_id: null, on_any_error_step_id: null, order: 1 },
+          { step_id: 's1', step_type: 'platform', name: 'S1', referenced_action_id: 1, order: 2 },
+          { step_id: 's2', step_type: 'platform', name: 'S2', referenced_action_id: 2, order: 3 },
+        ],
+      },
+    };
+    const result = parseWorkflowFile(JSON.stringify(data), '.json');
+    expect(result.valid).toBe(true);
+
+    const pgStep = result.data!.workflow.steps.find((s) => s.step_id === 'pg-1');
+    expect(pgStep?.step_type).toBe('parallel_group');
+    expect(pgStep?.parallel_steps).toEqual(['s1', 's2']);
+    expect(pgStep?.on_all_success_step_id).toBeNull();
+    expect(pgStep?.on_any_error_step_id).toBeNull();
+    expect((pgStep as unknown as Record<string, unknown>).referenced_action_id).toBeUndefined();
+    expect((pgStep as unknown as Record<string, unknown>).retry_enabled).toBeUndefined();
+  });
+
+  it('normalise correctement les steps parallel_group depuis YAML', () => {
+    const yamlContent = `version: '1.0'
+workflow:
+  name: Test
+  description: null
+  tags: []
+  steps:
+    - step_id: pg-1
+      step_type: parallel_group
+      name: PG
+      parallel_steps:
+        - s1
+        - s2
+      on_all_success_step_id: s2
+      on_any_error_step_id: null
+      order: 1
+    - step_id: s1
+      step_type: platform
+      name: S1
+      referenced_action_id: 1
+      order: 2
+    - step_id: s2
+      step_type: platform
+      name: S2
+      referenced_action_id: 2
+      order: 3
+`;
+    const result = parseWorkflowFile(yamlContent, '.yaml');
+    expect(result.valid).toBe(true);
+
+    const pgStep = result.data!.workflow.steps.find((s) => s.step_id === 'pg-1');
+    expect(pgStep?.step_type).toBe('parallel_group');
+    expect(pgStep?.parallel_steps).toEqual(['s1', 's2']);
+    expect(pgStep?.on_all_success_step_id).toBe('s2');
+    expect(pgStep?.on_any_error_step_id).toBeNull();
+    expect((pgStep as unknown as Record<string, unknown>).referenced_action_id).toBeUndefined();
   });
 });

@@ -88,6 +88,16 @@ function getStepTypeErrors(nodeId: string, data: WorkflowStepNodeData): Validati
       }
       break;
     }
+    case 'parallel_group':
+      // Story 65.4: parallel_group doit avoir au moins 2 sous-steps
+      if (!data.parallel_steps || data.parallel_steps.length < 2) {
+        errors.push({
+          nodeId,
+          type: 'error',
+          message: 'Un groupe parallèle doit contenir au moins 2 sous-steps (parallel_steps)',
+        });
+      }
+      break;
   }
   return errors;
 }

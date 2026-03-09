@@ -23,6 +23,7 @@ const STEP_TYPE_COLORS: Record<WorkflowStepType, string> = {
   gate:               '#faad14',  // ambre/jaune
   http_request:       '#13c2c2',  // cyan
   schedule_execution: '#4f46e5',  // indigo (Story 57.16)
+  parallel_group:     '#52c41a',  // vert (Story 65.4)
 };
 
 const STEP_TYPE_LABELS: Record<WorkflowStepType, string> = {
@@ -32,6 +33,7 @@ const STEP_TYPE_LABELS: Record<WorkflowStepType, string> = {
   gate:               'Attendre',
   http_request:       'HTTP',
   schedule_execution: 'Planifier', // Story 57.16
+  parallel_group:     'Parallèle', // Story 65.4
 };
 
 const INTEGRATION_LABELS: Record<string, string> = {
@@ -103,6 +105,13 @@ export interface WorkflowStepNodeData {
   // === schedule_execution ===
   /** Story 57.16: Configuration du step de planification. */
   schedule_config?: ScheduleStepConfig | null;
+  // === parallel_group ===
+  /** Story 65.4: Liste des step_id à exécuter en parallèle (≥2 requis). */
+  parallel_steps?: string[] | null;
+  /** Story 65.4: Step suivant si tous les sous-steps réussissent. */
+  on_all_success_step_id?: string | null;
+  /** Story 65.4: Step suivant si au moins un sous-step échoue (fail-fast). */
+  on_any_error_step_id?: string | null;
 }
 
 const WorkflowStepNode: React.FC<NodeProps> = ({ data, selected }) => {

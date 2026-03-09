@@ -11,6 +11,7 @@ import {
   reactFlowToWorkflowSteps,
 } from '../workflowConversion';
 import type { WorkflowStep } from '../../types/api';
+import type { WorkflowStepNodeData } from '../../components/admin/WorkflowStepNode';
 
 describe('generateStepId', () => {
   it('generates a string ID', () => {
@@ -545,5 +546,104 @@ describe('reactFlowToWorkflowSteps — Story 57.16 round-trip schedule_execution
     expect(result[0].schedule_config?.inherit_parameters).toBe(true);
     expect(result[0].schedule_config?.inherit_targets).toBe(true);
     expect(result[0].referenced_action_id).toBe(56);
+  });
+});
+
+// ── Story 65.4 — parallel_group ────────────────────────────────────────────
+
+describe('workflowStepsToReactFlow — parallel_group', () => {
+  it('crée un nœud parallel_group avec les champs dans data (AC #2)', () => {
+    const steps: WorkflowStep[] = [
+      {
+        order: 1,
+        step_id: 'pg-1',
+        step_type: 'parallel_group',
+        name: 'Backups parallèles',
+        parallel_steps: ['bk-db', 'bk-cfg'],
+        on_all_success_step_id: 'apply-patch',
+        on_any_error_step_id: 'rollback',
+      },
+      { order: 2, step_id: 'bk-db', step_type: 'platform', name: 'Backup DB', referenced_action_id: 10 },
+      { order: 3, step_id: 'bk-cfg', step_type: 'platform', name: 'Backup Config', referenced_action_id: 11 },
+      { order: 4, step_id: 'apply-patch', step_type: 'platform', name: 'Patch', referenced_action_id: 12 },
+      { order: 5, step_id: 'rollback', step_type: 'platform', name: 'Rollback', referenced_action_id: 13 },
+    ];
+    const { nodes } = workflowStepsToReactFlow(steps);
+
+    const pgNode = nodes.find((n) => n.id === 'pg-1');
+    expect(pgNode).toBeDefined();
+    const data = pgNode!.data as unknown as WorkflowStepNodeData;
+    expect(data.step_type).toBe('parallel_group');
+    expect(data.parallel_steps).toEqual(['bk-db', 'bk-cfg']);
+    expect(data.on_all_success_step_id).toBe('apply-patch');
+    expect(data.on_any_error_step_id).toBe('rollback');
+  });
+
+  it('crée edge success vers on_all_success_step_id et error vers on_any_error_step_id (AC #2)', () => {
+    const steps: WorkflowStep[] = [
+      {
+        order: 1, step_id: 'pg-1', step_type: 'parallel_group', name: 'PG',
+        parallel_steps: ['s1', 's2'], on_all_success_step_id: 'next', on_any_error_step_id: null,
+      },
+      { order: 2, step_id: 's1', step_type: 'platform', name: 'S1', referenced_action_id: 1 },
+      { order: 3, step_id: 's2', step_type: 'platform', name: 'S2', referenced_action_id: 2 },
+      { order: 4, step_id: 'next', step_type: 'platform', name: 'Next', referenced_action_id: 3 },
+    ];
+    const { edges } = workflowStepsToReactFlow(steps);
+
+    const successEdge = edges.find((e) => e.source === 'pg-1' && e.sourceHandle === 'success');
+    expect(successEdge?.target).toBe('next');
+
+    const errorEdge = edges.find((e) => e.source === 'pg-1' && e.sourceHandle === 'error');
+    expect(errorEdge?.target).toBe(END_NODE_ID); // null → END_NODE_ID
+  });
+});
+
+describe('reactFlowToWorkflowSteps — parallel_group', () => {
+  it('produit un WorkflowStep parallel_group sans on_success_step_id/on_error_step_id (AC #3)', () => {
+    const nodes: Node[] = [
+      {
+        id: 'pg-1', type: 'workflowStep', position: { x: 0, y: 0 },
+        data: {
+          step_type: 'parallel_group', name: 'PG',
+          parallel_steps: ['s1', 's2'],
+          on_all_success_step_id: null, on_any_error_step_id: null,
+        },
+      },
+    ];
+    const edges: Edge[] = [];
+    const result = reactFlowToWorkflowSteps(nodes, edges);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].step_type).toBe('parallel_group');
+    expect(result[0].parallel_steps).toEqual(['s1', 's2']);
+    expect(result[0].on_all_success_step_id).toBeNull();
+    expect(result[0].on_any_error_step_id).toBeNull();
+    expect(result[0]).not.toHaveProperty('on_success_step_id');
+    expect(result[0]).not.toHaveProperty('on_error_step_id');
+  });
+});
+
+describe('round-trip parallel_group (AC #8)', () => {
+  it('WorkflowStep[] → reactFlow → WorkflowStep[] produit un résultat équivalent', () => {
+    const originalSteps: WorkflowStep[] = [
+      {
+        order: 1, step_id: 'pg-1', step_type: 'parallel_group', name: 'PG',
+        parallel_steps: ['s1', 's2'], on_all_success_step_id: 's3', on_any_error_step_id: null,
+      },
+      { order: 2, step_id: 's1', step_type: 'platform', name: 'S1', referenced_action_id: 1 },
+      { order: 3, step_id: 's2', step_type: 'platform', name: 'S2', referenced_action_id: 2 },
+      { order: 4, step_id: 's3', step_type: 'platform', name: 'S3', referenced_action_id: 3 },
+    ];
+    const { nodes, edges } = workflowStepsToReactFlow(originalSteps);
+    const reconstructed = reactFlowToWorkflowSteps(nodes, edges);
+
+    const pgStep = reconstructed.find((s) => s.step_id === 'pg-1');
+    expect(pgStep?.step_type).toBe('parallel_group');
+    expect(pgStep?.parallel_steps).toEqual(['s1', 's2']);
+    expect(pgStep?.on_all_success_step_id).toBe('s3');
+    expect(pgStep?.on_any_error_step_id).toBeNull();
+    expect(pgStep).not.toHaveProperty('on_success_step_id');
+    expect(pgStep).not.toHaveProperty('on_error_step_id');
   });
 });

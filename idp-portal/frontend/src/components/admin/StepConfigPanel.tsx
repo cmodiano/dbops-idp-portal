@@ -100,6 +100,7 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({
     gate: 'Attente / Gate',
     http_request: 'Requête HTTP',
     schedule_execution: 'Planifier une exécution', // Story 57.16
+    parallel_group: 'Groupe parallèle', // Story 65.4
   };
 
   return (
