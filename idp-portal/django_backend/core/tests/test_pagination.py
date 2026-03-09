@@ -3,8 +3,9 @@
 Story 26.11 (AC4): 8+ tests couvrant tous les cas limites.
 """
 import pytest
+from unittest.mock import MagicMock
 
-from core.pagination import paginate_queryset
+from core.pagination import paginate_queryset, CustomPageNumberPagination
 from executions.models import Execution
 from tests.factories import ExecutionFactory
 
@@ -121,3 +122,22 @@ class TestPaginateQueryset:
         qs = Execution.objects.all()
         with pytest.raises(ValueError, match="limit must be > 0"):
             paginate_queryset(qs, offset=0, limit=-5)
+
+
+class TestCustomPageNumberPagination:
+    """MEDIUM-2: CustomPageNumberPagination retourne la page_size réelle dans la réponse."""
+
+    def test_get_paginated_response_uses_actual_page_size(self, db):
+        """MEDIUM-2: page_size dans la réponse doit refléter la taille de page réelle, pas la valeur de classe."""
+        ExecutionFactory.create_batch(30)
+        paginator = CustomPageNumberPagination()
+        request = MagicMock()
+        request.query_params = {'page_size': '10'}
+        qs = Execution.objects.all().order_by('id')
+
+        # paginate_queryset stocke page_size réel dans self.page.paginator.per_page
+        paginator.paginate_queryset(qs, request)
+        response = paginator.get_paginated_response([])
+
+        # La réponse doit contenir la taille de page réelle (10), pas le défaut de classe (25)
+        assert response.data['pagination']['page_size'] == 10

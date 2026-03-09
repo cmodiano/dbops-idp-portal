@@ -156,6 +156,22 @@ def _get_request_context(context: dict[str, Any]) -> dict[str, Any]:
     return {'correlation_id': get_correlation_id()}
 
 
+# Module-level constant — MEDIUM-1: avoid rebuilding tuple on every exception handler call
+_CUSTOM_EXCEPTIONS = (
+    (NotFoundError, status.HTTP_404_NOT_FOUND),
+    (BadRequestError, status.HTTP_400_BAD_REQUEST),
+    (InvalidStateError, status.HTTP_400_BAD_REQUEST),
+    (UnauthorizedError, status.HTTP_401_UNAUTHORIZED),
+    (ForbiddenError, status.HTTP_403_FORBIDDEN),
+    (ServiceUnavailableError, status.HTTP_503_SERVICE_UNAVAILABLE),
+    (ConflictError, status.HTTP_409_CONFLICT),
+)
+_CustomExc = Union[
+    NotFoundError, BadRequestError, InvalidStateError,
+    UnauthorizedError, ForbiddenError, ServiceUnavailableError, ConflictError,
+]
+
+
 def custom_exception_handler(exc: Exception, context: dict[str, Any]) -> Response | None:
     """
     Custom exception handler that formats errors:
@@ -176,19 +192,6 @@ def custom_exception_handler(exc: Exception, context: dict[str, Any]) -> Respons
     request_context = _get_request_context(context)
 
     # Handle custom exceptions (these are expected, log at warning level with full details)
-    _CUSTOM_EXCEPTIONS = (
-        (NotFoundError, status.HTTP_404_NOT_FOUND),
-        (BadRequestError, status.HTTP_400_BAD_REQUEST),
-        (InvalidStateError, status.HTTP_400_BAD_REQUEST),
-        (UnauthorizedError, status.HTTP_401_UNAUTHORIZED),
-        (ForbiddenError, status.HTTP_403_FORBIDDEN),
-        (ServiceUnavailableError, status.HTTP_503_SERVICE_UNAVAILABLE),
-        (ConflictError, status.HTTP_409_CONFLICT),
-    )
-    _CustomExc = Union[
-        NotFoundError, BadRequestError, InvalidStateError,
-        UnauthorizedError, ForbiddenError, ServiceUnavailableError, ConflictError,
-    ]
     for exc_cls, http_status in _CUSTOM_EXCEPTIONS:
         if isinstance(exc, exc_cls):
             cust = cast(_CustomExc, exc)

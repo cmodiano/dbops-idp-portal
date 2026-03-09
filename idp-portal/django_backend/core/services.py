@@ -18,6 +18,9 @@ from core.utils import ensure_utc_isoformat
 
 logger = structlog.get_logger(__name__)
 
+# Cap page_size to prevent unbounded queries (mirrors MAX_PAGE_SIZE in pagination.py)
+_MAX_PAGE_SIZE = 1000
+
 
 class AuditService:
     """
@@ -93,7 +96,10 @@ class AuditService:
         
         # Order by timestamp DESC
         queryset = queryset.order_by('-timestamp')
-        
+
+        # Cap page_size to prevent unbounded queries (MEDIUM-R2)
+        page_size = min(page_size, _MAX_PAGE_SIZE)
+
         # Pagination
         total_count = queryset.count()
         start_index = (page - 1) * page_size
@@ -155,8 +161,8 @@ class AuditService:
         # Write header
         writer.writerow(['Timestamp', 'User ID', 'Action Type', 'Entity Type', 'Entity ID', 'IP Address', 'Details'])
         
-        # Write rows
-        for entry in queryset:
+        # Write rows — MEDIUM-4: use iterator() to avoid loading full result set into memory for large audit logs
+        for entry in queryset.iterator(chunk_size=2000):
             # Deserialize JSON details for better readability
             details_formatted = ''
             if entry.details:
