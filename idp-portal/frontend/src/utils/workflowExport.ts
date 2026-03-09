@@ -89,13 +89,27 @@ export function buildWorkflowExport(
             order: s.order,
           };
         }
+        // Story 67.4: on_success_step_ids / on_error_step_ids (priorité), join_policy
+        const successIds =
+          s.on_success_step_ids?.length
+            ? s.on_success_step_ids
+            : s.on_success_step_id
+              ? [s.on_success_step_id]
+              : [];
+        const errorIds =
+          s.on_error_step_ids?.length
+            ? s.on_error_step_ids
+            : s.on_error_step_id
+              ? [s.on_error_step_id]
+              : [];
         return {
           step_id: s.step_id ?? null,
           step_type: s.step_type ?? 'platform', // Story 65.4: toujours inclure step_type
           referenced_action_id: s.referenced_action_id,
           name: s.name ?? null,
-          on_success_step_id: s.on_success_step_id ?? null,
-          on_error_step_id: s.on_error_step_id ?? null,
+          on_success_step_ids: successIds,
+          on_error_step_ids: errorIds,
+          ...(s.join_policy ? { join_policy: s.join_policy } : {}),
           retry_enabled: s.retry_enabled ?? false,
           retry_max_attempts: s.retry_max_attempts ?? null,
           retry_interval_seconds: s.retry_interval_seconds ?? null,
@@ -363,20 +377,41 @@ export function validateWorkflowImport(data: unknown): string[] {
         }
       }
     } else {
-      if (typeof s.on_success_step_id === 'string' && s.on_success_step_id) {
-        if (!stepIds.has(s.on_success_step_id)) {
-          errors.push(`Étape ${i + 1} : "on_success_step_id" référence un step_id inexistant : "${s.on_success_step_id}".`);
+      // Story 67.4: on_success_step_ids (priorité) ou on_success_step_id (rétrocompat)
+      const successTargets: string[] = Array.isArray(s.on_success_step_ids)
+        ? (s.on_success_step_ids as string[]).filter((id): id is string => typeof id === 'string' && id.length > 0)
+        : typeof s.on_success_step_id === 'string' && s.on_success_step_id
+          ? [s.on_success_step_id]
+          : [];
+      for (const tid of successTargets) {
+        if (!stepIds.has(tid)) {
+          errors.push(`Étape ${i + 1} : "on_success_step_ids" référence un step_id inexistant : "${tid}".`);
         }
-        if (s.on_success_step_id === s.step_id) {
-          errors.push(`Étape ${i + 1} : auto-référence interdite (on_success_step_id = step_id).`);
+        if (tid === s.step_id) {
+          errors.push(`Étape ${i + 1} : auto-référence interdite (on_success_step_ids = step_id).`);
         }
       }
-      if (typeof s.on_error_step_id === 'string' && s.on_error_step_id) {
-        if (!stepIds.has(s.on_error_step_id)) {
-          errors.push(`Étape ${i + 1} : "on_error_step_id" référence un step_id inexistant : "${s.on_error_step_id}".`);
+      // Story 67.4: on_error_step_ids (priorité) ou on_error_step_id (rétrocompat)
+      const errorTargets: string[] = Array.isArray(s.on_error_step_ids)
+        ? (s.on_error_step_ids as string[]).filter((id): id is string => typeof id === 'string' && id.length > 0)
+        : typeof s.on_error_step_id === 'string' && s.on_error_step_id
+          ? [s.on_error_step_id]
+          : [];
+      for (const tid of errorTargets) {
+        if (!stepIds.has(tid)) {
+          errors.push(`Étape ${i + 1} : "on_error_step_ids" référence un step_id inexistant : "${tid}".`);
         }
-        if (s.on_error_step_id === s.step_id) {
-          errors.push(`Étape ${i + 1} : auto-référence interdite (on_error_step_id = step_id).`);
+        if (tid === s.step_id) {
+          errors.push(`Étape ${i + 1} : auto-référence interdite (on_error_step_ids = step_id).`);
+        }
+      }
+      // Story 67.4: join_policy
+      if (s.join_policy !== undefined && s.join_policy !== null) {
+        const validPolicies = ['all_success', 'one_success', 'all_done'];
+        if (typeof s.join_policy !== 'string' || !validPolicies.includes(s.join_policy)) {
+          errors.push(
+            `Étape ${i + 1} : "join_policy" doit être l'une de : ${validPolicies.join(', ')}. Reçu : "${s.join_policy}".`,
+          );
         }
       }
     }

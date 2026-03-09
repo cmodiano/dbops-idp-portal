@@ -18,7 +18,7 @@
  * Refactored in Story 54.12: graph state and event handlers extracted to useWorkflowGraph.
  */
 
-import { useRef } from 'react';
+import { useRef, useMemo } from 'react';
 import type { FC } from 'react';
 import {
   ReactFlow,
@@ -82,6 +82,12 @@ function WorkflowBuilderCanvasInner({
 
   // Hook appelle useReactFlow() → doit être dans le provider
   const graph = useWorkflowGraph({ steps, onChange, disabled });
+
+  // Story 67.4: Calculer le nombre de connexions entrantes du node sélectionné
+  const selectedNodeIncomingEdgeCount = useMemo(
+    () => graph.selectedNode ? graph.edges.filter(e => e.target === graph.selectedNode!.id).length : 0,
+    [graph.edges, graph.selectedNode],
+  );
 
   const {
     exporting,
@@ -158,6 +164,7 @@ function WorkflowBuilderCanvasInner({
         availableStepIds={graph.workflowStepIds}
         availableStepOptions={graph.workflowStepOptions}
         workflowId={workflowId}
+        incomingEdgeCount={selectedNodeIncomingEdgeCount}
       />
 
       <ValidationReportPanel

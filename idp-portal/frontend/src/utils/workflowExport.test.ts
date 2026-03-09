@@ -123,12 +123,13 @@ describe('buildWorkflowExport', () => {
 
   it('preserves step data correctly', () => {
     const result = buildValidExport();
-    const step1 = result.workflow.steps[0];
+    const step1 = result.workflow.steps[0] as unknown as Record<string, unknown>;
     expect(step1.step_id).toBe('step-aaa');
     expect(step1.referenced_action_id).toBe(42);
     expect(step1.name).toBe('Backup base');
-    expect(step1.on_success_step_id).toBe('step-bbb');
-    expect(step1.on_error_step_id).toBe('step-ccc');
+    // Story 67.4: export uses on_success_step_ids / on_error_step_ids (arrays)
+    expect(step1.on_success_step_ids).toEqual(['step-bbb']);
+    expect(step1.on_error_step_ids).toEqual(['step-ccc']);
     expect(step1.retry_enabled).toBe(true);
     expect(step1.retry_max_attempts).toBe(3);
     expect(step1.retry_interval_seconds).toBe(60);
@@ -397,6 +398,106 @@ describe('parseWorkflowFile (JSON)', () => {
     expect(step.on_error_step_id).toBeNull();
     expect(step.retry_enabled).toBe(false);
     expect(step.retry_max_attempts).toBeNull();
+  });
+});
+
+// ── Story 67.4 — multi-connexions et join_policy (CaC) ────────────────────────
+
+describe('buildWorkflowExport — on_success_step_ids, join_policy (Story 67.4)', () => {
+  it('exporte on_success_step_ids et on_error_step_ids (tableaux) pour fan-out', () => {
+    const steps: WorkflowStep[] = [
+      {
+        order: 1, step_id: 'a', step_type: 'platform', name: 'A', referenced_action_id: 1,
+        on_success_step_ids: ['b', 'c'], on_error_step_ids: ['rollback'],
+      },
+      { order: 2, step_id: 'b', referenced_action_id: 2, name: 'B', on_success_step_ids: ['d'] },
+      { order: 3, step_id: 'c', referenced_action_id: 3, name: 'C', on_success_step_ids: ['d'] },
+      {
+        order: 4, step_id: 'd', referenced_action_id: 4, name: 'D',
+        on_success_step_ids: [], join_policy: 'one_success',
+      },
+      { order: 5, step_id: 'rollback', referenced_action_id: 5, name: 'Rollback', on_success_step_ids: [] },
+    ];
+    const result = buildWorkflowExport(steps, { name: 'Parallel', description: null, tags: [] });
+    const stepA = result.workflow.steps[0] as unknown as Record<string, unknown>;
+    const stepD = result.workflow.steps[3] as unknown as Record<string, unknown>;
+    expect(stepA.on_success_step_ids).toEqual(['b', 'c']);
+    expect(stepA.on_error_step_ids).toEqual(['rollback']);
+    expect(stepD.join_policy).toBe('one_success');
+  });
+
+  it('fallback on_success_step_id → on_success_step_ids (rétrocompat)', () => {
+    const steps: WorkflowStep[] = [
+      { order: 1, step_id: 'a', referenced_action_id: 1, name: 'A', on_success_step_id: 'b' },
+      { order: 2, step_id: 'b', referenced_action_id: 2, name: 'B' },
+    ];
+    const result = buildWorkflowExport(steps, { name: 'Legacy', description: null, tags: [] });
+    const stepA = result.workflow.steps[0] as unknown as Record<string, unknown>;
+    expect(stepA.on_success_step_ids).toEqual(['b']);
+    expect(stepA.on_error_step_ids).toEqual([]);
+  });
+});
+
+describe('validateWorkflowImport — on_success_step_ids, join_policy (Story 67.4)', () => {
+  it('accepte on_success_step_ids (tableau) et join_policy valide', () => {
+    const data = {
+      version: '1.0',
+      workflow: {
+        name: 'Test',
+        steps: [
+          { step_id: 'a', referenced_action_id: 1, name: 'A', on_success_step_ids: ['b', 'c'] },
+          { step_id: 'b', referenced_action_id: 2, name: 'B', on_success_step_ids: ['d'] },
+          { step_id: 'c', referenced_action_id: 3, name: 'C', on_success_step_ids: ['d'] },
+          { step_id: 'd', referenced_action_id: 4, name: 'D', on_success_step_ids: [], join_policy: 'all_success' },
+        ],
+      },
+    };
+    const errors = validateWorkflowImport(data);
+    expect(errors).toEqual([]);
+  });
+
+  it('rejette on_success_step_ids référençant un step_id inexistant', () => {
+    const data = {
+      version: '1.0',
+      workflow: {
+        name: 'Test',
+        steps: [
+          { step_id: 'a', referenced_action_id: 1, name: 'A', on_success_step_ids: ['b', 'inexistant'] },
+          { step_id: 'b', referenced_action_id: 2, name: 'B' },
+        ],
+      },
+    };
+    const errors = validateWorkflowImport(data);
+    expect(errors.some((e) => e.includes('inexistant'))).toBe(true);
+  });
+
+  it('rejette join_policy invalide', () => {
+    const data = {
+      version: '1.0',
+      workflow: {
+        name: 'Test',
+        steps: [
+          { step_id: 'a', referenced_action_id: 1, name: 'A', join_policy: 'invalid_policy' },
+        ],
+      },
+    };
+    const errors = validateWorkflowImport(data);
+    expect(errors.some((e) => e.includes('join_policy'))).toBe(true);
+  });
+
+  it('accepte rétrocompat on_success_step_id (singulier)', () => {
+    const data = {
+      version: '1.0',
+      workflow: {
+        name: 'Test',
+        steps: [
+          { step_id: 'a', referenced_action_id: 1, name: 'A', on_success_step_id: 'b' },
+          { step_id: 'b', referenced_action_id: 2, name: 'B' },
+        ],
+      },
+    };
+    const errors = validateWorkflowImport(data);
+    expect(errors).toEqual([]);
   });
 });
 

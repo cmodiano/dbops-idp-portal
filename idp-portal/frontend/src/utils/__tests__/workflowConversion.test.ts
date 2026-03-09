@@ -376,7 +376,7 @@ describe('reactFlowToWorkflowSteps', () => {
     expect(result[0].step_id).toBe('step-1');
   });
 
-  it('maps edges to on_success_step_id and on_error_step_id', () => {
+  it('maps edges to on_success_step_ids and on_error_step_ids (Story 67.4)', () => {
     const nodes: Node[] = [
       { id: START_NODE_ID, type: 'start', position: { x: 0, y: 0 }, data: {} },
       { id: 'step-1', type: 'workflowStep', position: { x: 0, y: 120 }, data: { action_id: 10, name: 'S1', retry_enabled: false, retry_max_attempts: null, retry_interval_seconds: null, retry_backoff_multiplier: null } },
@@ -388,11 +388,11 @@ describe('reactFlowToWorkflowSteps', () => {
       { id: 'e2', source: 'step-1', target: 'step-2', sourceHandle: 'error' },
     ];
     const result = reactFlowToWorkflowSteps(nodes, edges);
-    expect(result[0].on_success_step_id).toBe('step-2');
-    expect(result[0].on_error_step_id).toBe('step-2');
+    expect(result[0].on_success_step_ids).toEqual(['step-2']);
+    expect(result[0].on_error_step_ids).toEqual(['step-2']);
   });
 
-  it('sets null for edges pointing to End node', () => {
+  it('produces empty on_success_step_ids array for edges pointing to End node (Story 67.4)', () => {
     const nodes: Node[] = [
       { id: START_NODE_ID, type: 'start', position: { x: 0, y: 0 }, data: {} },
       { id: 'step-1', type: 'workflowStep', position: { x: 0, y: 120 }, data: { action_id: 10, name: 'S1', retry_enabled: false, retry_max_attempts: null, retry_interval_seconds: null, retry_backoff_multiplier: null } },
@@ -402,10 +402,10 @@ describe('reactFlowToWorkflowSteps', () => {
       { id: 'e1', source: 'step-1', target: END_NODE_ID, sourceHandle: 'success' },
     ];
     const result = reactFlowToWorkflowSteps(nodes, edges);
-    expect(result[0].on_success_step_id).toBeNull();
+    expect(result[0].on_success_step_ids).toEqual([]);
   });
 
-  it('round-trips correctly: steps → reactflow → steps', () => {
+  it('round-trips correctly: steps → reactflow → steps (Story 67.4)', () => {
     const originalSteps: WorkflowStep[] = [
       { order: 1, step_id: 'step-1', name: 'Step 1', referenced_action_id: 10, on_success_step_id: 'step-2', on_error_step_id: null, retry_enabled: true, retry_max_attempts: 3, retry_interval_seconds: 5, retry_backoff_multiplier: 2 },
       { order: 2, step_id: 'step-2', name: 'Step 2', referenced_action_id: 20, on_success_step_id: null, on_error_step_id: null, retry_enabled: false, retry_max_attempts: null, retry_interval_seconds: null, retry_backoff_multiplier: null },
@@ -415,10 +415,11 @@ describe('reactFlowToWorkflowSteps', () => {
 
     expect(roundTripped).toHaveLength(2);
     expect(roundTripped[0].step_id).toBe('step-1');
-    expect(roundTripped[0].on_success_step_id).toBe('step-2');
+    // Story 67.4: rétrocompat — on_success_step_id singulier produit un tableau 1 élément
+    expect(roundTripped[0].on_success_step_ids).toEqual(['step-2']);
     expect(roundTripped[0].retry_enabled).toBe(true);
     expect(roundTripped[0].retry_max_attempts).toBe(3);
-    expect(roundTripped[1].on_success_step_id).toBeNull();
+    expect(roundTripped[1].on_success_step_ids).toEqual([]);
   });
 });
 
@@ -646,5 +647,75 @@ describe('round-trip parallel_group (AC #8)', () => {
     expect(pgStep?.on_any_error_step_id).toBeNull();
     expect(pgStep).not.toHaveProperty('on_success_step_id');
     expect(pgStep).not.toHaveProperty('on_error_step_id');
+  });
+});
+
+// ── Story 67.4 — multi-connexions et join_policy ────────────────────────────
+
+describe('Story 67.4 — reactFlowToWorkflowSteps multi-connexions', () => {
+  it('6.1 — produit on_success_step_ids array quand 2 success edges existent', () => {
+    const nodes: Node[] = [
+      { id: START_NODE_ID, type: 'start', position: { x: 0, y: 0 }, data: {} },
+      { id: 'stepA', type: 'workflowStep', position: { x: 0, y: 120 }, data: { step_type: 'platform', name: 'A', retry_enabled: false, retry_max_attempts: null, retry_interval_seconds: null, retry_backoff_multiplier: null } },
+      { id: END_NODE_ID, type: 'end', position: { x: 0, y: 400 }, data: {} },
+    ];
+    const edges: Edge[] = [
+      { id: 'stepA_success_stepB', source: 'stepA', target: 'stepB', sourceHandle: 'success', targetHandle: 'input' },
+      { id: 'stepA_success_stepC', source: 'stepA', target: 'stepC', sourceHandle: 'success', targetHandle: 'input' },
+    ];
+    const steps = reactFlowToWorkflowSteps(nodes, edges);
+    expect(steps[0].on_success_step_ids).toEqual(['stepB', 'stepC']);
+  });
+
+  it('6.2 — rétrocompat singulier : on_success_step_id → workflowStepsToReactFlow crée 1 edge', () => {
+    const steps: WorkflowStep[] = [
+      { order: 1, step_id: 'stepA', name: null, step_type: 'platform', on_success_step_id: 'stepB' },
+    ];
+    const { edges } = workflowStepsToReactFlow(steps);
+    const successEdges = edges.filter(e => e.source === 'stepA' && e.sourceHandle === 'success' && e.target !== END_NODE_ID);
+    expect(successEdges).toHaveLength(1);
+    expect(successEdges[0].target).toBe('stepB');
+  });
+
+  it('6.3 — round-trip multi-connexion + join_policy', () => {
+    const input: WorkflowStep[] = [
+      { order: 1, step_id: 'stepA', name: 'A', step_type: 'platform', on_success_step_ids: ['stepB', 'stepC'] },
+      { order: 2, step_id: 'stepB', name: 'B', step_type: 'platform', on_success_step_ids: ['stepD'] },
+      { order: 3, step_id: 'stepC', name: 'C', step_type: 'platform', on_success_step_ids: ['stepD'] },
+      { order: 4, step_id: 'stepD', name: 'D', step_type: 'platform', join_policy: 'one_success', on_success_step_ids: [] },
+    ];
+    const { nodes, edges } = workflowStepsToReactFlow(input);
+    const output = reactFlowToWorkflowSteps(nodes, edges);
+    // stepA : fan-out vers stepB et stepC
+    expect(output[0].on_success_step_ids).toEqual(['stepB', 'stepC']);
+    // stepB et stepC : convergent vers stepD
+    expect(output[1].on_success_step_ids).toEqual(['stepD']);
+    expect(output[2].on_success_step_ids).toEqual(['stepD']);
+    // stepD : join_policy préservé, aucune cible success (fin de workflow)
+    expect(output[3].join_policy).toBe('one_success');
+    expect(output[3].on_success_step_ids).toEqual([]);
+  });
+
+  it('6.5 — join_policy null est absent du résultat de reactFlowToWorkflowSteps', () => {
+    const nodes = [
+      { id: START_NODE_ID, type: 'start', position: { x: 0, y: 0 }, data: {} },
+      { id: 'stepA', type: 'workflowStep', position: { x: 0, y: 120 },
+        data: { step_type: 'platform', name: 'A', join_policy: null,
+          retry_enabled: false, retry_max_attempts: null, retry_interval_seconds: null, retry_backoff_multiplier: null } },
+      { id: END_NODE_ID, type: 'end', position: { x: 0, y: 300 }, data: {} },
+    ];
+    const result = reactFlowToWorkflowSteps(nodes, []);
+    expect(result[0]).not.toHaveProperty('join_policy');
+  });
+
+  it('6.4 — workflowStepsToReactFlow avec on_success_step_ids: 2 targets → 2 edges', () => {
+    const steps: WorkflowStep[] = [
+      { order: 1, step_id: 'stepA', name: 'A', step_type: 'platform', on_success_step_ids: ['stepB', 'stepC'] },
+    ];
+    const { edges } = workflowStepsToReactFlow(steps);
+    const successEdges = edges.filter(e => e.source === 'stepA' && e.sourceHandle === 'success' && e.target !== END_NODE_ID);
+    expect(successEdges).toHaveLength(2);
+    expect(successEdges.map(e => e.target)).toContain('stepB');
+    expect(successEdges.map(e => e.target)).toContain('stepC');
   });
 });

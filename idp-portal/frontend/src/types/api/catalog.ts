@@ -150,6 +150,12 @@ export interface WorkflowStep {
   on_success_step_id?: string | null;
   /** Story 16.2: Next step ID on error (nullable = workflow fails). */
   on_error_step_id?: string | null;
+  /** Story 67.4: Multiple next step IDs on success (fan-out). Priorité sur on_success_step_id. */
+  on_success_step_ids?: string[] | null;
+  /** Story 67.4: Multiple next step IDs on error (fan-out). Priorité sur on_error_step_id. */
+  on_error_step_ids?: string[] | null;
+  /** Story 67.4: Join policy for convergence steps. */
+  join_policy?: 'all_success' | 'one_success' | 'all_done' | null;
   // === platform ===
   /** Story 57.13: Optional for backward compat — required if step_type='platform'. */
   referenced_action_id?: number | null;

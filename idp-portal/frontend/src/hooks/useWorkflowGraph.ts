@@ -155,8 +155,9 @@ export function useWorkflowGraph({
       const isSuccess = sourceHandle === 'success' || sourceHandle === 'output';
 
       setEdges((eds) => {
+        // Story 67.4: autoriser plusieurs edges par handle (fan-out). Bloquer seulement les doublons exacts.
         const filtered = eds.filter(
-          (e) => !(e.source === params.source && e.sourceHandle === sourceHandle)
+          (e) => !(e.source === params.source && e.sourceHandle === sourceHandle && e.target === params.target)
         );
         const newEdge: Edge = {
           ...params,
