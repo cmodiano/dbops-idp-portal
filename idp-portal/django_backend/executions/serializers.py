@@ -112,6 +112,7 @@ class ExecutionStepSerializer(serializers.Serializer):
     execution_id = serializers.IntegerField(read_only=True)
     step_order = serializers.IntegerField(read_only=True)
     step_name = serializers.CharField(read_only=True)
+    config_step_id = serializers.CharField(read_only=True, allow_null=True)
     step_type = serializers.CharField(read_only=True)
     status = serializers.CharField(read_only=True)
     started_at = serializers.DateTimeField(read_only=True, allow_null=True)
@@ -126,6 +127,7 @@ class ExecutionStepSerializer(serializers.Serializer):
             "execution_id": obj.execution_id,
             "step_order": obj.step_order,
             "step_name": obj.step_name,
+            "config_step_id": obj.config_step_id,
             "step_type": obj.step_type,
             "status": obj.status,
             "started_at": ensure_utc_isoformat(obj.started_at),

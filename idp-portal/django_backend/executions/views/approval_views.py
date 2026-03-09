@@ -148,16 +148,27 @@ def _validate_approval_gate_step(step: ExecutionStep) -> None:
 
 
 def _get_step_config(step: ExecutionStep) -> dict:
-    """Retourne la définition du step depuis action.execution_steps."""
+    """Retourne la définition du step depuis action.execution_steps.
+
+    Uses config_step_id (robust ID-based matching) with fallback to step_name
+    for backward compatibility with older ExecutionStep records.
+    """
     action = step.execution.action
     execution_steps = action.execution_steps or []
     for s in execution_steps:
         if isinstance(s, dict):
-            if s.get("step_id") == step.step_name or s.get("name") == step.step_name:
+            # Primary: match by config_step_id (robust, always a UUID)
+            if step.config_step_id and s.get("step_id") == step.config_step_id:
+                return s
+            # Fallback for old records without config_step_id
+            if not step.config_step_id and (
+                s.get("step_id") == step.step_name or s.get("name") == step.step_name
+            ):
                 return s
     logger.warning(
         "step_config_not_found",
         step_name=step.step_name,
+        config_step_id=step.config_step_id,
         execution_id=step.execution_id,
         step_id=step.id,
     )

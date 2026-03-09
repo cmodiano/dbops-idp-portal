@@ -236,14 +236,18 @@ def _transition_step_to_running(step: ExecutionStep, gate_status: dict, correlat
     action = step.execution.action
     execution_steps = action.execution_steps or []
 
-    # Match by step_order from output's gate_conditions context or by name
+    # Match by config_step_id (robust) with fallback to step_name for old records
     step_def = None
     for s in execution_steps:
-        if isinstance(s, dict) and (
-            s.get('name') == step.step_name or s.get('step_id') == step.step_name
-        ):
-            step_def = s
-            break
+        if isinstance(s, dict):
+            if step.config_step_id and s.get('step_id') == step.config_step_id:
+                step_def = s
+                break
+            if not step.config_step_id and (
+                s.get('name') == step.step_name or s.get('step_id') == step.step_name
+            ):
+                step_def = s
+                break
 
     if step_def:
         # Story 57.7: Détecter si c'est un step ADR-007 container workflow
@@ -530,14 +534,18 @@ def _handle_gate_timeout(step: ExecutionStep, gate_status: dict, correlation_id:
         action = step.execution.action
         execution_steps = action.execution_steps or []
 
-        # Find current step config (match by name or step_id)
+        # Find current step config (match by config_step_id with fallback)
         step_def = None
         for s in execution_steps:
-            if isinstance(s, dict) and (
-                s.get('name') == step.step_name or s.get('step_id') == step.step_name
-            ):
-                step_def = s
-                break
+            if isinstance(s, dict):
+                if step.config_step_id and s.get('step_id') == step.config_step_id:
+                    step_def = s
+                    break
+                if not step.config_step_id and (
+                    s.get('name') == step.step_name or s.get('step_id') == step.step_name
+                ):
+                    step_def = s
+                    break
 
         # Story 57.7: Container workflow (ADR-007) uses resume_container_workflow_from_gate
         is_adr007_step = bool(step_def and step_def.get('step_type'))
@@ -716,9 +724,8 @@ def resume_container_workflow_from_gate(self: Any, execution_id: int, on_success
             status=ExecutionStepStatus.COMPLETED,
         ).order_by('step_order')
 
-        # _step_outputs est keyed par step_id (step.get('step_id')), pas par step_name.
-        # ExecutionStep.step_name stocke step.get('name') (nom humain), pas le step_id.
-        # On construit le mapping name → step_id depuis la définition du workflow.
+        # _step_outputs is keyed by step_id (config's step_id UUID).
+        # Use config_step_id directly when available; fall back to name→id mapping for old records.
         step_name_to_id = {
             s.get('name'): s.get('step_id')
             for s in all_steps
@@ -730,7 +737,11 @@ def resume_container_workflow_from_gate(self: Any, execution_id: int, on_success
         # Restaurer le contexte des outputs de steps déjà exécutés (keyed par step_id)
         for db_step in completed_steps:
             step_output = db_step.get_output() or {}
-            step_id_key = step_name_to_id.get(db_step.step_name) if db_step.step_name else None
+            # Primary: use config_step_id (robust UUID-based matching)
+            step_id_key = db_step.config_step_id
+            # Fallback for old records: map step_name → step_id via config
+            if not step_id_key and db_step.step_name:
+                step_id_key = step_name_to_id.get(db_step.step_name)
             if step_id_key:
                 runtime._step_outputs[step_id_key] = step_output
         runtime.workflow_steps = remaining_steps
