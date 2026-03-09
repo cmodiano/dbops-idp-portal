@@ -755,5 +755,7 @@ del _allowed_http_hosts_env
 # Epic 56 — Décorrélation : schéma/synonyme Oracle fallback pour l'inventaire
 INVENTORY_FALLBACK_SCHEMA = os.getenv('INVENTORY_FALLBACK_SCHEMA', 'DBOPS_INVENTORY')
 
-# Story 65.2 — parallel_group ThreadPoolExecutor max workers
+# Story 65.2 — fan-out ThreadPoolExecutor max workers
+# Nom conservé pour rétrocompatibilité avec les envs existants (anciennement parallel_group).
+# Utilisé par ContainerWorkflowRuntime._execute_fan_out() (Story 67.2).
 PARALLEL_GROUP_MAX_WORKERS = int(os.environ.get('PARALLEL_GROUP_MAX_WORKERS', '5'))

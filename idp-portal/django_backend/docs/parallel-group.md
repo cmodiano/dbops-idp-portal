@@ -1,5 +1,17 @@
 # Parallel Group — Documentation développeur
 
+> ⚠️ **OBSOLÈTE depuis Story 67.2**
+>
+> Le mécanisme `parallel_group` (step_type dédié) a été **supprimé du runtime** dans Story 67.2.
+> Le parallélisme est désormais géré via le **fan-out explicite** :
+> attribuer 2+ valeurs à `on_success_step_ids` ou `on_error_step_ids` d'un step ordinaire
+> déclenche automatiquement une exécution parallèle via `ThreadPoolExecutor`.
+>
+> **Référence architecture** : `docs/architecture/parallel-workflow-actions-analysis.md` — Option B "Fan-out explicite"
+>
+> Cette page est conservée à titre d'historique et pour la rétrocompatibilité
+> de l'export/import CaC (`catalog/services_export_import.py`).
+
 Story 65.1–65.7 | Epic 65 — Workflow Parallel Group (Phase 1 MVP)
 
 ---

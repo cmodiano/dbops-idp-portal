@@ -267,8 +267,15 @@ class WorkflowRuntime:
         # Only treat the relevant branch key as "explicit" for the outcome.
         # This avoids a subtle retro-compat bug where having ONLY on_error_step_id would
         # incorrectly terminate a success path (AC1).
-        if is_success and 'on_success_step_id' in current_step:
-            next_step_id = current_step.get('on_success_step_id')
+        if is_success and ('on_success_step_id' in current_step or 'on_success_step_ids' in current_step):
+            # TODO 67.3+: WorkflowRuntime ne supporte pas encore le parallélisme.
+            # Si on_success_step_ids (pluriel) est présent, prendre le premier élément.
+            ids_plural = current_step.get('on_success_step_ids')
+            next_step_id: str | None
+            if ids_plural and isinstance(ids_plural, list):
+                next_step_id = str(ids_plural[0])
+            else:
+                next_step_id = current_step.get('on_success_step_id')
             logger.debug(
                 "workflow_branch_resolution",
                 current_step_id=current_step.get('step_id'),
@@ -278,8 +285,14 @@ class WorkflowRuntime:
             )
             return next_step_id
 
-        if (not is_success) and 'on_error_step_id' in current_step:
-            next_step_id = current_step.get('on_error_step_id')
+        if (not is_success) and ('on_error_step_id' in current_step or 'on_error_step_ids' in current_step):
+            # TODO 67.3+: WorkflowRuntime ne supporte pas encore le parallélisme.
+            # Si on_error_step_ids (pluriel) est présent, prendre le premier élément.
+            ids_plural = current_step.get('on_error_step_ids')
+            if ids_plural and isinstance(ids_plural, list):
+                next_step_id = str(ids_plural[0])
+            else:
+                next_step_id = current_step.get('on_error_step_id')
             logger.debug(
                 "workflow_branch_resolution",
                 current_step_id=current_step.get('step_id'),

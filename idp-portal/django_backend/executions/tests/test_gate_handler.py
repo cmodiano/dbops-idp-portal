@@ -303,7 +303,11 @@ class TestExecuteHandlerStepWaitingProtocol:
                 {'step_type': 'gate', 'gate_type': 'maintenance_window', 'order': 1, 'step_id': 'g1'},
                 {'step_type': 'platform', 'order': 2, 'step_id': 's2'},
             ]
-            runtime._member_step_ids = frozenset()  # no parallel_group in this workflow
+            # Story 67.2: _member_step_ids supprimé, remplacé par _step_lookup_by_id
+            runtime._step_lookup_by_id = {
+                'g1': {'step_type': 'gate', 'gate_type': 'maintenance_window', 'order': 1, 'step_id': 'g1'},
+                's2': {'step_type': 'platform', 'order': 2, 'step_id': 's2'},
+            }
 
             # _check_cancelled retourne False, _execute_step retourne RUNNING pour gate
             with patch.object(runtime, '_check_cancelled', return_value=False):
