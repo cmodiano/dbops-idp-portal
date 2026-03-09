@@ -430,20 +430,20 @@ class ActionSerializer(ActionFieldValidationMixin, serializers.ModelSerializer):
     @extend_schema_field({'type': 'array', 'items': {'type': 'object', 'properties': {
         'order': {'type': 'integer'}, 'name': {'type': 'string'},
         'referenced_action_id': {'type': 'integer'}, 'action_name': {'type': 'string'},
-        'step_id': {'type': 'string'}, 'on_success_step_id': {'type': 'string'},
-        'on_error_step_id': {'type': 'string'}, 'retry_enabled': {'type': 'boolean'},
+        'step_id': {'type': 'string'},
+        # Story 67.1: multi-target routing (replaces singular on_success_step_id / on_error_step_id)
+        'on_success_step_ids': {'type': 'array', 'items': {'type': 'string'}, 'nullable': True},
+        'on_error_step_ids': {'type': 'array', 'items': {'type': 'string'}, 'nullable': True},
+        'retry_enabled': {'type': 'boolean'},
         'retry_max_attempts': {'type': 'integer'}, 'retry_interval_seconds': {'type': 'integer'},
         'retry_backoff_multiplier': {'type': 'number'},
         # Story 57.15: step_type and schedule_config
+        # Story 67.1: parallel_group removed from enum
         'step_type': {'type': 'string',
                       'enum': ['platform', 'schedule_execution', 'gate', 'service_call',
-                               'evaluation', 'http_request', 'parallel_group'],
+                               'evaluation', 'http_request'],
                       'default': 'platform'},
         'schedule_config': {'type': 'object', 'nullable': True},
-        # Story 65.1: parallel_group fields
-        'parallel_steps': {'type': 'array', 'items': {'type': 'string'}, 'nullable': True},
-        'on_all_success_step_id': {'type': 'string', 'nullable': True},
-        'on_any_error_step_id': {'type': 'string', 'nullable': True},
     }}, 'nullable': True})
     def get_workflow_steps(self, obj: Action) -> list[dict[str, Any]] | None:
         """
@@ -518,21 +518,29 @@ class ActionSerializer(ActionFieldValidationMixin, serializers.ModelSerializer):
                 workflow_step['request_timeout'] = step.get('request_timeout')
                 workflow_step['input_mapping'] = step.get('input_mapping')
                 workflow_step['output_mapping'] = step.get('output_mapping')
-            elif step_type == 'parallel_group':
-                # Story 65.1 Task 3.1: Expose parallel_group fields
-                workflow_step['parallel_steps'] = step.get('parallel_steps', [])
-                workflow_step['on_all_success_step_id'] = step.get('on_all_success_step_id')
-                workflow_step['on_any_error_step_id'] = step.get('on_any_error_step_id')
             if step.get('condition'):
                 workflow_step['condition'] = step['condition']
 
-            # Story 16.2: Branch and retry fields
+            # Story 16.2 / Story 67.1: Branch and retry fields
             if 'step_id' in step:
                 workflow_step['step_id'] = step['step_id']
-            if 'on_success_step_id' in step:
-                workflow_step['on_success_step_id'] = step['on_success_step_id']
-            if 'on_error_step_id' in step:
-                workflow_step['on_error_step_id'] = step['on_error_step_id']
+
+            # Story 67.1: Expose on_success_step_ids / on_error_step_ids (arrays).
+            # Convert singular on_success_step_id if present in DB (retrocompat).
+            success_ids = step.get('on_success_step_ids')
+            if success_ids is None and 'on_success_step_id' in step:
+                v = step['on_success_step_id']
+                success_ids = [v] if v else []
+            if success_ids is not None or 'on_success_step_ids' in step or 'on_success_step_id' in step:
+                workflow_step['on_success_step_ids'] = success_ids if success_ids is not None else []
+
+            error_ids = step.get('on_error_step_ids')
+            if error_ids is None and 'on_error_step_id' in step:
+                v = step['on_error_step_id']
+                error_ids = [v] if v else []
+            if error_ids is not None or 'on_error_step_ids' in step or 'on_error_step_id' in step:
+                workflow_step['on_error_step_ids'] = error_ids if error_ids is not None else []
+
             if 'retry_enabled' in step:
                 workflow_step['retry_enabled'] = step['retry_enabled']
             if 'retry_max_attempts' in step:

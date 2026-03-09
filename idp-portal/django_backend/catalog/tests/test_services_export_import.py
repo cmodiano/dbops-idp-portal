@@ -593,25 +593,25 @@ class ExportImportParallelGroupTests(TestCase):
         # Either updated (if YAML fields differ from setUp defaults) or unchanged — never created
         self.assertEqual(updated + unchanged, 1)
 
-    def test_import_invalid_parallel_group_one_step_raises_error(self):
-        """Import avec parallel_group à 1 seul parallel_step → InvalidStateError. AC #2."""
+    def test_import_parallel_group_one_step_now_valid(self):
+        """Story 67.1: parallel_group validation supprimée — 1 seul parallel_step n'est plus invalide."""
         yaml_bytes = _make_workflow_action_yaml(
-            name="bad-workflow",
+            name="formerly-bad-workflow",
             execution_steps=_INVALID_ONE_PARALLEL_STEP,
         )
-        with self.assertRaises(InvalidStateError) as ctx:
-            import_action_yaml(yaml_bytes, user=self.user)
-        self.assertEqual(ctx.exception.code, "INVALID_WORKFLOW_STEPS")
+        # Avec Story 67.1, la validation parallel_group est supprimée → import réussit
+        created, updated, unchanged = import_action_yaml(yaml_bytes, user=self.user)
+        self.assertEqual(created, 1)
 
-    def test_import_invalid_parallel_steps_ref_raises_error(self):
-        """Import avec parallel_steps référençant un step_id inexistant → InvalidStateError. AC #2."""
+    def test_import_parallel_steps_bad_ref_now_valid(self):
+        """Story 67.1: parallel_group validation supprimée — référence non-existante dans parallel_steps n'est plus vérifiée."""
         yaml_bytes = _make_workflow_action_yaml(
-            name="bad-ref-workflow",
+            name="formerly-bad-ref-workflow",
             execution_steps=_INVALID_BAD_REF_PARALLEL_STEP,
         )
-        with self.assertRaises(InvalidStateError) as ctx:
-            import_action_yaml(yaml_bytes, user=self.user)
-        self.assertEqual(ctx.exception.code, "INVALID_WORKFLOW_STEPS")
+        # Avec Story 67.1, la validation parallel_steps est supprimée → import réussit
+        created, updated, unchanged = import_action_yaml(yaml_bytes, user=self.user)
+        self.assertEqual(created, 1)
 
     def test_import_parallel_group_non_workflow_item_type_skips_validation(self):
         """item_type='action' : validation execution_steps ignorée même si invalide. AC #2."""

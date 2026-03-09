@@ -203,38 +203,34 @@ class TestValidateWorkflowSteps:
             validate_workflow_steps(steps)
         assert "must be an object" in str(exc_info.value)
 
-    def test_on_success_step_id_targeting_parallel_member_invalid(self):
-        """on_success_step_id cannot target parallel_group member (not directly routable)."""
+    def test_routing_to_former_parallel_member_now_valid(self):
+        """Story 67.1: parallel_group member restriction removed — routing to any valid step_id is allowed."""
         steps = [
             {
                 'order': 1, 'name': 'Step 1', 'referenced_action_id': 10, 'step_id': 's1',
-                'on_success_step_id': 'p1',  # p1 is a parallel member
+                'on_success_step_ids': ['p1'],
             },
-            {'order': 2, 'step_id': 'pg-1', 'step_type': 'parallel_group', 'parallel_steps': ['p1', 'p2']},
-            {'order': 3, 'name': 'P1', 'referenced_action_id': 20, 'step_id': 'p1'},
-            {'order': 4, 'name': 'P2', 'referenced_action_id': 30, 'step_id': 'p2'},
+            {'order': 2, 'name': 'P1', 'referenced_action_id': 20, 'step_id': 'p1', 'on_success_step_ids': []},
+            {'order': 3, 'name': 'P2', 'referenced_action_id': 30, 'step_id': 'p2', 'on_success_step_ids': []},
         ]
-        with pytest.raises(drf_serializers.ValidationError) as exc_info:
-            validate_workflow_steps(steps)
-        assert "cannot target parallel_group member" in str(exc_info.value)
-        assert "on_success_step_id" in str(exc_info.value)
+        # Should not raise — routing to any valid step_id is now allowed
+        result = validate_workflow_steps(steps)
+        assert result is not None
 
-    def test_on_error_step_id_targeting_parallel_member_invalid(self):
-        """on_error_step_id cannot target parallel_group member (not directly routable)."""
+    def test_routing_to_step_via_error_ids_now_valid(self):
+        """Story 67.1: on_error_step_ids can target any valid step_id."""
         steps = [
             {
                 'order': 1, 'name': 'Step 1', 'referenced_action_id': 10, 'step_id': 's1',
-                'on_success_step_id': None,
-                'on_error_step_id': 'p1',  # p1 is a parallel member
+                'on_success_step_ids': [],
+                'on_error_step_ids': ['p1'],
             },
-            {'order': 2, 'step_id': 'pg-1', 'step_type': 'parallel_group', 'parallel_steps': ['p1', 'p2']},
-            {'order': 3, 'name': 'P1', 'referenced_action_id': 20, 'step_id': 'p1'},
-            {'order': 4, 'name': 'P2', 'referenced_action_id': 30, 'step_id': 'p2'},
+            {'order': 2, 'name': 'P1', 'referenced_action_id': 20, 'step_id': 'p1', 'on_success_step_ids': []},
+            {'order': 3, 'name': 'P2', 'referenced_action_id': 30, 'step_id': 'p2', 'on_success_step_ids': []},
         ]
-        with pytest.raises(drf_serializers.ValidationError) as exc_info:
-            validate_workflow_steps(steps)
-        assert "cannot target parallel_group member" in str(exc_info.value)
-        assert "on_error_step_id" in str(exc_info.value)
+        # Should not raise
+        result = validate_workflow_steps(steps)
+        assert result is not None
 
     def test_workflow_with_branches_valid(self):
         """Workflow with valid branches is valid."""
@@ -498,31 +494,34 @@ class TestValidateRetryConstraints:
 
 
 class TestDetectWorkflowCycles:
-    """Test cycle detection in workflow branch paths."""
+    """Test cycle detection in workflow branch paths.
+
+    Story 67.1: _detect_workflow_cycles uses on_success_step_ids / on_error_step_ids (plural).
+    """
 
     def test_no_cycle_linear_workflow(self):
         """Linear workflow (s1 -> s2 -> s3) has no cycle."""
         steps = [
-            {'step_id': 's1', 'on_success_step_id': 's2'},
-            {'step_id': 's2', 'on_success_step_id': 's3'},
-            {'step_id': 's3', 'on_success_step_id': None},
+            {'step_id': 's1', 'on_success_step_ids': ['s2']},
+            {'step_id': 's2', 'on_success_step_ids': ['s3']},
+            {'step_id': 's3', 'on_success_step_ids': []},
         ]
         _detect_workflow_cycles(steps)  # Should not raise
 
     def test_no_cycle_diamond_workflow(self):
         """Diamond workflow (s1 -> s2, s3; s2, s3 -> s4) has no cycle."""
         steps = [
-            {'step_id': 's1', 'on_success_step_id': 's2', 'on_error_step_id': 's3'},
-            {'step_id': 's2', 'on_success_step_id': 's4'},
-            {'step_id': 's3', 'on_success_step_id': 's4'},
-            {'step_id': 's4', 'on_success_step_id': None},
+            {'step_id': 's1', 'on_success_step_ids': ['s2'], 'on_error_step_ids': ['s3']},
+            {'step_id': 's2', 'on_success_step_ids': ['s4']},
+            {'step_id': 's3', 'on_success_step_ids': ['s4']},
+            {'step_id': 's4', 'on_success_step_ids': []},
         ]
         _detect_workflow_cycles(steps)  # Should not raise
 
     def test_cycle_self_loop(self):
         """Self-loop (s1 -> s1) is detected."""
         steps = [
-            {'step_id': 's1', 'on_success_step_id': 's1'},
+            {'step_id': 's1', 'on_success_step_ids': ['s1']},
         ]
         with pytest.raises(drf_serializers.ValidationError) as exc_info:
             _detect_workflow_cycles(steps)
@@ -531,8 +530,8 @@ class TestDetectWorkflowCycles:
     def test_cycle_two_node_loop(self):
         """Two-node cycle (s1 -> s2 -> s1) is detected."""
         steps = [
-            {'step_id': 's1', 'on_success_step_id': 's2'},
-            {'step_id': 's2', 'on_success_step_id': 's1'},
+            {'step_id': 's1', 'on_success_step_ids': ['s2']},
+            {'step_id': 's2', 'on_success_step_ids': ['s1']},
         ]
         with pytest.raises(drf_serializers.ValidationError) as exc_info:
             _detect_workflow_cycles(steps)

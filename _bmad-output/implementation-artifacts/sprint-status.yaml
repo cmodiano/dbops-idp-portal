@@ -842,3 +842,23 @@ development_status:
     66-26-revue-documentation-docs-readme: done
     66-27-consolidation-synthese-findings-plan-correction: done
     epic-66-retrospective: optional
+    # === Epic 67: Workflow — Parallélisme via multi-connexion (remplacement Groupe parallèle) ===
+    # Réf: planning-artifacts/epic-67-workflow-parallel-multi-connexion.md
+    # Supprimer step parallel_group ; permettre plusieurs connexions depuis un port succès/échec → exécution parallèle
+    epic-67: in-progress
+    67-1-schema-json-validation-backend-multi-cibles: done
+    67-2-runtime-backend-execution-parallele-multi-cibles: backlog
+    67-3-frontend-workflow-builder-multi-connexions: backlog
+    67-4-frontend-suppression-step-groupe-parallele: backlog
+    67-5-migration-parallel-group-vers-multi-connexion: backlog
+    67-6-vue-execution-cac-documentation-tests: backlog
+    epic-67-retrospective: optional
+    # === Epic 68: Authentification LDAP prioritaire (comptes à haut privilège) ===
+    # Réf: implementation-artifacts/67-2-exigence-auth-ldap-comptes-privileges.md
+    # Requis sécurité : LDAP prioritaire, accès portail réservé aux comptes à haut privilège (séparation laptop / privilégié)
+    epic-68: backlog
+    68-1-configuration-ldap-methode-prioritaire: backlog
+    68-2-restriction-acces-comptes-haut-privilege: backlog
+    68-3-authentification-explicite-sans-sso-transparent: backlog
+    68-4-validation-non-regression-saml: backlog
+    epic-68-retrospective: optional

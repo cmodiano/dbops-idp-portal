@@ -107,8 +107,9 @@ class WorkflowStepsIntegrationTests(TestCase):
         workflow_steps = response.data['data']['workflow_steps']
         self.assertEqual(len(workflow_steps), 3)
         self.assertEqual(workflow_steps[0]['step_id'], 'step-1')
-        self.assertEqual(workflow_steps[0]['on_success_step_id'], 'step-2')
-        self.assertEqual(workflow_steps[0]['on_error_step_id'], 'step-3')
+        # Story 67.1: API returns on_success_step_ids / on_error_step_ids (arrays)
+        self.assertEqual(workflow_steps[0]['on_success_step_ids'], ['step-2'])
+        self.assertEqual(workflow_steps[0]['on_error_step_ids'], ['step-3'])
 
     def test_update_workflow_steps_with_retry_success(self):
         """Test updating workflow steps with valid retry configuration."""
@@ -298,6 +299,48 @@ class WorkflowStepsIntegrationTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('brouillon ou désactivée', str(response.data))
 
+    def test_update_workflow_steps_fan_out_multi_target_direct(self):
+        """Story 67.1 AC #1: on_success_step_ids avec plusieurs IDs envoyés directement à l'API."""
+        steps = [
+            {
+                'order': 1,
+                'name': 'Fan-out Step',
+                'referenced_action_id': self.action1.id,
+                'step_id': 'step-1',
+                'on_success_step_ids': ['step-2', 'step-3'],  # pluriel direct — fan-out
+                'on_error_step_ids': [],
+            },
+            {
+                'order': 2,
+                'name': 'Branch A',
+                'referenced_action_id': self.action2.id,
+                'step_id': 'step-2',
+                'on_success_step_ids': [],
+            },
+            {
+                'order': 3,
+                'name': 'Branch B',
+                'referenced_action_id': self.action3.id,
+                'step_id': 'step-3',
+                'on_success_step_ids': [],
+            },
+        ]
+
+        response = self.client.put(
+            f'/api/v1/admin/actions/{self.workflow.id}/execution-steps/',
+            {'steps': steps},
+            format='json'
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        workflow_steps = response.data['data']['workflow_steps']
+        self.assertEqual(len(workflow_steps), 3)
+        step1 = next(s for s in workflow_steps if s['step_id'] == 'step-1')
+        # Fan-out préservé tel quel : deux successeurs dans la réponse
+        self.assertEqual(sorted(step1['on_success_step_ids']), ['step-2', 'step-3'])
+        self.assertEqual(step1['on_error_step_ids'], [])
+
     def test_update_workflow_steps_complex_diamond_structure(self):
         """Test complex diamond workflow structure (convergence, not a cycle)."""
         steps = [
@@ -343,8 +386,9 @@ class WorkflowStepsIntegrationTests(TestCase):
         # Verify complex structure
         workflow_steps = response.data['data']['workflow_steps']
         self.assertEqual(len(workflow_steps), 4)
-        self.assertEqual(workflow_steps[0]['on_success_step_id'], 'step-2')
-        self.assertEqual(workflow_steps[0]['on_error_step_id'], 'step-3')
-        self.assertEqual(workflow_steps[1]['on_success_step_id'], 'final')
-        self.assertEqual(workflow_steps[2]['on_success_step_id'], 'final')
-        self.assertEqual(workflow_steps[3]['on_success_step_id'], None)
+        # Story 67.1: API returns on_success_step_ids / on_error_step_ids (arrays)
+        self.assertEqual(workflow_steps[0]['on_success_step_ids'], ['step-2'])
+        self.assertEqual(workflow_steps[0]['on_error_step_ids'], ['step-3'])
+        self.assertEqual(workflow_steps[1]['on_success_step_ids'], ['final'])
+        self.assertEqual(workflow_steps[2]['on_success_step_ids'], ['final'])
+        self.assertEqual(workflow_steps[3]['on_success_step_ids'], [])
