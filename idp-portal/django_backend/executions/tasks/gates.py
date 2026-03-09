@@ -279,14 +279,6 @@ def _transition_step_to_running(step: ExecutionStep, gate_status: dict, correlat
             try:
                 execution = step.execution
                 if execution.status == ExecutionStatus.RUNNING:
-                    AuditService.create_entry(
-                        user_id=str(execution.user_id),
-                        action_type=AuditActionType.EXECUTION_COMPLETED,
-                        entity_type=AuditEntityType.EXECUTION,
-                        entity_id=execution.id,
-                        details={'execution_id': str(execution.id), 'action_name': execution.action.name if execution.action else None},
-                        correlation_id=correlation_id,
-                    )
                     updated = Execution.objects.filter(
                         id=execution.id,
                         status=ExecutionStatus.RUNNING,
@@ -295,6 +287,14 @@ def _transition_step_to_running(step: ExecutionStep, gate_status: dict, correlat
                         completed_at=timezone.now(),
                     )
                     if updated:
+                        AuditService.create_entry(
+                            user_id=str(execution.user_id),
+                            action_type=AuditActionType.EXECUTION_COMPLETED,
+                            entity_type=AuditEntityType.EXECUTION,
+                            entity_id=execution.id,
+                            details={'execution_id': str(execution.id), 'action_name': execution.action.name if execution.action else None},
+                            correlation_id=correlation_id,
+                        )
                         logger.info(
                             "evaluate_waiting_gates_step_container_workflow_completed",
                             step_id=step.id,
@@ -367,8 +367,18 @@ def _update_waiting_context(step: ExecutionStep, gate_status: dict, correlation_
     # V113: Durable event so UI can refresh gate status on reconnect.
     # Skip for approval gates — no meaningful change until approval.
     if not is_approval_gate:
-        from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
-        WorkflowEventService.emit_step_output_updated(step.execution_id, step)
+        try:
+            from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
+            WorkflowEventService.emit_step_output_updated(step.execution_id, step)
+        except Exception as e:  # noqa: BLE001 — best-effort: emit must not fail evaluation
+            logger.error(
+                "evaluate_waiting_gates_emit_step_output_updated_failed",
+                step_id=step.id,
+                execution_id=step.execution_id,
+                error=str(e),
+                correlation_id=correlation_id,
+                exc_info=True,
+            )
 
     logger.info(
         "evaluate_waiting_gates_step_still_waiting",
@@ -382,30 +392,36 @@ def _update_waiting_context(step: ExecutionStep, gate_status: dict, correlation_
 def _get_next_step_id_by_order(execution_steps: list, current_step_config: dict) -> str | None:
     """Return step_id of next step by order (fallback when on_success_step_id absent).
 
+    Excludes parallel_group member steps so the result matches the runtime's
+    non-member sequencing (ContainerWorkflowRuntime._execute_workflow_steps).
     Uses identity-based matching (step_id/name) as primary strategy, falling back
     to strict order comparison.
     """
-    candidate_steps = [s for s in execution_steps if isinstance(s, dict) and s.get('step_id')]
-    sorted_steps = sorted(
-        enumerate(candidate_steps),
-        key=lambda ix: (ix[1].get('order', 0), ix[0]),
-    )
+    member_step_ids: set[str] = set()
+    for s in execution_steps:
+        if isinstance(s, dict) and s.get('step_type') == 'parallel_group':
+            member_step_ids.update(s.get('parallel_steps') or [])
+    non_member_steps = [
+        s for s in execution_steps
+        if isinstance(s, dict) and s.get('step_id') and s.get('step_id') not in member_step_ids
+    ]
+    sorted_steps = sorted(non_member_steps, key=lambda s: s.get('order', 0))
     current_order = current_step_config.get('order', 0)
     current_sid = current_step_config.get('step_id')
     current_name = current_step_config.get('name')
 
     # Try identity-based match first: find current step in sorted list, return next
     if current_sid or current_name:
-        for i, (_orig_idx, s) in enumerate(sorted_steps):
+        for i, s in enumerate(sorted_steps):
             if (current_sid and s.get('step_id') == current_sid) or (
                 current_name and s.get('name') == current_name
             ):
                 if i + 1 < len(sorted_steps):
-                    return sorted_steps[i + 1][1].get('step_id')
+                    return sorted_steps[i + 1].get('step_id')
                 return None  # current step is last
 
     # Fallback: first step with strictly greater order
-    for _orig_idx, s in sorted_steps:
+    for s in sorted_steps:
         if s.get('order', 0) > current_order:
             return s.get('step_id')
     return None
@@ -569,14 +585,6 @@ def _handle_gate_timeout(step: ExecutionStep, gate_status: dict, correlation_id:
             try:
                 execution = step.execution
                 if execution.status == ExecutionStatus.RUNNING:
-                    AuditService.create_entry(
-                        user_id=str(execution.user_id),
-                        action_type=AuditActionType.EXECUTION_COMPLETED,
-                        entity_type=AuditEntityType.EXECUTION,
-                        entity_id=execution.id,
-                        details={'execution_id': str(execution.id), 'action_name': execution.action.name if execution.action else None},
-                        correlation_id=correlation_id,
-                    )
                     updated = Execution.objects.filter(
                         id=execution.id,
                         status=ExecutionStatus.RUNNING,
@@ -585,6 +593,14 @@ def _handle_gate_timeout(step: ExecutionStep, gate_status: dict, correlation_id:
                         completed_at=timezone.now(),
                     )
                     if updated:
+                        AuditService.create_entry(
+                            user_id=str(execution.user_id),
+                            action_type=AuditActionType.EXECUTION_COMPLETED,
+                            entity_type=AuditEntityType.EXECUTION,
+                            entity_id=execution.id,
+                            details={'execution_id': str(execution.id), 'action_name': execution.action.name if execution.action else None},
+                            correlation_id=correlation_id,
+                        )
                         logger.info(
                             "evaluate_waiting_gates_step_timeout_container_workflow_completed",
                             step_id=step.id,

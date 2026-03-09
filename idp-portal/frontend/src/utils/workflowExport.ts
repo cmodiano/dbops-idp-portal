@@ -76,19 +76,33 @@ export function buildWorkflowExport(
       name: metadata.name,
       description: metadata.description ?? null,
       tags: metadata.tags ?? [],
-      // MEDIUM-1 FIX: Reorder fields to match JSON Schema documentation
-      steps: steps.map((s) => ({
-        step_id: s.step_id ?? null,
-        referenced_action_id: s.referenced_action_id,
-        name: s.name ?? null,
-        on_success_step_id: s.on_success_step_id ?? null,
-        on_error_step_id: s.on_error_step_id ?? null,
-        retry_enabled: s.retry_enabled ?? false,
-        retry_max_attempts: s.retry_max_attempts ?? null,
-        retry_interval_seconds: s.retry_interval_seconds ?? null,
-        retry_backoff_multiplier: s.retry_backoff_multiplier ?? null,
-        order: s.order, // Optional field at end
-      })),
+      steps: steps.map((s) => {
+        // Story 65.4: parallel_group has a different schema
+        if (s.step_type === 'parallel_group') {
+          return {
+            step_id: s.step_id ?? null,
+            step_type: 'parallel_group' as const,
+            name: s.name ?? null,
+            parallel_steps: s.parallel_steps ?? [],
+            on_all_success_step_id: s.on_all_success_step_id ?? null,
+            on_any_error_step_id: s.on_any_error_step_id ?? null,
+            order: s.order,
+          };
+        }
+        return {
+          step_id: s.step_id ?? null,
+          step_type: s.step_type ?? 'platform', // Story 65.4: toujours inclure step_type
+          referenced_action_id: s.referenced_action_id,
+          name: s.name ?? null,
+          on_success_step_id: s.on_success_step_id ?? null,
+          on_error_step_id: s.on_error_step_id ?? null,
+          retry_enabled: s.retry_enabled ?? false,
+          retry_max_attempts: s.retry_max_attempts ?? null,
+          retry_interval_seconds: s.retry_interval_seconds ?? null,
+          retry_backoff_multiplier: s.retry_backoff_multiplier ?? null,
+          order: s.order, // Optional field at end
+        };
+      }),
     },
   };
 }
@@ -176,7 +190,6 @@ export async function exportWorkflowAsImage(
   return new Promise<void>((resolve, reject) => {
     finalCanvas.toBlob((blob) => {
       if (!blob) {
-        // HIGH-3 FIX: Reject instead of silently resolving
         reject(new Error('Échec de la génération de l\'image PNG'));
         return;
       }
@@ -269,46 +282,102 @@ export function validateWorkflowImport(data: unknown): string[] {
       allStepIds.push(s.step_id);
     }
 
-    // referenced_action_id
-    if (typeof s.referenced_action_id !== 'number' || s.referenced_action_id < 1 || !Number.isInteger(s.referenced_action_id)) {
-      errors.push(`Étape ${i + 1} : "referenced_action_id" doit être un entier positif.`);
+    // Story 65.4: pour parallel_group, validation spécifique (pas de referenced_action_id requis)
+    if (s.step_type === 'parallel_group') {
+      if (!Array.isArray(s.parallel_steps) || s.parallel_steps.length < 2) {
+        errors.push(`Étape ${i + 1} : "parallel_steps" doit contenir au moins 2 step_id.`);
+      } else if (s.parallel_steps.some((id: unknown) => typeof id !== 'string' || (id as string).length === 0)) {
+        errors.push(`Étape ${i + 1} : "parallel_steps" doit contenir des strings non-vides.`);
+      } else if (new Set(s.parallel_steps).size !== (s.parallel_steps as string[]).length) {
+        errors.push(`Étape ${i + 1} : "parallel_steps" contient des step_id dupliqués.`);
+      }
+    } else {
+      // referenced_action_id
+      if (typeof s.referenced_action_id !== 'number' || s.referenced_action_id < 1 || !Number.isInteger(s.referenced_action_id)) {
+        errors.push(`Étape ${i + 1} : "referenced_action_id" doit être un entier positif.`);
+      }
+
+      // Retry validation
+      if (s.retry_enabled === true) {
+        if (typeof s.retry_max_attempts !== 'number' || s.retry_max_attempts < 1) {
+          errors.push(`Étape ${i + 1} : "retry_max_attempts" doit être >= 1 si retry est activé.`);
+        }
+        if (typeof s.retry_interval_seconds !== 'number' || s.retry_interval_seconds < 1) {
+          errors.push(`Étape ${i + 1} : "retry_interval_seconds" doit être >= 1 si retry est activé.`);
+        }
+        if (typeof s.retry_backoff_multiplier !== 'number' || s.retry_backoff_multiplier < 1.0) {
+          errors.push(`Étape ${i + 1} : "retry_backoff_multiplier" doit être >= 1.0 si retry est activé.`);
+        }
+      }
     }
 
     // name (optional but should be string or null)
     if (s.name !== undefined && s.name !== null && typeof s.name !== 'string') {
       errors.push(`Étape ${i + 1} : "name" doit être une chaîne de caractères ou null.`);
     }
+  });
 
-    // Retry validation
-    if (s.retry_enabled === true) {
-      if (typeof s.retry_max_attempts !== 'number' || s.retry_max_attempts < 1) {
-        errors.push(`Étape ${i + 1} : "retry_max_attempts" doit être >= 1 si retry est activé.`);
-      }
-      if (typeof s.retry_interval_seconds !== 'number' || s.retry_interval_seconds < 1) {
-        errors.push(`Étape ${i + 1} : "retry_interval_seconds" doit être >= 1 si retry est activé.`);
-      }
-      if (typeof s.retry_backoff_multiplier !== 'number' || s.retry_backoff_multiplier < 1.0) {
-        errors.push(`Étape ${i + 1} : "retry_backoff_multiplier" doit être >= 1.0 si retry est activé.`);
-      }
-    }
+  // Build step_id -> step lookup for member type checks
+  const stepById = new Map<string, Record<string, unknown>>();
+  (wf.steps as Record<string, unknown>[]).forEach((st) => {
+    const sid = st.step_id as string;
+    if (typeof sid === 'string' && sid) stepById.set(sid, st);
   });
 
   // Cross-step reference validation
   (wf.steps as Record<string, unknown>[]).forEach((s, i) => {
-    if (typeof s.on_success_step_id === 'string' && s.on_success_step_id) {
-      if (!stepIds.has(s.on_success_step_id)) {
-        errors.push(`Étape ${i + 1} : "on_success_step_id" référence un step_id inexistant : "${s.on_success_step_id}".`);
+    if (s.step_type === 'parallel_group') {
+      // Story 65.4: valider les références dans parallel_group
+      if (Array.isArray(s.parallel_steps)) {
+        (s.parallel_steps as string[]).forEach((pid) => {
+          if (!stepIds.has(pid)) {
+            errors.push(`Étape ${i + 1} : parallel_steps référence un step_id inexistant : "${pid}".`);
+          }
+          if (pid === s.step_id) {
+            errors.push(`Étape ${i + 1} : auto-référence interdite dans parallel_steps (step_id = "${pid}").`);
+          }
+          const refStep = stepById.get(pid);
+          const refType = (refStep?.step_type as string) ?? 'platform';
+          if (refType === 'parallel_group') {
+            errors.push(`Étape ${i + 1} : parallel_steps ne peut pas contenir de parallel_group imbriqué ("${pid}").`);
+          }
+          if (refType === 'gate') {
+            errors.push(`Étape ${i + 1} : parallel_steps ne peut pas contenir de step gate ("${pid}").`);
+          }
+        });
       }
-      if (s.on_success_step_id === s.step_id) {
-        errors.push(`Étape ${i + 1} : auto-référence interdite (on_success_step_id = step_id).`);
+      if (typeof s.on_all_success_step_id === 'string' && s.on_all_success_step_id) {
+        if (!stepIds.has(s.on_all_success_step_id)) {
+          errors.push(`Étape ${i + 1} : "on_all_success_step_id" référence un step_id inexistant : "${s.on_all_success_step_id}".`);
+        }
+        if (s.on_all_success_step_id === s.step_id) {
+          errors.push(`Étape ${i + 1} : auto-référence interdite (on_all_success_step_id = step_id).`);
+        }
       }
-    }
-    if (typeof s.on_error_step_id === 'string' && s.on_error_step_id) {
-      if (!stepIds.has(s.on_error_step_id)) {
-        errors.push(`Étape ${i + 1} : "on_error_step_id" référence un step_id inexistant : "${s.on_error_step_id}".`);
+      if (typeof s.on_any_error_step_id === 'string' && s.on_any_error_step_id) {
+        if (!stepIds.has(s.on_any_error_step_id)) {
+          errors.push(`Étape ${i + 1} : "on_any_error_step_id" référence un step_id inexistant : "${s.on_any_error_step_id}".`);
+        }
+        if (s.on_any_error_step_id === s.step_id) {
+          errors.push(`Étape ${i + 1} : auto-référence interdite (on_any_error_step_id = step_id).`);
+        }
       }
-      if (s.on_error_step_id === s.step_id) {
-        errors.push(`Étape ${i + 1} : auto-référence interdite (on_error_step_id = step_id).`);
+    } else {
+      if (typeof s.on_success_step_id === 'string' && s.on_success_step_id) {
+        if (!stepIds.has(s.on_success_step_id)) {
+          errors.push(`Étape ${i + 1} : "on_success_step_id" référence un step_id inexistant : "${s.on_success_step_id}".`);
+        }
+        if (s.on_success_step_id === s.step_id) {
+          errors.push(`Étape ${i + 1} : auto-référence interdite (on_success_step_id = step_id).`);
+        }
+      }
+      if (typeof s.on_error_step_id === 'string' && s.on_error_step_id) {
+        if (!stepIds.has(s.on_error_step_id)) {
+          errors.push(`Étape ${i + 1} : "on_error_step_id" référence un step_id inexistant : "${s.on_error_step_id}".`);
+        }
+        if (s.on_error_step_id === s.step_id) {
+          errors.push(`Étape ${i + 1} : auto-référence interdite (on_error_step_id = step_id).`);
+        }
       }
     }
   });
@@ -349,18 +418,33 @@ export function parseWorkflowFile(
   const exportData = parsed as WorkflowExport;
 
   // Normalize steps: ensure all optional fields have defaults
-  const normalizedSteps: WorkflowStep[] = exportData.workflow.steps.map((step, index) => ({
-    order: typeof step.order === 'number' ? step.order : index + 1,
-    step_id: step.step_id ?? null,
-    referenced_action_id: step.referenced_action_id,
-    name: step.name ?? null,
-    on_success_step_id: step.on_success_step_id ?? null,
-    on_error_step_id: step.on_error_step_id ?? null,
-    retry_enabled: step.retry_enabled ?? false,
-    retry_max_attempts: step.retry_max_attempts ?? null,
-    retry_interval_seconds: step.retry_interval_seconds ?? null,
-    retry_backoff_multiplier: step.retry_backoff_multiplier ?? null,
-  }));
+  const normalizedSteps: WorkflowStep[] = exportData.workflow.steps.map((step, index) => {
+    const base = {
+      order: typeof step.order === 'number' ? step.order : index + 1,
+      step_id: step.step_id ?? null,
+      name: step.name ?? null,
+      step_type: step.step_type ?? 'platform',
+    };
+    // Story 65.4: parallel_group normalisation
+    if (step.step_type === 'parallel_group') {
+      return {
+        ...base,
+        parallel_steps: Array.isArray(step.parallel_steps) ? step.parallel_steps : [],
+        on_all_success_step_id: step.on_all_success_step_id ?? null,
+        on_any_error_step_id: step.on_any_error_step_id ?? null,
+      };
+    }
+    return {
+      ...base,
+      referenced_action_id: step.referenced_action_id,
+      on_success_step_id: step.on_success_step_id ?? null,
+      on_error_step_id: step.on_error_step_id ?? null,
+      retry_enabled: step.retry_enabled ?? false,
+      retry_max_attempts: step.retry_max_attempts ?? null,
+      retry_interval_seconds: step.retry_interval_seconds ?? null,
+      retry_backoff_multiplier: step.retry_backoff_multiplier ?? null,
+    };
+  });
 
   return {
     valid: true,

@@ -196,6 +196,46 @@ class TestValidateWorkflowSteps:
             validate_workflow_steps(steps)
         assert "referenced_action_id is required for platform steps" in str(exc_info.value)
 
+    def test_step_not_dict_raises(self):
+        """Step that is not a dict raises ValidationError."""
+        steps = [{'order': 1, 'name': 'Step 1', 'referenced_action_id': 10}, ['not', 'a', 'dict']]
+        with pytest.raises(drf_serializers.ValidationError) as exc_info:
+            validate_workflow_steps(steps)
+        assert "must be an object" in str(exc_info.value)
+
+    def test_on_success_step_id_targeting_parallel_member_invalid(self):
+        """on_success_step_id cannot target parallel_group member (not directly routable)."""
+        steps = [
+            {
+                'order': 1, 'name': 'Step 1', 'referenced_action_id': 10, 'step_id': 's1',
+                'on_success_step_id': 'p1',  # p1 is a parallel member
+            },
+            {'order': 2, 'step_id': 'pg-1', 'step_type': 'parallel_group', 'parallel_steps': ['p1', 'p2']},
+            {'order': 3, 'name': 'P1', 'referenced_action_id': 20, 'step_id': 'p1'},
+            {'order': 4, 'name': 'P2', 'referenced_action_id': 30, 'step_id': 'p2'},
+        ]
+        with pytest.raises(drf_serializers.ValidationError) as exc_info:
+            validate_workflow_steps(steps)
+        assert "cannot target parallel_group member" in str(exc_info.value)
+        assert "on_success_step_id" in str(exc_info.value)
+
+    def test_on_error_step_id_targeting_parallel_member_invalid(self):
+        """on_error_step_id cannot target parallel_group member (not directly routable)."""
+        steps = [
+            {
+                'order': 1, 'name': 'Step 1', 'referenced_action_id': 10, 'step_id': 's1',
+                'on_success_step_id': None,
+                'on_error_step_id': 'p1',  # p1 is a parallel member
+            },
+            {'order': 2, 'step_id': 'pg-1', 'step_type': 'parallel_group', 'parallel_steps': ['p1', 'p2']},
+            {'order': 3, 'name': 'P1', 'referenced_action_id': 20, 'step_id': 'p1'},
+            {'order': 4, 'name': 'P2', 'referenced_action_id': 30, 'step_id': 'p2'},
+        ]
+        with pytest.raises(drf_serializers.ValidationError) as exc_info:
+            validate_workflow_steps(steps)
+        assert "cannot target parallel_group member" in str(exc_info.value)
+        assert "on_error_step_id" in str(exc_info.value)
+
     def test_workflow_with_branches_valid(self):
         """Workflow with valid branches is valid."""
         steps = [

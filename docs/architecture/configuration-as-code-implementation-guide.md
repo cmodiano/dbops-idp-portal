@@ -148,8 +148,10 @@ def import_action_yaml(content: bytes, mode="additive", user=None) -> tuple[int,
 
 ### Pourquoi pas `update_or_create` directement ?
 
-`update_or_create` retourne toujours `updated=True` même si aucun champ n'a changé. Ce pattern
-permet de distinguer `updated` de `unchanged` pour produire des rapports précis.
+`update_or_create()` retourne un tuple `(object, created)` où `created` vaut `True` si un nouvel
+objet a été créé, `False` sinon. Il ne permet pas de savoir si un objet existant a été modifié
+(seulement s'il a été créé). Ce pattern avec `_apply_field_changes` permet de distinguer
+`created`, `unchanged` et `updated-with-field-changes` pour produire des rapports précis.
 
 ---
 
@@ -179,7 +181,7 @@ def update_sync_tracking(obj: object, yaml_content: bytes) -> None:
 
 ### Usage dans `detect_drift`
 
-```
+```text
 hash_fichier_git == obj.last_synced_hash → in_sync
 hash_fichier_git != obj.last_synced_hash → diverged
 obj.last_synced_hash is None             → jamais syncé
@@ -241,10 +243,16 @@ def import_integration_yaml(content: bytes, mode="additive", user=None) -> tuple
         if obj.secret_service_id != ref_integration.id:
             obj.secret_service_id = ref_integration.id
             obj.save(update_fields=["secret_service_id"])
+            update_sync_tracking(obj, content)  # Toujours si FK modifiée
+            if unchanged:
+                unchanged, updated = 0, 1
     elif obj.secret_service_id is not None and not was_created:
         # Effacer la référence si absente du YAML
         obj.secret_service_id = None
         obj.save(update_fields=["secret_service_id"])
+        update_sync_tracking(obj, content)  # Toujours si FK modifiée
+        if unchanged:
+            unchanged, updated = 0, 1
     # ...
 ```
 
@@ -264,7 +272,7 @@ Les `Integration` peuvent stocker un chemin Vault dans `credential_ref`
 
 À l'export, le **dernier segment du chemin** est remplacé par `***` :
 
-```
+```text
 secret/integrations/aap-prod  →  secret/integrations/***
 simple-secret                  →  ***
 None / ""                      →  None
@@ -307,11 +315,11 @@ from django.http import HttpResponse
 
 from core.exceptions import InvalidStateError
 from core.parsers import YAMLParser, extract_yaml_content
-from core.permissions import IsAdminUser
+from core.permissions import AdminProfilePermission
 
 
 @api_view(['GET'])
-@permission_classes([IsAdminUser])
+@permission_classes([AdminProfilePermission])
 def export_<entity>(request: Request) -> HttpResponse:
     """GET /api/v1/admin/<entity>/export/yaml/ — Export YAML."""
     content = export_<entity>_yaml()
@@ -321,7 +329,7 @@ def export_<entity>(request: Request) -> HttpResponse:
 
 
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([AdminProfilePermission])
 @parser_classes([YAMLParser, MultiPartParser])
 def sync_<entity>(request: Request) -> Response:
     """POST /api/v1/admin/<entity>/sync/ — Import depuis YAML."""
@@ -352,7 +360,7 @@ def sync_<entity>(request: Request) -> Response:
 
 | Règle | Détail |
 |-------|--------|
-| `@permission_classes([IsAdminUser])` | Obligatoire sur tous les endpoints CaC |
+| `@permission_classes([AdminProfilePermission])` | Obligatoire sur tous les endpoints CaC |
 | `@parser_classes([YAMLParser, MultiPartParser])` | Pour les endpoints POST (sync) |
 | Retour export | `HttpResponse` avec `content_type='application/x-yaml'` |
 | Retour sync | `Response({"data": ...})` (201 si création pure, 200 sinon) |
@@ -364,7 +372,7 @@ def sync_<entity>(request: Request) -> Response:
 
 ### Graph de dépendances FK
 
-```
+```text
 RefEngine (code)         ← aucune dépendance
 RefCategory (code)       ← aucune dépendance
 Tag (name)               ← aucune dépendance
@@ -484,7 +492,7 @@ Pour ajouter le support CaC d'une nouvelle entité Django :
 ### Phase 5 : Endpoints HTTP CaC
 
 - [ ] Créer `<app>/iac_views.py` (ou ajouter dans l'existant)
-  - `export_<entity>` (GET) avec `@permission_classes([IsAdminUser])`
+  - `export_<entity>` (GET) avec `@permission_classes([AdminProfilePermission])`
   - `sync_<entity>` (POST) avec `@parser_classes([YAMLParser, MultiPartParser])`
 - [ ] Déclarer les routes dans `<app>/urls.py`
 - [ ] Brancher dans le routeur principal

@@ -105,6 +105,7 @@ export function CalendarPage() {
 
   const handleTodayClick = useCallback(() => {
     calendarRef.current?.getApi().today();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- calendarRef is a stable ref, no need to list as dep
   }, []);
 
   const handleToggleRecurrence = useCallback(

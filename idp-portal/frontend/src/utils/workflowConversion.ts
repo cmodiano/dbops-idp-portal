@@ -77,6 +77,10 @@ export function workflowStepsToReactFlow(
       output_mapping: step.output_mapping ?? null,
       // Story 57.16: schedule_execution
       schedule_config: step.schedule_config ?? null,
+      // Story 65.4: parallel_group fields
+      parallel_steps: step.parallel_steps ?? null,
+      on_all_success_step_id: step.on_all_success_step_id ?? null,
+      on_any_error_step_id: step.on_any_error_step_id ?? null,
     } satisfies WorkflowStepNodeData,
   }));
 
@@ -85,39 +89,26 @@ export function workflowStepsToReactFlow(
     const sourceId = step.step_id;
     if (!sourceId) return;
 
-    if (step.on_success_step_id) {
+    if (step.step_type === 'parallel_group') {
+      // Story 65.4: parallel_group uses on_all_success / on_any_error instead of on_success / on_error
+      const allSuccessTarget = step.on_all_success_step_id ?? END_NODE_ID;
       edges.push({
-        id: `${sourceId}_success_${step.on_success_step_id}`,
+        id: `${sourceId}_all_success_${allSuccessTarget}`,
         source: sourceId,
-        target: step.on_success_step_id,
+        target: allSuccessTarget,
         sourceHandle: 'success',
         targetHandle: 'input',
         type: 'customEdge',
         animated: false,
         style: { stroke: STYLE_TOKENS.iconSuccess, strokeWidth: STYLE_TOKENS.edgeStrokeWidth },
-        label: 'succès',
+        label: 'tout succès',
         labelStyle: { fontSize: STYLE_TOKENS.edgeLabelFontSize, fill: STYLE_TOKENS.textSuccess },
       });
-    } else {
-      // on_success_step_id=null means "end of workflow" — draw edge to End node for clarity
+      const anyErrorTarget = step.on_any_error_step_id ?? END_NODE_ID;
       edges.push({
-        id: `${sourceId}_success_${END_NODE_ID}`,
+        id: `${sourceId}_any_error_${anyErrorTarget}`,
         source: sourceId,
-        target: END_NODE_ID,
-        sourceHandle: 'success',
-        targetHandle: 'input',
-        type: 'customEdge',
-        animated: false,
-        style: { stroke: STYLE_TOKENS.iconSuccess, strokeWidth: STYLE_TOKENS.edgeStrokeWidth },
-        label: 'succès',
-        labelStyle: { fontSize: STYLE_TOKENS.edgeLabelFontSize, fill: STYLE_TOKENS.textSuccess },
-      });
-    }
-    if (step.on_error_step_id) {
-      edges.push({
-        id: `${sourceId}_error_${step.on_error_step_id}`,
-        source: sourceId,
-        target: step.on_error_step_id,
+        target: anyErrorTarget,
         sourceHandle: 'error',
         targetHandle: 'input',
         type: 'customEdge',
@@ -127,19 +118,62 @@ export function workflowStepsToReactFlow(
         labelStyle: { fontSize: STYLE_TOKENS.edgeLabelFontSize, fill: STYLE_TOKENS.textError },
       });
     } else {
-      // on_error_step_id=null means "end/fail" — draw edge to End node for clarity
-      edges.push({
-        id: `${sourceId}_error_${END_NODE_ID}`,
-        source: sourceId,
-        target: END_NODE_ID,
-        sourceHandle: 'error',
-        targetHandle: 'input',
-        type: 'customEdge',
-        animated: false,
-        style: { stroke: STYLE_TOKENS.iconError, strokeWidth: STYLE_TOKENS.edgeStrokeWidth },
-        label: 'erreur',
-        labelStyle: { fontSize: STYLE_TOKENS.edgeLabelFontSize, fill: STYLE_TOKENS.textError },
-      });
+      if (step.on_success_step_id) {
+        edges.push({
+          id: `${sourceId}_success_${step.on_success_step_id}`,
+          source: sourceId,
+          target: step.on_success_step_id,
+          sourceHandle: 'success',
+          targetHandle: 'input',
+          type: 'customEdge',
+          animated: false,
+          style: { stroke: STYLE_TOKENS.iconSuccess, strokeWidth: STYLE_TOKENS.edgeStrokeWidth },
+          label: 'succès',
+          labelStyle: { fontSize: STYLE_TOKENS.edgeLabelFontSize, fill: STYLE_TOKENS.textSuccess },
+        });
+      } else {
+        // on_success_step_id=null means "end of workflow" — draw edge to End node for clarity
+        edges.push({
+          id: `${sourceId}_success_${END_NODE_ID}`,
+          source: sourceId,
+          target: END_NODE_ID,
+          sourceHandle: 'success',
+          targetHandle: 'input',
+          type: 'customEdge',
+          animated: false,
+          style: { stroke: STYLE_TOKENS.iconSuccess, strokeWidth: STYLE_TOKENS.edgeStrokeWidth },
+          label: 'succès',
+          labelStyle: { fontSize: STYLE_TOKENS.edgeLabelFontSize, fill: STYLE_TOKENS.textSuccess },
+        });
+      }
+      if (step.on_error_step_id) {
+        edges.push({
+          id: `${sourceId}_error_${step.on_error_step_id}`,
+          source: sourceId,
+          target: step.on_error_step_id,
+          sourceHandle: 'error',
+          targetHandle: 'input',
+          type: 'customEdge',
+          animated: false,
+          style: { stroke: STYLE_TOKENS.iconError, strokeWidth: STYLE_TOKENS.edgeStrokeWidth },
+          label: 'erreur',
+          labelStyle: { fontSize: STYLE_TOKENS.edgeLabelFontSize, fill: STYLE_TOKENS.textError },
+        });
+      } else {
+        // on_error_step_id=null means "end/fail" — draw edge to End node for clarity
+        edges.push({
+          id: `${sourceId}_error_${END_NODE_ID}`,
+          source: sourceId,
+          target: END_NODE_ID,
+          sourceHandle: 'error',
+          targetHandle: 'input',
+          type: 'customEdge',
+          animated: false,
+          style: { stroke: STYLE_TOKENS.iconError, strokeWidth: STYLE_TOKENS.edgeStrokeWidth },
+          label: 'erreur',
+          labelStyle: { fontSize: STYLE_TOKENS.edgeLabelFontSize, fill: STYLE_TOKENS.textError },
+        });
+      }
     }
   });
 
@@ -211,6 +245,20 @@ export function reactFlowToWorkflowSteps(
 
     // Story 57.13: backward compat — default to 'platform' if step_type not set
     const stepType: WorkflowStepType = data.step_type ?? 'platform';
+
+    // Story 65.4: parallel_group — routing via on_all_success / on_any_error, pas on_success/on_error
+    if (stepType === 'parallel_group') {
+      return {
+        order: index + 1,
+        step_id: node.id,
+        step_type: 'parallel_group' as const,
+        name: data.name ?? null,
+        parallel_steps: data.parallel_steps ?? null,
+        on_all_success_step_id: successEdge?.target ?? null,
+        on_any_error_step_id: errorEdge?.target ?? null,
+        condition: data.condition ?? null,
+      };
+    }
 
     const baseStep: WorkflowStep = {
       order: index + 1,

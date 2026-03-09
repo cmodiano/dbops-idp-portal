@@ -351,7 +351,7 @@ class TestParallelGroupErrorRouting:
 
 @pytest.mark.django_db(transaction=True)
 class TestParallelGroupStepOutputsThreadSafety:
-    """AC4, AC7: thread-safety de _step_outputs."""
+    """AC4: _step_outputs après exécution parallèle."""
 
     def setup_method(self):
         self.user = UserFactory(username="parallel_outputs_user")
@@ -393,9 +393,38 @@ class TestParallelGroupStepOutputsThreadSafety:
         assert 'step-a' in runtime._step_outputs, "_step_outputs doit contenir step-a"
         assert 'step-b' in runtime._step_outputs, "_step_outputs doit contenir step-b"
 
+
+@pytest.mark.django_db(transaction=True)
+class TestParallelGroupLockInfrastructure:
+    """Interface checks for _step_outputs_lock and _step_lock (no concurrency stress)."""
+
+    def setup_method(self):
+        self.user = UserFactory(username="parallel_lock_user")
+        self.action_a = ActionFactory(
+            name="Action A", status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.ACTION, created_by=self.user,
+        )
+        self.action_b = ActionFactory(
+            name="Action B", status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.ACTION, created_by=self.user,
+        )
+        self.action_c = ActionFactory(
+            name="Action C", status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.ACTION, created_by=self.user,
+        )
+        self.workflow_action = ActionFactory(
+            name="Lock Test Workflow",
+            status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.WORKFLOW,
+            execution_steps=_make_parallel_workflow(
+                self.action_a.id, self.action_b.id, self.action_c.id,
+            ),
+            created_by=self.user,
+        )
+
     @patch('executions.container_workflow_runtime.AuditService')
     def test_step_outputs_lock_exists(self, mock_audit):
-        """AC4: _step_outputs_lock est un threading.Lock."""
+        """_step_outputs_lock exposes lock interface (acquire/release)."""
         execution = Execution.objects.create(
             action=self.workflow_action,
             user=self.user,
@@ -409,7 +438,7 @@ class TestParallelGroupStepOutputsThreadSafety:
 
     @patch('executions.container_workflow_runtime.AuditService')
     def test_step_lock_exists(self, mock_audit):
-        """AC7: _step_lock est un threading.Lock pour pré-allocation step_order."""
+        """_step_lock exposes lock interface for step_order pre-allocation."""
         execution = Execution.objects.create(
             action=self.workflow_action,
             user=self.user,
@@ -457,9 +486,8 @@ class TestParallelGroupCancellation:
         call_count = {'n': 0}
 
         def is_cancelled_side_effect(execution_id):
+            """Call sequence: (1) before pg-1 → not cancelled; (2) before step-c (after routing) → cancelled."""
             call_count['n'] += 1
-            # Première vérification : avant pg-1 → pas annulé
-            # Deuxième vérification : avant step-c (après routing) → annulé
             return call_count['n'] > 1
 
         mock_is_cancelled.side_effect = is_cancelled_side_effect

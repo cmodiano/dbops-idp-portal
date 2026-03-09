@@ -303,6 +303,7 @@ class TestExecuteHandlerStepWaitingProtocol:
                 {'step_type': 'gate', 'gate_type': 'maintenance_window', 'order': 1, 'step_id': 'g1'},
                 {'step_type': 'platform', 'order': 2, 'step_id': 's2'},
             ]
+            runtime._member_step_ids = frozenset()  # no parallel_group in this workflow
 
             # _check_cancelled retourne False, _execute_step retourne RUNNING pour gate
             with patch.object(runtime, '_check_cancelled', return_value=False):
@@ -513,11 +514,18 @@ class TestTransitionStepToRunningADR007:
             mock_step.refresh_from_db = MagicMock()
 
             with patch('executions.tasks.gates.AuditService'):
-                with patch.object(Execution.objects, 'filter') as mock_exec_filter:
-                    mock_exec_filter.return_value.update.return_value = 1
-                    _transition_step_to_running(mock_step, gate_status, 'corr-123')
+                with patch('executions.services.runnable_steps.RunnableStepService') as mock_runnable:
+                    with patch('executions.services.workflow_events.WorkflowEventService') as mock_events:
+                        mock_runnable.delete = MagicMock()
+                        mock_events.emit_step_status_changed = MagicMock()
+                        with patch.object(Execution.objects, 'filter') as mock_exec_filter:
+                            mock_exec_filter.return_value.update.return_value = 1
+                            _transition_step_to_running(mock_step, gate_status, 'corr-123')
 
         mock_exec_filter.assert_called_once()
+        filter_call = mock_exec_filter.call_args
+        assert filter_call[1]['id'] == mock_execution.id
+        assert filter_call[1]['status'] == ExecutionStatus.RUNNING
         update_call = mock_exec_filter.return_value.update.call_args
         assert update_call[1]['status'] == ExecutionStatus.COMPLETED
         assert 'completed_at' in update_call[1]

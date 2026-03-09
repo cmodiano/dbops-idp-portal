@@ -195,6 +195,13 @@ def validate_workflow_steps(steps: list[dict[str, Any]], action_id: int | None =
                             f"Step {i} (step_id={step_id}): parallel_steps cannot contain "
                             f"gate step '{ps_id}' (gate steps may wait and are not supported as members)"
                         )
+                    # Members must not have on_success_step_id/on_error_step_id — runtime does not follow them
+                    if ref_step.get('on_success_step_id') is not None or ref_step.get('on_error_step_id') is not None:
+                        raise serializers.ValidationError(
+                            f"Step {i} (step_id={step_id}): parallel_group member '{ps_id}' must not have "
+                            f"on_success_step_id or on_error_step_id (ContainerWorkflowRuntime._execute_step_for_parallel "
+                            f"does not follow those edges)"
+                        )
 
             # Task 1.4: on_all_success_step_id / on_any_error_step_id must reference existing steps (AC #6)
             on_all_success = step.get('on_all_success_step_id')
@@ -267,6 +274,18 @@ def _detect_workflow_cycles(steps: list[dict[str, Any]]) -> None:
     if not steps:
         return
 
+    # Collect all parallel_group member step_ids (excluded from sequential execution)
+    member_step_ids: set[str] = set()
+    for s in steps:
+        if s.get('step_type') == 'parallel_group':
+            member_step_ids.update(s.get('parallel_steps') or [])
+
+    # Non-member steps sorted by order (mirrors ContainerWorkflowRuntime._execute_workflow_steps)
+    sorted_non_member = sorted(
+        [s for s in steps if s.get('step_id') and s.get('step_id') not in member_step_ids],
+        key=lambda s: s.get('order', 0),
+    )
+
     # Build adjacency graph: step_id -> [next_step_ids]
     graph: dict[str, list[str]] = {}
     for step in steps:
@@ -288,6 +307,16 @@ def _detect_workflow_cycles(steps: list[dict[str, Any]]) -> None:
                 neighbors.append(on_all_success)
             if on_any_error is not None:
                 neighbors.append(on_any_error)
+            # Implicit fall-through: when on_all_success absent, runtime continues to next sequential non-member
+            if on_all_success is None:
+                try:
+                    idx = next(i for i, s in enumerate(sorted_non_member) if s.get('step_id') == step_id)
+                    if idx + 1 < len(sorted_non_member):
+                        next_step_id = sorted_non_member[idx + 1].get('step_id')
+                        if next_step_id:
+                            neighbors.append(next_step_id)
+                except StopIteration:
+                    pass
         else:
             on_success = step.get('on_success_step_id') if 'on_success_step_id' in step else None
             on_error = step.get('on_error_step_id') if 'on_error_step_id' in step else None

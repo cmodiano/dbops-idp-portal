@@ -134,7 +134,7 @@ export interface ScheduleStepConfig {
   parameter_mapping?: Record<string, string>;
 }
 
-export type WorkflowStepType = 'platform' | 'service_call' | 'http_request' | 'evaluation' | 'gate' | 'schedule_execution';
+export type WorkflowStepType = 'platform' | 'service_call' | 'http_request' | 'evaluation' | 'gate' | 'schedule_execution' | 'parallel_group';
 
 /** Workflow step - reference to an existing action or special step type (Story 5.7, AC2; Story 16.2 branches & retry; Story 57.13 step types). */
 export interface WorkflowStep {
@@ -192,6 +192,13 @@ export interface WorkflowStep {
   // === schedule_execution ===
   /** Story 57.16: Configuration pour les steps de planification. */
   schedule_config?: ScheduleStepConfig | null;
+  // === parallel_group ===
+  /** Story 65.4: Liste des step_id à exécuter en parallèle (≥2 requis). */
+  parallel_steps?: string[] | null;
+  /** Story 65.4: Step suivant si tous les sous-steps réussissent. */
+  on_all_success_step_id?: string | null;
+  /** Story 65.4: Step suivant si au moins un sous-step échoue (fail-fast). */
+  on_any_error_step_id?: string | null;
   // === shared (service_call, evaluation, http_request) ===
   /** Story 57.13: Condition for environment filtering. */
   condition?: { environment_in?: string[] } | null;

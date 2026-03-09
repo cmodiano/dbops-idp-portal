@@ -169,8 +169,12 @@ Retourne l'un de quatre statuts par entité :
 
 ### `DriftBadge` (interface utilisateur)
 
-Composant frontend affiché dans le tableau de bord Config Sync. Affiche un badge coloré
-(`in_sync` / `diverged` / `missing`) pour chaque entité CaC.
+Composant frontend affiché dans le tableau de bord Config Sync. La commande `detect_drift`
+distingue quatre statuts (`in_sync`, `diverged`, `missing_in_yaml`, `missing_in_db`). Le
+composant DriftBadge regroupe intentionnellement `missing_in_yaml` et `missing_in_db` en un
+seul badge `missing` pour simplifier l'affichage. La remédiation diffère selon le statut
+sous-jacent : `missing_in_yaml` → créer un fichier YAML ; `missing_in_db` → exécuter
+`sync_config` pour importer.
 
 ### Config Sync Dashboard
 

@@ -199,16 +199,16 @@ def import_integration_yaml(
         if obj.secret_service_id != ref_integration.id:
             obj.secret_service_id = ref_integration.id
             obj.save(update_fields=["secret_service_id"])
+            update_sync_tracking(obj, content)
             if unchanged:
                 unchanged, updated = 0, 1
-                update_sync_tracking(obj, content)
     elif obj.secret_service_id is not None and not was_created:
         # Clear secret_service_ref if absent from YAML but set in DB
         obj.secret_service_id = None
         obj.save(update_fields=["secret_service_id"])
+        update_sync_tracking(obj, content)
         if unchanged:
             unchanged, updated = 0, 1
-            update_sync_tracking(obj, content)
 
     AuditService.create_entry(
         user_id=str(user.id) if user and hasattr(user, "id") else "",

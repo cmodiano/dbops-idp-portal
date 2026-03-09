@@ -161,4 +161,19 @@ describe('ActionPalette', () => {
     fireEvent.click(btn);
     expect(onAddSpecialStep).toHaveBeenCalledWith('schedule_execution');
   });
+
+  // Story 65.5: parallel_group bouton
+  it('affiche le bouton "Groupe parallèle" dans les steps spéciaux (AC1)', () => {
+    render(<ActionPalette />);
+    expect(screen.getByText('Groupe parallèle')).toBeInTheDocument();
+    expect(screen.getByTestId('add-special-step-parallel_group')).toBeInTheDocument();
+  });
+
+  it('le bouton parallel_group appelle onAddSpecialStep avec "parallel_group" (AC2)', () => {
+    const onAddSpecialStep = vi.fn();
+    render(<ActionPalette onAddSpecialStep={onAddSpecialStep} />);
+    const btn = screen.getByTestId('add-special-step-parallel_group');
+    fireEvent.click(btn);
+    expect(onAddSpecialStep).toHaveBeenCalledWith('parallel_group');
+  });
 });
