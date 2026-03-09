@@ -12,7 +12,7 @@ import {
   fetchFeatureFlags,
   updateFeatureFlag,
   type FeatureFlagDetail,
-} from '../../services/featureFlagService';
+} from '../../services/feature_flag_service';
 import { useFeatureFlagContext } from '../../contexts/FeatureFlagContext';
 import logger from '../../services/logger';
 
