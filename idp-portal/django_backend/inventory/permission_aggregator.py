@@ -31,7 +31,7 @@ class RBACPermissionAggregator:
         self,
         profiles: QuerySet,
         environment: str | None,
-        correlation_id: str,
+        correlation_id: str | None,  # INV-LOW-02: consistent with codebase convention (str | None)
     ) -> dict[str, Any] | None:
         """
         Aggregate permissions from all user profiles.

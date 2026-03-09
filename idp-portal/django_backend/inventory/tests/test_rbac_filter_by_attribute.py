@@ -75,6 +75,28 @@ class TestApplyAttributeFilter(TestCase):
         )
         self.assertEqual(len(result), 5)
 
+    def test_fail_open_behavior_typo_in_attribute_key_grants_full_access(self):
+        """
+        INV-MED-03 — FAIL-OPEN security behavior: explicit test.
+
+        When a profile's filter_by_attribute key contains a typo (e.g. "engine_tpe"
+        instead of "engine_type"), the filter is silently skipped and ALL servers pass
+        through unfiltered — potentially granting broader access than intended.
+
+        This behavior is intentional (documented in _apply_attribute_filter docstring)
+        and this test locks in the expected behavior. Operators must monitor the
+        "rbac_filter_attribute_not_found" log warning.
+        """
+        # Typo: "engine_tpe" instead of "engine_type"
+        result = InventoryRBACFilter._apply_attribute_filter(
+            self.servers, {"engine_tpe": ["oracle"]}, 'test-cid'
+        )
+        # FAIL-OPEN: all 5 servers pass through despite the filter
+        self.assertEqual(len(result), 5, (
+            "FAIL-OPEN: typo in attribute key must return ALL servers "
+            "(not an empty list or raise an error)"
+        ))
+
     def test_case_insensitive_matching(self):
         """Filter values are matched case-insensitively."""
         result = InventoryRBACFilter._apply_attribute_filter(

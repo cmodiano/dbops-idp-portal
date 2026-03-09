@@ -256,6 +256,36 @@ class TargetListAllViewTests(TestCase):
         response = self.client.get('/api/v1/inventory/targets/all/', {'page': 'abc'})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_list_all_targets_invalid_target_type_returns_400(self):
+        """INV-MED-01: list_all_targets uses TargetFilterParamsSerializer — invalid target_type rejected."""
+        self.client.force_authenticate(user=self.admin_user)
+        response = self.client.get('/api/v1/inventory/targets/all/', {'target_type': 'nonexistent_type'})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    @patch('inventory.views._inventory_service_factory')
+    def test_list_all_targets_valid_target_type_accepted(self, mock_service_class):
+        """INV-MED-01: list_all_targets accepts valid target_type values via TargetFilterParamsSerializer."""
+        mock_service = MagicMock()
+        mock_service.list_targets.return_value = ([], 0)
+        mock_service.list_environments.return_value = ['dev', 'prod']
+        mock_service_class.return_value = mock_service
+
+        self.client.force_authenticate(user=self.admin_user)
+        response = self.client.get('/api/v1/inventory/targets/all/', {'target_type': 'server'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    @patch('inventory.views._inventory_service_factory')
+    def test_list_all_targets_page_size_5000_accepted(self, mock_service_class):
+        """INV-MED-01: list_all_targets via TargetFilterParamsSerializer allows page_size up to 5000."""
+        mock_service = MagicMock()
+        mock_service.list_targets.return_value = ([], 0)
+        mock_service.list_environments.return_value = ['dev']
+        mock_service_class.return_value = mock_service
+
+        self.client.force_authenticate(user=self.admin_user)
+        response = self.client.get('/api/v1/inventory/targets/all/', {'page_size': '5000'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
 
 class TargetRBACTests(TestCase):
     """Tests for RBAC filtering in target API."""

@@ -11,7 +11,7 @@ from inventory.mapper import (
     SAFE_TABLE_NAME_PATTERN,
     InventoryMapper,
     MapperValidationError,
-    _validate_column_name,
+    validate_column_name,  # INV-LOW-01: use public name instead of private _validate_column_name
 )
 
 
@@ -57,7 +57,7 @@ class MappingValidator:
         Raises:
             MapperValidationError: If name is invalid.
         """
-        _validate_column_name(name)
+        validate_column_name(name)
         return name
 
     def validate_mapper_columns(self, mapper: InventoryMapper, entity_name: str) -> None:
@@ -77,7 +77,7 @@ class MappingValidator:
 
         id_col = entity.get('id_column')
         if id_col:
-            _validate_column_name(id_col)
+            validate_column_name(id_col)
 
         for concept, col in entity.get('columns', {}).items():
             if not SAFE_COLUMN_NAME_PATTERN.match(concept):
@@ -85,4 +85,4 @@ class MappingValidator:
                     f"Invalid concept name: '{concept}'. "
                     "Must match pattern: [A-Za-z_][A-Za-z0-9_]*"
                 )
-            _validate_column_name(col)
+            validate_column_name(col)
