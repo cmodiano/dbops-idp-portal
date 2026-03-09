@@ -78,6 +78,18 @@ def trigger_platform_job(
         return {"outcome": "error", "error": str(exc)}
 
     try:
+        # Idempotency guard: si platform_job_id déjà stocké, le trigger a déjà abouti
+        # (story 66-16 finding HIGH — double-trigger sur retry Celery)
+        if execution_step.platform_job_id:
+            logger.warning(
+                "trigger_platform_job_already_dispatched",
+                execution_step_id=execution_step_id,
+                execution_id=execution_id,
+                platform_job_id=execution_step.platform_job_id,
+                correlation_id=correlation_id,
+            )
+            return {"outcome": "dispatched", "platform_job_id": execution_step.platform_job_id}
+
         # S'assurer que correlation_id est présent dans trigger_kwargs (déjà injecté par execute(),
         # mais on le normalise ici pour les appels directs sans correlation_id)
         trigger_kwargs = {**trigger_kwargs, "correlation_id": correlation_id}

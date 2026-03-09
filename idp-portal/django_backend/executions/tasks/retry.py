@@ -150,10 +150,14 @@ def retry_workflow_step(self: Any, execution_id: int, step: dict, attempt: int) 
                 'error_message': result.error_message,
             }
 
-        # Schedule next retry with exponential backoff
+        # Schedule next retry with exponential backoff — capped at 24h (story 66-16 finding MEDIUM)
+        _MAX_RETRY_DELAY_SECONDS = 86400  # 24h max, prevents overflow on high attempt counts
         interval_seconds = step.get('retry_interval_seconds', 60)
         backoff_multiplier = step.get('retry_backoff_multiplier', 2.0)
-        delay_seconds = interval_seconds * (backoff_multiplier ** (attempt - 1))
+        delay_seconds = min(
+            interval_seconds * (backoff_multiplier ** (attempt - 1)),
+            _MAX_RETRY_DELAY_SECONDS,
+        )
 
         logger.info(
             "celery_retry_workflow_step_rescheduling",

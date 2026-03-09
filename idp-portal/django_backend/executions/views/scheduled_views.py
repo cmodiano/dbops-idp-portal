@@ -34,6 +34,8 @@ from executions.serializers import (
 )
 from core.environment import EnvironmentHelper
 from core.permissions import IsDBAOrDBOPS, is_admin_user
+from core.services import AuditService
+from core.models import AuditActionType, AuditEntityType
 from executions.scheduling_service import SchedulingService
 from executions.utils import (
     parse_int,
@@ -544,6 +546,25 @@ class ScheduledExecutionRecurringPatternView(APIView):
 
         rp.updated_at = timezone.now()
         rp.save(update_fields=["is_active", "next_execution_date", "updated_at"])
+
+        # AC: audit trail sur toggle is_active (story 66-16 finding HIGH — SCHED-BE-002)
+        action_type = (
+            AuditActionType.SCHEDULED_EXECUTION_RECURRING_DISABLED
+            if not is_active
+            else AuditActionType.SCHEDULED_EXECUTION_RECURRING_CREATED
+        )
+        AuditService.create_entry(
+            user_id=str(request.user.id),
+            action_type=action_type,
+            entity_type=AuditEntityType.EXECUTION,
+            entity_id=se.id,
+            details={
+                'recurring_pattern_id': rp.id,
+                'is_active': is_active,
+                'next_execution_date': rp.next_execution_date.isoformat() if rp.next_execution_date else None,
+            },
+            correlation_id=get_correlation_id(),
+        )
 
         return Response({"data": RecurringPatternSerializer(rp).data})
 

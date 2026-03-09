@@ -12,7 +12,7 @@ Usage:
 """
 from __future__ import annotations
 
-import logging
+import structlog
 from typing import TYPE_CHECKING
 
 from django.db import IntegrityError, transaction
@@ -23,7 +23,7 @@ from executions.models import RunnableStep
 if TYPE_CHECKING:
     from executions.models import ExecutionStep
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class RunnableStepService:
@@ -56,20 +56,20 @@ class RunnableStepService:
             if created:
                 logger.info(
                     "runnable_step_enqueued",
-                    extra={
-                        "execution_step_id": step.id,
-                        "execution_id": step.execution_id,
-                        "priority": priority,
-                    },
+                    execution_step_id=step.id,
+                    execution_id=step.execution_id,
+                    priority=priority,
                 )
             return runnable if created else None
         except IntegrityError:
             # Expected: race condition on get_or_create (duplicate execution_step_id)
             return None
         except Exception as e:
-            logger.exception(
+            logger.error(
                 "runnable_step_enqueue_failed",
-                extra={"execution_step_id": step.id, "error": str(e)},
+                execution_step_id=step.id,
+                error=str(e),
+                exc_info=True,
             )
             raise
 
@@ -118,20 +118,20 @@ class RunnableStepService:
 
                     logger.info(
                         "runnable_steps_claimed",
-                        extra={
-                            "worker_id": worker_id,
-                            "count": len(batch),
-                            "step_ids": [r.execution_step_id for r in batch],
-                        },
+                        worker_id=worker_id,
+                        count=len(batch),
+                        step_ids=[r.execution_step_id for r in batch],
                     )
                 return batch
         except IntegrityError:
             # Expected: rare constraint violation during update
             return []
         except Exception as e:
-            logger.exception(
+            logger.error(
                 "runnable_steps_claim_failed",
-                extra={"worker_id": worker_id, "error": str(e)},
+                worker_id=worker_id,
+                error=str(e),
+                exc_info=True,
             )
             raise
 
@@ -154,9 +154,11 @@ class RunnableStepService:
             # Expected: rare constraint violation during delete
             return False
         except Exception as e:
-            logger.exception(
+            logger.error(
                 "runnable_step_delete_failed",
-                extra={"execution_step_id": execution_step_id, "error": str(e)},
+                execution_step_id=execution_step_id,
+                error=str(e),
+                exc_info=True,
             )
             raise
 
@@ -176,9 +178,11 @@ class RunnableStepService:
             # Expected: rare constraint violation during delete
             return 0
         except Exception as e:
-            logger.exception(
+            logger.error(
                 "runnable_steps_delete_for_execution_failed",
-                extra={"execution_id": execution_id, "error": str(e)},
+                execution_id=execution_id,
+                error=str(e),
+                exc_info=True,
             )
             raise
 

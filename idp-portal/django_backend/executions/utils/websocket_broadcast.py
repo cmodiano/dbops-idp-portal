@@ -1,13 +1,13 @@
 """Utilitaires de broadcast WebSocket pour les exécutions — Story 58.3."""
 from __future__ import annotations
 
-import logging
+import structlog
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from executions.models import ExecutionStep
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def broadcast_step_update(execution_id: int, step: "ExecutionStep") -> None:
@@ -61,5 +61,6 @@ def broadcast_step_update(execution_id: int, step: "ExecutionStep") -> None:
     except Exception:  # noqa: BLE001
         logger.warning(
             "broadcast_step_update_error",
-            extra={"execution_id": execution_id, "step_id": step.id},
+            execution_id=execution_id,
+            step_id=step.id,
         )

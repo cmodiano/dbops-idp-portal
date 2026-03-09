@@ -422,9 +422,13 @@ class TestStepExecutorInvalidIntegration(TransactionTestCase):
         from executions.workflow_runtime import StepOutcome
         assert result.outcome == StepOutcome.ERROR
         assert 'invalid' in result.error_message.lower()
-        mock_audit.assert_called_once()
+        # story 66-16: ValueError handler now also adds EXECUTION_FAILED audit — 2 calls expected
+        assert mock_audit.call_count == 2
         from core.models import AuditActionType
-        assert mock_audit.call_args.kwargs['action_type'] == AuditActionType.WORKFLOW_STEP_BLOCKED_INVALID_INTEGRATION
+        first_call_type = mock_audit.call_args_list[0].kwargs['action_type']
+        assert first_call_type == AuditActionType.WORKFLOW_STEP_BLOCKED_INVALID_INTEGRATION
+        second_call_type = mock_audit.call_args_list[1].kwargs['action_type']
+        assert second_call_type == AuditActionType.EXECUTION_FAILED
 
         from executions.models import ExecutionStep, ExecutionStepStatus
         step_record = ExecutionStep.objects.filter(execution=self.execution).first()
@@ -820,8 +824,9 @@ class TestStepExecutorParallelGroupGuard:
 
         assert "ContainerWorkflowRuntime" in result.error_message
 
+    @patch("executions.workflow_step_executor.AuditService.create_entry")
     @patch("executions.workflow_step_executor.ExecutionStep.objects.create")
-    def test_non_parallel_group_step_not_intercepted(self, mock_create):
+    def test_non_parallel_group_step_not_intercepted(self, mock_create, mock_audit):
         """Vérifie que le guard ne capture PAS les steps normaux (pas de régression)."""
         from executions.workflow_step_executor import StepExecutor
         from executions.workflow_runtime import StepOutcome
