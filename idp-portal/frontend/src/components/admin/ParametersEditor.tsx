@@ -8,7 +8,7 @@
  * - Delete (X) per parameter; inline validation: name required, name unique, type required (AC6)
  */
 
-import React from 'react';
+import type { FC, CSSProperties } from 'react';
 import {
   Button,
   Input,
@@ -91,7 +91,7 @@ interface SortableParamCardProps {
   inventorySchemaLoading: boolean;          // Story 62.5
 }
 
-const SortableParamCard: React.FC<SortableParamCardProps> = ({
+const SortableParamCard: FC<SortableParamCardProps> = ({
   param,
   index,
   allParams,
@@ -114,7 +114,7 @@ const SortableParamCard: React.FC<SortableParamCardProps> = ({
     param.name.trim() !== '' &&
     allParams.filter((p, i) => i !== index && (p.name || '').trim() === param.name.trim()).length > 0;
 
-  const style: React.CSSProperties = {
+  const style: CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
@@ -309,7 +309,7 @@ const SortableParamCard: React.FC<SortableParamCardProps> = ({
   );
 };
 
-export const ParametersEditor: React.FC<ParametersEditorProps> = ({ value = EMPTY_PARAMS, onChange }) => {
+export const ParametersEditor: FC<ParametersEditorProps> = ({ value = EMPTY_PARAMS, onChange }) => {
   const { schema: inventorySchema, loading: inventorySchemaLoading } = useInventorySchema(); // Story 62.5
   const sensors = useSensors(
     useSensor(PointerSensor),

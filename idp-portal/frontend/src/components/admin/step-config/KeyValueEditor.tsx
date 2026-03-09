@@ -7,7 +7,8 @@
  * sont émises vers le parent via onChange).
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { FC, ReactNode } from 'react';
 import { Alert, Button, Input, Space, theme } from 'antd';
 import type { InputRef } from 'antd';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
@@ -21,7 +22,7 @@ export interface KeyValueEditorProps {
   valuePlaceholder?: string;
   'data-testid'?: string;
   /** Story 57.20: Contenu d'aide affiché à côté du label (ex. MappingHelpPopover). */
-  helpContent?: React.ReactNode;
+  helpContent?: ReactNode;
   /** Story 57.20: Label affiché au-dessus de l'éditeur. */
   label?: string;
   /** Story 57.20: Avertissements à afficher sous l'éditeur. */
@@ -53,7 +54,7 @@ function pairsToRecord(pairs: KvPair[]): Record<string, string> {
   }, {});
 }
 
-export const KeyValueEditor: React.FC<KeyValueEditorProps> = ({
+export const KeyValueEditor: FC<KeyValueEditorProps> = ({
   value,
   onChange,
   disabled = false,

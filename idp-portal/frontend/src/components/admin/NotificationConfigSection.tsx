@@ -4,7 +4,7 @@
  * Chaque bloc a un toggle on/off + conditions (on_failure, on_success, always).
  */
 
-import React from 'react';
+import type { FC, CSSProperties } from 'react';
 import { Switch, Input, Checkbox, Typography, Space, theme, Divider, Alert } from 'antd';
 import type { NotificationConfig, NotificationChannel } from '../../types/api/catalog';
 
@@ -34,7 +34,7 @@ export interface NotificationConfigSectionProps {
   onChange?: (config: NotificationConfig) => void;
 }
 
-export const NotificationConfigSection: React.FC<NotificationConfigSectionProps> = ({
+export const NotificationConfigSection: FC<NotificationConfigSectionProps> = ({
   value,
   onChange,
 }) => {
@@ -74,14 +74,14 @@ export const NotificationConfigSection: React.FC<NotificationConfigSectionProps>
     updateChannel(type, { conditions: selected as NotificationChannel['conditions'] });
   };
 
-  const headerStyle: React.CSSProperties = {
+  const headerStyle: CSSProperties = {
     padding: '4px 8px',
     background: token.colorFillQuaternary,
     borderRadius: token.borderRadius,
     fontWeight: 500,
   };
 
-  const rowStyle: React.CSSProperties = {
+  const rowStyle: CSSProperties = {
     padding: '8px',
     borderBottom: `1px solid ${token.colorBorderSecondary}`,
     alignItems: 'center',

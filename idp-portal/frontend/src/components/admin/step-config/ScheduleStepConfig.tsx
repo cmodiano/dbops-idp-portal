@@ -4,7 +4,7 @@
  * Affiche : sélection de l'action cible, source de date (parameter/fixed_offset/recurring),
  * champs conditionnels selon la source, inherit_parameters, inherit_targets, parameter_mapping.
  */
-import React from 'react';
+import type { FC } from 'react';
 import { Input, Select, Switch, Typography, Divider } from 'antd';
 import type { WorkflowStepNodeData } from '../WorkflowStepNode';
 import { KeyValueEditor } from './KeyValueEditor';
@@ -42,7 +42,7 @@ function updateScheduleConfig(
   return { ...base, ...patch };
 }
 
-export const ScheduleStepConfig: React.FC<ScheduleStepConfigProps> = ({
+export const ScheduleStepConfig: FC<ScheduleStepConfigProps> = ({
   data,
   onUpdate,
   disabled = false,

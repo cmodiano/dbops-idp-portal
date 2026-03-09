@@ -18,7 +18,8 @@
  * Refactored in Story 54.12: graph state and event handlers extracted to useWorkflowGraph.
  */
 
-import React, { useRef } from 'react';
+import { useRef } from 'react';
+import type { FC } from 'react';
 import {
   ReactFlow,
   Controls,
@@ -180,7 +181,7 @@ function WorkflowBuilderCanvasInner({
 }
 
 /** WorkflowBuilderCanvas wrapped with ReactFlowProvider */
-export const WorkflowBuilderCanvas: React.FC<WorkflowBuilderCanvasProps> = (props) => {
+export const WorkflowBuilderCanvas: FC<WorkflowBuilderCanvasProps> = (props) => {
   return (
     <ReactFlowProvider>
       <WorkflowBuilderCanvasInner {...props} />

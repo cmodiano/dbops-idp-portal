@@ -11,7 +11,8 @@
  * Story 34-9 (SOLID-FE-8): SortableStepCard extracted to ./SortableStepCard.tsx (SRP).
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import type { FC } from 'react';
 import {
   Button,
   Space,
@@ -67,7 +68,7 @@ export interface WorkflowStepsEditorProps {
   disabled?: boolean;
 }
 
-export const WorkflowStepsEditor: React.FC<WorkflowStepsEditorProps> = ({
+export const WorkflowStepsEditor: FC<WorkflowStepsEditorProps> = ({
   steps,
   onChange,
   loading = false,

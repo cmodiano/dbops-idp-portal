@@ -5,11 +5,12 @@
  * Excluded from backend conversion (isStartNode flag).
  */
 
-import React, { memo } from 'react';
+import { memo } from 'react';
+import type { FC } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { PlayCircleOutlined } from '@ant-design/icons';
 
-const StartNode: React.FC<NodeProps> = () => {
+const StartNode: FC<NodeProps> = () => {
   return (
     <div
       style={{

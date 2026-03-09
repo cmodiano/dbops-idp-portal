@@ -5,7 +5,8 @@
  * Les connexions on_all_success / on_any_error se gèrent via les handles du canvas.
  */
 
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
+import type { FC } from 'react';
 import { Select, Typography, Alert } from 'antd';
 import type { WorkflowStepNodeData } from '../WorkflowStepNode';
 
@@ -19,7 +20,7 @@ export interface ParallelGroupStepConfigProps {
   availableStepOptions?: { value: string; label: string }[];
 }
 
-export const ParallelGroupStepConfig: React.FC<ParallelGroupStepConfigProps> = ({
+export const ParallelGroupStepConfig: FC<ParallelGroupStepConfigProps> = ({
   data,
   onUpdate,
   disabled = false,

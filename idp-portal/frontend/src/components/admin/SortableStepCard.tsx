@@ -8,7 +8,8 @@
  * avec drag-and-drop via @dnd-kit.
  */
 
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
+import type { FC, CSSProperties } from 'react';
 import {
   Button,
   Input,
@@ -48,7 +49,7 @@ export interface SortableStepCardProps {
 }
 
 /** Sortable step card using @dnd-kit. */
-export const SortableStepCard: React.FC<SortableStepCardProps> = ({
+export const SortableStepCard: FC<SortableStepCardProps> = ({
   step,
   index,
   eligibleActions,
@@ -73,7 +74,7 @@ export const SortableStepCard: React.FC<SortableStepCardProps> = ({
     isDragging,
   } = useSortable({ id: stepId });
 
-  const style: React.CSSProperties = {
+  const style: CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,

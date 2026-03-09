@@ -9,7 +9,8 @@
  * Story 57.16: Added schedule_execution step type with schedule_source badge display.
  */
 
-import React, { memo, useMemo } from 'react';
+import { memo, useMemo } from 'react';
+import type { FC } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Badge, Divider, Tag, Tooltip, theme } from 'antd';
 import { CheckCircleOutlined, CloseCircleOutlined, HourglassOutlined, LoadingOutlined, MinusCircleOutlined } from '@ant-design/icons';
@@ -114,7 +115,7 @@ export interface WorkflowStepNodeData {
   on_any_error_step_id?: string | null;
 }
 
-const WorkflowStepNode: React.FC<NodeProps> = ({ data, selected }) => {
+const WorkflowStepNode: FC<NodeProps> = ({ data, selected }) => {
   const { token } = theme.useToken();
   const nodeData = data as unknown as WorkflowStepNodeData;
 

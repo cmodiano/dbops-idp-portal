@@ -7,7 +7,8 @@
  * django_backend/executions/step_handlers/service_call_handler.py#_ALLOWED_OPERATIONS
  */
 
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
+import type { FC } from 'react';
 import { Divider, Select, Typography } from 'antd';
 import type { WorkflowStepNodeData } from '../WorkflowStepNode';
 import { KeyValueEditor } from './KeyValueEditor';
@@ -35,7 +36,7 @@ export interface ServiceCallStepConfigProps {
   workflowId?: number;
 }
 
-export const ServiceCallStepConfig: React.FC<ServiceCallStepConfigProps> = ({
+export const ServiceCallStepConfig: FC<ServiceCallStepConfigProps> = ({
   data,
   onUpdate,
   disabled = false,

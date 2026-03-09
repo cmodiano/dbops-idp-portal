@@ -6,7 +6,7 @@
  * - type="output" : syntaxe dot-notation $.path, outputs typiques par step_type
  */
 
-import React from 'react';
+import type { FC } from 'react';
 import { Popover, Typography, theme } from 'antd';
 import { QuestionCircleOutlined } from '@ant-design/icons';
 
@@ -160,7 +160,7 @@ function OutputHelpContent({ stepType }: { stepType?: string }) {
   );
 }
 
-export const MappingHelpPopover: React.FC<MappingHelpPopoverProps> = ({
+export const MappingHelpPopover: FC<MappingHelpPopoverProps> = ({
   type,
   stepType,
   availableSteps,

@@ -11,7 +11,8 @@
  * - parallel_group: ParallelGroupStepConfig (Story 65.5)
  */
 
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
+import type { FC } from 'react';
 import { Drawer, Input, Switch, InputNumber, Typography, Space, Button, Divider, Alert } from 'antd';
 import { DeleteOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import type { Node } from '@xyflow/react';
@@ -43,7 +44,7 @@ export interface StepConfigPanelProps {
   workflowId?: number;
 }
 
-export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({
+export const StepConfigPanel: FC<StepConfigPanelProps> = ({
   node,
   open,
   onClose,

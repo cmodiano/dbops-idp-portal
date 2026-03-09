@@ -5,14 +5,15 @@
  * Groupement par step, recherche, tooltip description.
  */
 
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
+import type { FC, ReactNode } from 'react';
 import { Popover, Input, Tooltip, Spin, Empty, Typography, theme } from 'antd';
 import { CodeOutlined, ThunderboltOutlined, ApiOutlined, GlobalOutlined } from '@ant-design/icons';
 import { useOutputSchemas } from '../../../hooks/useOutputSchemas';
 
 const { Text } = Typography;
 
-const STEP_TYPE_ICONS: Record<string, React.ReactNode> = {
+const STEP_TYPE_ICONS: Record<string, ReactNode> = {
   platform: <ThunderboltOutlined />,
   service_call: <ApiOutlined />,
   http_request: <GlobalOutlined />,
@@ -27,7 +28,7 @@ export interface VariablePickerProps {
   availableStepIds?: string[];
 }
 
-export const VariablePicker: React.FC<VariablePickerProps> = ({
+export const VariablePicker: FC<VariablePickerProps> = ({
   workflowId,
   currentStepId,
   onSelect,
