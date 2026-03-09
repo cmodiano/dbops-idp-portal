@@ -1,8 +1,9 @@
 /**
- * StepDetailDrawer tests (Story 19.3 + 19.6).
+ * StepDetailDrawer tests (Story 19.3 + 19.6 + 65.6).
  * Covers AC1 (drawer opens), AC2 (timeline), AC3 (metadata header),
  * AC4 (real-time updates), AC5 (close), AC9 (error card), AC10 (pending step).
  * Story 19.6: AC3 (child timeline with steps), AC4 (fallback when no child steps).
+ * Story 65.6 AC7: parallel_group sub-steps panel, aggregated status in header.
  */
 
 import { render, screen, within, waitFor } from '@testing-library/react';
@@ -485,5 +486,175 @@ describe('StepDetailDrawer — Story 19.6: Child execution timeline', () => {
     await waitFor(() => {
       expect(screen.getByText('Impossible de charger la timeline de l\'action')).toBeInTheDocument();
     });
+  });
+});
+
+/* === Story 65.6 AC7: parallel_group sub-steps panel === */
+
+const mockParallelGroupWorkflowSteps: WorkflowStep[] = [
+  {
+    order: 0,
+    name: 'Backups parallèles',
+    step_id: 'pg-1',
+    step_type: 'parallel_group',
+    parallel_steps: ['bk-db', 'bk-cfg'],
+  },
+  {
+    order: 1,
+    name: 'Backup DB',
+    step_id: 'bk-db',
+    step_type: 'platform',
+  },
+  {
+    order: 2,
+    name: 'Backup Config',
+    step_id: 'bk-cfg',
+    step_type: 'platform',
+  },
+];
+
+const mockParallelSubStepExecutions: ExecutionStepResponse[] = [
+  {
+    id: 10,
+    execution_id: 1,
+    step_order: 1,
+    step_name: 'Backup DB',
+    step_type: 'platform',
+    status: 'COMPLETED',
+    started_at: '2026-03-08T10:00:00Z',
+    completed_at: '2026-03-08T10:01:00Z',
+    output: null,
+    platform_job_id: null,
+    error_message: null,
+  },
+  {
+    id: 11,
+    execution_id: 1,
+    step_order: 2,
+    step_name: 'Backup Config',
+    step_type: 'platform',
+    status: 'RUNNING',
+    started_at: '2026-03-08T10:00:30Z',
+    completed_at: null,
+    output: null,
+    platform_job_id: null,
+    error_message: null,
+  },
+];
+
+describe('StepDetailDrawer — Story 65.6 AC7: parallel_group', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('affiche le panneau sous-steps pour un nœud parallel_group', () => {
+    render(
+      <StepDetailDrawer
+        open
+        stepId="pg-1"
+        executionId={1}
+        executionSteps={mockParallelSubStepExecutions}
+        workflowSteps={mockParallelGroupWorkflowSteps}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('parallel-group-substeps-panel')).toBeInTheDocument();
+  });
+
+  it('affiche les noms de tous les sous-steps', () => {
+    render(
+      <StepDetailDrawer
+        open
+        stepId="pg-1"
+        executionId={1}
+        executionSteps={mockParallelSubStepExecutions}
+        workflowSteps={mockParallelGroupWorkflowSteps}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('Backup DB')).toBeInTheDocument();
+    expect(screen.getByText('Backup Config')).toBeInTheDocument();
+  });
+
+  it('affiche "En cours..." pour un sous-step RUNNING', () => {
+    render(
+      <StepDetailDrawer
+        open
+        stepId="pg-1"
+        executionId={1}
+        executionSteps={mockParallelSubStepExecutions}
+        workflowSteps={mockParallelGroupWorkflowSteps}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('En cours...')).toBeInTheDocument();
+  });
+
+  it("affiche le message d'erreur pour un sous-step FAILED", () => {
+    const failedSubSteps: ExecutionStepResponse[] = [
+      { ...mockParallelSubStepExecutions[0], status: 'FAILED', error_message: 'Erreur disque plein' },
+      mockParallelSubStepExecutions[1],
+    ];
+    render(
+      <StepDetailDrawer
+        open
+        stepId="pg-1"
+        executionId={1}
+        executionSteps={failedSubSteps}
+        workflowSteps={mockParallelGroupWorkflowSteps}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('Erreur disque plein')).toBeInTheDocument();
+  });
+
+  it('affiche le statut agrégé RUNNING dans le header quand ≥1 sous-step est RUNNING', () => {
+    render(
+      <StepDetailDrawer
+        open
+        stepId="pg-1"
+        executionId={1}
+        executionSteps={mockParallelSubStepExecutions}
+        workflowSteps={mockParallelGroupWorkflowSteps}
+        onClose={vi.fn()}
+      />,
+    );
+    // 1 COMPLETED + 1 RUNNING → aggregated = RUNNING → header shows "En cours"
+    const header = screen.getByTestId('step-detail-header');
+    expect(header.textContent).toContain('En cours');
+  });
+
+  it('affiche le statut agrégé COMPLETED dans le header quand tous COMPLETED', () => {
+    const completedSteps: ExecutionStepResponse[] = mockParallelSubStepExecutions.map((s) => ({
+      ...s,
+      status: 'COMPLETED' as const,
+      completed_at: '2026-03-08T10:02:00Z',
+    }));
+    render(
+      <StepDetailDrawer
+        open
+        stepId="pg-1"
+        executionId={1}
+        executionSteps={completedSteps}
+        workflowSteps={mockParallelGroupWorkflowSteps}
+        onClose={vi.fn()}
+      />,
+    );
+    const header = screen.getByTestId('step-detail-header');
+    expect(header.textContent).toContain('Terminé');
+  });
+
+  it("n'affiche pas le panneau sous-steps pour un step normal", () => {
+    render(
+      <StepDetailDrawer
+        open
+        stepId="bk-db"
+        executionId={1}
+        executionSteps={mockParallelSubStepExecutions}
+        workflowSteps={mockParallelGroupWorkflowSteps}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.queryByTestId('parallel-group-substeps-panel')).not.toBeInTheDocument();
   });
 });

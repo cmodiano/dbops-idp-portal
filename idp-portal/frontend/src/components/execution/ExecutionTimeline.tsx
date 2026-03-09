@@ -20,7 +20,7 @@ import {
   TimelineList,
   StepLogsDrawer,
 } from './ExecutionTimeline/index';
-import type { ExecutionResponse, ExecutionStepResponse, RemediationSuggestion } from '../../types/api';
+import type { ExecutionResponse, ExecutionStepResponse, RemediationSuggestion, WorkflowStep } from '../../types/api';
 
 const { Text } = Typography;
 
@@ -41,6 +41,8 @@ export interface ExecutionTimelineProps {
   embedInWorkflowStepDrawer?: boolean;
   /** Callback when execution is updated via real-time (e.g. completion) so parent list can sync. */
   onExecutionUpdate?: (execution: ExecutionResponse) => void;
+  /** Story 65.6: workflow steps for parallel_group grouping in timeline (AC: #3, #6). */
+  workflowSteps?: WorkflowStep[];
 }
 
 export function ExecutionTimeline({
@@ -54,6 +56,7 @@ export function ExecutionTimeline({
   onSuggestionClick,
   embedInWorkflowStepDrawer = false,
   onExecutionUpdate,
+  workflowSteps,
 }: ExecutionTimelineProps) {
   const { steps, execution, loading, error, isPolling, useRealtime, lastMessage } = useExecutionData({
     executionId,
@@ -143,6 +146,7 @@ export function ExecutionTimeline({
         expandedId={expandedId}
         onToggleExpand={(id) => setExpandedId(expandedId === id ? null : id)}
         onOpenLogs={setLogsDrawerStepId}
+        workflowSteps={workflowSteps}
       />
 
       <StepLogsDrawer

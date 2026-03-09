@@ -44,6 +44,7 @@ import StartNode from '../admin/StartNode';
 import EndNode from '../admin/EndNode';
 import CustomEdge from '../admin/CustomEdge';
 import { StepDetailDrawer } from './StepDetailDrawer';
+import { buildParallelGroupMap, computeParallelGroupStatus } from '../../utils/parallelGroupUtils';
 
 const { Text } = Typography;
 
@@ -207,9 +208,42 @@ function WorkflowExecutionGraphInner({
       }
     });
 
+    // Story 65.6: Build parallel group map to compute aggregated status for parallel_group nodes
+    const parallelGroupMap = workflowSteps?.length
+      ? buildParallelGroupMap(workflowSteps, executionSteps)
+      : new Map();
+
     const enrichedNodes = baseNodes.map((node) => {
       if (node.id === START_NODE_ID || node.id === END_NODE_ID) {
         return node;
+      }
+
+      // Story 65.6: parallel_group node — compute aggregated status from sub-steps
+      if (node.data?.step_type === 'parallel_group') {
+        const groupInfo = parallelGroupMap.get(node.id);
+        const aggregatedStatus = groupInfo
+          ? computeParallelGroupStatus(groupInfo.subSteps)
+          : 'PENDING';
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            executionStatus: aggregatedStatus,
+            executionDuration: null,
+          },
+          style: {
+            ...node.style,
+            ...getNodeStyle(aggregatedStatus),
+            ...(node.id === selectedStepId && {
+              borderColor: STATUS_COLORS.SELECTED,
+              borderWidth: 4,
+              boxShadow: `0 0 12px ${STATUS_COLORS.SELECTED}80`,
+              opacity: 1,
+            }),
+            transition: 'border-color 0.3s, opacity 0.3s, box-shadow 0.3s',
+          },
+          className: aggregatedStatus === 'RUNNING' && node.id !== selectedStepId ? 'workflow-node-running' : undefined,
+        };
       }
 
       const execStep = stepStatusMap.get(node.id);
@@ -257,10 +291,22 @@ function WorkflowExecutionGraphInner({
       }
     });
 
-    const enrichedEdges = baseEdges.map((edge) => {
-      const sourceStep = stepStatusMap.get(edge.source);
+    // Story 65.6: parallel_group nodes have no ExecutionStep — use aggregated status for edge coloring
+    const pgMapForEdges = workflowSteps?.length
+      ? buildParallelGroupMap(workflowSteps, executionSteps)
+      : new Map();
 
-      if (sourceStep && (sourceStep.status === 'COMPLETED' || sourceStep.status === 'FAILED')) {
+    const enrichedEdges = baseEdges.map((edge) => {
+      // Determine source status: aggregated for parallel_group, direct for regular steps
+      let sourceStatus: ExecutionStepStatus | undefined;
+      const pgInfo = pgMapForEdges.get(edge.source);
+      if (pgInfo) {
+        sourceStatus = computeParallelGroupStatus(pgInfo.subSteps);
+      } else {
+        sourceStatus = stepStatusMap.get(edge.source)?.status;
+      }
+
+      if (sourceStatus === 'COMPLETED' || sourceStatus === 'FAILED') {
         // AC8: Traversed path — thicker, fully opaque
         return {
           ...edge,
@@ -273,7 +319,7 @@ function WorkflowExecutionGraphInner({
         };
       }
 
-      if (sourceStep?.status === 'RUNNING') {
+      if (sourceStatus === 'RUNNING') {
         // Edge from running step — animated
         return {
           ...edge,
