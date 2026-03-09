@@ -397,7 +397,13 @@ class ActionViewSet(viewsets.ModelViewSet):
         queryset = Action.objects.filter(
             status=ActionStatus.PUBLISHED,
             item_type=ActionItemType.ACTION
-        ).with_tags().with_creator()
+        ).with_tags().with_creator().order_by('name')
+
+        # BE-CAT-011: Use DRF pagination to avoid unbounded response for large catalogs.
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = ActionSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
 
         serializer = ActionSerializer(queryset, many=True)
         return Response({"data": serializer.data})

@@ -112,15 +112,24 @@ class CatalogActionViewSet(viewsets.ReadOnlyModelViewSet):
             queryset = queryset.filter(default_impact_level=impact)
 
         # RBAC filtering (if user authenticated)
+        # BE-CAT-012: Filter directly in DB to avoid list(queryset) memory spike for large catalogs.
         rbac_service = self._get_rbac_service()
         cumulative_permissions = rbac_service.get_permissions(self.request.user)  # type: ignore[arg-type]
         if cumulative_permissions:
-            # Convert queryset to list for filtering
-            actions_list = list(queryset)
-            filtered_actions = rbac_service.filter_actions(actions_list, cumulative_permissions)
-            # Get IDs of filtered actions and filter queryset
-            filtered_ids = [a.id if hasattr(a, 'id') else a.get('id') for a in filtered_actions]
-            queryset = queryset.filter(id__in=filtered_ids)
+            actions_type = cumulative_permissions.get('actions_type', 'all')
+            if actions_type != 'all':
+                action_ids = set(cumulative_permissions.get('action_ids', []) or [])
+                tag_patterns = set(cumulative_permissions.get('tag_patterns', []) or [])
+                if tag_patterns:
+                    from catalog.models import ActionTag  # noqa: PLC0415
+                    tag_action_ids = set(
+                        ActionTag.objects.filter(
+                            tag__name__in=tag_patterns,
+                            action__status=ActionStatus.PUBLISHED,
+                        ).values_list('action_id', flat=True)
+                    )
+                    action_ids = action_ids | tag_action_ids
+                queryset = queryset.filter(id__in=action_ids)
 
         return queryset.order_by('name')  # type: ignore[no-any-return]
 

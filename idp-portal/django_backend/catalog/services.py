@@ -16,6 +16,7 @@ from django.core.paginator import Paginator
 from django.utils import timezone
 from django.db.models import QuerySet
 from catalog.models import Action, ActionStatus, Tag, ActionTag, ActionItemType, normalize_tag_name
+from core.pagination import MAX_PAGE_SIZE
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.middleware import get_correlation_id
@@ -302,30 +303,23 @@ class CatalogService:
             Tuple of (list of Action instances, PaginationInfo dict)
         """
         queryset = Action.objects.all()
-        
+
         if status:
             queryset = queryset.filter(status=status)
         if item_type:
             queryset = queryset.filter(item_type=item_type)
         if tags_filter:
-            # Code Review 30.1: Log filter application for observability
-            logger.debug(
-                "catalog_list_all_applying_tags_filter",
-                tags_filter=tags_filter,
-                current_queryset_count=queryset.count(),
-            )
             queryset = queryset.search_by_tags(tags_filter)
-            logger.debug(
-                "catalog_list_all_after_tags_filter",
-                result_count=queryset.count(),
-            )
-        
+
         # Prefetch tags to avoid N+1
         queryset = queryset.with_tags().with_creator()
-        
+
         # Order by created_at DESC
         queryset = queryset.order_by('-created_at')
-        
+
+        # BE-CAT-001: Cap page_size to prevent unbounded queries
+        page_size = min(page_size, MAX_PAGE_SIZE)
+
         # Pagination
         paginator = Paginator(queryset, page_size)
         page_obj = paginator.get_page(page)
@@ -514,7 +508,8 @@ class CatalogService:
                 'previous_status': old_status,
                 'new_status': new_status,
                 'transition': transition,
-            }
+            },
+            correlation_id=get_correlation_id(),
         )
 
         return action  # type: ignore[no-any-return]
@@ -780,9 +775,12 @@ class CatalogService:
 
         return action  # type: ignore[no-any-return]
 
+    @transaction.atomic
     def sync_tags(self, action_id: int, tag_names: list[str]) -> Action | None:
         """
         Synchronize tags for an action (replace all existing tags).
+
+        BE-CAT-002: @transaction.atomic ensures delete+create are atomic.
 
         Args:
             action_id: ID of the action

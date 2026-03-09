@@ -278,8 +278,8 @@ def validate_business_rule_policies(value: dict | None) -> None:
             _validate_review_if_modified_policy(policy, idx)
 
     logger.debug(
-        "business_rule_policies validation passed",
-        extra={"num_rules": len(on_step_output)},
+        "business_rule_policies_validation_passed",
+        num_rules=len(on_step_output),
     )
 
 

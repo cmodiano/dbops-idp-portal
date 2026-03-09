@@ -3,7 +3,7 @@ Export/import YAML services for Tags.
 Story 64.2 - CaC Tags management.
 """
 
-import logging
+import structlog
 from typing import Any
 
 from django.db import IntegrityError, transaction
@@ -14,7 +14,7 @@ from core.models import AuditActionType, AuditEntityType
 from core.services import AuditService
 from core.services_cac_utils import parse_yaml, serialize_to_yaml, validate_envelope
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def export_tags_yaml() -> bytes:

@@ -6,7 +6,7 @@ Most complex CaC entity: FK refs (integration, policy), M2M tags, mutex rules, 5
 
 from __future__ import annotations
 
-import logging
+import structlog
 from typing import Any
 
 from django.db import transaction
@@ -24,7 +24,7 @@ from core.services_cac_utils import (
 )
 from integrations.models import Integration
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
