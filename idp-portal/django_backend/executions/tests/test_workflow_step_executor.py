@@ -758,3 +758,95 @@ class TestEvaluatePolicyRemainingBranches(TransactionTestCase):
         mock_audit.assert_called_once()
         from core.models import AuditActionType
         assert mock_audit.call_args.kwargs['action_type'] == AuditActionType.EXECUTION_STEP_POLICY_AUTO_APPROVED
+
+
+# ---------------------------------------------------------------------------
+# Story 65.3 — Guard défensif parallel_group dans StepExecutor
+# ---------------------------------------------------------------------------
+
+class TestStepExecutorParallelGroupGuard:
+    """Story 65.3 — guard défensif pour parallel_group dans StepExecutor.
+
+    Ce test n'accède pas à la BD : le guard retourne avant tout accès BD,
+    donc MagicMock suffit (pas de @pytest.mark.django_db requis).
+    """
+
+    def test_parallel_group_returns_error_not_exception(self):
+        """AC #2, #5 : parallel_group retourne StepOutcome.ERROR, pas une exception."""
+        from executions.workflow_step_executor import StepExecutor
+        from executions.workflow_runtime import StepOutcome
+
+        execution = MagicMock()
+        execution.id = 999
+        execution.user_id = 1
+        execution.action.name = "test-workflow"
+
+        executor = StepExecutor(execution=execution, correlation_id="test-correlation")
+
+        step = {
+            "step_id": "pg-1",
+            "step_type": "parallel_group",
+            "name": "Test Parallel Group",
+            "order": 1,
+            "parallel_steps": ["step-a", "step-b"],
+            "on_all_success_step_id": "step-c",
+            "on_any_error_step_id": None,
+        }
+
+        result = executor.execute(step=step, step_order=1, step_parameters={})
+
+        assert result.outcome == StepOutcome.ERROR
+        assert "parallel_group" in result.error_message
+        assert result.error_details is not None
+        assert result.error_details.get("step_type") == "parallel_group"
+
+    def test_parallel_group_error_message_mentions_container_runtime(self):
+        """AC #2 : le message d'erreur oriente vers ContainerWorkflowRuntime."""
+        from executions.workflow_step_executor import StepExecutor
+
+        execution = MagicMock()
+        execution.id = 998
+
+        executor = StepExecutor(execution=execution, correlation_id="test-corr-2")
+
+        step = {
+            "step_id": "pg-2",
+            "step_type": "parallel_group",
+            "name": "Another Parallel Group",
+            "order": 2,
+        }
+
+        result = executor.execute(step=step, step_order=2, step_parameters={})
+
+        assert "ContainerWorkflowRuntime" in result.error_message
+
+    @patch("executions.workflow_step_executor.ExecutionStep.objects.create")
+    def test_non_parallel_group_step_not_intercepted(self, mock_create):
+        """Vérifie que le guard ne capture PAS les steps normaux (pas de régression)."""
+        from executions.workflow_step_executor import StepExecutor
+        from executions.workflow_runtime import StepOutcome
+
+        execution = MagicMock()
+        execution.id = 997
+        mock_step_record = MagicMock()
+        mock_create.return_value = mock_step_record
+
+        executor = StepExecutor(execution=execution, correlation_id="test-corr-3")
+
+        # Un step de type 'platform' sans referenced_action_id → validation ERROR
+        # (comportement existant inchangé)
+        step = {
+            "step_id": "regular-step",
+            "step_type": "platform",
+            "name": "Regular Step",
+            "order": 1,
+        }
+
+        result = executor.execute(step=step, step_order=1, step_parameters={})
+
+        # Le guard parallel_group ne doit PAS intercepter ce step
+        # Le résultat est ERROR (missing referenced_action_id), pas "parallel_group"
+        assert result.outcome == StepOutcome.ERROR
+        assert "parallel_group" not in result.error_message
+        # Vérifie que le code a bien dépassé le guard et atteint la création de ExecutionStep
+        mock_create.assert_called_once()

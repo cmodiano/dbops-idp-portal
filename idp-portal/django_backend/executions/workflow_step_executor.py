@@ -66,10 +66,35 @@ class StepExecutor:
         step_id = step.get('step_id')
         step_name = step.get('name', f"Step {step.get('order', 0)}")
 
-        # Story 57.15: Route par step_type AVANT le check gate_conditions
+        # Story 57.15: Route par step_type AVANT le check gate_conditions.
+        # schedule_execution → handler dédié ; parallel_group → guard défensif (Story 65.3).
         step_type_routing = step.get('step_type', 'platform')
         if step_type_routing == 'schedule_execution':
             return self._execute_schedule_step(step, step_order, step_parameters)
+
+        # Story 65.3: WorkflowRuntime est legacy et strictement séquentiel.
+        # Les workflows avec parallel_group doivent utiliser ContainerWorkflowRuntime.
+        # Ce guard évite une ValueError générique si un parallel_group atteignait ce code.
+        if step_type_routing == 'parallel_group':
+            logger.error(
+                "workflow_step_executor_parallel_group_not_supported",
+                execution_id=self.execution.id,
+                step_id=step_id,
+                step_name=step_name,
+                correlation_id=self.correlation_id,
+            )
+            return StepResult(
+                outcome=StepOutcome.ERROR,
+                error_message=(
+                    f"WorkflowRuntime ne supporte pas step_type 'parallel_group' (step_id={step_id or 'N/A'}). "
+                    "Utiliser ContainerWorkflowRuntime pour les workflows avec parallel_group."
+                ),
+                error_details={
+                    'step_type': 'parallel_group',
+                    'step_id': step_id,
+                    'remedy': 'ContainerWorkflowRuntime gère les parallel_group (Story 65.2)',
+                },
+            )
 
         logger.info(
             "workflow_step_executing",
@@ -160,9 +185,6 @@ class StepExecutor:
                     'gate_conditions_count': len(gate_conditions),
                 },
             )
-
-        # Note (AC3): this runtime is strictly sequential in V1.
-        # Parallel execution is intentionally NOT supported yet; this is a future enhancement.
 
         # Create ExecutionStep record
         execution_step = ExecutionStep.objects.create(
