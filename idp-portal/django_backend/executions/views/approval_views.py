@@ -457,9 +457,10 @@ class ApproveExecutionView(APIView):
                     execution_steps = step.execution.action.execution_steps or []
                     on_success_step_id = _get_next_step_id_by_order(execution_steps, step_config)
                 if on_success_step_id:
+                    _eid, _sid = execution_id, on_success_step_id
                     transaction.on_commit(
-                        lambda: resume_container_workflow_from_gate.apply_async(
-                            args=[execution_id, on_success_step_id]
+                        lambda eid=_eid, sid=_sid: resume_container_workflow_from_gate.apply_async(  # type: ignore[misc]
+                            args=[eid, sid], queue="default"
                         )
                     )
                 else:
@@ -634,9 +635,10 @@ class RejectExecutionView(APIView):
                 RunnableStepService.delete(step.id)
                 on_error_step_id = step_config.get("on_error_step_id")
                 if on_error_step_id:
+                    _eid, _eid_err = execution_id, on_error_step_id
                     transaction.on_commit(
-                        lambda: resume_container_workflow_from_gate.apply_async(
-                            args=[execution_id, on_error_step_id]
+                        lambda eid=_eid, sid=_eid_err: resume_container_workflow_from_gate.apply_async(  # type: ignore[misc]
+                            args=[eid, sid], queue="default"
                         )
                     )
                 else:
@@ -803,9 +805,10 @@ class ApproveStepView(APIView):
             on_success_step_id = _get_next_step_id_by_order(execution_steps, step_config)
 
         if on_success_step_id:
+            _eid, _sid = execution_id, on_success_step_id
             transaction.on_commit(
-                lambda: resume_container_workflow_from_gate.apply_async(
-                    args=[execution_id, on_success_step_id]
+                lambda eid=_eid, sid=_sid: resume_container_workflow_from_gate.apply_async(  # type: ignore[misc]
+                    args=[eid, sid], queue="default"
                 )
             )
         else:
@@ -894,9 +897,10 @@ class RejectStepView(APIView):
         on_error_step_id = step_config.get("on_error_step_id")
 
         if on_error_step_id:
+            _eid, _eid_err = execution_id, on_error_step_id
             transaction.on_commit(
-                lambda: resume_container_workflow_from_gate.apply_async(
-                    args=[execution_id, on_error_step_id]
+                lambda eid=_eid, sid=_eid_err: resume_container_workflow_from_gate.apply_async(  # type: ignore[misc]
+                    args=[eid, sid], queue="default"
                 )
             )
         else:

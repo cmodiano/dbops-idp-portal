@@ -423,3 +423,203 @@ class ImportActionYamlTests(TestCase):
         with self.assertRaises(InvalidStateError) as ctx:
             import_action_yaml(bad_yaml, user=self.user)
         self.assertEqual(ctx.exception.code, "INVALID_YAML_SYNTAX")
+
+
+# ---------------------------------------------------------------------------
+# Story 65.7 — CaC export/import tests for parallel_group
+# ---------------------------------------------------------------------------
+
+# Valid parallel_group workflow steps (compatible with validate_workflow_steps).
+# Platform steps use referenced_action_id=1; step-apply-patch and step-rollback
+# are non-member exit points (on_success_step_id=None).
+_VALID_PARALLEL_GROUP_STEPS = [
+    {
+        "step_id": "pg-backup",
+        "step_type": "parallel_group",
+        "name": "Backups parallèles",
+        "parallel_steps": ["step-backup-db", "step-backup-config"],
+        "on_all_success_step_id": "step-apply-patch",
+        "on_any_error_step_id": "step-rollback",
+    },
+    {
+        "step_id": "step-backup-db",
+        "step_type": "platform",
+        "name": "Backup DB",
+        "referenced_action_id": 1,
+    },
+    {
+        "step_id": "step-backup-config",
+        "step_type": "platform",
+        "name": "Backup Config",
+        "referenced_action_id": 1,
+    },
+    {
+        "step_id": "step-apply-patch",
+        "step_type": "platform",
+        "name": "Apply Patch",
+        "referenced_action_id": 1,
+        "on_success_step_id": None,
+    },
+    {
+        "step_id": "step-rollback",
+        "step_type": "platform",
+        "name": "Rollback",
+        "referenced_action_id": 1,
+        "on_success_step_id": None,
+    },
+]
+
+# Invalid: parallel_group with only 1 parallel_step (must raise INVALID_WORKFLOW_STEPS)
+_INVALID_ONE_PARALLEL_STEP = [
+    {
+        "step_id": "pg-solo",
+        "step_type": "parallel_group",
+        "name": "Groupe solo",
+        "parallel_steps": ["step-only-one"],
+        "on_all_success_step_id": None,
+        "on_any_error_step_id": None,
+    },
+    {
+        "step_id": "step-only-one",
+        "step_type": "platform",
+        "name": "Seul step",
+        "referenced_action_id": 1,
+    },
+]
+
+# Invalid: parallel_group referencing a non-existent step_id
+_INVALID_BAD_REF_PARALLEL_STEP = [
+    {
+        "step_id": "pg-bad",
+        "step_type": "parallel_group",
+        "name": "Groupe bad ref",
+        "parallel_steps": ["step-exists", "step-nonexistent"],
+        "on_all_success_step_id": None,
+        "on_any_error_step_id": None,
+    },
+    {
+        "step_id": "step-exists",
+        "step_type": "platform",
+        "name": "Existing step",
+        "referenced_action_id": 1,
+    },
+]
+
+
+def _make_workflow_action_yaml(
+    name="workflow-action",
+    engine="AAP",
+    platform="AAP",
+    item_type="workflow",
+    execution_steps=None,
+):
+    """Helper: build workflow Action YAML bytes. Story 65.7."""
+    spec = {
+        "engine": engine,
+        "platform": platform,
+        "status": "draft",
+        "item_type": item_type,
+        "requires_target": False,
+    }
+    if execution_steps is not None:
+        spec["execution_steps"] = execution_steps
+    data = {
+        "apiVersion": "idp/v1",
+        "kind": "Action",
+        "metadata": {"name": name},
+        "spec": spec,
+    }
+    return yaml.dump(data, default_flow_style=False, allow_unicode=True).encode("utf-8")
+
+
+class ExportImportParallelGroupTests(TestCase):
+    """Tests CaC export/import pour les workflows avec parallel_group. Story 65.7."""
+
+    def setUp(self):
+        self.user = UserFactory()
+        self.action = Action.objects.create(
+            name="pre-patch-workflow",
+            engine="AAP",
+            platform="AAP",
+            item_type="workflow",
+            execution_steps=_VALID_PARALLEL_GROUP_STEPS,
+            created_by=self.user,
+        )
+
+    def test_export_parallel_group_includes_all_fields(self):
+        """Export YAML contient tous les champs du parallel_group. AC #1."""
+        parsed = yaml.safe_load(export_action_yaml("pre-patch-workflow"))
+        steps = parsed["spec"]["execution_steps"]
+        pg_step = next(s for s in steps if s.get("step_type") == "parallel_group")
+        self.assertEqual(pg_step["parallel_steps"], ["step-backup-db", "step-backup-config"])
+        self.assertEqual(pg_step["on_all_success_step_id"], "step-apply-patch")
+        self.assertEqual(pg_step["on_any_error_step_id"], "step-rollback")
+
+    def test_round_trip_preserves_parallel_group_structure(self):
+        """Export → réimport → execution_steps préservés sans perte (all pg fields). AC #1."""
+        yaml_bytes = export_action_yaml("pre-patch-workflow")
+        import_action_yaml(yaml_bytes, mode="full", user=self.user)
+        action = Action.objects.get(name="pre-patch-workflow")
+        pg_step = next(
+            s for s in action.execution_steps
+            if s.get("step_type") == "parallel_group"
+        )
+        self.assertEqual(pg_step["parallel_steps"], ["step-backup-db", "step-backup-config"])
+        self.assertEqual(pg_step["on_all_success_step_id"], "step-apply-patch")
+        self.assertEqual(pg_step["on_any_error_step_id"], "step-rollback")
+        self.assertEqual(pg_step["step_id"], "pg-backup")
+        self.assertEqual(pg_step["name"], "Backups parallèles")
+
+    def test_import_valid_parallel_group_creates_action(self):
+        """Import d'un nouveau workflow avec parallel_group valide → créé. AC #3."""
+        yaml_bytes = _make_workflow_action_yaml(
+            name="new-parallel-workflow",
+            execution_steps=_VALID_PARALLEL_GROUP_STEPS,
+        )
+        created, updated, unchanged = import_action_yaml(yaml_bytes, user=self.user)
+        self.assertEqual(created, 1)
+        action = Action.objects.get(name="new-parallel-workflow")
+        self.assertIsNotNone(action.execution_steps)
+
+    def test_import_valid_parallel_group_updates_action(self):
+        """Import d'un workflow déjà existant → mis à jour ou inchangé (pas créé). AC #3."""
+        yaml_bytes = _make_workflow_action_yaml(
+            name="pre-patch-workflow",
+            execution_steps=_VALID_PARALLEL_GROUP_STEPS,
+        )
+        _created, updated, unchanged = import_action_yaml(yaml_bytes, user=self.user)
+        # Action already exists from setUp → must not be created again
+        self.assertEqual(_created, 0)
+        # Either updated (if YAML fields differ from setUp defaults) or unchanged — never created
+        self.assertEqual(updated + unchanged, 1)
+
+    def test_import_invalid_parallel_group_one_step_raises_error(self):
+        """Import avec parallel_group à 1 seul parallel_step → InvalidStateError. AC #2."""
+        yaml_bytes = _make_workflow_action_yaml(
+            name="bad-workflow",
+            execution_steps=_INVALID_ONE_PARALLEL_STEP,
+        )
+        with self.assertRaises(InvalidStateError) as ctx:
+            import_action_yaml(yaml_bytes, user=self.user)
+        self.assertEqual(ctx.exception.code, "INVALID_WORKFLOW_STEPS")
+
+    def test_import_invalid_parallel_steps_ref_raises_error(self):
+        """Import avec parallel_steps référençant un step_id inexistant → InvalidStateError. AC #2."""
+        yaml_bytes = _make_workflow_action_yaml(
+            name="bad-ref-workflow",
+            execution_steps=_INVALID_BAD_REF_PARALLEL_STEP,
+        )
+        with self.assertRaises(InvalidStateError) as ctx:
+            import_action_yaml(yaml_bytes, user=self.user)
+        self.assertEqual(ctx.exception.code, "INVALID_WORKFLOW_STEPS")
+
+    def test_import_parallel_group_non_workflow_item_type_skips_validation(self):
+        """item_type='action' : validation execution_steps ignorée même si invalide. AC #2."""
+        yaml_bytes = _make_workflow_action_yaml(
+            name="action-with-bad-pg",
+            item_type="action",
+            execution_steps=_INVALID_ONE_PARALLEL_STEP,
+        )
+        # Must NOT raise (item_type != "workflow" → validation skipped)
+        created, updated, unchanged = import_action_yaml(yaml_bytes, user=self.user)
+        self.assertEqual(created, 1)

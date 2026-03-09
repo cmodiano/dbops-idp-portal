@@ -698,6 +698,8 @@ CELERY_TASK_ROUTES.update({
     'executions.tasks.retry_workflow_step': {'queue': 'default'},
     # Story 47.2 — Trigger async ; la queue spécifique est passée via apply_async(queue=...) au runtime.
     'executions.tasks.trigger_platform_job': {'queue': 'default'},
+    # Story 57.7 — Reprise workflow après gate (approbation) — doit être sur default (worker écoute cette queue)
+    'executions.tasks.resume_container_workflow_from_gate': {'queue': 'default'},
 })
 
 del _adapters_pkg, _adapter_registry, _SHIM_PLATFORM_MAP  # nettoyer le namespace settings

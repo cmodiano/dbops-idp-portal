@@ -196,9 +196,14 @@ def validate_workflow_step_parameters(
         normalized[str(order_int)] = {"parameters": params}
 
     if invalid_orders:
+        valid_str = ", ".join(str(o) for o in valid_orders) if valid_orders else "(aucun)"
+        invalid_str = ", ".join(sorted(invalid_orders))
         raise BadRequestError(
             code="INVALID_WORKFLOW_STEP_ORDER",
-            message="workflow_step_parameters contient des step_order inconnus",
+            message=(
+                f"workflow_step_parameters contient des step_order inconnus : {invalid_str}. "
+                f"Valeurs valides pour ce workflow : {valid_str}"
+            ),
             details={"invalid_step_orders": sorted(invalid_orders), "valid_step_orders": valid_orders},
         )
 

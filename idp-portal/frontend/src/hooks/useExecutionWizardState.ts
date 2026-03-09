@@ -77,6 +77,9 @@ function buildWorkflowStepParams(
       | undefined) ?? {};
     const out: Record<string, { parameters: Record<string, unknown> }> = {};
     for (const step of workflowSteps) {
+      // Backend only accepts workflow_step_parameters for steps with referenced_action_id
+      // (platform, schedule_execution). Gates, parallel_group, etc. are rejected.
+      if (step.referenced_action_id == null) continue;
       const orderKey = String(step.order);
       const stepEntry = raw[orderKey];
       const stepSpecific = (stepEntry?.parameters ?? {}) as Record<string, unknown>;

@@ -266,6 +266,7 @@ def _transition_step_to_running(step: ExecutionStep, gate_status: dict, correlat
             # Container workflow ADR-007 : reprendre depuis le prochain step
             resume_container_workflow_from_gate.apply_async(
                 args=[step.execution_id, on_success_step_id],
+                queue="default",
             )
             logger.info(
                 "evaluate_waiting_gates_step_container_workflow_resumed",
@@ -572,6 +573,7 @@ def _handle_gate_timeout(step: ExecutionStep, gate_status: dict, correlation_id:
         if is_adr007_step and on_success_step_id:
             resume_container_workflow_from_gate.apply_async(
                 args=[step.execution_id, on_success_step_id],
+                queue="default",
             )
             logger.info(
                 "evaluate_waiting_gates_step_timeout_container_workflow_resumed",

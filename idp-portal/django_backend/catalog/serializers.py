@@ -475,14 +475,16 @@ class ActionSerializer(ActionFieldValidationMixin, serializers.ModelSerializer):
         # Convert execution_steps to workflow_steps format
         # Story 16.2: Include step_id, branches (on_success/on_error), and retry config
         # Story 57.13: Include all step types (platform, gate, service_call, evaluation, http_request)
+        # Align order default with extract_workflow_step_map (idx+1) so workflow_step_parameters
+        # keys match between frontend (workflow_steps) and backend validation.
         workflow_steps = []
-        for step in execution_steps:
+        for idx, step in enumerate(execution_steps):
             if not isinstance(step, dict):
                 continue
             step_type = step.get('step_type') or 'platform'
             ref_id = step.get('referenced_action_id')
             workflow_step = {
-                'order': step.get('order', 0),
+                'order': step.get('order', idx + 1),
                 'name': step.get('name'),
                 'step_type': step_type,
                 'referenced_action_id': ref_id,
