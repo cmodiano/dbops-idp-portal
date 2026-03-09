@@ -6,6 +6,7 @@ import structlog
 from typing import Any
 
 from asgiref.sync import async_to_sync
+from django.db import transaction
 from rest_framework import viewsets, status, serializers as drf_serializers
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -273,24 +274,25 @@ class IntegrationViewSet(viewsets.ViewSet):
         details = IntegrationValidationService.get_integration_validation_details(integration)
         computed_status = details['status']
 
-        # Update status in DB if changed
+        # Update status in DB if changed — atomic: save + audit in same transaction
         if integration.status != computed_status:
-            old_status = integration.status
-            integration.status = computed_status
-            integration.save(update_fields=['status', 'updated_at'])
+            with transaction.atomic():
+                old_status = integration.status
+                integration.status = computed_status
+                integration.save(update_fields=['status', 'updated_at'])
 
-            AuditService.create_entry(
-                user_id=str(request.user.id) if request.user and hasattr(request.user, 'id') else 'system',
-                action_type=AuditActionType.INTEGRATION_STATUS_UPDATED,
-                entity_type=AuditEntityType.INTEGRATION,
-                entity_id=integration.id,
-                details={
-                    'previous_status': old_status,
-                    'new_status': computed_status,
-                    'validation_reason': details['validation_message'],
-                },
-                correlation_id=get_correlation_id(),
-            )
+                AuditService.create_entry(
+                    user_id=str(request.user.id) if request.user and hasattr(request.user, 'id') else 'system',
+                    action_type=AuditActionType.INTEGRATION_STATUS_UPDATED,
+                    entity_type=AuditEntityType.INTEGRATION,
+                    entity_id=integration.id,
+                    details={
+                        'previous_status': old_status,
+                        'new_status': computed_status,
+                        'validation_reason': details['validation_message'],
+                    },
+                    correlation_id=get_correlation_id(),
+                )
 
         return Response({"data": {
             'integration_id': integration.id,
@@ -462,27 +464,27 @@ class IntegrationViewSet(viewsets.ViewSet):
             )
             result = HealthCheckResult(status=HealthCheckStatus.ERROR, checked_at=timezone.now(), error_message=str(exc))
 
-        # Mise à jour BD (évite signal récursif)
+        # Mise à jour BD + audit — atomique : si l'audit échoue, le statut n'est pas mis à jour
         sanitized_error = _sanitize_health_error_message(result.error_message)
-        Integration.objects.filter(id=integration_id).update(
-            health_status=result.status.value,
-            health_checked_at=result.checked_at,
-            health_error_message=sanitized_error,
-        )
+        with transaction.atomic():
+            Integration.objects.filter(id=integration_id).update(
+                health_status=result.status.value,
+                health_checked_at=result.checked_at,
+                health_error_message=sanitized_error,
+            )
 
-        # Audit
-        AuditService.create_entry(
-            user_id=str(request.user.id) if request.user and hasattr(request.user, 'id') else 'system',
-            action_type=AuditActionType.INTEGRATION_HEALTH_CHECK_TESTED,
-            entity_type=AuditEntityType.INTEGRATION,
-            entity_id=integration_id,
-            details={
-                'status': result.status.value,
-                'checked_at': result.checked_at.isoformat(),
-                'error_message': sanitized_error,
-            },
-            correlation_id=get_correlation_id(),
-        )
+            AuditService.create_entry(
+                user_id=str(request.user.id) if request.user and hasattr(request.user, 'id') else 'system',
+                action_type=AuditActionType.INTEGRATION_HEALTH_CHECK_TESTED,
+                entity_type=AuditEntityType.INTEGRATION,
+                entity_id=integration_id,
+                details={
+                    'status': result.status.value,
+                    'checked_at': result.checked_at.isoformat(),
+                    'error_message': sanitized_error,
+                },
+                correlation_id=get_correlation_id(),
+            )
 
         return Response({"data": {
             "status": result.status.value,

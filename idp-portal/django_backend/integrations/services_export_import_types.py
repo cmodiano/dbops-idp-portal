@@ -11,6 +11,7 @@ from typing import Any
 from django.db import transaction
 
 from core.exceptions import InvalidStateError
+from core.middleware import get_correlation_id
 from core.models import AuditActionType, AuditEntityType
 from core.services import AuditService
 from core.services_cac_utils import (
@@ -241,6 +242,7 @@ def import_integration_types_yaml(
             "actions_unchanged": actions_unchanged,
             "mode": mode,
         },
+        correlation_id=get_correlation_id(),
     )
 
     return (created, updated, unchanged)
