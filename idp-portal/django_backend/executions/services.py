@@ -360,6 +360,7 @@ class ExecutionService:
                         execution=execution,
                         step_order=step_data.get('step_order', 0),
                         step_name=step_data.get('step_name', 'Step'),
+                        config_step_id=step_data.get('config_step_id'),
                         step_type=step_data.get('step_type', 'manual'),
                         status=ExecutionStepStatus.PENDING,
                     )
@@ -878,6 +879,7 @@ class ExecutionService:
             step_type=step_type,
             status=ExecutionStepStatus.PENDING,
         )
+        # Note: create_step doesn't receive config_step_id; callers should set it if needed
         return step
 
     def get_steps_by_execution(self, execution_id: int) -> QuerySet:

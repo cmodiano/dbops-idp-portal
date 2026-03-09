@@ -298,7 +298,7 @@ class ContainerWorkflowRuntime:
             ExecutionStatus of the step (COMPLETED for SKIPPED steps)
         """
         step_order = step.get('order', 0)
-        step_name = step.get('name') or f"Step {step_order}"
+        step_name = step.get('name') or step.get('step_id') or f"Step {step_order}"
         step_id = step.get('step_id')
         step_type = step.get('step_type') or 'platform'  # ADR-007 §3d, coalesce null/"" to platform
 
@@ -504,7 +504,7 @@ class ContainerWorkflowRuntime:
 
         Story 65.2 — AC4, AC7.
         """
-        step_name = step.get('name') or f"Step {step_order}"
+        step_name = step.get('name') or step.get('step_id') or f"Step {step_order}"
         step_id = step.get('step_id')
         step_type = step.get('step_type') or 'platform'
 
@@ -581,6 +581,7 @@ class ContainerWorkflowRuntime:
             execution=self.execution,
             step_order=step_order,
             step_name=step_name,
+            config_step_id=step_id,
             step_type=db_step_type,
             status=ExecutionStepStatus.SKIPPED,
             started_at=now,
@@ -607,6 +608,7 @@ class ContainerWorkflowRuntime:
             execution=self.execution,
             step_order=step_order,
             step_name=step_name,
+            config_step_id=step_id,
             step_type=ExecutionStepType.PLATFORM,
             status=ExecutionStepStatus.RUNNING,
             started_at=timezone.now(),
@@ -736,6 +738,7 @@ class ContainerWorkflowRuntime:
             execution=self.execution,
             step_order=step_order,
             step_name=step_name,
+            config_step_id=step_id,
             step_type=db_step_type,
             status=ExecutionStepStatus.RUNNING,
             started_at=timezone.now(),
@@ -824,6 +827,7 @@ class ContainerWorkflowRuntime:
             execution=self.execution,
             step_order=self._step_order_counter,
             step_name=step_name,
+            config_step_id=step_id,
             step_type=ExecutionStepType.PLATFORM,
             status=ExecutionStepStatus.RUNNING,
             started_at=timezone.now(),
@@ -1005,6 +1009,7 @@ class ContainerWorkflowRuntime:
             execution=self.execution,
             step_order=self._step_order_counter,
             step_name=step_name,
+            config_step_id=step_id,
             step_type=db_step_type,
             status=ExecutionStepStatus.SKIPPED,
             started_at=now,
@@ -1050,6 +1055,7 @@ class ContainerWorkflowRuntime:
             execution=self.execution,
             step_order=self._step_order_counter,
             step_name=step_name,
+            config_step_id=step_id,
             step_type=db_step_type,
             status=ExecutionStepStatus.RUNNING,
             started_at=timezone.now(),
