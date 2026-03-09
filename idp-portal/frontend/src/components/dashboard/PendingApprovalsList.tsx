@@ -74,13 +74,13 @@ function ApprovalContext({ parameters, targets, compact, isPendingApproval }: Ap
     }
     if (hasStepParams) {
       const stepLines = Object.entries(stepParams!).map(([stepOrder, stepData]) => {
-        const params = stepData && typeof stepData === 'object' && 'parameters' in stepData
-          ? (stepData as { parameters: Record<string, unknown> }).parameters
-          : null;
+        const stepEntry = stepData && typeof stepData === 'object' ? stepData as { name?: string; parameters?: Record<string, unknown> } : null;
+        const stepName = stepEntry?.name ?? `Étape ${stepOrder}`;
+        const params = stepEntry?.parameters ?? null;
         const paramStr = params
           ? Object.entries(params).map(([pk, pv]) => `${humanizeKey(pk)}=${formatParamValue(pv)}`).join(', ')
           : '';
-        return paramStr ? `Étape ${stepOrder}: ${paramStr}` : '';
+        return paramStr ? `${stepName}: ${paramStr}` : '';
       }).filter(Boolean);
       if (stepLines.length) parts.push(stepLines.join(' | '));
     }
@@ -137,12 +137,12 @@ function ApprovalContext({ parameters, targets, compact, isPendingApproval }: Ap
         <div style={{ marginBottom: 4 }}>
           <Text strong style={{ fontSize: 12 }}>Paramètres par étape :</Text>
           {Object.entries(stepParams!).map(([stepOrder, stepData]) => {
-            const params = stepData && typeof stepData === 'object' && 'parameters' in stepData
-              ? (stepData as { parameters: Record<string, unknown> }).parameters
-              : null;
+            const stepEntry = stepData && typeof stepData === 'object' ? stepData as { name?: string; parameters?: Record<string, unknown> } : null;
+            const stepName = stepEntry?.name ?? `Étape ${stepOrder}`;
+            const params = stepEntry?.parameters ?? null;
             return (
             <div key={stepOrder} style={{ fontSize: 12, paddingLeft: 8 }}>
-              <Text type="secondary">Étape {stepOrder} :</Text>
+              <Text type="secondary">{stepName} :</Text>
               {params && Object.entries(params).map(([pk, pv]) => (
                 <div key={pk} style={{ paddingLeft: 16 }}>
                   {humanizeKey(pk)} : {formatParamValue(pv)}

@@ -24,7 +24,7 @@ const STEP_TYPE_COLORS: Record<WorkflowStepType, string> = {
   gate:               '#faad14',  // ambre/jaune
   http_request:       '#13c2c2',  // cyan
   schedule_execution: '#4f46e5',  // indigo (Story 57.16)
-  parallel_group:     '#52c41a',  // vert (Story 65.4)
+  parallel_group:     '#52c41a',  // vert (deprecated, rétro-compat)
 };
 
 const STEP_TYPE_LABELS: Record<WorkflowStepType, string> = {
@@ -34,7 +34,7 @@ const STEP_TYPE_LABELS: Record<WorkflowStepType, string> = {
   gate:               'Attendre',
   http_request:       'HTTP',
   schedule_execution: 'Planifier', // Story 57.16
-  parallel_group:     'Parallèle', // Story 65.4
+  parallel_group:     'Parallèle', // deprecated, rétro-compat
 };
 
 const INTEGRATION_LABELS: Record<string, string> = {
@@ -106,7 +106,7 @@ export interface WorkflowStepNodeData {
   // === schedule_execution ===
   /** Story 57.16: Configuration du step de planification. */
   schedule_config?: ScheduleStepConfig | null;
-  // === parallel_group ===
+  // === parallel_group — TODO Story 67.7: supprimer ces champs après migration ===
   /** Story 65.4: Liste des step_id à exécuter en parallèle (≥2 requis). */
   parallel_steps?: string[] | null;
   /** Story 65.4: Step suivant si tous les sous-steps réussissent. */
@@ -151,10 +151,6 @@ const WorkflowStepNode: FC<NodeProps> = ({ data, selected }) => {
     }
     if (stepType === 'schedule_execution') {
       return nodeData.name ?? nodeData.action_name ?? 'Planifier une exécution';
-    }
-    // Story 65.5: parallel_group
-    if (stepType === 'parallel_group') {
-      return nodeData.name ?? 'Groupe parallèle';
     }
     return nodeData.name ?? '';
   }, [stepType, nodeData]);
@@ -207,29 +203,6 @@ const WorkflowStepNode: FC<NodeProps> = ({ data, selected }) => {
           <div style={{ marginBottom: 4, fontWeight: 600 }}>{primaryTitle}</div>
           <div>Statut: {executionStatusLabels[nodeData.executionStatus] ?? nodeData.executionStatus}</div>
           {nodeData.executionDuration && <div>Durée: {nodeData.executionDuration}</div>}
-        </div>
-      );
-    }
-
-    // Story 65.5: Tooltip parallel_group — liste des sous-steps + routage
-    if (stepType === 'parallel_group') {
-      const steps = nodeData.parallel_steps ?? [];
-      const allSuccess = nodeData.on_all_success_step_id ?? 'Fin';
-      const anyError = nodeData.on_any_error_step_id ?? 'Fin';
-      return (
-        <div style={{ fontSize: 12 }}>
-          <div style={{ marginBottom: 4, fontWeight: 600 }}>{primaryTitle}</div>
-          <div style={{ marginBottom: 2 }}>
-            Étapes parallèles : {steps.length === 0 ? 'Non configuré' : steps.join(', ')}
-          </div>
-          <div>
-            <CheckCircleOutlined style={{ color: '#52c41a', marginRight: 4 }} />
-            Tout succès → {allSuccess}
-          </div>
-          <div>
-            <CloseCircleOutlined style={{ color: '#ff4d4f', marginRight: 4 }} />
-            Une erreur → {anyError}
-          </div>
         </div>
       );
     }
@@ -311,12 +284,6 @@ const WorkflowStepNode: FC<NodeProps> = ({ data, selected }) => {
             {nodeData.schedule_config.schedule_source === 'parameter' && 'Paramètre utilisateur'}
             {nodeData.schedule_config.schedule_source === 'fixed_offset' && `Offset: ${nodeData.schedule_config.fixed_offset ?? '?'}`}
             {nodeData.schedule_config.schedule_source === 'recurring' && 'Récurrent'}
-          </div>
-        )}
-        {/* Story 65.5: Nombre de sous-steps parallèles */}
-        {stepType === 'parallel_group' && nodeData.parallel_steps && nodeData.parallel_steps.length > 0 && (
-          <div style={{ fontSize: 11, color: token.colorTextSecondary, marginTop: 2 }}>
-            {nodeData.parallel_steps.length} étapes parallèles
           </div>
         )}
         {/* Secondary info for platform steps */}

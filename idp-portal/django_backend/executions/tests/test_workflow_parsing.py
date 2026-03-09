@@ -224,7 +224,7 @@ class TestValidateWorkflowStepParameters(TestCase):
             workflow_action=self.workflow_action,
             workflow_step_parameters={"2": {"parameters": None}},
         )
-        self.assertEqual(result, {"2": {"parameters": {}}})
+        self.assertEqual(result, {"2": {"name": "Étape 2", "parameters": {}}})
 
     # Tâche 5.13c — step value avec "parameters": valeur non-dict (ex: string) → BadRequestError
     def test_step_parameters_non_dict_raises_invalid_parameters(self):
@@ -244,7 +244,7 @@ class TestValidateWorkflowStepParameters(TestCase):
             workflow_action=self.workflow_action,
             workflow_step_parameters={"2": {"parameters": {}}},
         )
-        self.assertEqual(result, {"2": {"parameters": {}}})
+        self.assertEqual(result, {"2": {"name": "Étape 2", "parameters": {}}})
 
     # Tâche 5.15 — pas de schema, params non-vides → BadRequestError(INVALID_PARAMETERS)
     def test_no_schema_non_empty_params_raises_bad_request(self):

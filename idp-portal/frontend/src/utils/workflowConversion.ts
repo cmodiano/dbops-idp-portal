@@ -88,10 +88,6 @@ export function workflowStepsToReactFlow(
       output_mapping: step.output_mapping ?? null,
       // Story 57.16: schedule_execution
       schedule_config: step.schedule_config ?? null,
-      // Story 65.4: parallel_group fields
-      parallel_steps: step.parallel_steps ?? null,
-      on_all_success_step_id: step.on_all_success_step_id ?? null,
-      on_any_error_step_id: step.on_any_error_step_id ?? null,
       // Story 67.4: join_policy pour les steps de convergence
       join_policy: step.join_policy ?? null,
     } satisfies WorkflowStepNodeData,
@@ -102,72 +98,28 @@ export function workflowStepsToReactFlow(
     const sourceId = step.step_id;
     if (!sourceId) return;
 
-    if (step.step_type === 'parallel_group') {
-      // Story 65.4: parallel_group uses on_all_success / on_any_error instead of on_success / on_error
-      const allSuccessTarget = step.on_all_success_step_id ?? END_NODE_ID;
-      edges.push({
-        id: `${sourceId}_all_success_${allSuccessTarget}`,
-        source: sourceId,
-        target: allSuccessTarget,
-        sourceHandle: 'success',
-        targetHandle: 'input',
-        type: 'customEdge',
-        animated: false,
-        style: { stroke: STYLE_TOKENS.iconSuccess, strokeWidth: STYLE_TOKENS.edgeStrokeWidth },
-        label: 'tout succès',
-        labelStyle: { fontSize: STYLE_TOKENS.edgeLabelFontSize, fill: STYLE_TOKENS.textSuccess },
-      });
-      const anyErrorTarget = step.on_any_error_step_id ?? END_NODE_ID;
-      edges.push({
-        id: `${sourceId}_any_error_${anyErrorTarget}`,
-        source: sourceId,
-        target: anyErrorTarget,
-        sourceHandle: 'error',
-        targetHandle: 'input',
-        type: 'customEdge',
-        animated: false,
-        style: { stroke: STYLE_TOKENS.iconError, strokeWidth: STYLE_TOKENS.edgeStrokeWidth },
-        label: 'erreur',
-        labelStyle: { fontSize: STYLE_TOKENS.edgeLabelFontSize, fill: STYLE_TOKENS.textError },
-      });
-    } else {
-      // Story 67.4: rétrocompat — préférer on_success_step_ids[], fallback sur on_success_step_id (singulier)
-      const successTargets: string[] =
-        step.on_success_step_ids?.length
-          ? step.on_success_step_ids
-          : step.on_success_step_id
-            ? [step.on_success_step_id]
-            : [];
+    // Story 67.4: rétrocompat — préférer on_success_step_ids[], fallback sur on_success_step_id (singulier)
+    const successTargets: string[] =
+      step.on_success_step_ids?.length
+        ? step.on_success_step_ids
+        : step.on_success_step_id
+          ? [step.on_success_step_id]
+          : [];
 
-      const errorTargets: string[] =
-        step.on_error_step_ids?.length
-          ? step.on_error_step_ids
-          : step.on_error_step_id
-            ? [step.on_error_step_id]
-            : [];
+    const errorTargets: string[] =
+      step.on_error_step_ids?.length
+        ? step.on_error_step_ids
+        : step.on_error_step_id
+          ? [step.on_error_step_id]
+          : [];
 
-      // Créer une edge par target success
-      if (successTargets.length > 0) {
-        for (const target of successTargets) {
-          edges.push({
-            id: `${sourceId}_success_${target}`,
-            source: sourceId,
-            target,
-            sourceHandle: 'success',
-            targetHandle: 'input',
-            type: 'customEdge',
-            animated: false,
-            style: { stroke: STYLE_TOKENS.iconSuccess, strokeWidth: STYLE_TOKENS.edgeStrokeWidth },
-            label: 'succès',
-            labelStyle: { fontSize: STYLE_TOKENS.edgeLabelFontSize, fill: STYLE_TOKENS.textSuccess },
-          });
-        }
-      } else {
-        // Fin de workflow → edge vers End node
+    // Créer une edge par target success
+    if (successTargets.length > 0) {
+      for (const target of successTargets) {
         edges.push({
-          id: `${sourceId}_success_${END_NODE_ID}`,
+          id: `${sourceId}_success_${target}`,
           source: sourceId,
-          target: END_NODE_ID,
+          target,
           sourceHandle: 'success',
           targetHandle: 'input',
           type: 'customEdge',
@@ -177,29 +129,29 @@ export function workflowStepsToReactFlow(
           labelStyle: { fontSize: STYLE_TOKENS.edgeLabelFontSize, fill: STYLE_TOKENS.textSuccess },
         });
       }
+    } else {
+      // Fin de workflow → edge vers End node
+      edges.push({
+        id: `${sourceId}_success_${END_NODE_ID}`,
+        source: sourceId,
+        target: END_NODE_ID,
+        sourceHandle: 'success',
+        targetHandle: 'input',
+        type: 'customEdge',
+        animated: false,
+        style: { stroke: STYLE_TOKENS.iconSuccess, strokeWidth: STYLE_TOKENS.edgeStrokeWidth },
+        label: 'succès',
+        labelStyle: { fontSize: STYLE_TOKENS.edgeLabelFontSize, fill: STYLE_TOKENS.textSuccess },
+      });
+    }
 
-      // Créer une edge par target error
-      if (errorTargets.length > 0) {
-        for (const target of errorTargets) {
-          edges.push({
-            id: `${sourceId}_error_${target}`,
-            source: sourceId,
-            target,
-            sourceHandle: 'error',
-            targetHandle: 'input',
-            type: 'customEdge',
-            animated: false,
-            style: { stroke: STYLE_TOKENS.iconError, strokeWidth: STYLE_TOKENS.edgeStrokeWidth },
-            label: 'erreur',
-            labelStyle: { fontSize: STYLE_TOKENS.edgeLabelFontSize, fill: STYLE_TOKENS.textError },
-          });
-        }
-      } else {
-        // Fin/erreur de workflow → edge vers End node
+    // Créer une edge par target error
+    if (errorTargets.length > 0) {
+      for (const target of errorTargets) {
         edges.push({
-          id: `${sourceId}_error_${END_NODE_ID}`,
+          id: `${sourceId}_error_${target}`,
           source: sourceId,
-          target: END_NODE_ID,
+          target,
           sourceHandle: 'error',
           targetHandle: 'input',
           type: 'customEdge',
@@ -209,6 +161,20 @@ export function workflowStepsToReactFlow(
           labelStyle: { fontSize: STYLE_TOKENS.edgeLabelFontSize, fill: STYLE_TOKENS.textError },
         });
       }
+    } else {
+      // Fin/erreur de workflow → edge vers End node
+      edges.push({
+        id: `${sourceId}_error_${END_NODE_ID}`,
+        source: sourceId,
+        target: END_NODE_ID,
+        sourceHandle: 'error',
+        targetHandle: 'input',
+        type: 'customEdge',
+        animated: false,
+        style: { stroke: STYLE_TOKENS.iconError, strokeWidth: STYLE_TOKENS.edgeStrokeWidth },
+        label: 'erreur',
+        labelStyle: { fontSize: STYLE_TOKENS.edgeLabelFontSize, fill: STYLE_TOKENS.textError },
+      });
     }
   });
 
@@ -278,30 +244,9 @@ export function reactFlowToWorkflowSteps(
     const errorTargets = edges
       .filter((e) => e.source === node.id && e.sourceHandle === 'error' && e.target !== END_NODE_ID)
       .map((e) => e.target as string);
-    // Pour le code parallel_group (rétrocompat)
-    const successEdge = edges.find(
-      (e) => e.source === node.id && e.sourceHandle === 'success' && e.target !== END_NODE_ID
-    );
-    const errorEdge = edges.find(
-      (e) => e.source === node.id && e.sourceHandle === 'error' && e.target !== END_NODE_ID
-    );
 
     // Story 57.13: backward compat — default to 'platform' if step_type not set
     const stepType: WorkflowStepType = data.step_type ?? 'platform';
-
-    // Story 65.4: parallel_group — routing via on_all_success / on_any_error, pas on_success/on_error
-    if (stepType === 'parallel_group') {
-      return {
-        order: index + 1,
-        step_id: node.id,
-        step_type: 'parallel_group' as const,
-        name: data.name ?? null,
-        parallel_steps: data.parallel_steps ?? null,
-        on_all_success_step_id: successEdge?.target ?? null,
-        on_any_error_step_id: errorEdge?.target ?? null,
-        condition: data.condition ?? null,
-      };
-    }
 
     const baseStep: WorkflowStep = {
       order: index + 1,

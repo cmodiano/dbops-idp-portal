@@ -86,9 +86,9 @@ class TestApproveStepView(TestCase):
         self.assertIn("approved_at", step_data)
         self.assertEqual(step_data["approval_comment"], "LGTM")
 
-        # Vérifie que la tâche Celery de resume est bien déclenchée
+        # Vérifie que la tâche Celery de resume est bien déclenchée (Story 67.4: liste)
         mock_resume.apply_async.assert_called_once_with(
-            args=[self.execution.id, "execute-action"],
+            args=[self.execution.id, ["execute-action"]],
             queue="default",
         )
 

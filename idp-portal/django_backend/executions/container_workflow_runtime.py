@@ -149,6 +149,8 @@ class ContainerWorkflowRuntime:
             for s in self.workflow_steps
             if s.get('step_id')
         }
+        # Story 67.4: Vague initiale pour resume après gate (fan-out parallèle)
+        self._initial_wave: list[str] | None = None
 
         logger.info(
             "container_workflow_runtime_initialized",
@@ -1416,13 +1418,18 @@ class ContainerWorkflowRuntime:
             # Note: run_sync() / run() vérifient déjà les steps vides avant d'appeler cette méthode
             return ExecutionStatus.COMPLETED
 
-        # Démarrer par le step d'ordre minimum
-        first_step = min(self.workflow_steps, key=lambda s: s.get('order', 0))
-        first_step_id = first_step.get('step_id')
-        if not first_step_id:
-            # Rétrocompat : step sans step_id → exécution séquentielle par ordre
-            return self._execute_workflow_steps_sequential()
-        current_wave: list[str] = [first_step_id]
+        # Story 67.4: Vague initiale explicite (resume après gate avec on_success_step_ids)
+        initial_wave = getattr(self, '_initial_wave', None)
+        if initial_wave:
+            current_wave = [s for s in initial_wave if s in self._step_lookup_by_id]
+        else:
+            # Démarrer par le step d'ordre minimum
+            first_step = min(self.workflow_steps, key=lambda s: s.get('order', 0))
+            first_step_id = first_step.get('step_id')
+            if not first_step_id:
+                # Rétrocompat : step sans step_id → exécution séquentielle par ordre
+                return self._execute_workflow_steps_sequential()
+            current_wave = [first_step_id]
 
         while current_wave:
             # Check cancellation avant chaque vague (AC4)

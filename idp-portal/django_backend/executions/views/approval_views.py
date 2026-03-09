@@ -175,6 +175,20 @@ def _get_step_config(step: ExecutionStep) -> dict:
     return {}
 
 
+def _get_on_success_step_ids(step_config: dict, execution_steps: list) -> list[str]:
+    """Story 67.4: Retourne la liste des step_ids à reprendre après approbation.
+    Priorité: on_success_step_ids (pluriel) > on_success_step_id (singulier) > _get_next_step_id_by_order.
+    """
+    ids = step_config.get("on_success_step_ids")
+    if isinstance(ids, list) and len(ids) > 0:
+        return [s for s in ids if isinstance(s, str) and s]
+    sid = step_config.get("on_success_step_id")
+    if sid and isinstance(sid, str):
+        return [sid]
+    next_id = _get_next_step_id_by_order(execution_steps, step_config)
+    return [next_id] if next_id else []
+
+
 def _get_next_step_id_by_order(execution_steps: list, current_step_config: dict) -> str | None:
     """Retourne le step_id du step suivant par ordre (fallback quand on_success_step_id absent).
     Exclut les members de parallel_group (non routables directement, comme dans le runtime).
@@ -452,15 +466,13 @@ class ApproveExecutionView(APIView):
                 from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
                 WorkflowEventService.emit_approval_granted(execution_id, step, approved_by=user_id)
                 RunnableStepService.delete(step.id)
-                on_success_step_id = step_config.get("on_success_step_id")
-                if not on_success_step_id:
-                    execution_steps = step.execution.action.execution_steps or []
-                    on_success_step_id = _get_next_step_id_by_order(execution_steps, step_config)
-                if on_success_step_id:
-                    _eid, _sid = execution_id, on_success_step_id
+                execution_steps = step.execution.action.execution_steps or []
+                on_success_step_ids = _get_on_success_step_ids(step_config, execution_steps)
+                if on_success_step_ids:
+                    _eid, _sids = execution_id, on_success_step_ids
                     transaction.on_commit(
-                        lambda eid=_eid, sid=_sid: resume_container_workflow_from_gate.apply_async(  # type: ignore[misc]
-                            args=[eid, sid], queue="default"
+                        lambda: resume_container_workflow_from_gate.apply_async(
+                            args=[_eid, _sids], queue="default"
                         )
                     )
                 else:
@@ -477,7 +489,7 @@ class ApproveExecutionView(APIView):
                     details={
                         "step_id": step.id,
                         "step_name": step.step_name,
-                        "on_success_step_id": on_success_step_id,
+                        "on_success_step_ids": on_success_step_ids,
                         "via_legacy_endpoint": True,
                         "action_name": step.execution.action.name if step.execution.action else None,
                         **_get_execution_audit_context(step.execution),
@@ -798,17 +810,13 @@ class ApproveStepView(APIView):
         WorkflowEventService.emit_approval_granted(execution_id, step, approved_by=user_id)
         RunnableStepService.delete(step.id)
 
-        on_success_step_id = step_config.get("on_success_step_id")
-        # Fallback: linear order when gate has no explicit on_success_step_id (common for simple workflows)
-        if not on_success_step_id:
-            execution_steps = step.execution.action.execution_steps or []
-            on_success_step_id = _get_next_step_id_by_order(execution_steps, step_config)
-
-        if on_success_step_id:
-            _eid, _sid = execution_id, on_success_step_id
+        execution_steps = step.execution.action.execution_steps or []
+        on_success_step_ids = _get_on_success_step_ids(step_config, execution_steps)
+        if on_success_step_ids:
+            _eid, _sids = execution_id, on_success_step_ids
             transaction.on_commit(
-                lambda eid=_eid, sid=_sid: resume_container_workflow_from_gate.apply_async(  # type: ignore[misc]
-                    args=[eid, sid], queue="default"
+                lambda: resume_container_workflow_from_gate.apply_async(
+                    args=[_eid, _sids], queue="default"
                 )
             )
         else:
@@ -826,7 +834,7 @@ class ApproveStepView(APIView):
             details={
                 "step_id": step.id,
                 "step_name": step.step_name,
-                "on_success_step_id": on_success_step_id,
+                "on_success_step_ids": on_success_step_ids,
                 "action_name": step.execution.action.name if step.execution.action else None,
                 **_get_execution_audit_context(step.execution),
             },
@@ -839,7 +847,7 @@ class ApproveStepView(APIView):
             step_name=step.step_name,
             execution_id=execution_id,
             user_id=user_id,
-            on_success_step_id=on_success_step_id,
+            on_success_step_ids=on_success_step_ids,
             correlation_id=correlation_id,
         )
 

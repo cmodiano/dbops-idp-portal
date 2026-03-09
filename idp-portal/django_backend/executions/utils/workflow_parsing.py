@@ -92,6 +92,28 @@ def extract_workflow_step_map(workflow_action: Action) -> dict[int, int]:
     return out
 
 
+def extract_workflow_step_names(workflow_action: Action) -> dict[int, str]:
+    """
+    Build mapping step_order -> step name for a workflow.
+    Used to enrich workflow_step_parameters for approval modal display.
+    """
+    steps = workflow_action.execution_steps or []
+    if not isinstance(steps, list):
+        return {}
+    out: dict[int, str] = {}
+    for idx, step in enumerate(steps):
+        if not isinstance(step, dict):
+            continue
+        try:
+            order = int(step.get("order", idx + 1))
+            name = step.get("name") or step.get("step_id") or f"Étape {order}"
+            if isinstance(name, str):
+                out[order] = name
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
 def validate_workflow_step_parameters(
     *,
     workflow_action: Action,
@@ -114,6 +136,7 @@ def validate_workflow_step_parameters(
         )
 
     step_map = extract_workflow_step_map(workflow_action)
+    step_names = extract_workflow_step_names(workflow_action)
     valid_orders = sorted(step_map.keys())
 
     # Batch-load all referenced actions upfront to avoid N+1 queries
@@ -165,7 +188,8 @@ def validate_workflow_step_parameters(
                     message="Cette étape n'accepte pas de paramètres",
                     details={"step_order": order_int},
                 )
-            normalized[str(order_int)] = {"parameters": {}}
+            step_name = step_names.get(order_int, f"Étape {order_int}")
+            normalized[str(order_int)] = {"name": step_name, "parameters": {}}
             continue
 
         if JSONSCHEMA_AVAILABLE:
@@ -193,7 +217,8 @@ def validate_workflow_step_parameters(
                     details={"step_order": order_int, "error": err},
                 )
 
-        normalized[str(order_int)] = {"parameters": params}
+        step_name = step_names.get(order_int, f"Étape {order_int}")
+        normalized[str(order_int)] = {"name": step_name, "parameters": params}
 
     if invalid_orders:
         valid_str = ", ".join(str(o) for o in valid_orders) if valid_orders else "(aucun)"

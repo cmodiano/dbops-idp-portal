@@ -18,7 +18,6 @@ import {
   ClockCircleOutlined,
   GlobalOutlined,
   ScheduleOutlined,
-  BranchesOutlined,  // Story 65.5: parallel_group
 } from '@ant-design/icons';
 import type { ActionListItem } from '../../types/api';
 import type { WorkflowStepType } from '../../types/api';
@@ -38,7 +37,6 @@ const SPECIAL_STEP_TYPES: {
   { type: 'gate', label: 'Attendre', color: '#faad14', icon: <ClockCircleOutlined /> },
   { type: 'http_request', label: 'Requête HTTP', color: '#13c2c2', icon: <GlobalOutlined /> },
   { type: 'schedule_execution', label: 'Planifier une exécution', color: '#4f46e5', icon: <ScheduleOutlined /> },
-  { type: 'parallel_group', label: 'Groupe parallèle', color: '#52c41a', icon: <BranchesOutlined /> }, // Story 65.5
 ];
 
 export interface ActionPaletteProps {

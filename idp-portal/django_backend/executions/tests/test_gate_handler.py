@@ -335,7 +335,7 @@ class TestResumeContainerWorkflowFromGate:
         from executions.tasks.gates import resume_container_workflow_from_gate
 
         with patch('executions.cancellation_cache.is_cancelled', return_value=True):
-            result = resume_container_workflow_from_gate.run(execution_id=1, on_success_step_id='step-1')
+            result = resume_container_workflow_from_gate.run(execution_id=1, on_success_step_ids='step-1')
 
         assert result == {'outcome': 'cancelled'}
 
@@ -348,7 +348,7 @@ class TestResumeContainerWorkflowFromGate:
         with patch('executions.cancellation_cache.is_cancelled', return_value=False):
             with patch.object(Execution.objects, 'select_related') as mock_qs:
                 mock_qs.return_value.get.side_effect = Execution.DoesNotExist()
-                result = resume_container_workflow_from_gate.run(execution_id=9999, on_success_step_id='step-1')
+                result = resume_container_workflow_from_gate.run(execution_id=9999, on_success_step_ids='step-1')
 
         assert result['outcome'] == 'error'
         assert result['error'] == 'Execution not found'
@@ -366,7 +366,7 @@ class TestResumeContainerWorkflowFromGate:
         with patch('executions.cancellation_cache.is_cancelled', return_value=False):
             with patch.object(Execution.objects, 'select_related') as mock_qs:
                 mock_qs.return_value.get.return_value = mock_execution
-                result = resume_container_workflow_from_gate.run(execution_id=1, on_success_step_id='step-1')
+                result = resume_container_workflow_from_gate.run(execution_id=1, on_success_step_ids='step-1')
 
         assert result['outcome'] == 'not_running'
 
@@ -387,7 +387,7 @@ class TestResumeContainerWorkflowFromGate:
                 mock_qs.return_value.get.return_value = mock_execution
                 with patch.object(ExecutionStep.objects, 'filter') as mock_filter:
                     mock_filter.return_value.order_by.return_value = []
-                    result = resume_container_workflow_from_gate.run(execution_id=1, on_success_step_id='missing-step')
+                    result = resume_container_workflow_from_gate.run(execution_id=1, on_success_step_ids='missing-step')
 
         assert result == {'outcome': 'step_not_found', 'step_id': 'missing-step'}
 
@@ -434,7 +434,7 @@ class TestResumeContainerWorkflowFromGate:
                     with patch.object(ContainerWorkflowRuntime, '__init__', fake_runtime_init):
                         with patch.object(ContainerWorkflowRuntime, '_execute_workflow_steps', return_value=None):
                             resume_container_workflow_from_gate.run(
-                                execution_id=1, on_success_step_id='tf-apply'
+                                execution_id=1, on_success_step_ids='tf-apply'
                             )
 
         # Le step_output doit être keyed par 'tf-plan' (step_id), pas 'Terraform Plan' (step_name)

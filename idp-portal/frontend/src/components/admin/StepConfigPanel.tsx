@@ -8,7 +8,6 @@
  * - gate: GateStepConfig
  * - http_request: HttpRequestStepConfig
  * - schedule_execution: ScheduleStepConfig (Story 57.16)
- * - parallel_group: ParallelGroupStepConfig (Story 65.5)
  */
 
 import { useMemo } from 'react';
@@ -23,7 +22,6 @@ import { EvaluationStepConfig } from './step-config/EvaluationStepConfig';
 import { GateStepConfig } from './step-config/GateStepConfig';
 import { HttpRequestStepConfig } from './step-config/HttpRequestStepConfig';
 import { ScheduleStepConfig } from './step-config/ScheduleStepConfig';
-import { ParallelGroupStepConfig } from './step-config/ParallelGroupStepConfig'; // Story 65.5
 import type { WorkflowStepType } from '../../types/api';
 import { getStepLabel } from '../../utils/workflowStepLabels';
 
@@ -107,7 +105,7 @@ export const StepConfigPanel: FC<StepConfigPanelProps> = ({
     gate: 'Attente / Gate',
     http_request: 'Requête HTTP',
     schedule_execution: 'Planifier une exécution', // Story 57.16
-    parallel_group: 'Groupe parallèle', // Story 65.4
+    parallel_group: 'Groupe parallèle (déprécié)', // rétro-compat
   };
 
   return (
@@ -320,16 +318,6 @@ export const StepConfigPanel: FC<StepConfigPanelProps> = ({
           <ScheduleStepConfig data={data} onUpdate={handleUpdate} disabled={disabled} />
         )}
 
-        {/* parallel_group — Story 65.5 */}
-        {stepType === 'parallel_group' && (
-          <ParallelGroupStepConfig
-            data={data}
-            onUpdate={handleUpdate}
-            disabled={disabled}
-            availableStepOptions={availableStepOptions}
-          />
-        )}
-
         <Divider style={{ margin: '8px 0' }} />
 
         {/* Branch info (read-only) */}
@@ -342,8 +330,8 @@ export const StepConfigPanel: FC<StepConfigPanelProps> = ({
           </Text>
         </div>
 
-        {/* Join policy — Story 67.4: visible uniquement si 2+ connexions entrantes ET step non-parallel_group */}
-        {incomingEdgeCount >= 2 && stepType !== 'parallel_group' && (
+        {/* Join policy — Story 67.4: visible si 2+ connexions entrantes */}
+        {incomingEdgeCount >= 2 && (
           <>
             <Divider style={{ margin: '8px 0' }} />
             <div>

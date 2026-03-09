@@ -669,27 +669,34 @@ def _handle_gate_timeout(step: ExecutionStep, gate_status: dict, correlation_id:
 
 
 @shared_task(bind=True, max_retries=0, name="executions.tasks.resume_container_workflow_from_gate")
-def resume_container_workflow_from_gate(self: Any, execution_id: int, on_success_step_id: str) -> dict:
+def resume_container_workflow_from_gate(
+    self: Any, execution_id: int, on_success_step_ids: str | list[str]
+) -> dict:
     """
     Story 57.7: Reprend le container workflow après satisfaction d'un gate step.
+    Story 67.4: Accepte on_success_step_ids (list) pour fan-out parallèle.
 
     Appelé par _transition_step_to_running() quand le gate step est satisfait
     et que l'exécution est un container workflow ADR-007.
 
     Args:
         execution_id: ID de l'Execution à reprendre
-        on_success_step_id: step_id à partir duquel reprendre le workflow
+        on_success_step_ids: step_id ou liste de step_ids à partir desquels reprendre
     """
     from executions.models import Execution, ExecutionStatus
     from executions.cancellation_cache import is_cancelled
     from executions.container_workflow_runtime import ContainerWorkflowRuntime
 
     correlation_id = get_correlation_id()
+    step_ids = (
+        on_success_step_ids if isinstance(on_success_step_ids, list) else [on_success_step_ids]
+    )
+    first_step_id = step_ids[0] if step_ids else ""
 
     logger.info(
         "resume_container_workflow_gate_start",
         execution_id=execution_id,
-        on_success_step_id=on_success_step_id,
+        on_success_step_ids=step_ids,
         correlation_id=correlation_id,
     )
 
@@ -714,26 +721,35 @@ def resume_container_workflow_from_gate(self: Any, execution_id: int, on_success
             )
             return {'outcome': 'not_running', 'status': str(execution.status)}
 
-        # Trouver les steps restants à partir de on_success_step_id
+        # Trouver les steps restants à partir de on_success_step_ids (Story 67.4: union)
         all_steps = execution.action.execution_steps or []
         remaining_steps = []
-        found = False
+        found_ids: set[str] = set()
+        for step_id in step_ids:
+            if not step_id or not isinstance(step_id, str):
+                continue
+            for s in all_steps:
+                if isinstance(s, dict) and s.get('step_id') == step_id:
+                    found_ids.add(step_id)
+                    break
+        # Inclure tous les steps à partir du premier trouvé (ordre préservé)
+        collect = False
         for s in all_steps:
             if isinstance(s, dict):
-                if found:
-                    remaining_steps.append(s)
-                elif s.get('step_id') == on_success_step_id:
-                    found = True
+                sid = s.get('step_id')
+                if sid in found_ids:
+                    collect = True
+                if collect:
                     remaining_steps.append(s)
 
-        if not found:
+        if not found_ids:
             logger.error(
                 "resume_container_workflow_gate_step_not_found",
                 execution_id=execution_id,
-                on_success_step_id=on_success_step_id,
+                on_success_step_ids=step_ids,
                 correlation_id=correlation_id,
             )
-            return {'outcome': 'step_not_found', 'step_id': on_success_step_id}
+            return {'outcome': 'step_not_found', 'step_id': first_step_id}
 
         # Reconstruire le contexte _step_outputs depuis les ExecutionStep COMPLETED existants
         from executions.models import ExecutionStep, ExecutionStepStatus
@@ -763,6 +779,9 @@ def resume_container_workflow_from_gate(self: Any, execution_id: int, on_success
             if step_id_key:
                 runtime._step_outputs[step_id_key] = step_output
         runtime.workflow_steps = remaining_steps
+        # Story 67.4: Vague initiale pour fan-out parallèle (2+ step_ids)
+        if len(step_ids) > 1:
+            runtime._initial_wave = [s for s in step_ids if isinstance(s, str) and s]
         # Resume: _step_order_counter must continue from max existing step_order
         # to avoid UK_EXEC_STEPS_EXEC_ORDER violation (step_order already used by gate)
         from django.db.models import Max
@@ -775,11 +794,11 @@ def resume_container_workflow_from_gate(self: Any, execution_id: int, on_success
         logger.info(
             "resume_container_workflow_gate_complete",
             execution_id=execution_id,
-            on_success_step_id=on_success_step_id,
+            on_success_step_ids=step_ids,
             remaining_steps_count=len(remaining_steps),
             correlation_id=correlation_id,
         )
-        return {'outcome': 'completed', 'resumed_from': on_success_step_id}
+        return {'outcome': 'completed', 'resumed_from': step_ids}
 
     except Execution.DoesNotExist:
         logger.error(
