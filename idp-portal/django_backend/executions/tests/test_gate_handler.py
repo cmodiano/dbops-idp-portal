@@ -299,6 +299,9 @@ class TestExecuteHandlerStepWaitingProtocol:
             runtime.correlation_id = 'test-corr'
             runtime._step_order_counter = 0
             runtime._step_outputs = {}
+            runtime._step_outputs_lock = __import__('threading').Lock()
+            runtime._step_lock = __import__('threading').Lock()
+            runtime.child_executions = []
             runtime.workflow_steps = [
                 {'step_type': 'gate', 'gate_type': 'maintenance_window', 'order': 1, 'step_id': 'g1'},
                 {'step_type': 'platform', 'order': 2, 'step_id': 's2'},

@@ -27,7 +27,7 @@ class TestResumeContainerWorkflowGenericException:
             with patch.object(Execution.objects, 'select_related') as mock_qs:
                 mock_qs.return_value.get.side_effect = RuntimeError("Unexpected DB error")
                 result = resume_container_workflow_from_gate.run(
-                    execution_id=1, on_success_step_id='step-1'
+                    execution_id=1, on_success_step_ids='step-1'
                 )
 
         assert result['outcome'] == 'error'

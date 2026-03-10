@@ -81,6 +81,10 @@ def get_workflow_entry_step_ids(steps: list | None) -> list[str]:
     Used by runtime to determine where to start execution, instead of relying
     on min(order) which fails when a new step (e.g. approval) is added at the
     beginning but gets a higher order due to array position.
+
+    Story 67.2 retrocompat: When the workflow has no edges (all_targets empty),
+    all steps would be "entry" points. For linear workflows without explicit
+    routing, we return only the first step by order to avoid fan-out behavior.
     """
     if not isinstance(steps, list):
         return []
@@ -105,6 +109,17 @@ def get_workflow_entry_step_ids(steps: list | None) -> list[str]:
         step_id = step.get('step_id')
         if isinstance(step_id, str) and step_id.strip() and step_id not in all_targets:
             entry_ids.append(step_id)
+    # Linear workflow retrocompat: no edges → all steps are "entry" by definition.
+    # Return only the first step by order to avoid fan-out (Story 67.2).
+    if entry_ids and not all_targets:
+        steps_with_id = [
+            (s.get('order', 0), s.get('step_id'))
+            for s in steps
+            if isinstance(s, dict) and s.get('step_id') in entry_ids
+        ]
+        if steps_with_id:
+            first = min(steps_with_id, key=lambda x: (x[0], x[1] or ''))
+            return [first[1]] if first[1] else entry_ids
     return entry_ids
 
 

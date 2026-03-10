@@ -264,12 +264,16 @@ class WorkflowRuntime:
         """
         is_success = outcome == StepOutcome.SUCCESS
 
-        # Branching logic (Story 16.2, 67.1): only on_success_step_ids / on_error_step_ids.
-        if is_success and 'on_success_step_ids' in current_step:
+        # Branching logic (Story 16.2, 67.1): on_success_step_ids/on_success_step_id,
+        # on_error_step_ids/on_error_step_id (singular for retrocompat).
+        if is_success and ('on_success_step_ids' in current_step or 'on_success_step_id' in current_step):
             ids_plural = current_step.get('on_success_step_ids')
+            sid_singular = current_step.get('on_success_step_id')
             next_step_id: str | None
             if ids_plural and isinstance(ids_plural, list) and len(ids_plural) > 0:
                 next_step_id = str(ids_plural[0])
+            elif sid_singular and isinstance(sid_singular, str) and sid_singular.strip():
+                next_step_id = sid_singular.strip()
             else:
                 next_step_id = None
             logger.debug(
@@ -281,10 +285,13 @@ class WorkflowRuntime:
             )
             return next_step_id
 
-        if (not is_success) and 'on_error_step_ids' in current_step:
+        if (not is_success) and ('on_error_step_ids' in current_step or 'on_error_step_id' in current_step):
             ids_plural = current_step.get('on_error_step_ids')
+            sid_singular = current_step.get('on_error_step_id')
             if ids_plural and isinstance(ids_plural, list) and len(ids_plural) > 0:
                 next_step_id = str(ids_plural[0])
+            elif sid_singular and isinstance(sid_singular, str) and sid_singular.strip():
+                next_step_id = sid_singular.strip()
             else:
                 next_step_id = None
             logger.debug(
@@ -453,7 +460,10 @@ class WorkflowRuntime:
                 return ExecutionStatus.RUNNING
 
             # AC2: If step failed and no error path, workflow fails
-            if result.is_error and 'on_error_step_ids' not in current_step:
+            has_error_path = (
+                'on_error_step_ids' in current_step or 'on_error_step_id' in current_step
+            )
+            if result.is_error and not has_error_path:
                 # Backward compat: no explicit error path = fail workflow
                 logger.warning(
                     "workflow_step_failed_no_error_path",
