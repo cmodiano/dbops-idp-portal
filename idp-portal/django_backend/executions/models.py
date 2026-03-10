@@ -369,6 +369,16 @@ class ExecutionStep(models.Model):
         blank=True,
         db_column='APPROVAL_COMMENT',
     )
+    # Rejection fields (V118) — who rejected and when (gate step rejection)
+    rejected_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='rejected_steps',
+        db_column='REJECTED_BY',
+    )
+    rejected_at = models.DateTimeField(null=True, blank=True, db_column='REJECTED_AT')
 
     class Meta:
         db_table = 'EXECUTION_STEPS'

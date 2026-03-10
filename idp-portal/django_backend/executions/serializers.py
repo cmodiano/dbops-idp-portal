@@ -142,6 +142,8 @@ class ExecutionStepSerializer(serializers.Serializer):
             "approved_by_id": obj.approved_by_id,
             "approved_at": ensure_utc_isoformat(obj.approved_at),
             "approval_comment": obj.approval_comment,
+            "rejected_by_id": obj.rejected_by_id,
+            "rejected_at": ensure_utc_isoformat(obj.rejected_at),
         }
 
 

@@ -108,7 +108,7 @@ def _get_step_or_404(execution_id: int, step_id: int) -> ExecutionStep:
     try:
         return (
             ExecutionStep.objects.select_for_update()
-            .select_related("execution__action", "approved_by")
+            .select_related("execution__action", "approved_by", "rejected_by")
             .get(id=step_id, execution_id=execution_id)
         )
     except ExecutionStep.DoesNotExist:
@@ -542,6 +542,8 @@ class RejectExecutionView(APIView):
         step.status = ExecutionStepStatus.FAILED
         step.completed_at = timezone.now()
         step.approval_comment = rejection_reason or ""
+        step.rejected_by = cast(User, request.user)
+        step.rejected_at = timezone.now()
         step.save()
 
         # V113: Durable rejection event + dequeue runnable step
@@ -748,6 +750,8 @@ class RejectStepView(APIView):
         step.status = ExecutionStepStatus.FAILED
         step.completed_at = timezone.now()
         step.approval_comment = request.data.get("comment", "") or ""
+        step.rejected_by = cast(User, request.user)
+        step.rejected_at = timezone.now()
         step.save()
 
         # V113: Durable rejection event + dequeue runnable step
