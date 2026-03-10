@@ -245,5 +245,44 @@ au flux API REST).
 | `executions/container_workflow_runtime.py` | Runtime — `_execute_parallel_group()`, `_execute_step_for_parallel()` |
 | `executions/models.py` | `ExecutionStep.config_step_id` — matching robuste (commit ebf9209) |
 | `executions/tests/test_container_workflow_runtime_parallel.py` | Tests runtime parallèle (Story 65.2) |
-| `src/components/workflow/parallelGroupUtils.ts` | Utilitaires frontend matching + statut agrégé |
-| `src/components/workflow/workflowConversion.ts` | Conversion TypeScript ↔ backend format |
+| `frontend/src/utils/parallelGroupUtils.ts` | Utilitaires frontend matching + statut agrégé |
+| `frontend/src/utils/workflowConversion.ts` | Conversion TypeScript ↔ backend format |
+
+---
+
+## 11. Migration vers fan-out multi-connexions (Epic 67)
+
+> **Cette section documente la migration de l'Option A (`parallel_group`) vers l'Option B (fan-out explicite) réalisée dans l'Epic 67 (Stories 67.1–67.7, 2026-03).**
+
+### Pourquoi migrer ?
+
+Le `step_type: 'parallel_group'` introduit dans l'Epic 65 imposait un nœud de groupement explicite dans le workflow. L'Epic 67 remplace ce mécanisme par le **fan-out implicite via `on_success_step_ids[]`** : lorsqu'un step ordinaire a 2+ cibles dans `on_success_step_ids`, le runtime lance les branches en parallèle automatiquement — sans nœud dédié.
+
+### Ce qui a changé
+
+| Aspect | Epic 65 (parallel_group) | Epic 67 (fan-out) |
+|--------|--------------------------|-------------------|
+| Schéma | `step_type: "parallel_group"` + `parallel_steps[]` | `on_success_step_ids: ["s2", "s3"]` sur n'importe quel step |
+| Join | `on_all_success_step_id` / `on_any_error_step_id` | `join_policy` sur le step de convergence |
+| Runtime | `_execute_parallel_group()` dédié | Fan-out automatique dans `_route_step_result()` |
+| Frontend builder | Nœud `parallel_group` dans le canvas | Multi-connexions depuis un même handle success/error |
+| Utilitaires | `parallelGroupUtils.ts` retourne des données actives | Retourne des structures vides (comportement plat correct) |
+
+### Commande de migration
+
+```bash
+# Depuis django_backend/ — migre tous les workflows existants
+python manage.py migrate_parallel_group [--dry-run] [--action-name=<nom>]
+```
+
+La commande (`catalog/management/commands/migrate_parallel_group.py`, Story 67.6) :
+1. Localise les steps `step_type: 'parallel_group'` dans `execution_steps`
+2. Modifie le prédécesseur pour pointer directement vers les membres (`on_success_step_ids`)
+3. Affecte `on_success_step_ids: [step-suivant]` aux membres
+4. Supprime le nœud `parallel_group`
+
+### Documentation complète
+
+- Architecture et schéma JSON : [`docs/architecture/parallel-workflow-actions-analysis.md`](../../../../docs/architecture/parallel-workflow-actions-analysis.md) — section "Option B — Fan-out explicite (Implémentation actuelle, Epic 67)"
+- Stories d'implémentation : `_bmad-output/implementation-artifacts/67-*.md`
+- Tests CaC round-trip : `catalog/tests/test_services_export_import.py` — classe `TestWorkflowCaCParallelBranches`

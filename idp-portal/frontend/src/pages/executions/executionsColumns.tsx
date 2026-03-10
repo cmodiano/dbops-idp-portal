@@ -40,9 +40,9 @@ export function formatDuration(startedAt: string | null, completedAt: string | n
   return remaining ? `${minutes}m ${remaining}s` : `${minutes}m`;
 }
 
-/** Format UTC date for display in local timezone (API dates are UTC with Z suffix). */
+/** Format UTC date for display in local timezone (API dates are UTC with Z suffix). Includes seconds for Début/Fin columns. */
 export function formatDate(dateStr: string | null): string {
-  return formatUtcToLocal(dateStr, 'datetime');
+  return formatUtcToLocal(dateStr, 'datetimeWithSeconds');
 }
 
 /** Check if execution is in a running state (AC3). */
@@ -150,13 +150,21 @@ export const getExecutionsColumns = (
       render: (env: string) => getEnvironmentLabel(env || '') || '—',
     },
     {
-      title: 'Date',
-      dataIndex: 'created_at',
-      key: 'created_at',
+      title: 'Début',
+      dataIndex: 'started_at',
+      key: 'started_at',
       sorter: true,
-      sortOrder: state.sortField === 'created_at' ? state.sortOrder : undefined,
-      width: 160,
-      render: (date: string, record: ExecutionResponse) => formatDate(record.started_at || date),
+      sortOrder: (state.sortField === 'created_at' || state.sortField === 'started_at') ? state.sortOrder : undefined,
+      width: 140,
+      render: (_: unknown, record: ExecutionResponse) =>
+        formatDate(record.started_at || record.created_at),
+    },
+    {
+      title: 'Fin',
+      key: 'completed_at',
+      width: 140,
+      render: (_: unknown, record: ExecutionResponse) =>
+        formatDate(record.completed_at),
     },
     {
       title: 'Durée',

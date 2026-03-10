@@ -852,7 +852,7 @@ development_status:
     67-4-frontend-workflow-builder-multi-connexions: done
     67-5-frontend-suppression-step-groupe-parallele: done
     67-6-migration-parallel-group-vers-multi-connexion: done
-    67-7-vue-execution-cac-documentation-tests: backlog
+    67-7-vue-execution-cac-documentation-tests: done
     67-8-join-policy-failed-all-failed-one-failed: backlog
     epic-67-retrospective: optional
     # === Epic 68: Authentification LDAP prioritaire (comptes à haut privilège) ===

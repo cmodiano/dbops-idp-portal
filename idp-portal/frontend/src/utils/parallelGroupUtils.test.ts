@@ -202,3 +202,87 @@ describe('getStepNamesInParallelGroups', () => {
     expect(ids.size).toBe(2);
   });
 });
+
+// ─── Post-Story 67.5 — Fan-out multi-connexions (no parallel_group steps) ────
+// Vérifie que les fonctions retournent des structures vides/correctes quand
+// aucun step n'a step_type: 'parallel_group' (comportement post-67.5).
+
+const fanOutWorkflowSteps: WorkflowStep[] = [
+  {
+    order: 0,
+    name: 'Init',
+    step_id: 's1',
+    step_type: 'platform',
+    on_success_step_ids: ['s2', 's3'],
+  },
+  {
+    order: 1,
+    name: 'Branch A',
+    step_id: 's2',
+    step_type: 'platform',
+    on_success_step_ids: ['s4'],
+  },
+  {
+    order: 2,
+    name: 'Branch B',
+    step_id: 's3',
+    step_type: 'platform',
+    on_success_step_ids: ['s4'],
+  },
+  {
+    order: 3,
+    name: 'Join',
+    step_id: 's4',
+    step_type: 'platform',
+    on_success_step_ids: [],
+  },
+];
+
+describe('buildParallelGroupMap — no parallel_group steps (post-67.5 fan-out)', () => {
+  it('retourne une Map vide quand aucun step n\'a step_type parallel_group', () => {
+    const result = buildParallelGroupMap(fanOutWorkflowSteps, []);
+    expect(result.size).toBe(0);
+  });
+
+  it('retourne une Map vide pour une liste vide', () => {
+    const result = buildParallelGroupMap([], []);
+    expect(result.size).toBe(0);
+  });
+});
+
+describe('getStepNamesInParallelGroups — no parallel_group steps (post-67.5 fan-out)', () => {
+  it('retourne un Set vide quand aucun step n\'a step_type parallel_group', () => {
+    const result = getStepNamesInParallelGroups(fanOutWorkflowSteps);
+    expect(result.size).toBe(0);
+  });
+
+  it('retourne un Set vide pour une liste vide', () => {
+    const result = getStepNamesInParallelGroups([]);
+    expect(result.size).toBe(0);
+  });
+});
+
+describe('computeParallelGroupStatus — cas 0 sous-steps', () => {
+  it('retourne PENDING quand subSteps est vide (0 sous-steps)', () => {
+    expect(computeParallelGroupStatus([])).toBe('PENDING');
+  });
+});
+
+describe('findExecutionStepsForParallelGroup — no parallel_group steps (post-67.5 fan-out)', () => {
+  it('retourne [] quand le step n\'a pas de parallel_steps (step platform fan-out)', () => {
+    // Les steps platform dans un workflow fan-out n'ont pas de parallel_steps
+    const fanOutStep = fanOutWorkflowSteps[0]; // s1 avec on_success_step_ids mais pas parallel_steps
+    const fanOutExecSteps = [
+      makeStep({ id: 10, step_name: 'Init', status: 'COMPLETED', step_order: 1 }),
+      makeStep({ id: 11, step_name: 'Branch A', status: 'RUNNING', step_order: 2 }),
+    ];
+    const result = findExecutionStepsForParallelGroup(fanOutStep, fanOutWorkflowSteps, fanOutExecSteps);
+    expect(result).toHaveLength(0);
+  });
+
+  it('retourne [] pour une liste vide de workflowSteps et executionSteps', () => {
+    const fanOutStep = fanOutWorkflowSteps[0];
+    const result = findExecutionStepsForParallelGroup(fanOutStep, [], []);
+    expect(result).toHaveLength(0);
+  });
+});

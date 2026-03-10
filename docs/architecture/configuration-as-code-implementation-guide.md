@@ -6,15 +6,15 @@ l'implémentation Configuration-as-Code du portail IDP (Epic 64).
 ## Table des matières
 
 1. [Format d'envelope YAML](#1-format-denvelope-yaml)
-2. [Utilitaires core : `services_iac_utils.py`](#2-utilitaires-core--services_iac_utilspy)
+2. [Utilitaires core : `services_iac_utils.py`](#2-utilitaires-core-services_iac_utilspy)
 3. [Pattern `_apply_field_changes`](#3-pattern-_apply_field_changes)
 4. [Pattern `update_sync_tracking`](#4-pattern-update_sync_tracking)
 5. [Pattern two-pass import (integrations)](#5-pattern-two-pass-import-integrations)
-6. [Credential masking à l'export](#6-credential-masking-à-lexport)
+6. [Credential masking à l'export](#6-credential-masking-a-lexport)
 7. [Pattern FBV pour endpoints CaC](#7-pattern-fbv-pour-endpoints-cac)
-8. [Ordre de dépendances et graph](#8-ordre-de-dépendances-et-graph)
+8. [Ordre de dépendances et graph](#8-ordre-de-dependances-et-graph)
 9. [Conventions de nommage](#9-conventions-de-nommage)
-10. [Ajouter une nouvelle entité CaC — checklist](#10-ajouter-une-nouvelle-entité-cac--checklist)
+10. [Ajouter une nouvelle entité CaC — checklist](#10-ajouter-une-nouvelle-entite-cac-checklist)
 
 ---
 

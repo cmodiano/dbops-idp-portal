@@ -4,6 +4,16 @@
  * Utilities for parallel_group step matching and aggregated status computation.
  * The backend does NOT create an ExecutionStep for the parallel_group itself —
  * only sub-steps are persisted. These helpers derive group state from sub-step statuses.
+ *
+ * POST-STORY 67.5 NOTE: The `step_type: 'parallel_group'` has been removed from the
+ * workflow builder and replaced by fan-out multi-connexions (`on_success_step_ids[]`).
+ * As a result, `buildParallelGroupMap` and `getStepNamesInParallelGroups` now return
+ * empty structures for all modern workflows — this is intentional and correct.
+ * Flat rendering of all steps (each step as an individual TimelineStepItem) is the
+ * expected behaviour for fan-out workflows.
+ *
+ * These functions are retained for backward compatibility with older executions that
+ * may still contain `step_type: 'parallel_group'` steps in their stored data.
  */
 
 import type { WorkflowStep } from '../types/api/catalog';

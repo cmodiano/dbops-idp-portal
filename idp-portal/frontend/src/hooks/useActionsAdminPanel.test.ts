@@ -418,18 +418,6 @@ describe('useActionsAdminPanel', () => {
     expect(MOCK_NOTIFICATION.error).toHaveBeenCalledTimes(1);
   });
 
-  it('setIncludeDisabled — met à jour includeDisabled', () => {
-    const { result } = renderHook(() =>
-      useActionsAdminPanel({ notification: MOCK_NOTIFICATION as any, modal: MOCK_MODAL as any })
-    );
-
-    expect(result.current.includeDisabled).toBe(false);
-
-    act(() => { result.current.setIncludeDisabled(true); });
-
-    expect(result.current.includeDisabled).toBe(true);
-  });
-
   it('fetchActions — erreur API : notifie l\'erreur', async () => {
     vi.mocked(getAdminActions).mockRejectedValue(new Error('Network error'));
 
@@ -527,12 +515,10 @@ describe('useActionsAdminPanel', () => {
     expect(MOCK_NOTIFICATION.error).toHaveBeenCalledTimes(1);
   });
 
-  it('fetchActions — avec includeDisabled=true inclut le filtre', async () => {
+  it('fetchActions — inclut toujours include_disabled=true', async () => {
     const { result } = renderHook(() =>
       useActionsAdminPanel({ notification: MOCK_NOTIFICATION as any, modal: MOCK_MODAL as any })
     );
-
-    act(() => { result.current.setIncludeDisabled(true); });
 
     await act(async () => {
       await result.current.fetchActions();

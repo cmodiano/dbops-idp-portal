@@ -623,3 +623,249 @@ class ExportImportParallelGroupTests(TestCase):
         # Must NOT raise (item_type != "workflow" → validation skipped)
         created, updated, unchanged = import_action_yaml(yaml_bytes, user=self.user)
         self.assertEqual(created, 1)
+
+
+# ---------------------------------------------------------------------------
+# Story 67.7 — CaC export/import tests for fan-out multi-connexions
+# ---------------------------------------------------------------------------
+
+# Sequential workflow: one step → on_success_step_ids with a single target.
+_SEQUENTIAL_FANOUT_STEPS = [
+    {
+        "step_id": "s1",
+        "step_type": "platform",
+        "name": "Init",
+        "referenced_action_id": 1,
+        "on_success_step_ids": ["s2"],
+    },
+    {
+        "step_id": "s2",
+        "step_type": "platform",
+        "name": "Deploy",
+        "referenced_action_id": 1,
+        "on_success_step_ids": [],
+    },
+]
+
+# Fan-out workflow: one step fanning out to 2 parallel branches then joining.
+_FANOUT_2_BRANCHES_STEPS = [
+    {
+        "step_id": "s1",
+        "step_type": "platform",
+        "name": "Init",
+        "referenced_action_id": 1,
+        "on_success_step_ids": ["s2", "s3"],
+    },
+    {
+        "step_id": "s2",
+        "step_type": "platform",
+        "name": "Branch A",
+        "referenced_action_id": 1,
+        "on_success_step_ids": ["s4"],
+    },
+    {
+        "step_id": "s3",
+        "step_type": "platform",
+        "name": "Branch B",
+        "referenced_action_id": 1,
+        "on_success_step_ids": ["s4"],
+    },
+    {
+        "step_id": "s4",
+        "step_type": "platform",
+        "name": "Join",
+        "referenced_action_id": 1,
+        "join_policy": "all_success",
+        "on_success_step_ids": [],
+    },
+]
+
+# Invalid: join_policy with unsupported value.
+_INVALID_JOIN_POLICY_STEPS = [
+    {
+        "step_id": "s1",
+        "step_type": "platform",
+        "name": "Init",
+        "referenced_action_id": 1,
+        "on_success_step_ids": ["s2", "s3"],
+    },
+    {
+        "step_id": "s2",
+        "step_type": "platform",
+        "name": "Branch A",
+        "referenced_action_id": 1,
+        "on_success_step_ids": ["s4"],
+    },
+    {
+        "step_id": "s3",
+        "step_type": "platform",
+        "name": "Branch B",
+        "referenced_action_id": 1,
+        "on_success_step_ids": ["s4"],
+    },
+    {
+        "step_id": "s4",
+        "step_type": "platform",
+        "name": "Join",
+        "referenced_action_id": 1,
+        "join_policy": "invalid_value",
+        "on_success_step_ids": [],
+    },
+]
+
+# Fan-out workflow with on_error_step_ids for round-trip validation.
+_FANOUT_WITH_ERROR_STEPS = [
+    {
+        "step_id": "s1",
+        "step_type": "platform",
+        "name": "Init",
+        "referenced_action_id": 1,
+        "on_success_step_ids": ["s2"],
+        "on_error_step_ids": ["s3"],
+    },
+    {
+        "step_id": "s2",
+        "step_type": "platform",
+        "name": "Deploy",
+        "referenced_action_id": 1,
+        "on_success_step_ids": [],
+    },
+    {
+        "step_id": "s3",
+        "step_type": "platform",
+        "name": "Rollback",
+        "referenced_action_id": 1,
+        "on_success_step_ids": [],
+    },
+]
+
+# Invalid: on_success_step_ids references a non-existent step_id.
+_INVALID_BAD_SUCCESS_REF_STEPS = [
+    {
+        "step_id": "s1",
+        "step_type": "platform",
+        "name": "Init",
+        "referenced_action_id": 1,
+        "on_success_step_ids": ["inexistant"],
+    },
+]
+
+
+class TestWorkflowCaCParallelBranches(TestCase):
+    """Tests CaC export/import pour les workflows fan-out multi-connexions. Story 67.7."""
+
+    def setUp(self):
+        self.user = UserFactory()
+
+    def _make_workflow(self, name, steps):
+        """Helper: crée une Action de type workflow avec execution_steps fan-out."""
+        return Action.objects.create(
+            name=name,
+            engine="AAP",
+            platform="AAP",
+            item_type="workflow",
+            execution_steps=steps,
+            created_by=self.user,
+        )
+
+    # ---- Subtask 2.2 : round-trip séquentiel (1 cible) ----
+
+    def test_round_trip_sequential_on_success_step_ids(self):
+        """Export → YAML → re-import : on_success_step_ids avec 1 cible préservé. AC #4, #5."""
+        self._make_workflow("workflow-seq", _SEQUENTIAL_FANOUT_STEPS)
+        yaml_bytes = export_action_yaml("workflow-seq")
+        parsed = yaml.safe_load(yaml_bytes)
+        steps = parsed["spec"]["execution_steps"]
+        s1 = next(s for s in steps if s["step_id"] == "s1")
+        self.assertEqual(s1["on_success_step_ids"], ["s2"])
+
+        import_action_yaml(yaml_bytes, mode="full", user=self.user)
+        action = Action.objects.get(name="workflow-seq")
+        s1_db = next(s for s in action.execution_steps if s["step_id"] == "s1")
+        self.assertEqual(s1_db["on_success_step_ids"], ["s2"])
+
+    # ---- Subtask 2.3 : round-trip fan-out 2 cibles ----
+
+    def test_round_trip_fanout_two_targets(self):
+        """Export → YAML contient les 2 cibles → re-import correct. AC #4, #5."""
+        self._make_workflow("workflow-fanout", _FANOUT_2_BRANCHES_STEPS)
+        yaml_bytes = export_action_yaml("workflow-fanout")
+        parsed = yaml.safe_load(yaml_bytes)
+        steps = parsed["spec"]["execution_steps"]
+        s1 = next(s for s in steps if s["step_id"] == "s1")
+        self.assertIn("s2", s1["on_success_step_ids"])
+        self.assertIn("s3", s1["on_success_step_ids"])
+        self.assertEqual(len(s1["on_success_step_ids"]), 2)
+
+        import_action_yaml(yaml_bytes, mode="full", user=self.user)
+        action = Action.objects.get(name="workflow-fanout")
+        s1_db = next(s for s in action.execution_steps if s["step_id"] == "s1")
+        self.assertEqual(set(s1_db["on_success_step_ids"]), {"s2", "s3"})
+
+    # ---- Subtask 2.4 : round-trip join_policy all_success ----
+
+    def test_round_trip_join_policy_preserved(self):
+        """Export → re-import : join_policy='all_success' sur le step de convergence. AC #4, #5."""
+        self._make_workflow("workflow-join", _FANOUT_2_BRANCHES_STEPS)
+        yaml_bytes = export_action_yaml("workflow-join")
+        parsed = yaml.safe_load(yaml_bytes)
+        steps = parsed["spec"]["execution_steps"]
+        s4 = next(s for s in steps if s["step_id"] == "s4")
+        self.assertEqual(s4["join_policy"], "all_success")
+
+        import_action_yaml(yaml_bytes, mode="full", user=self.user)
+        action = Action.objects.get(name="workflow-join")
+        s4_db = next(s for s in action.execution_steps if s["step_id"] == "s4")
+        self.assertEqual(s4_db["join_policy"], "all_success")
+
+    # ---- Subtask 2.5 : import join_policy invalide → InvalidStateError ----
+
+    def test_import_invalid_join_policy_raises(self):
+        """Import YAML avec join_policy='invalid_value' → InvalidStateError INVALID_WORKFLOW_STEPS. AC #5."""
+        yaml_bytes = _make_workflow_action_yaml(
+            name="workflow-bad-join",
+            execution_steps=_INVALID_JOIN_POLICY_STEPS,
+        )
+        with self.assertRaises(InvalidStateError) as ctx:
+            import_action_yaml(yaml_bytes, user=self.user)
+        self.assertEqual(ctx.exception.code, "INVALID_WORKFLOW_STEPS")
+
+    # ---- Subtask 2.6 : import référence invalide → InvalidStateError ----
+
+    def test_import_invalid_success_ref_raises(self):
+        """Import YAML avec on_success_step_ids=['inexistant'] → InvalidStateError. AC #5."""
+        yaml_bytes = _make_workflow_action_yaml(
+            name="workflow-bad-ref",
+            execution_steps=_INVALID_BAD_SUCCESS_REF_STEPS,
+        )
+        with self.assertRaises(InvalidStateError) as ctx:
+            import_action_yaml(yaml_bytes, user=self.user)
+        self.assertEqual(ctx.exception.code, "INVALID_WORKFLOW_STEPS")
+
+    # ---- Subtask 2.x : round-trip on_error_step_ids ----
+
+    def test_round_trip_on_error_step_ids_preserved(self):
+        """Export → re-import : on_error_step_ids préservé dans le round-trip. AC #4."""
+        self._make_workflow("workflow-error-path", _FANOUT_WITH_ERROR_STEPS)
+        yaml_bytes = export_action_yaml("workflow-error-path")
+        parsed = yaml.safe_load(yaml_bytes)
+        steps = parsed["spec"]["execution_steps"]
+        s1 = next(s for s in steps if s["step_id"] == "s1")
+        self.assertEqual(s1["on_error_step_ids"], ["s3"])
+
+        import_action_yaml(yaml_bytes, mode="full", user=self.user)
+        action = Action.objects.get(name="workflow-error-path")
+        s1_db = next(s for s in action.execution_steps if s["step_id"] == "s1")
+        self.assertEqual(s1_db["on_error_step_ids"], ["s3"])
+        self.assertEqual(s1_db["on_success_step_ids"], ["s2"])
+
+    # ---- Subtask 2.7 : export bulk inclut les workflows parallèles ----
+
+    def test_export_bulk_includes_parallel_workflow(self):
+        """export_actions_yaml() inclut correctement les workflows fan-out. AC #4."""
+        from catalog.services_export_import import export_actions_yaml
+        self._make_workflow("workflow-bulk-fanout", _FANOUT_2_BRANCHES_STEPS)
+        bulk_bytes = export_actions_yaml()
+        self.assertIn(b"workflow-bulk-fanout", bulk_bytes)
+        self.assertIn(b"on_success_step_ids", bulk_bytes)
+        self.assertIn(b"join_policy", bulk_bytes)

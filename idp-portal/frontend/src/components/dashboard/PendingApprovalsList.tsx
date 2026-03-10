@@ -205,10 +205,16 @@ export function PendingApprovalsList({
 
   const handleApproveConfirm = async () => {
     if (!selectedExecution) return;
-    const result = await approve(selectedExecution.id, comment || undefined);
+    const execId = selectedExecution.id;
+    const approvalComment = comment || undefined;
+    // Fermer la modal immédiatement (l'API retourne dès que l'approbation est enregistrée,
+    // le lancement du workflow se fait en arrière-plan — pas d'attente de fin d'exécution)
+    setApproveModalOpen(false);
+    setSelectedExecution(null);
+    setComment('');
+    const result = await approve(execId, approvalComment);
     if (result.success) {
-      message.success(`Exécution #${selectedExecution.id} approuvée`);
-      setApproveModalOpen(false);
+      message.success(`Exécution #${execId} approuvée`);
     } else {
       message.error(result.error);
     }

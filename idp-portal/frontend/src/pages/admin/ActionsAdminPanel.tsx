@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { App, Typography, Button, Table, Space, Card, Tag, Checkbox, Modal, Input } from 'antd';
+import { App, Typography, Button, Table, Space, Card, Tag, Modal, Input } from 'antd';
 import {
   PlusOutlined,
   ReloadOutlined,
@@ -57,14 +57,6 @@ export function ActionsAdminPanel({ notification, modal, isDark }: ActionsAdminP
           body: { paddingTop: 16 },
         }}
       >
-        <div style={{ marginBottom: 12 }}>
-          <Checkbox
-            checked={panel.includeDisabled}
-            onChange={(e) => panel.setIncludeDisabled(e.target.checked)}
-          >
-            Inclure les actions desactivees
-          </Checkbox>
-        </div>
         <Table
           columns={getActionsColumns(panel.handleEdit, panel.handleStatusChange, panel.handleDelete, panel.handleDeactivate, panel.handleReactivate, isDark)}
           dataSource={panel.actions}

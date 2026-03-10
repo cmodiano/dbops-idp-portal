@@ -1135,7 +1135,10 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
                     style="width: 120px;"
                   />
                   <col
-                    style="width: 160px;"
+                    style="width: 140px;"
+                  />
+                  <col
+                    style="width: 140px;"
                   />
                   <col
                     style="width: 80px;"
@@ -1250,7 +1253,7 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
                     </th>
                     <th
                       aria-description="sortable"
-                      aria-label="Date"
+                      aria-label="Début"
                       aria-sort="descending"
                       class="ant-table-cell ant-table-column-sort ant-table-column-has-sorters"
                       scope="col"
@@ -1262,7 +1265,7 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
                         <span
                           class="ant-table-column-title"
                         >
-                          Date
+                          Début
                         </span>
                         <span
                           class="ant-table-column-sorter ant-table-column-sorter-full"
@@ -1312,6 +1315,12 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
                           </span>
                         </span>
                       </div>
+                    </th>
+                    <th
+                      class="ant-table-cell"
+                      scope="col"
+                    >
+                      Fin
                     </th>
                     <th
                       class="ant-table-cell"
@@ -1387,9 +1396,10 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
                           <img
                             alt=""
                             aria-hidden="true"
+                            class="engine-icon-img"
                             height="40"
                             src="/icons/engines/sqlserver.svg"
-                            style="flex-shrink: 0; vertical-align: middle; filter: none;"
+                            style="flex-shrink: 0; vertical-align: middle; filter: none; object-fit: contain;"
                             width="40"
                           />
                         </div>
@@ -1432,12 +1442,17 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
                     <td
                       class="ant-table-cell"
                     >
-                      PROD
+                      Production
                     </td>
                     <td
                       class="ant-table-cell ant-table-column-sort"
                     >
-                      29/01/2026 14:00
+                      29/01/2026 14:00:00
+                    </td>
+                    <td
+                      class="ant-table-cell"
+                    >
+                      —
                     </td>
                     <td
                       class="ant-table-cell"
@@ -1505,9 +1520,10 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
                           <img
                             alt=""
                             aria-hidden="true"
+                            class="engine-icon-img"
                             height="40"
                             src="/icons/engines/oracle.svg"
-                            style="flex-shrink: 0; vertical-align: middle; filter: brightness(1.1) contrast(1.1);"
+                            style="flex-shrink: 0; vertical-align: middle; filter: brightness(1.1) contrast(1.1); object-fit: contain;"
                             width="40"
                           />
                         </div>
@@ -1550,12 +1566,17 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
                     <td
                       class="ant-table-cell"
                     >
-                      DEV
+                      Développement
                     </td>
                     <td
                       class="ant-table-cell ant-table-column-sort"
                     >
-                      28/01/2026 10:00
+                      28/01/2026 10:00:00
+                    </td>
+                    <td
+                      class="ant-table-cell"
+                    >
+                      28/01/2026 10:05:00
                     </td>
                     <td
                       class="ant-table-cell"

@@ -223,7 +223,11 @@ function WorkflowExecutionGraphInner({
         return node;
       }
 
-      // Story 65.6: parallel_group node — compute aggregated status from sub-steps
+      // Story 65.6: parallel_group node — compute aggregated status from sub-steps.
+      // POST-STORY 67.5 DEAD CODE: `step_type: 'parallel_group'` was removed from the
+      // workflow builder in Story 67.5 (replaced by fan-out via on_success_step_ids[]).
+      // No node will have this type in modern workflows, so this branch is never entered.
+      // Retained for backward compatibility with executions recorded before Story 67.5.
       if (node.data?.step_type === 'parallel_group') {
         const groupInfo = parallelGroupMap.get(node.id);
         const aggregatedStatus = groupInfo

@@ -6,6 +6,11 @@
 > **Implémentation réalisée :** L'Option A (Parallel Group MVP) a été implémentée dans l'Epic 65 (Stories 65.1–65.7).
 > Documentation d'implémentation : [`idp-portal/django_backend/docs/parallel-group.md`](../../idp-portal/django_backend/docs/parallel-group.md)
 
+> **Implémentation Epic 67 réalisée (Option B — Fan-out explicite) :**
+> Le `step_type: parallel_group` (Epic 65) a été remplacé par le fan-out multi-connexions dans l'Epic 67 (Stories 67.1–67.7).
+> Documentation complète : [`idp-portal/django_backend/docs/parallel-group.md`](../../idp-portal/django_backend/docs/parallel-group.md)
+> et `_bmad-output/implementation-artifacts/67-*.md`
+
 ---
 
 ## 1. État actuel de notre codebase
@@ -509,3 +514,61 @@ La question clé est : **Quels cas d'usage concrets ont besoin du parallélisme 
 
 - Si c'est principalement "lancer 2-3 backups en parallèle avant de continuer", l'Option A suffit.
 - Si c'est des DAG complexes avec des diamants, des joins partiels, etc., il faut le DAG complet.
+
+---
+
+## Option B — Fan-out explicite (Implémentation actuelle, Epic 67)
+
+> **Statut** : Implémentation réalisée dans l'Epic 67 (Stories 67.1–67.7, 2026-03).
+> L'Option A (`parallel_group`) a été **remplacée** par cette approche plus naturelle.
+
+### Schéma JSON du step fan-out
+
+```json
+{
+  "step_id": "s1",
+  "step_type": "platform",
+  "name": "Init",
+  "referenced_action_id": 42,
+  "on_success_step_ids": ["s2", "s3"],
+  "on_error_step_ids": ["s-rollback"]
+}
+```
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| `on_success_step_ids` | `string[]` | Liste de `step_id` vers lesquels router en cas de succès. 2+ valeurs = fan-out parallèle. |
+| `on_error_step_ids` | `string[]` | Liste de `step_id` vers lesquels router en cas d'erreur. |
+| `join_policy` | `string` | Politique d'attente sur un step de convergence (`all_success`, `one_success`, `all_done`). |
+
+### Comportement runtime
+
+Le moteur (`executions/container_workflow_runtime.py`) utilise un `ThreadPoolExecutor` pour lancer les branches parallèles dès qu'un step a 2+ cibles dans `on_success_step_ids` ou `on_error_step_ids`. Les branches sont exécutées indépendamment.
+
+Un step de convergence (join) attend ses prédécesseurs selon `join_policy` :
+- `all_success` (défaut) : démarre quand tous les prédécesseurs ont réussi
+- `one_success` : démarre dès qu'au moins un prédécesseur a réussi
+- `all_done` : démarre quand tous les prédécesseurs ont terminé (quelle que soit leur issue)
+
+### Rétrocompatibilité
+
+Le champ singulier `on_success_step_id` (sans `s`) est automatiquement normalisé en `on_success_step_ids: [valeur]` par `catalog/validation.py` (L54–59). Les workflows Epic 65 avec `parallel_group` ont été migrés via la commande Django `migrate_parallel_group` (Story 67.6).
+
+### Migration depuis parallel_group (Option A → Option B)
+
+La commande de migration Django (`management/commands/migrate_parallel_group.py`, Story 67.6) convertit les steps `step_type: 'parallel_group'` existants en fan-out multi-connexions :
+- Le step `parallel_group` est supprimé
+- Son prédécesseur reçoit `on_success_step_ids` avec les branches comme cibles
+- Les membres reçoivent `on_success_step_ids: [step-suivant]`
+
+### Fichiers clés
+
+| Chemin | Rôle |
+|--------|------|
+| `catalog/validation.py` | `validate_workflow_steps()` — validation références, cycles, join_policy |
+| `catalog/services_export_import.py` | CaC export/import — passthrough JSON + validation |
+| `catalog/tests/test_services_export_import.py` | Tests round-trip fan-out (Story 67.7) |
+| `executions/container_workflow_runtime.py` | Runtime fan-out parallèle + join_policy |
+| `frontend/src/utils/parallelGroupUtils.ts` | Utilitaires frontend (retournent vide post-67.5) |
+| `frontend/src/components/execution/WorkflowExecutionGraph.tsx` | Graphe d'exécution — statut individuel par nœud |
+| `idp-portal/django_backend/docs/parallel-group.md` | Documentation historique + migration |
