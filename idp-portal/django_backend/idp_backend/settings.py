@@ -330,6 +330,7 @@ REST_FRAMEWORK = {
         'public': os.getenv('THROTTLE_PUBLIC_RATE', '50/minute'),
         'api_key_token': os.getenv('THROTTLE_API_KEY_TOKEN_RATE', '10/minute'),
         'service_login': os.getenv('THROTTLE_SERVICE_LOGIN_RATE', '5/minute'),
+        'portal_login': os.getenv('THROTTLE_PORTAL_LOGIN_RATE', '5/minute'),
     },
     'DEFAULT_PAGINATION_CLASS': 'core.pagination.CustomPageNumberPagination',
     'PAGE_SIZE': 25,
@@ -526,6 +527,16 @@ def _parse_ldap_timeout(name: str, default: str) -> int:
 
 LDAP_CONNECT_TIMEOUT = _parse_ldap_timeout("LDAP_CONNECT_TIMEOUT", "10")
 LDAP_RECEIVE_TIMEOUT = _parse_ldap_timeout("LDAP_RECEIVE_TIMEOUT", "10")
+
+# Portal authentication method order (Story 68.1)
+# Controls which auth methods are available for portal login, in priority order.
+# Values: comma-separated list of "ldap" and/or "saml"
+# Default: "ldap,saml" — LDAP is tried first (high-privilege accounts)
+PORTAL_AUTH_METHODS = [
+    m.strip()
+    for m in os.getenv("PORTAL_AUTH_METHODS", "ldap,saml").split(",")
+    if m.strip()
+]
 
 # ============================================================================
 # SAML Configuration (Story M.7)

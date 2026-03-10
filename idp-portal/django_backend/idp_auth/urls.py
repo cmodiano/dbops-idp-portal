@@ -13,6 +13,7 @@ from idp_auth.views import (
     RefreshTokenView,
     LogoutView,
     ServiceLoginView,
+    PortalLoginView,
     UserFavoritesView,
     UserFavoriteItemView,
     APIKeyTokenView,
@@ -27,6 +28,9 @@ urlpatterns = [
 
     # Service account login via LDAP (Story 49.2)
     path('auth/service-login/', ServiceLoginView.as_view(), name='service-login'),
+
+    # Portal interactive login via LDAP — high-privilege accounts (Story 68.1)
+    path('auth/portal-login/', PortalLoginView.as_view(), name='portal-login'),
 
     # API key token exchange (Story 44.2)
     path('auth/token/', APIKeyTokenView.as_view(), name='api-key-token'),
