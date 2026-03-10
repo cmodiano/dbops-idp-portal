@@ -302,6 +302,101 @@ describe('ActionCard', () => {
     });
   });
 
+  // Story 69.2: Technology icons and workflow indicator tests
+  describe('Story 69.2 — technology icons and workflow indicator', () => {
+    const workflowWithTechs: ActionPreviewData = {
+      ...mockAction,
+      item_type: 'workflow',
+      technologies: ['Oracle', 'SQL Server'],
+    };
+
+    const workflowManyTechs: ActionPreviewData = {
+      ...mockAction,
+      item_type: 'workflow',
+      technologies: ['Oracle', 'SQL Server', 'DB2', 'MySQL'],
+    };
+
+    const workflowNoTechs: ActionPreviewData = {
+      ...mockAction,
+      item_type: 'workflow',
+    };
+
+    const workflowEmptyTechs: ActionPreviewData = {
+      ...mockAction,
+      item_type: 'workflow',
+      technologies: [''],
+    };
+
+    const simpleAction: ActionPreviewData = {
+      ...mockAction,
+      item_type: 'action',
+      engine: 'Oracle',
+    };
+
+    it('workflow displays technology icons when technologies present', () => {
+      const { container } = renderWithTheme(<ActionCard action={workflowWithTechs} />);
+
+      const techIcons = container.querySelector('[data-testid="technology-icons"]');
+      expect(techIcons).toBeInTheDocument();
+    });
+
+    it('workflow shows overflow indicator "+1" when > 3 technologies', () => {
+      renderWithTheme(<ActionCard action={workflowManyTechs} />);
+
+      expect(screen.getByTestId('technology-overflow')).toHaveTextContent('+1');
+    });
+
+    it('workflow with exactly 3 technologies shows no overflow indicator (boundary)', () => {
+      const workflowExact3: ActionPreviewData = {
+        ...mockAction,
+        item_type: 'workflow',
+        technologies: ['Oracle', 'SQL Server', 'DB2'],
+      };
+      renderWithTheme(<ActionCard action={workflowExact3} />);
+
+      expect(screen.getByTestId('technology-icons')).toBeInTheDocument();
+      expect(screen.queryByTestId('technology-overflow')).not.toBeInTheDocument();
+    });
+
+    it('workflow indicator is present for workflows', () => {
+      renderWithTheme(<ActionCard action={workflowWithTechs} />);
+
+      expect(screen.getByTestId('workflow-indicator')).toBeInTheDocument();
+      expect(screen.getByLabelText('Workflow')).toBeInTheDocument();
+    });
+
+    it('simple action has no workflow indicator', () => {
+      renderWithTheme(<ActionCard action={simpleAction} />);
+
+      expect(screen.queryByTestId('workflow-indicator')).not.toBeInTheDocument();
+    });
+
+    it('simple action displays single technology icon unchanged', () => {
+      const { container } = renderWithTheme(<ActionCard action={simpleAction} />);
+
+      // Should NOT have multi-tech icons container
+      expect(container.querySelector('[data-testid="technology-icons"]')).not.toBeInTheDocument();
+      // Should have engine icon (img or ant icon)
+      expect(container.querySelector('.engine-icon-img') || container.querySelector('[aria-label^="Type: Action"]')).toBeTruthy();
+    });
+
+    it('workflow falls back to workflow icon when technologies field is absent', () => {
+      const { container } = renderWithTheme(<ActionCard action={workflowNoTechs} />);
+
+      // No multi-tech icons
+      expect(container.querySelector('[data-testid="technology-icons"]')).not.toBeInTheDocument();
+      // Should render a workflow SVG icon (from getItemTypeIcon)
+      expect(container.querySelector('svg')).toBeInTheDocument();
+    });
+
+    it('workflow falls back to workflow icon when technologies is empty strings only', () => {
+      const { container } = renderWithTheme(<ActionCard action={workflowEmptyTechs} />);
+
+      expect(container.querySelector('[data-testid="technology-icons"]')).not.toBeInTheDocument();
+      expect(container.querySelector('svg')).toBeInTheDocument();
+    });
+  });
+
   // Story 7.1: Business variant tests
   describe('business variant (Story 7.1)', () => {
     const actionWithTechnicalTerms: ActionPreviewData = {

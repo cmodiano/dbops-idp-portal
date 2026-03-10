@@ -869,7 +869,7 @@ development_status:
     # Icônes technologies, indicateur workflow (bas gauche, couleur thème), extrait enrichi, drawer actions+paramètres
     epic-69: in-progress
     69-1-backend-exposition-technologies-actions-workflow: done
-    69-2-cartes-catalogue-icones-technologies-indicateur-workflow: backlog
+    69-2-cartes-catalogue-icones-technologies-indicateur-workflow: done # Code review adversariale 2026-03-09: 7 issues (1H+3M+3L), 6 auto-fixées — paddingBottom workflow, overflow color adaptive, double filtrage supprimé, test boundary 3 techs, aria-label overflow, getEngineIcon refactoré — 45/45 tests pass ✅
     69-3-cartes-catalogue-extrait-enrichi-technologies-actions: backlog
     69-4-drawer-detail-liste-actions-parametres: backlog
     epic-69-retrospective: optional

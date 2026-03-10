@@ -400,6 +400,14 @@ export interface ParameterDefinition {
  * Contains all fields needed to render ActionCard and ActionDrawerPreview.
  * Story 2.23: category removed — use tags for categorization.
  */
+/** Story 69.2: Included action summary for workflow cards. */
+export interface IncludedAction {
+  id: number;
+  name: string;
+  engine: ActionEngine | null;
+  parameters_schema?: Record<string, unknown> | null;
+}
+
 export interface ActionPreviewData {
   name: string;
   description: string | null;
@@ -418,6 +426,10 @@ export interface ActionPreviewData {
   stats?: ActionStats | null;
   /** Story 22.18: MED-6 fix — Whether action requires target selection (default true). */
   requires_target?: boolean;
+  /** Story 69.2: List of technology engine codes for workflow cards. */
+  technologies?: string[];
+  /** Story 69.2: Included actions summary for workflow cards (prep for 69.3/69.4). */
+  included_actions?: IncludedAction[];
 }
 
 /**

@@ -35,6 +35,7 @@ import { sanitizeDescription } from '../../utils/businessLanguage';
 import { ENGINE_SVG_SOURCES } from '../../utils/executionRenderers';
 import { getEngineIconUrl } from '../../utils/engineIconCache';
 import { getItemTypeIcon } from '../../utils/iconHelpers';
+import { WorkflowIcon } from '../icons/WorkflowIcon';
 
 const { Text, Paragraph } = Typography;
 
@@ -51,13 +52,12 @@ export interface ActionCardProps {
   showFavoriteButton?: boolean;
 }
 
-/** Get engine icon with SVG override for cards (real vendor logos).
+/** Story 69.2: Resolve a single engine code to an icon node at given size.
  * Story 31.3: Fallback cascade — 1) icon_url from API cache, 2) ENGINE_SVG_SOURCES hardcoded, 3) iconHelpers. */
-function getEngineIcon(engine: ActionEngine): ReactNode {
+function getEngineIconAtSize(engine: string, size: number): ReactNode {
   const apiIconUrl = getEngineIconUrl(engine);
-  const svgSrc = apiIconUrl || ENGINE_SVG_SOURCES[engine];
+  const svgSrc = apiIconUrl || ENGINE_SVG_SOURCES[engine as ActionEngine];
   if (svgSrc) {
-    const size = STYLE_TOKENS.engineIconSize;
     return (
       <img
         src={svgSrc}
@@ -65,18 +65,55 @@ function getEngineIcon(engine: ActionEngine): ReactNode {
         width={size}
         height={size}
         className="engine-icon-img"
-        style={{
-          flexShrink: 0,
-          width: size,
-          height: size,
-          objectFit: 'contain',
-        }}
+        style={{ flexShrink: 0, width: size, height: size, objectFit: 'contain' }}
         aria-hidden
       />
     );
   }
-  const { icon } = getItemTypeIcon('action', engine, { fontSize: STYLE_TOKENS.engineIconSize });
+  const { icon } = getItemTypeIcon('action', engine, { fontSize: size });
   return icon;
+}
+
+/** Get engine icon at default card size (40px). */
+function getEngineIcon(engine: ActionEngine): ReactNode {
+  return getEngineIconAtSize(engine, STYLE_TOKENS.engineIconSize);
+}
+
+/** Story 69.2: Display multiple technology icons for workflows with overflow indicator. */
+interface TechnologyIconsProps {
+  technologies: string[];
+  maxVisible?: number;
+  iconSize?: number;
+}
+
+function TechnologyIcons({ technologies, maxVisible = 3, iconSize = 24 }: TechnologyIconsProps) {
+  const visible = technologies.slice(0, maxVisible);
+  const overflow = technologies.length - maxVisible;
+
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }} data-testid="technology-icons">
+      {visible.map((tech, i) => (
+        <span key={`${tech}-${i}`} style={{ display: 'inline-flex', flexShrink: 0 }}>
+          {getEngineIconAtSize(tech, iconSize)}
+        </span>
+      ))}
+      {overflow > 0 && (
+        <span
+          data-testid="technology-overflow"
+          aria-label={`et ${overflow} technologie${overflow > 1 ? 's' : ''} supplémentaire${overflow > 1 ? 's' : ''}`}
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: 'inherit',
+            opacity: 0.55,
+            marginLeft: 2,
+          }}
+        >
+          +{overflow}
+        </span>
+      )}
+    </span>
+  );
 }
 
 const MAX_VISIBLE_TAGS = 3;
@@ -106,10 +143,14 @@ export const ActionCard = memo(function ActionCard({
     ? sanitizeDescription(action.description)
     : action.description;
 
+  // Story 69.2: For workflows with technologies, show multiple tech icons; fallback to single engine icon
   // Story 5.7, AC3; Story 18.2: Use shared iconHelpers for workflow, engine-specific SVG for actions
-  const icon = isWorkflow
-    ? getItemTypeIcon('workflow', null, { withTooltip: true, fontSize: STYLE_TOKENS.engineIconSize }).icon
-    : (action.engine ? getEngineIcon(action.engine) : null);
+  const workflowTechnologies = action.technologies?.filter((t) => t && t.trim() !== '') || [];
+  const icon = isWorkflow && workflowTechnologies.length > 0
+    ? <TechnologyIcons technologies={workflowTechnologies} maxVisible={3} iconSize={24} />
+    : isWorkflow
+      ? getItemTypeIcon('workflow', null, { withTooltip: true, fontSize: STYLE_TOKENS.engineIconSize }).icon
+      : (action.engine ? getEngineIcon(action.engine) : null);
 
   const visibleTags = action.tags?.slice(0, MAX_VISIBLE_TAGS) || [];
   const hiddenTagsCount = (action.tags?.length || 0) - MAX_VISIBLE_TAGS;
@@ -140,9 +181,13 @@ export const ActionCard = memo(function ActionCard({
         maxWidth: STYLE_TOKENS.cardMaxWidth,
         cursor: isClickable ? 'pointer' : 'default',
         overflow: 'hidden',
+        position: 'relative',
       }}
       styles={{
-        body: { padding: STYLE_TOKENS.cardBodyPadding },
+        body: {
+          padding: STYLE_TOKENS.cardBodyPadding,
+          ...(isWorkflow ? { paddingBottom: STYLE_TOKENS.cardBodyPadding + 24 } : undefined),
+        },
       }}
     >
       <Space orientation="vertical" size="small" style={{ width: '100%' }}>
@@ -299,6 +344,12 @@ export const ActionCard = memo(function ActionCard({
           </div>
         )}
       </Space>
+      {/* Story 69.2: Workflow indicator — bottom left (AC3, AC4) */}
+      {isWorkflow && (
+        <div style={{ position: 'absolute', bottom: 8, left: 8 }} data-testid="workflow-indicator">
+          <WorkflowIcon size={16} aria-label="Workflow" />
+        </div>
+      )}
     </Card>
   );
 });
