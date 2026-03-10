@@ -5,12 +5,15 @@
  * AC6: Approve/Reject buttons with confirmation modal.
  */
 
+import type React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { ConfigProvider, App as AntApp } from 'antd';
 import { PendingApprovalsList } from './PendingApprovalsList';
 import { humanizeKey, formatParamValue, partitionParameters } from './approvalContextUtils';
 import type { ExecutionResponse } from '../../types/api';
+import { lightTheme } from '../../theme/desjardins';
 
 // Mock the execution service
 vi.mock('../../services/execution_service', () => ({
@@ -34,6 +37,18 @@ vi.spyOn(App, 'useApp').mockReturnValue({
   notification: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), open: vi.fn() },
   modal: { confirm: vi.fn(), info: vi.fn(), success: vi.fn(), error: vi.fn(), warning: vi.fn() },
 } as unknown as ReturnType<typeof App.useApp>);
+
+function renderWithProviders(ui: React.ReactElement) {
+  // ConfigProvider and AntApp needed for Modal to render properly in tests
+  return render(
+    <ConfigProvider theme={lightTheme}>
+      <AntApp>
+        {ui}
+      </AntApp>
+    </ConfigProvider>,
+  );
+}
+
 
 const mockExecutions: ExecutionResponse[] = [
   {
@@ -74,7 +89,7 @@ describe('PendingApprovalsList', () => {
   describe('rendering (AC2)', () => {
     it('renders table with pending executions', () => {
       const onActionComplete = vi.fn();
-      render(
+      renderWithProviders(
         <PendingApprovalsList
           executions={mockExecutions}
           loading={false}
@@ -88,7 +103,7 @@ describe('PendingApprovalsList', () => {
 
     it('shows action name column', () => {
       const onActionComplete = vi.fn();
-      render(
+      renderWithProviders(
         <PendingApprovalsList
           executions={mockExecutions}
           loading={false}
@@ -102,7 +117,7 @@ describe('PendingApprovalsList', () => {
 
     it('shows environment tag', () => {
       const onActionComplete = vi.fn();
-      render(
+      renderWithProviders(
         <PendingApprovalsList
           executions={mockExecutions}
           loading={false}
@@ -117,7 +132,7 @@ describe('PendingApprovalsList', () => {
 
     it('shows empty state when no executions', () => {
       const onActionComplete = vi.fn();
-      render(
+      renderWithProviders(
         <PendingApprovalsList
           executions={[]}
           loading={false}
@@ -130,7 +145,7 @@ describe('PendingApprovalsList', () => {
 
     it('shows loading state', () => {
       const onActionComplete = vi.fn();
-      render(
+      renderWithProviders(
         <PendingApprovalsList
           executions={[]}
           loading={true}
@@ -143,10 +158,10 @@ describe('PendingApprovalsList', () => {
     });
   });
 
-  describe('approve button (AC6)', () => {
-    it('shows approve button for each execution', () => {
+  describe('approve flow (AC6) — Voir opens modal with Approve/Reject', () => {
+    it('shows Voir button for each execution', () => {
       const onActionComplete = vi.fn();
-      render(
+      renderWithProviders(
         <PendingApprovalsList
           executions={mockExecutions}
           loading={false}
@@ -154,14 +169,14 @@ describe('PendingApprovalsList', () => {
         />
       );
 
-      const approveButtons = screen.getAllByRole('button', { name: /Approuver/ });
-      expect(approveButtons).toHaveLength(2);
+      const viewButtons = screen.getAllByRole('button', { name: /Voir/ });
+      expect(viewButtons).toHaveLength(2);
     });
 
-    it('opens approve confirmation modal on click', async () => {
+    it('opens view modal with context on Voir click', async () => {
       const user = userEvent.setup();
       const onActionComplete = vi.fn();
-      render(
+      renderWithProviders(
         <PendingApprovalsList
           executions={mockExecutions}
           loading={false}
@@ -169,21 +184,21 @@ describe('PendingApprovalsList', () => {
         />
       );
 
-      const approveButtons = screen.getAllByRole('button', { name: /Approuver/ });
-      await user.click(approveButtons[0]);
+      const viewButtons = screen.getAllByRole('button', { name: /Voir/ });
+      await user.click(viewButtons[0]);
 
-      expect(screen.getByText("Confirmer l'approbation")).toBeInTheDocument();
-      // Modal contains strong text with action name
+      expect(screen.getByText("Détails de l'approbation")).toBeInTheDocument();
+      // Modal contains context
       const modalContent = screen.getByRole('dialog');
       expect(modalContent).toBeInTheDocument();
     });
 
-    it('calls approveExecution on confirm', async () => {
+    it('calls approveExecution when clicking Approuver in modal', async () => {
       const user = userEvent.setup();
       const onActionComplete = vi.fn();
       mockApproveExecution.mockResolvedValue({ data: { status: 'SUBMITTED' } });
 
-      render(
+      renderWithProviders(
         <PendingApprovalsList
           executions={mockExecutions}
           loading={false}
@@ -191,13 +206,13 @@ describe('PendingApprovalsList', () => {
         />
       );
 
-      // Open modal
-      const approveButtons = screen.getAllByRole('button', { name: /Approuver/ });
-      await user.click(approveButtons[0]);
+      // Open view modal
+      await user.click(screen.getAllByRole('button', { name: /Voir/ })[0]);
 
-      // Confirm
-      const confirmButton = screen.getByRole('button', { name: 'Approuver' });
-      await user.click(confirmButton);
+      // Wait for modal and click Approve (modal renders in portal)
+      const dialog = await screen.findByRole('dialog');
+      const approveButton = within(dialog).getByRole('button', { name: /Approuver/ });
+      await user.click(approveButton);
 
       await waitFor(() => {
         expect(mockApproveExecution).toHaveBeenCalledWith(1, undefined);
@@ -210,7 +225,7 @@ describe('PendingApprovalsList', () => {
       const onActionComplete = vi.fn();
       mockApproveExecution.mockResolvedValue({ data: { status: 'SUBMITTED' } });
 
-      render(
+      renderWithProviders(
         <PendingApprovalsList
           executions={mockExecutions}
           loading={false}
@@ -218,17 +233,17 @@ describe('PendingApprovalsList', () => {
         />
       );
 
-      // Open modal
-      const approveButtons = screen.getAllByRole('button', { name: /Approuver/ });
-      await user.click(approveButtons[0]);
+      // Open view modal
+      await user.click(screen.getAllByRole('button', { name: /Voir/ })[0]);
 
       // Enter comment
-      const textarea = screen.getByPlaceholderText('Commentaire (optionnel)');
+      const dialog = await screen.findByRole('dialog');
+      const textarea = within(dialog).getByPlaceholderText(/Commentaire pour l'approbation/);
       await user.type(textarea, 'Approved after review');
 
-      // Confirm
-      const confirmButton = screen.getByRole('button', { name: 'Approuver' });
-      await user.click(confirmButton);
+      // Click Approve
+      const approveButton = within(dialog).getByRole('button', { name: /Approuver/ });
+      await user.click(approveButton);
 
       await waitFor(() => {
         expect(mockApproveExecution).toHaveBeenCalledWith(1, 'Approved after review');
@@ -240,7 +255,7 @@ describe('PendingApprovalsList', () => {
       const onActionComplete = vi.fn();
       mockApproveExecution.mockResolvedValue({ data: { status: 'SUBMITTED' } });
 
-      render(
+      renderWithProviders(
         <PendingApprovalsList
           executions={mockExecutions}
           loading={false}
@@ -248,11 +263,11 @@ describe('PendingApprovalsList', () => {
         />
       );
 
-      // Open modal and confirm
-      const approveButtons = screen.getAllByRole('button', { name: /Approuver/ });
-      await user.click(approveButtons[0]);
-      const confirmButton = screen.getByRole('button', { name: 'Approuver' });
-      await user.click(confirmButton);
+      // Open view modal and approve
+      await user.click(screen.getAllByRole('button', { name: /Voir/ })[0]);
+      const dialog = await screen.findByRole('dialog');
+      const approveButton = within(dialog).getByRole('button', { name: /Approuver/ });
+      await user.click(approveButton);
 
       await waitFor(() => {
         expect(mockMessage.success).toHaveBeenCalledWith('Exécution #1 approuvée');
@@ -264,7 +279,7 @@ describe('PendingApprovalsList', () => {
       const onActionComplete = vi.fn();
       mockApproveExecution.mockRejectedValue(new Error('Network error'));
 
-      render(
+      renderWithProviders(
         <PendingApprovalsList
           executions={mockExecutions}
           loading={false}
@@ -272,11 +287,11 @@ describe('PendingApprovalsList', () => {
         />
       );
 
-      // Open modal and confirm
-      const approveButtons = screen.getAllByRole('button', { name: /Approuver/ });
-      await user.click(approveButtons[0]);
-      const confirmButton = screen.getByRole('button', { name: 'Approuver' });
-      await user.click(confirmButton);
+      // Open view modal and approve
+      await user.click(screen.getAllByRole('button', { name: /Voir/ })[0]);
+      const dialog = await screen.findByRole('dialog');
+      const approveButton = within(dialog).getByRole('button', { name: /Approuver/ });
+      await user.click(approveButton);
 
       await waitFor(() => {
         expect(mockMessage.error).toHaveBeenCalledWith('Network error');
@@ -284,25 +299,11 @@ describe('PendingApprovalsList', () => {
     });
   });
 
-  describe('reject button (AC6)', () => {
-    it('shows reject button for each execution', () => {
-      const onActionComplete = vi.fn();
-      render(
-        <PendingApprovalsList
-          executions={mockExecutions}
-          loading={false}
-          onActionComplete={onActionComplete}
-        />
-      );
-
-      const rejectButtons = screen.getAllByRole('button', { name: /Refuser/ });
-      expect(rejectButtons).toHaveLength(2);
-    });
-
-    it('opens reject confirmation modal on click', async () => {
+  describe('reject flow (AC6) — Refuser in view modal', () => {
+    it('Refuser button is in view modal after clicking Voir', async () => {
       const user = userEvent.setup();
       const onActionComplete = vi.fn();
-      render(
+      renderWithProviders(
         <PendingApprovalsList
           executions={mockExecutions}
           loading={false}
@@ -310,21 +311,18 @@ describe('PendingApprovalsList', () => {
         />
       );
 
-      const rejectButtons = screen.getAllByRole('button', { name: /Refuser/ });
-      await user.click(rejectButtons[0]);
+      await user.click(screen.getAllByRole('button', { name: /Voir/ })[0]);
 
-      expect(screen.getByText('Confirmer le refus')).toBeInTheDocument();
-      // Modal contains strong text with action name
-      const modalContent = screen.getByRole('dialog');
-      expect(modalContent).toBeInTheDocument();
+      const dialog = await screen.findByRole('dialog');
+      expect(within(dialog).getByRole('button', { name: /Refuser/ })).toBeInTheDocument();
     });
 
-    it('calls rejectExecution on confirm', async () => {
+    it('calls rejectExecution when clicking Refuser in modal', async () => {
       const user = userEvent.setup();
       const onActionComplete = vi.fn();
       mockRejectExecution.mockResolvedValue({ data: { status: 'REJECTED' } });
 
-      render(
+      renderWithProviders(
         <PendingApprovalsList
           executions={mockExecutions}
           loading={false}
@@ -332,13 +330,13 @@ describe('PendingApprovalsList', () => {
         />
       );
 
-      // Open modal
-      const rejectButtons = screen.getAllByRole('button', { name: /Refuser/ });
-      await user.click(rejectButtons[0]);
+      // Open view modal
+      await user.click(screen.getAllByRole('button', { name: /Voir/ })[0]);
 
-      // Confirm - find button in modal
-      const confirmButton = screen.getByRole('button', { name: 'Refuser' });
-      await user.click(confirmButton);
+      // Click Refuser in modal
+      const dialog = await screen.findByRole('dialog');
+      const rejectButton = within(dialog).getByRole('button', { name: /Refuser/ });
+      await user.click(rejectButton);
 
       await waitFor(() => {
         expect(mockRejectExecution).toHaveBeenCalledWith(1, undefined);
@@ -351,7 +349,7 @@ describe('PendingApprovalsList', () => {
       const onActionComplete = vi.fn();
       mockRejectExecution.mockResolvedValue({ data: { status: 'REJECTED' } });
 
-      render(
+      renderWithProviders(
         <PendingApprovalsList
           executions={mockExecutions}
           loading={false}
@@ -359,17 +357,15 @@ describe('PendingApprovalsList', () => {
         />
       );
 
-      // Open modal
-      const rejectButtons = screen.getAllByRole('button', { name: /Refuser/ });
-      await user.click(rejectButtons[0]);
+      // Open view modal
+      await user.click(screen.getAllByRole('button', { name: /Voir/ })[0]);
 
-      // Enter comment
-      const textarea = screen.getByPlaceholderText('Motif du refus (optionnel)');
+      // Enter comment and click Refuser
+      const dialog = await screen.findByRole('dialog');
+      const textarea = within(dialog).getByPlaceholderText(/Commentaire pour l'approbation/);
       await user.type(textarea, 'Policy violation');
-
-      // Confirm
-      const confirmButton = screen.getByRole('button', { name: 'Refuser' });
-      await user.click(confirmButton);
+      const rejectButton = within(dialog).getByRole('button', { name: /Refuser/ });
+      await user.click(rejectButton);
 
       await waitFor(() => {
         expect(mockRejectExecution).toHaveBeenCalledWith(1, 'Policy violation');
@@ -381,7 +377,7 @@ describe('PendingApprovalsList', () => {
       const onActionComplete = vi.fn();
       mockRejectExecution.mockResolvedValue({ data: { status: 'REJECTED' } });
 
-      render(
+      renderWithProviders(
         <PendingApprovalsList
           executions={mockExecutions}
           loading={false}
@@ -389,11 +385,11 @@ describe('PendingApprovalsList', () => {
         />
       );
 
-      // Open modal and confirm
-      const rejectButtons = screen.getAllByRole('button', { name: /Refuser/ });
-      await user.click(rejectButtons[0]);
-      const confirmButton = screen.getByRole('button', { name: 'Refuser' });
-      await user.click(confirmButton);
+      // Open view modal and reject
+      await user.click(screen.getAllByRole('button', { name: /Voir/ })[0]);
+      const dialog = await screen.findByRole('dialog');
+      const rejectButton = within(dialog).getByRole('button', { name: /Refuser/ });
+      await user.click(rejectButton);
 
       await waitFor(() => {
         expect(mockMessage.success).toHaveBeenCalledWith('Exécution #1 refusée');
@@ -421,56 +417,63 @@ describe('PendingApprovalsList — Story 58.2: paramètres et targets', () => {
     ],
   };
 
-  it('AC1: affiche les paramètres dans le tableau', () => {
-    render(
+  it('AC1: affiche les paramètres dans la modale Voir', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
       <PendingApprovalsList executions={[mockExecutionWithContext]} loading={false} onActionComplete={vi.fn()} />
     );
+    await user.click(screen.getByRole('button', { name: /Voir/ }));
     expect(screen.getByText(/Pdb name/)).toBeInTheDocument();
     expect(screen.getByText(/TESTDB/)).toBeInTheDocument();
   });
 
-  it('AC1: affiche les targets dans le tableau', () => {
-    render(
+  it('AC1: affiche les targets dans la modale Voir', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
       <PendingApprovalsList executions={[mockExecutionWithContext]} loading={false} onActionComplete={vi.fn()} />
     );
+    await user.click(screen.getByRole('button', { name: /Voir/ }));
     expect(screen.getByText('oracle-prod-01')).toBeInTheDocument();
     expect(screen.getByText('oracle-prod-02')).toBeInTheDocument();
   });
 
-  it('AC3: gère les paramètres null sans erreur', () => {
+  it('AC3: gère les paramètres null sans erreur', async () => {
+    const user = userEvent.setup();
     const execWithNullParams: ExecutionResponse = { ...mockExecutions[0], parameters: null, targets: [] };
-    render(
+    renderWithProviders(
       <PendingApprovalsList executions={[execWithNullParams]} loading={false} onActionComplete={vi.fn()} />
     );
     expect(screen.getByText('Create PDB')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Voir/ }));
     expect(screen.getByText(/Aucun paramètre/)).toBeInTheDocument();
   });
 
-  it('AC3: gère les paramètres vides sans erreur', () => {
+  it('AC3: gère les paramètres vides sans erreur', async () => {
+    const user = userEvent.setup();
     const execWithEmptyParams: ExecutionResponse = { ...mockExecutions[0], parameters: {}, targets: [] };
-    render(
+    renderWithProviders(
       <PendingApprovalsList executions={[execWithEmptyParams]} loading={false} onActionComplete={vi.fn()} />
     );
     expect(screen.getByText('Create PDB')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Voir/ }));
     expect(screen.getByText(/Aucun paramètre/)).toBeInTheDocument();
   });
 
   it('AC4: gère les targets absents sans erreur', () => {
     const execWithNoTargets: ExecutionResponse = { ...mockExecutions[0], parameters: null, targets: undefined };
-    render(
+    renderWithProviders(
       <PendingApprovalsList executions={[execWithNoTargets]} loading={false} onActionComplete={vi.fn()} />
     );
     expect(screen.getByText('Create PDB')).toBeInTheDocument();
   });
 
-  it('AC2: affiche les paramètres dans la modal d\'approbation', async () => {
+  it('AC2: affiche les paramètres dans la modale Voir', async () => {
     const user = userEvent.setup();
-    render(
+    renderWithProviders(
       <PendingApprovalsList executions={[mockExecutionWithContext]} loading={false} onActionComplete={vi.fn()} />
     );
 
-    const approveButtons = screen.getAllByRole('button', { name: /Approuver/ });
-    await user.click(approveButtons[0]);
+    await user.click(screen.getByRole('button', { name: /Voir/ }));
 
     const modal = screen.getByRole('dialog');
     expect(modal).toBeInTheDocument();
@@ -478,41 +481,38 @@ describe('PendingApprovalsList — Story 58.2: paramètres et targets', () => {
     expect(modal.textContent).toMatch(/TESTDB/);
   });
 
-  it('AC2: affiche les targets dans la modal d\'approbation', async () => {
+  it('AC2: affiche les targets dans la modale Voir', async () => {
     const user = userEvent.setup();
-    render(
+    renderWithProviders(
       <PendingApprovalsList executions={[mockExecutionWithContext]} loading={false} onActionComplete={vi.fn()} />
     );
 
-    const approveButtons = screen.getAllByRole('button', { name: /Approuver/ });
-    await user.click(approveButtons[0]);
+    await user.click(screen.getByRole('button', { name: /Voir/ }));
 
     const modal = screen.getByRole('dialog');
     expect(modal.textContent).toMatch(/oracle-prod-01/);
   });
 
-  it('AC2: affiche les paramètres dans la modal de refus', async () => {
+  it('AC2: modale Voir affiche paramètres (même flux pour approbation/refus)', async () => {
     const user = userEvent.setup();
-    render(
+    renderWithProviders(
       <PendingApprovalsList executions={[mockExecutionWithContext]} loading={false} onActionComplete={vi.fn()} />
     );
 
-    const rejectButtons = screen.getAllByRole('button', { name: /Refuser/ });
-    await user.click(rejectButtons[0]);
+    await user.click(screen.getByRole('button', { name: /Voir/ }));
 
     const modal = screen.getByRole('dialog');
     expect(modal.textContent).toMatch(/Pdb name/);
     expect(modal.textContent).toMatch(/TESTDB/);
   });
 
-  it('AC2: affiche les targets dans la modal de refus', async () => {
+  it('AC2: modale Voir affiche targets', async () => {
     const user = userEvent.setup();
-    render(
+    renderWithProviders(
       <PendingApprovalsList executions={[mockExecutionWithContext]} loading={false} onActionComplete={vi.fn()} />
     );
 
-    const rejectButtons = screen.getAllByRole('button', { name: /Refuser/ });
-    await user.click(rejectButtons[0]);
+    await user.click(screen.getByRole('button', { name: /Voir/ }));
 
     const modal = screen.getByRole('dialog');
     expect(modal.textContent).toMatch(/oracle-prod-01/);
@@ -527,7 +527,7 @@ describe('PendingApprovalsList — coverage extras', () => {
 
   it('shows "Action #id" fallback when action_name is null', () => {
     const executionWithNoName = [{ ...mockExecutions[0], action_name: null }];
-    render(
+    renderWithProviders(
       <PendingApprovalsList executions={executionWithNoName} loading={false} onActionComplete={vi.fn()} />
     );
     expect(screen.getByText('Action #5')).toBeInTheDocument();
@@ -535,7 +535,7 @@ describe('PendingApprovalsList — coverage extras', () => {
 
   it('shows "Utilisateur #id" fallback when user_display_name is null', () => {
     const executionWithNoUser = [{ ...mockExecutions[0], user_display_name: null }];
-    render(
+    renderWithProviders(
       <PendingApprovalsList executions={executionWithNoUser} loading={false} onActionComplete={vi.fn()} />
     );
     expect(screen.getByText(/Utilisateur #10/)).toBeInTheDocument();
@@ -545,14 +545,14 @@ describe('PendingApprovalsList — coverage extras', () => {
     const user = userEvent.setup();
     mockRejectExecution.mockRejectedValue(new Error('Reject failed'));
 
-    render(
+    renderWithProviders(
       <PendingApprovalsList executions={mockExecutions} loading={false} onActionComplete={vi.fn()} />
     );
 
-    const rejectButtons = screen.getAllByRole('button', { name: /Refuser/ });
-    await user.click(rejectButtons[0]);
-    const confirmButton = screen.getByRole('button', { name: 'Refuser' });
-    await user.click(confirmButton);
+    await user.click(screen.getAllByRole('button', { name: /Voir/ })[0]);
+    const dialog = await screen.findByRole('dialog');
+    const rejectButton = within(dialog).getByRole('button', { name: /Refuser/ });
+    await user.click(rejectButton);
 
     await waitFor(() => {
       expect(mockMessage.error).toHaveBeenCalledWith('Reject failed');
@@ -668,14 +668,15 @@ describe('Story 58.6 — ApprovalContext rendering', () => {
   });
 
   it('AC2: affiche le label environnement lisible dans le tableau', () => {
-    render(
+    renderWithProviders(
       <PendingApprovalsList executions={mockExecutions} loading={false} onActionComplete={vi.fn()} />
     );
     const prodLabels = screen.getAllByText('Production');
     expect(prodLabels.length).toBeGreaterThan(0);
   });
 
-  it('AC1: filtre et formate les champs internes du contexte', () => {
+  it('AC1: filtre et formate les champs internes du contexte', async () => {
+    const user = userEvent.setup();
     const execWithInternals: ExecutionResponse = {
       ...mockExecutions[0],
       parameters: {
@@ -685,10 +686,11 @@ describe('Story 58.6 — ApprovalContext rendering', () => {
       },
       targets: [],
     };
-    render(
+    renderWithProviders(
       <PendingApprovalsList executions={[execWithInternals]} loading={false} onActionComplete={vi.fn()} />
     );
-    // Should show formatted sections, not raw JSON
+    await user.click(screen.getByRole('button', { name: /Voir/ }));
+    // Should show formatted sections in modal, not raw JSON
     expect(screen.getByText('Cibles :')).toBeInTheDocument();
     expect(screen.getByText('srv-dev-03.entreprise.local')).toBeInTheDocument();
     expect(screen.getByText('Paramètres par étape :')).toBeInTheDocument();
@@ -700,45 +702,52 @@ describe('Story 58.6 — ApprovalContext rendering', () => {
     expect(screen.getByText('Changement requis :')).toBeInTheDocument();
   });
 
-  it('AC3: humanise les clés techniques dans les paramètres métier', () => {
+  it('AC3: humanise les clés techniques dans les paramètres métier', async () => {
+    const user = userEvent.setup();
     const execWithBusinessParams: ExecutionResponse = {
       ...mockExecutions[0],
       parameters: { target_host: 'srv-01', database_name: 'mydb' },
       targets: [],
     };
-    render(
+    renderWithProviders(
       <PendingApprovalsList executions={[execWithBusinessParams]} loading={false} onActionComplete={vi.fn()} />
     );
+    await user.click(screen.getByRole('button', { name: /Voir/ }));
     expect(screen.getByText(/Target host/)).toBeInTheDocument();
     expect(screen.getByText(/Database name/)).toBeInTheDocument();
   });
 
-  it('AC5: affiche _targets comme fallback quand targets est vide', () => {
+  it('AC5: affiche _targets comme fallback quand targets est vide', async () => {
+    const user = userEvent.setup();
     const execWithFallback: ExecutionResponse = {
       ...mockExecutions[0],
       parameters: { _targets: ['srv-fallback-01'] },
       targets: [],
     };
-    render(
+    renderWithProviders(
       <PendingApprovalsList executions={[execWithFallback]} loading={false} onActionComplete={vi.fn()} />
     );
+    await user.click(screen.getByRole('button', { name: /Voir/ }));
     expect(screen.getByText('srv-fallback-01')).toBeInTheDocument();
   });
 
-  it('AC5: préfère targets riches sur _targets', () => {
+  it('AC5: préfère targets riches sur _targets', async () => {
+    const user = userEvent.setup();
     const execWithBoth: ExecutionResponse = {
       ...mockExecutions[0],
       parameters: { _targets: ['raw-srv'] },
       targets: [{ target_type: 'server', target_id: 'srv-01', target_name: 'rich-srv', target_metadata: null }],
     };
-    render(
+    renderWithProviders(
       <PendingApprovalsList executions={[execWithBoth]} loading={false} onActionComplete={vi.fn()} />
     );
+    await user.click(screen.getByRole('button', { name: /Voir/ }));
     expect(screen.getByText('rich-srv')).toBeInTheDocument();
     expect(screen.queryByText('raw-srv')).not.toBeInTheDocument();
   });
 
-  it('AC3: affiche booléens Oui/Non et null comme —', () => {
+  it('AC3: affiche booléens Oui/Non et null comme —', async () => {
+    const user = userEvent.setup();
     const execWithBoolNull: ExecutionResponse = {
       ...mockExecutions[0],
       parameters: {
@@ -746,11 +755,13 @@ describe('Story 58.6 — ApprovalContext rendering', () => {
       },
       targets: [],
     };
-    render(
+    renderWithProviders(
       <PendingApprovalsList executions={[execWithBoolNull]} loading={false} onActionComplete={vi.fn()} />
     );
+    await user.click(screen.getByRole('button', { name: /Voir/ }));
     expect(screen.getByText(/Non/)).toBeInTheDocument();
     expect(screen.getByText(/Oui/)).toBeInTheDocument();
-    expect(screen.getByText(/—/)).toBeInTheDocument();
+    // Em dash (—) used for null; may appear in multiple places (e.g. "— Demandeur")
+    expect(screen.getAllByText(/—/).length).toBeGreaterThan(0);
   });
 });

@@ -410,7 +410,7 @@ class ImportActionYamlTests(TestCase):
     def test_import_full_mode_does_not_delete_other_actions(self):
         """En mode full, l'import d'une action ne supprime pas les autres actions existantes (AC #1).
         import_action_yaml est single-entity : la suppression d'orphelins au niveau action
-        est du ressort de sync_config, pas du service d'import."""
+        est du ressort de l'import API (apply_idp_config.py), pas du service d'import."""
         _make_action(name="other-action", user=self.user)
         content = _make_action_yaml()
         import_action_yaml(content, mode="full", user=self.user)

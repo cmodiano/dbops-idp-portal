@@ -13,6 +13,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from drf_spectacular.utils import extend_schema, OpenApiResponse
 
+from idp_auth.dev_bypass import is_dev_bypass_allowed
 from idp_auth.serializers import ServiceLoginRequestSerializer
 from idp_auth.ldap_service import LDAPService, LDAPUnavailableError
 from idp_auth.services import AuthService
@@ -63,6 +64,51 @@ class PortalLoginView(APIView):
         serializer.is_valid(raise_exception=True)
         username = serializer.validated_data['username']
         password = serializer.validated_data['password']
+
+        # Dev bypass: accept dev-user with any password when AUTH_DEV_BYPASS + DEBUG (same as SAML)
+        if is_dev_bypass_allowed() and username == 'dev-user':
+            from idp_auth.models import User
+
+            dev_user, _ = User.objects.get_or_create(
+                username='dev-user',
+                defaults={'display_name': 'Dev User', 'profile': 'dbops'},
+            )
+            token_data = {
+                'sub': str(dev_user.id),
+                'username': 'dev-user',
+                'profile': 'dbops',
+                'ad_groups': ['dbops'],
+            }
+            access_token = create_access_token(token_data)
+            refresh_token = create_refresh_token(token_data)
+            expires_in = settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60
+
+            log.info('portal_login_dev_bypass', ldap_username=username)
+            AuditService.create_entry(
+                user_id=str(dev_user.id),
+                action_type=AuditActionType.AUTH_DEV_BYPASS_LOGIN,
+                entity_type=AuditEntityType.USER,
+                entity_id=dev_user.id,
+                details={'success': True, 'username': username, 'auth_method': 'ldap_dev_bypass'},
+            )
+
+            response = Response({
+                'data': {
+                    'access_token': access_token,
+                    'token_type': 'Bearer',
+                    'expires_in': expires_in,
+                }
+            })
+            response.set_cookie(
+                key='refresh_token',
+                value=refresh_token,
+                httponly=True,
+                secure=settings.APP_ENV != 'development',
+                samesite='Lax',
+                max_age=settings.JWT_REFRESH_TOKEN_EXPIRE_HOURS * 3600,
+                path='/api/v1/auth',
+            )
+            return response
 
         # Step 2: LDAP authentication
         ldap_service = LDAPService()

@@ -878,6 +878,6 @@ development_status:
     # Import uniquement via API (CI/CD) ; suppression sync_config et features UI import YAML
     epic-70: in-progress
     70-1-supprimer-commande-sync-config: done
-    70-2-supprimer-features-ui-import-yaml: backlog
+    70-2-supprimer-features-ui-import-yaml: done
     70-3-mise-a-jour-documentation-cac: backlog
     epic-70-retrospective: optional

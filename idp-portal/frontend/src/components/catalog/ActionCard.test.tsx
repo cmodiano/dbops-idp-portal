@@ -358,11 +358,10 @@ describe('ActionCard', () => {
       expect(screen.queryByTestId('technology-overflow')).not.toBeInTheDocument();
     });
 
-    it('workflow indicator is present for workflows', () => {
+    it('workflow with technologies shows technology icons (no separate workflow indicator)', () => {
       renderWithTheme(<ActionCard action={workflowWithTechs} />);
 
-      expect(screen.getByTestId('workflow-indicator')).toBeInTheDocument();
-      expect(screen.getByLabelText('Workflow')).toBeInTheDocument();
+      expect(screen.getByTestId('technology-icons')).toBeInTheDocument();
     });
 
     it('simple action has no workflow indicator', () => {
@@ -444,26 +443,27 @@ describe('ActionCard', () => {
       ],
     };
 
-    it('workflow displays included actions names with "Actions :" label', () => {
+    it('workflow displays included actions as chips with "Actions incluses" label', () => {
       renderWithTheme(<ActionCard action={workflowWith2Actions} />);
 
       const summary = screen.getByTestId('included-actions-summary');
       expect(summary).toBeInTheDocument();
-      expect(screen.getByText(/Actions\s*:/)).toBeInTheDocument();
+      expect(screen.getByText('Actions incluses')).toBeInTheDocument();
       expect(screen.getByText(/Backup/)).toBeInTheDocument();
       expect(screen.getByText(/Deploy/)).toBeInTheDocument();
       // Boundary: exactly maxVisible actions = no overflow
-      expect(screen.queryByText(/autre/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/^\+/)).not.toBeInTheDocument();
     });
 
-    it('workflow shows overflow indicator "et 2 autres" when > maxVisible actions', () => {
+    it('workflow shows overflow indicator "+N" when > maxVisible actions', () => {
       renderWithTheme(<ActionCard action={workflowWith4Actions} />);
 
       const summary = screen.getByTestId('included-actions-summary');
       expect(summary).toBeInTheDocument();
       expect(screen.getByText(/Backup/)).toBeInTheDocument();
       expect(screen.getByText(/Deploy/)).toBeInTheDocument();
-      expect(screen.getByText(/et 2 autres/)).toBeInTheDocument();
+      expect(screen.getByText(/Validate/)).toBeInTheDocument();
+      expect(screen.getByText('+1')).toBeInTheDocument();
     });
 
     it('simple action has no included actions summary', () => {

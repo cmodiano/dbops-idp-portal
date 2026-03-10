@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { Form, Input, Button, Alert, Card, Typography, Divider, Flex } from 'antd';
 import { UserOutlined, LockOutlined, LoginOutlined } from '@ant-design/icons';
@@ -15,10 +15,22 @@ const ERROR_MESSAGES: Record<string, string> = {
 };
 
 export default function LoginPage() {
-  const { login, loginWithCredentials } = useAuth();
+  const { login, loginWithCredentials, isAuthenticated, isLoading } = useAuth();
   const navigate = useNavigate();
+
+  // Redirect to catalog when already authenticated (e.g. dev bypass)
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      navigate('/catalog', { replace: true });
+    }
+  }, [isLoading, isAuthenticated, navigate]);
+
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  if (!isLoading && isAuthenticated) {
+    return null; // Redirect in progress
+  }
 
   const authMethods = (import.meta.env.VITE_PORTAL_AUTH_METHODS || 'ldap').split(',').map((m: string) => m.trim());
   const showSamlButton = authMethods.includes('saml');

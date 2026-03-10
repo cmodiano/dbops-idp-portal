@@ -43,6 +43,9 @@ function toPreviewData(action: CatalogAction, stats?: ActionStats | null): Actio
     execution_count: action.execution_count,
     stats: stats ?? null,
     item_type: action.item_type, // Story 18.2: workflow vs action visual distinction
+    // Story 69.2/69.3: technologies and included_actions for workflow cards (Epic 69)
+    technologies: action.technologies,
+    included_actions: action.included_actions,
   };
 }
 

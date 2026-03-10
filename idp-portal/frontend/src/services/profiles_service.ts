@@ -2,10 +2,10 @@
  * Profiles service (Story 2.9, FR25a). CRUD for dynamic profiles.
  * Story 2.10: get/put profile actions permissions. Requires DBOPS profile.
  * Story 2.11: get/put profile targets permissions.
- * Story 2.13: export/import YAML (AC1, AC2).
+ * Story 2.13: export YAML (AC1).
  */
 
-import { apiFetch, apiFetchBlob, apiPostFormData } from './api_client';
+import { apiFetch, apiFetchBlob } from './api_client';
 import type {
   ProfileCreate,
   ProfileUpdate,
@@ -85,17 +85,6 @@ export async function exportProfilesYaml(): Promise<void> {
   a.download = 'profiles.yaml';
   a.click();
   URL.revokeObjectURL(url);
-}
-
-/** Story 2.13: Import profiles from YAML file (AC2). Returns created/updated counts. */
-export async function importProfilesYaml(file: File): Promise<{ created: number; updated: number }> {
-  const formData = new FormData();
-  formData.append('file', file);
-  const res = await apiPostFormData<{ created: number; updated: number }>(
-    '/admin/profiles/import/',
-    formData,
-  );
-  return res.data;
 }
 
 /** Story 64.13: Export a single profile as YAML file. Triggers browser download. */

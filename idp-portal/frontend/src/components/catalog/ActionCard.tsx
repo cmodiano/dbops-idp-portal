@@ -35,7 +35,6 @@ import { sanitizeDescription } from '../../utils/businessLanguage';
 import { ENGINE_SVG_SOURCES } from '../../utils/executionRenderers';
 import { getEngineIconUrl } from '../../utils/engineIconCache';
 import { getItemTypeIcon } from '../../utils/iconHelpers';
-import { WorkflowIcon } from '../icons/WorkflowIcon';
 
 const { Text, Paragraph } = Typography;
 
@@ -86,7 +85,7 @@ interface TechnologyIconsProps {
   iconSize?: number;
 }
 
-function TechnologyIcons({ technologies, maxVisible = 3, iconSize = 24 }: TechnologyIconsProps) {
+function TechnologyIcons({ technologies, maxVisible = 3, iconSize = 32 }: TechnologyIconsProps) {
   const visible = technologies.slice(0, maxVisible);
   const overflow = technologies.length - maxVisible;
 
@@ -116,13 +115,13 @@ function TechnologyIcons({ technologies, maxVisible = 3, iconSize = 24 }: Techno
   );
 }
 
-/** Story 69.3: Display included action names with engine icons for workflow cards. */
+/** Story 69.3: Display included action names as compact chips for workflow cards. */
 interface IncludedActionsSummaryProps {
   actions: IncludedAction[];
   maxVisible?: number;
 }
 
-function IncludedActionsSummary({ actions, maxVisible = 2 }: IncludedActionsSummaryProps) {
+function IncludedActionsSummary({ actions, maxVisible = 3 }: IncludedActionsSummaryProps) {
   const visible = actions.slice(0, maxVisible);
   const overflow = actions.length - maxVisible;
 
@@ -132,23 +131,49 @@ function IncludedActionsSummary({ actions, maxVisible = 2 }: IncludedActionsSumm
       aria-label="Actions incluses dans le workflow"
       style={{ color: 'inherit' }}
     >
-      <Text type="secondary" style={{ fontSize: 12 }}>
-        {'Actions : '}
-        {visible.map((a, i) => (
-          <span key={a.id} style={{ whiteSpace: 'nowrap' }}>
+      <Text type="secondary" style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>
+        Actions incluses
+      </Text>
+      <Space size={4} wrap style={{ width: '100%' }}>
+        {visible.map((a) => (
+          <Tag
+            key={a.id}
+            style={{
+              margin: 0,
+              fontSize: 11,
+              padding: '1px 6px',
+              lineHeight: 1.4,
+              borderRadius: 4,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
             {a.engine ? (
-              <span style={{ display: 'inline-flex', verticalAlign: 'middle', marginRight: 2 }}>
-                {getEngineIconAtSize(a.engine, 14)}
+              <span style={{ display: 'inline-flex', flexShrink: 0 }}>
+                {getEngineIconAtSize(a.engine, 12)}
               </span>
             ) : null}
-            {a.name}
-            {i < visible.length - 1 ? ', ' : ''}
-          </span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 80 }}>
+              {a.name}
+            </span>
+          </Tag>
         ))}
         {overflow > 0 && (
-          <span>{` et ${overflow} autre${overflow > 1 ? 's' : ''}`}</span>
+          <Tag
+            style={{
+              margin: 0,
+              fontSize: 11,
+              padding: '1px 6px',
+              background: 'rgba(150,150,150,0.15)',
+              color: 'inherit',
+              border: 'none',
+            }}
+          >
+            +{overflow}
+          </Tag>
         )}
-      </Text>
+      </Space>
     </div>
   );
 }
@@ -187,7 +212,7 @@ export const ActionCard = memo(function ActionCard({
   // Story 5.7, AC3; Story 18.2: Use shared iconHelpers for workflow, engine-specific SVG for actions
   const workflowTechnologies = action.technologies?.filter((t) => t && t.trim() !== '') || [];
   const icon = isWorkflow && workflowTechnologies.length > 0
-    ? <TechnologyIcons technologies={workflowTechnologies} maxVisible={3} iconSize={24} />
+    ? <TechnologyIcons technologies={workflowTechnologies} maxVisible={3} iconSize={32} />
     : isWorkflow
       ? getItemTypeIcon('workflow', null, { withTooltip: true, fontSize: STYLE_TOKENS.engineIconSize }).icon
       : (action.engine ? getEngineIcon(action.engine) : null);
@@ -226,7 +251,6 @@ export const ActionCard = memo(function ActionCard({
       styles={{
         body: {
           padding: STYLE_TOKENS.cardBodyPadding,
-          ...(isWorkflow ? { paddingBottom: STYLE_TOKENS.cardBodyPadding + 24 } : undefined),
         },
       }}
     >
@@ -273,7 +297,7 @@ export const ActionCard = memo(function ActionCard({
 
         {/* Story 69.3: Included actions summary for workflows */}
         {isWorkflow && includedActions.length > 0 && (
-          <IncludedActionsSummary actions={includedActions} maxVisible={2} />
+          <IncludedActionsSummary actions={includedActions} maxVisible={3} />
         )}
 
         {/* Tags — pastel, pill-shaped */}
@@ -389,12 +413,7 @@ export const ActionCard = memo(function ActionCard({
           </div>
         )}
       </Space>
-      {/* Story 69.2: Workflow indicator — bottom left (AC3, AC4) */}
-      {isWorkflow && (
-        <div style={{ position: 'absolute', bottom: 8, left: 8 }} data-testid="workflow-indicator">
-          <WorkflowIcon size={16} aria-label="Workflow" />
-        </div>
-      )}
+      {/* Story 69.2: Workflow indicator removed from card — tech icons + "Actions incluses" already convey workflow type */}
     </Card>
   );
 });

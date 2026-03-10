@@ -12,6 +12,7 @@ from typing import Any
 from rest_framework import serializers
 from drf_spectacular.utils import extend_schema_field, extend_schema_serializer, OpenApiExample
 from drf_spectacular.types import OpenApiTypes
+from executions.utils import extract_workflow_referenced_action_ids
 from catalog import models
 from catalog.models import (
     Action, Tag, ActionStatus, ActionItemType, BusinessRulePolicy
@@ -229,11 +230,8 @@ class WorkflowEnrichmentMixin:
             if obj.item_type != 'workflow' or not obj.execution_steps:
                 setattr(self, cache_attr, ([], {}))
             else:
-                action_ids = [
-                    step['referenced_action_id']
-                    for step in obj.execution_steps
-                    if isinstance(step, dict) and step.get('referenced_action_id') is not None
-                ]
+                # Story 69: Use centralized extraction (step order, skips gate steps)
+                action_ids = extract_workflow_referenced_action_ids(obj)
                 if action_ids:
                     actions_map = {
                         a['id']: a
