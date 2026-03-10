@@ -8,7 +8,7 @@ opérationnelle. Le principe fondamental est :
 | Couche | Rôle | Modificateurs |
 |--------|------|---------------|
 | **Git (`idp-config/`)** | Source de vérité canonique | Opérateurs, DevOps (via PR) |
-| **Base de données** | Cache runtime, état courant | Processus `sync_config` uniquement |
+| **Base de données** | Cache runtime, état courant | Pipeline CI/CD via API (`apply_idp_config.py`) |
 | **Interface utilisateur** | Consultation et urgences uniquement | Admins (urgences opérationnelles) |
 
 Toute configuration stable doit exister dans Git. Les modifications directes en UI sont
@@ -30,7 +30,7 @@ considérées comme temporaires et doivent être répercutées dans `idp-config/
 
 ## Ordre de dépendances
 
-Les entités respectent un graphe de dépendances acyclique. La commande `sync_config` garantit
+Les entités respectent un graphe de dépendances acyclique. Les endpoints API d'import respectent
 l'ordre suivant :
 
 ```
@@ -58,15 +58,15 @@ présentes en base. Une violation lève `REF_NOT_FOUND`.
 ### Vue d'ensemble
 
 ```
-┌─────────────┐    ┌──────────────┐    ┌─────────────────┐    ┌──────────────────┐
-│  PR créée   │───→│ Validate YAML│───→│ Dry-run staging │───→│  Apply staging   │
-│ (Git push)  │    │ (syntax+env) │    │  (no DB writes) │    │ (sync_config)    │
-└─────────────┘    └──────────────┘    └─────────────────┘    └─────────┬────────┘
-                                                                         │
-                                                              ┌──────────▼────────┐
-                                                              │ Apply production  │
-                                                              │ (after approval)  │
-                                                              └───────────────────┘
+┌─────────────┐    ┌──────────────┐    ┌─────────────────┐    ┌────────────────────────┐
+│  PR créée   │───→│ Validate YAML│───→│ Dry-run staging │───→│    Apply staging       │
+│ (Git push)  │    │ (syntax+env) │    │  (no DB writes) │    │ (apply_idp_config.py)  │
+└─────────────┘    └──────────────┘    └─────────────────┘    └───────────┬────────────┘
+                                                                          │
+                                                              ┌───────────▼──────────┐
+                                                              │  Apply production    │
+                                                              │  (after approval)    │
+                                                              └──────────────────────┘
 ```
 
 ### Étapes du pipeline
@@ -74,35 +74,35 @@ présentes en base. Une violation lève `REF_NOT_FOUND`.
 #### 1. Validate PR (`on: pull_request`)
 
 ```bash
-python manage.py sync_config --config-dir ./idp-config/ --validate-only
+python scripts/apply_idp_config.py --config-dir ./idp-config/ --validate-only
 ```
 
 Vérifie la syntaxe YAML et la validité des envelopes (`apiVersion`, `kind`, `metadata`).
-Bloque la PR si validation échoue. Aucune connexion DB requise.
+Bloque la PR si validation échoue.
 
 #### 2. Dry-run staging (`on: pull_request`)
 
 ```bash
-python manage.py sync_config --config-dir ./idp-config/ --dry-run
+python scripts/apply_idp_config.py --config-dir ./idp-config/ --env staging --dry-run
 ```
 
-Simule l'import complet sans écriture. Affiche les fichiers valides et les erreurs potentielles.
+Simule l'import complet via les endpoints API sans écriture. Affiche les fichiers valides et les erreurs potentielles.
 
 #### 3. Apply staging (`on: merge to develop`)
 
 ```bash
-python manage.py sync_config --config-dir ./idp-config/
+python scripts/apply_idp_config.py --config-dir ./idp-config/ --env staging
 ```
 
-Applique la configuration en mode `additive` sur l'environnement de staging.
+Applique la configuration en mode `additive` sur l'environnement de staging via les endpoints API.
 
 #### 4. Apply production (`on: merge to main`, après approbation)
 
 ```bash
-python manage.py sync_config --config-dir ./idp-config/
+python scripts/apply_idp_config.py --config-dir ./idp-config/ --env production
 ```
 
-Applique la configuration en production. Requiert une approbation manuelle.
+Applique la configuration en production via les endpoints API. Requiert une approbation manuelle.
 
 ### Script CI/CD dédié
 
@@ -136,7 +136,7 @@ Comportement déclaratif (état final = contenu du YAML) :
 
 ## Hors scope — Données runtime exclues
 
-Les données suivantes sont **exclues du périmètre CaC** et ne sont jamais gérées par `sync_config` :
+Les données suivantes sont **exclues du périmètre CaC** et ne sont jamais gérées par le processus CaC :
 
 | Données | Raison de l'exclusion |
 |---------|----------------------|
@@ -173,8 +173,8 @@ Composant frontend affiché dans le tableau de bord Config Sync. La commande `de
 distingue quatre statuts (`in_sync`, `diverged`, `missing_in_yaml`, `missing_in_db`). Le
 composant DriftBadge regroupe intentionnellement `missing_in_yaml` et `missing_in_db` en un
 seul badge `missing` pour simplifier l'affichage. La remédiation diffère selon le statut
-sous-jacent : `missing_in_yaml` → créer un fichier YAML ; `missing_in_db` → exécuter
-`sync_config` pour importer.
+sous-jacent : `missing_in_yaml` → créer un fichier YAML ; `missing_in_db` → un import via
+l'API (CI/CD) pour créer l'entité.
 
 ### Config Sync Dashboard
 

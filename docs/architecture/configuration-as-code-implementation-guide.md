@@ -401,20 +401,21 @@ Action (name)             ← Integration (integration_ref)
 Profile (name)            ← Action (action_names dans permissions)
 ```
 
-### Ordre imposé par `sync_config`
+### Ordre imposé par les endpoints d'import
 
-```python
-SYNC_ORDER = [
-    ("reference/engines.yaml",      "engines",       ...),
-    ("reference/categories.yaml",   "categories",    ...),
-    ("tags.yaml",                   "tags",         ...),
-    ("feature-flags.yaml",          "flags",         ...),
-    ("integration-types/",          "int-types",     ...),
-    ("integrations/",               "integrations",  ...),
-    ("policies/",                  "policies",      ...),
-    ("actions/",                   "actions",       ...),
-    ("profiles/",                  "profiles",      ...),
-]
+Les endpoints API d'import (`POST .../sync/`) doivent être appelés dans cet ordre par le script
+`apply_idp_config.py` pour respecter le graphe de dépendances :
+
+```
+1. reference/engines.yaml      (aucune dépendance)
+2. reference/categories.yaml   (aucune dépendance)
+3. tags.yaml                   (aucune dépendance)
+4. feature-flags.yaml          (aucune dépendance)
+5. integration-types/          (aucune dépendance)
+6. integrations/               (→ integration-types)
+7. policies/                   (aucune dépendance FK)
+8. actions/                    (→ integrations, policies)
+9. profiles/                   (→ actions)
 ```
 
 ---
@@ -459,7 +460,6 @@ metadata: {}                   # vide, pas de name requis
 | `test_services_export_import.py` | Tests du service principal |
 | `test_services_export_import_<suffix>.py` | Tests services secondaires |
 | `test_iac_views.py` | Tests des endpoints HTTP CaC |
-| `test_sync_config_command.py` | Tests de la commande management |
 | `test_detect_drift_command.py` | Tests de la commande detect_drift |
 
 ---
@@ -492,11 +492,10 @@ Pour ajouter le support CaC d'une nouvelle entité Django :
 
 - [ ] Ajouter le nouveau kind dans `VALID_KINDS` dans `core/services_iac_utils.py`
 
-### Phase 4 : Intégration dans `sync_config`
+### Phase 4 : Intégration dans le processus d'import API
 
-- [ ] Ajouter une entrée dans `SYNC_ORDER` dans `core/management/commands/sync_config.py`
-  - Respecter l'ordre de dépendances
-  - Si fichier unique : `"<entity>.yaml"`, si répertoire : `"<entity>/"`
+- [ ] Ajouter le nouveau type d'entité dans `apply_idp_config.py` en respectant l'ordre de dépendances
+  - Vérifier que l'appel à l'endpoint `POST .../sync/` est positionné après les dépendances FK
 
 ### Phase 5 : Endpoints HTTP CaC
 
@@ -515,7 +514,6 @@ Pour ajouter le support CaC d'une nouvelle entité Django :
 
 - [ ] `test_services_export_import.py` : export (envelope, champs, masquage), import (create/update/unchanged, refs invalides, mode full, round-trip, INVALID_YAML_SYNTAX)
 - [ ] `test_iac_views.py` : endpoints export et sync (auth, format, erreurs)
-- [ ] `test_sync_config_command.py` : vérifier que le nouveau type est traité dans la séquence
 - [ ] `test_detect_drift_command.py` : statuts in_sync, diverged, missing
 
 ### Phase 8 : Documentation
@@ -529,7 +527,7 @@ Pour ajouter le support CaC d'une nouvelle entité Django :
 ## Références croisées
 
 - **Services** : `core/services_iac_utils.py`, `<app>/services_export_import*.py`
-- **Commandes** : `core/management/commands/sync_config.py`, `core/management/commands/detect_drift.py`
+- **Commandes** : `core/management/commands/detect_drift.py`
 - **Vues** : `core/iac_views.py`, `catalog/iac_views.py`, `integrations/iac_views.py`, etc.
 - **Tests** : voir pattern de nommage en section 9
 - **Stratégie** : [`configuration-as-code-strategy.md`](configuration-as-code-strategy.md)

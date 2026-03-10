@@ -7,9 +7,10 @@ Configuration-as-Code (CaC). Le principe fondamental est :
 
 > **Git = source de vérité. Base de données = cache runtime.**
 
-Toute modification de configuration passe par un commit dans ce répertoire, puis une commande
-de synchronisation met à jour la base de données. Les modifications directes en UI sont réservées
-aux urgences opérationnelles et doivent être répercutées dans Git dès que possible.
+Toute modification de configuration passe par un commit dans ce répertoire, puis le pipeline
+CI/CD applique la configuration via l'API (script `apply_idp_config.py` → endpoints `POST .../sync/`).
+Les modifications directes en UI sont réservées aux urgences opérationnelles et doivent être
+répercutées dans Git dès que possible.
 
 ## Structure du répertoire
 
@@ -65,21 +66,22 @@ spec:
 
 ## Commandes disponibles
 
-### `sync_config` — Appliquer la configuration en base
+### Import via API (CI/CD)
 
-```bash
-# Synchronisation complète (mode additive par défaut)
-python manage.py sync_config --config-dir ./idp-config/
+L'import de la configuration en base se fait exclusivement via les endpoints API `POST .../sync/`,
+appelés par le script de pipeline `apply_idp_config.py`. Il n'y a pas de commande management
+Django pour l'import.
 
-# Validation des fichiers YAML sans écriture en DB
-python manage.py sync_config --config-dir ./idp-config/ --dry-run
+**Endpoints d'import :**
 
-# Validation du schéma seulement (équivalent --dry-run)
-python manage.py sync_config --config-dir ./idp-config/ --validate-only
+| Entité              | Endpoint                                          |
+|---------------------|---------------------------------------------------|
+| Actions (catalogue) | `POST /api/iac/catalog/actions/sync/`             |
+| Profils             | `POST /api/iac/catalog/profiles/sync/`            |
+| Intégrations        | `POST /api/iac/integrations/sync/`                |
+| Données de référence| `POST /api/iac/reference-data/sync/`              |
 
-# Mode full : supprime les entités orphelines (absentes du YAML mais présentes en DB)
-python manage.py sync_config --config-dir ./idp-config/ --mode full
-```
+**Modes disponibles :** `additive` (défaut) ou `full` (avec suppression des orphelins).
 
 ### `detect_drift` — Détecter les divergences Git ↔ DB
 
@@ -134,13 +136,7 @@ spec:
   integration_ref: aap-prod
 ```
 
-### 3. Valider les changements
-
-```bash
-python manage.py sync_config --config-dir ./idp-config/ --dry-run
-```
-
-### 4. Committer et pousser
+### 3. Committer et pousser
 
 ```bash
 git add idp-config/actions/deploy-oracle.yaml
@@ -148,21 +144,17 @@ git commit -m "feat(config): update deploy-oracle description"
 git push
 ```
 
-### 5. Le pipeline CI/CD applique automatiquement la configuration
+### 4. Le pipeline CI/CD applique automatiquement la configuration
 
 ```
 Validate YAML → Dry-run staging → Apply staging → Apply production
 ```
 
-### 6. Ou appliquer manuellement
-
-```bash
-python manage.py sync_config --config-dir ./idp-config/
-```
+Le script `apply_idp_config.py` orchestre la validation et l'application via les endpoints API.
 
 ## Ordre de dépendances
 
-Les entités sont synchronisées dans cet ordre strict (respecté par `sync_config`) :
+Les entités sont synchronisées dans cet ordre strict (respecté par les endpoints API d'import) :
 
 ```
 1. reference/engines.yaml      (aucune dépendance)
@@ -196,14 +188,8 @@ Utilisation : déploiements quotidiens, ajouts de configuration.
 - Pour les intégrations individuelles : ne supprime pas les autres intégrations.
 
 **Attention :** Le mode `full` est destructif pour les données de référence et les profils.
-Toujours exécuter `--dry-run` avant `--mode full` en production.
-
-```bash
-# Toujours valider d'abord
-python manage.py sync_config --config-dir ./idp-config/ --dry-run
-# Puis appliquer
-python manage.py sync_config --config-dir ./idp-config/ --mode full
-```
+Toujours exécuter un dry-run via `apply_idp_config.py --dry-run` ou l'API avant `--mode full`
+en production.
 
 ## Règles de sécurité
 
@@ -251,6 +237,6 @@ entité existante en DB (déjà importée ou présente). Sinon, l'import lève `
 
 ## Ressources
 
-- [Stratégie CaC](../docs/architecture/configuration-as-code-strategy.md) — paradigme et flux CI/CD
-- [Guide d'implémentation CaC](../docs/architecture/configuration-as-code-implementation-guide.md) — patterns techniques
-- Commandes : `python manage.py sync_config --help`, `python manage.py detect_drift --help`
+- [Stratégie CaC](../../docs/architecture/configuration-as-code-strategy.md) — paradigme et flux CI/CD
+- [Guide d'implémentation CaC](../../docs/architecture/configuration-as-code-implementation-guide.md) — patterns techniques
+- Commandes : `python manage.py detect_drift --help`

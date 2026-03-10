@@ -879,5 +879,5 @@ development_status:
     epic-70: in-progress
     70-1-supprimer-commande-sync-config: done
     70-2-supprimer-features-ui-import-yaml: done
-    70-3-mise-a-jour-documentation-cac: backlog
+    70-3-mise-a-jour-documentation-cac: done
     epic-70-retrospective: optional
