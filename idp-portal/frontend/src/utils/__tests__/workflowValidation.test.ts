@@ -4,7 +4,8 @@
 import { describe, it, expect } from 'vitest';
 import type { Node, Edge } from '@xyflow/react';
 import { validateWorkflowGraph } from '../workflowValidation';
-import { START_NODE_ID, END_NODE_ID } from '../workflowConversion';
+import { START_NODE_ID, END_NODE_ID, workflowStepsToReactFlow } from '../workflowConversion';
+import type { WorkflowStep } from '../../types/api';
 import type { WorkflowStepNodeData } from '../../components/admin/WorkflowStepNode';
 
 const makeNodeWithData = (id: string, data: Partial<WorkflowStepNodeData> = {}): Node => ({
@@ -133,6 +134,21 @@ describe('validateWorkflowGraph', () => {
       (e) => e.nodeId === START_NODE_ID || e.nodeId === END_NODE_ID
     );
     expect(startEndErrors).toHaveLength(0);
+  });
+
+  it('validates correctly when steps array order differs from entry (ActionWizard flow)', () => {
+    // Simulates ActionWizard: workflowStepsToReactFlow(steps) then validateWorkflowGraph.
+    // Steps: [B, C, Gate] — Gate is entry (no incoming). Old logic would connect START→B, making C unreachable.
+    const steps: WorkflowStep[] = [
+      { order: 1, step_id: 'B', name: 'B', step_type: 'platform', referenced_action_id: 1, on_success_step_ids: [], on_error_step_ids: [] },
+      { order: 2, step_id: 'C', name: 'C', step_type: 'platform', referenced_action_id: 2, on_success_step_ids: [], on_error_step_ids: [] },
+      { order: 3, step_id: 'Gate', name: 'Gate', step_type: 'gate', gate_type: 'approval', on_success_step_ids: ['B'], on_error_step_ids: ['C'] },
+    ];
+    const { nodes, edges } = workflowStepsToReactFlow(steps);
+    const result = validateWorkflowGraph(nodes, edges);
+    expect(result.valid).toBe(true);
+    const unreachable = result.errors.filter((e) => e.message.includes('Non atteignable'));
+    expect(unreachable).toHaveLength(0);
   });
 });
 

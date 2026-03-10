@@ -84,6 +84,27 @@ describe('workflowStepsToReactFlow', () => {
     expect(startEdge!.sourceHandle).toBe('output');
   });
 
+  it('connects Start to entry step even when steps array order differs (validation fix)', () => {
+    // Entry = Gate (no incoming). Steps ordered as [B, C, Gate] — Gate is not first.
+    const steps = [
+      makeStep({ step_id: 'B', order: 1, name: 'B', on_success_step_ids: [], on_error_step_ids: [] }),
+      makeStep({ step_id: 'C', order: 2, name: 'C', on_success_step_ids: [], on_error_step_ids: [] }),
+      makeStep({
+        step_id: 'Gate',
+        order: 3,
+        name: 'Gate',
+        step_type: 'gate',
+        gate_type: 'approval',
+        on_success_step_ids: ['B'],
+        on_error_step_ids: ['C'],
+      }),
+    ];
+    const { edges } = workflowStepsToReactFlow(steps);
+    const startEdges = edges.filter((e) => e.source === START_NODE_ID);
+    expect(startEdges).toHaveLength(1);
+    expect(startEdges[0].target).toBe('Gate'); // Entry step, not steps[0] (B)
+  });
+
   it('creates success edges to End node when on_success_step_ids is empty', () => {
     const steps = [makeStep({ on_success_step_ids: [] })];
     const { edges } = workflowStepsToReactFlow(steps);

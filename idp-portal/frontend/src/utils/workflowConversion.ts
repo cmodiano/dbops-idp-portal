@@ -187,22 +187,33 @@ export function workflowStepsToReactFlow(
     deletable: false,
   };
 
-  // Auto-connect Start → first step and steps with null → End for correct display when loading
+  // Auto-connect Start → entry step(s). Entry = steps with no incoming edges from other steps.
+  // This ensures validation reachability matches the actual graph structure regardless of step array order.
   if (workflowNodes.length > 0) {
-    const firstStepId = steps[0]?.step_id ?? workflowNodes[0].id;
-    if (firstStepId) {
-      edges.push({
-        id: `${START_NODE_ID}_output_${firstStepId}`,
-        source: START_NODE_ID,
-        target: firstStepId,
-        sourceHandle: 'output',
-        targetHandle: 'input',
-        type: 'customEdge',
-        animated: false,
-        style: { stroke: STYLE_TOKENS.iconSuccess, strokeWidth: STYLE_TOKENS.edgeStrokeWidth },
-        label: 'succès',
-        labelStyle: { fontSize: STYLE_TOKENS.edgeLabelFontSize, fill: STYLE_TOKENS.textSuccess },
-      });
+    const allTargets = new Set<string>();
+    steps.forEach((s) => {
+      (s.on_success_step_ids ?? []).forEach((id) => allTargets.add(id));
+      (s.on_error_step_ids ?? []).forEach((id) => allTargets.add(id));
+    });
+    const entryStepIds = steps
+      .map((s) => s.step_id)
+      .filter((id): id is string => !!id && !allTargets.has(id));
+    const startTargets = entryStepIds.length > 0 ? entryStepIds : [steps[0]?.step_id ?? workflowNodes[0].id].filter(Boolean);
+    for (const targetId of startTargets) {
+      if (targetId && targetId !== END_NODE_ID) {
+        edges.push({
+          id: `${START_NODE_ID}_output_${targetId}`,
+          source: START_NODE_ID,
+          target: targetId,
+          sourceHandle: 'output',
+          targetHandle: 'input',
+          type: 'customEdge',
+          animated: false,
+          style: { stroke: STYLE_TOKENS.iconSuccess, strokeWidth: STYLE_TOKENS.edgeStrokeWidth },
+          label: 'succès',
+          labelStyle: { fontSize: STYLE_TOKENS.edgeLabelFontSize, fill: STYLE_TOKENS.textSuccess },
+        });
+      }
     }
   }
 
