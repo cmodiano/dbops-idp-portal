@@ -111,8 +111,9 @@ class ExecutionStatsView(APIView):
         completed = qs.filter(status=ExecutionStatus.COMPLETED).count()
         taux_succes_pct = round((completed / finished) * 100, 2) if finished > 0 else 0.0
 
+        # ADR-007: PENDING_APPROVAL removed — approval is now step-based
         executions_en_cours = qs.filter(
-            status__in=[ExecutionStatus.RUNNING, ExecutionStatus.SUBMITTED, ExecutionStatus.PENDING_APPROVAL]
+            status__in=[ExecutionStatus.RUNNING, ExecutionStatus.SUBMITTED]
         ).count()
         executions_en_erreur = qs.filter(status=ExecutionStatus.FAILED).count()
 

@@ -149,8 +149,9 @@ class DashboardStatsView(APIView):
         executions_jour = qs_base.filter(created_at__gte=today_start).count()
 
         # executions_en_cours: current running/pending (not period-scoped)
+        # ADR-007: PENDING_APPROVAL removed — approval is now step-based
         executions_en_cours = qs_base.filter(
-            status__in=[ExecutionStatus.SUBMITTED, ExecutionStatus.RUNNING, ExecutionStatus.PENDING_APPROVAL]
+            status__in=[ExecutionStatus.SUBMITTED, ExecutionStatus.RUNNING]
         ).count()
 
         # executions_en_erreur + taux_succes_pct: period-scoped

@@ -2,14 +2,14 @@
 Tests for Tower/AWX monitoring — Story 27.2.
 
 Covers:
-- poll_tower_job_status: success polling, terminal status, error handling, rescheduling
-- Non-regression: AAP tests still pass (poll_aap_job_status unaffected)
+- poll_platform_job_status with platform_type='tower': success polling, terminal status,
+  error handling, rescheduling
 """
 from __future__ import annotations
 
 from unittest.mock import patch, MagicMock, AsyncMock
 
-from executions.tasks import poll_tower_job_status
+from executions.tasks import poll_platform_job_status
 
 
 def _make_tower_adapter(status_data: dict, logs_data: dict) -> MagicMock:
@@ -21,7 +21,7 @@ def _make_tower_adapter(status_data: dict, logs_data: dict) -> MagicMock:
 
 
 class TestPollTowerJobStatus:
-    """Tests for poll_tower_job_status Celery task."""
+    """Tests for poll_platform_job_status with platform_type='tower'."""
 
     @patch("executions.tasks._update_execution_from_poll")
     @patch("executions.tasks._broadcast_execution_update")
@@ -38,14 +38,15 @@ class TestPollTowerJobStatus:
             {"content": "PLAY [all]", "format": "text/plain", "timestamp": "x", "complete": False, "job_status": "running"},
         )
         with patch("adapters.tower_adapter.TowerAdapter", return_value=adapter):
-            result = poll_tower_job_status(
+            result = poll_platform_job_status(
                 execution_id=1,
                 platform_job_id="100",
-                resource_type="job_template",
+                platform_type="tower",
                 base_url="https://tower.example.com",
                 credential_ref="test-token",
                 auth_flow="token",
                 poll_interval=5,
+                poll_kwargs={"resource_type": "job_template"},
             )
 
         assert result["outcome"] == "polling"
@@ -68,9 +69,10 @@ class TestPollTowerJobStatus:
             {"content": "PLAY RECAP", "format": "text/plain", "timestamp": "y", "complete": True, "job_status": "successful"},
         )
         with patch("adapters.tower_adapter.TowerAdapter", return_value=adapter):
-            result = poll_tower_job_status(
+            result = poll_platform_job_status(
                 execution_id=1,
                 platform_job_id="100",
+                platform_type="tower",
                 base_url="https://tower.example.com",
                 credential_ref="test-token",
             )
@@ -95,9 +97,10 @@ class TestPollTowerJobStatus:
             {"content": "TASK [deploy] failed", "format": "text/plain", "timestamp": "y", "complete": True, "job_status": "failed"},
         )
         with patch("adapters.tower_adapter.TowerAdapter", return_value=adapter):
-            result = poll_tower_job_status(
+            result = poll_platform_job_status(
                 execution_id=1,
                 platform_job_id="100",
+                platform_type="tower",
                 base_url="https://tower.example.com",
                 credential_ref="test-token",
             )
@@ -116,9 +119,10 @@ class TestPollTowerJobStatus:
         adapter.get_status = AsyncMock(side_effect=ConnectionError("Network error"))
 
         with patch("adapters.tower_adapter.TowerAdapter", return_value=adapter):
-            result = poll_tower_job_status(
+            result = poll_platform_job_status(
                 execution_id=1,
                 platform_job_id="100",
+                platform_type="tower",
                 base_url="https://tower.example.com",
                 credential_ref="test-token",
                 poll_interval=10,
@@ -143,9 +147,10 @@ class TestPollTowerJobStatus:
             {"content": "", "format": "text/plain", "timestamp": "y", "complete": True, "job_status": "canceled"},
         )
         with patch("adapters.tower_adapter.TowerAdapter", return_value=adapter):
-            result = poll_tower_job_status(
+            result = poll_platform_job_status(
                 execution_id=1,
                 platform_job_id="100",
+                platform_type="tower",
                 base_url="https://tower.example.com",
                 credential_ref="test-token",
             )
@@ -168,9 +173,10 @@ class TestPollTowerJobStatus:
             {"content": "logs", "format": "text/plain", "timestamp": "x", "complete": False, "job_status": "running"},
         )
         with patch("adapters.tower_adapter.TowerAdapter", return_value=adapter) as mock_cls:
-            poll_tower_job_status(
+            poll_platform_job_status(
                 execution_id=1,
                 platform_job_id="100",
+                platform_type="tower",
                 base_url="https://tower.example.com",
                 credential_ref="admin:password",
                 auth_flow="basic",
@@ -195,12 +201,13 @@ class TestPollTowerJobStatus:
             {"content": "wf logs", "format": "text/plain", "timestamp": "x", "complete": False, "job_status": "running"},
         )
         with patch("adapters.tower_adapter.TowerAdapter", return_value=adapter):
-            poll_tower_job_status(
+            poll_platform_job_status(
                 execution_id=1,
                 platform_job_id="100",
-                resource_type="workflow_job",
+                platform_type="tower",
                 base_url="https://tower.example.com",
                 credential_ref="test-token",
+                poll_kwargs={"resource_type": "workflow_job"},
             )
 
         adapter.get_status.assert_called_once()
@@ -226,9 +233,10 @@ class TestPollTowerJobStatus:
             {"content": "System error", "format": "text/plain", "timestamp": "y", "complete": True, "job_status": "error"},
         )
         with patch("adapters.tower_adapter.TowerAdapter", return_value=adapter):
-            result = poll_tower_job_status(
+            result = poll_platform_job_status(
                 execution_id=1,
                 platform_job_id="100",
+                platform_type="tower",
                 base_url="https://tower.example.com",
                 credential_ref="test-token",
             )
@@ -237,18 +245,13 @@ class TestPollTowerJobStatus:
         mock_apply_async.assert_not_called()
 
 
-class TestNonRegressionAAP:
-    """Ensure AAP polling task still works after Tower addition."""
+class TestNonRegressionPollingTasks:
+    """Ensure poll_platform_job_status is callable and is a shared task."""
 
-    def test_aap_poll_task_exists(self) -> None:
-        from executions.tasks import poll_aap_job_status
-        assert callable(poll_aap_job_status)
+    def test_poll_platform_task_exists(self) -> None:
+        from executions.tasks import poll_platform_job_status
+        assert callable(poll_platform_job_status)
 
-    def test_tower_poll_task_exists(self) -> None:
-        from executions.tasks import poll_tower_job_status
-        assert callable(poll_tower_job_status)
-
-    def test_both_tasks_are_shared_tasks(self) -> None:
-        from executions.tasks import poll_aap_job_status, poll_tower_job_status
-        assert hasattr(poll_aap_job_status, "apply_async")
-        assert hasattr(poll_tower_job_status, "apply_async")
+    def test_poll_platform_task_is_shared_task(self) -> None:
+        from executions.tasks import poll_platform_job_status
+        assert hasattr(poll_platform_job_status, "apply_async")

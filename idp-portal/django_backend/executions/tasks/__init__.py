@@ -31,11 +31,6 @@ from executions.tasks.scheduled import (  # noqa: E402
 )
 from executions.tasks.polling import (  # noqa: E402
     poll_platform_job_status,
-    poll_aap_job_status,
-    poll_tower_job_status,
-    poll_azure_devops_run_status,
-    poll_github_actions_run_status,
-    poll_terraform_cloud_run_status,
     MAX_POLLING_RETRIES,
     _mark_execution_polling_exhausted,
     _broadcast_execution_update,
@@ -50,11 +45,6 @@ __all__ = [
     "retry_workflow_step",
     "evaluate_waiting_gates",
     "poll_platform_job_status",
-    "poll_aap_job_status",
-    "poll_tower_job_status",
-    "poll_azure_devops_run_status",
-    "poll_github_actions_run_status",
-    "poll_terraform_cloud_run_status",
     "trigger_platform_job",
     # Constants
     "MAX_POLLING_RETRIES",

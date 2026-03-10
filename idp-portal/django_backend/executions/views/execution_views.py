@@ -277,8 +277,9 @@ class ExecutionsCreateView(APIView):
         )
         execution = self.get_execution_service().create_execution(exec_req)
 
-        # Step 8: Launch execution (skip when requires_approval → PENDING_APPROVAL; DBA will launch via /approve)
-        if execution.status != ExecutionStatus.PENDING_APPROVAL:
+        # Step 8: Launch execution (skip when requires_approval → approval gate step created;
+        # DBA will launch via /approve after gate approval). ADR-007: check step-based.
+        if not execution.is_pending_approval:
             self._launch_execution(execution, action, correlation_id, request)
 
         # Step 9: Build response
@@ -380,7 +381,7 @@ class ExecutionCancelView(APIView):
     @extend_schema(tags=['executions'], summary='Annuler une exécution', responses={200: ExecutionSerializer})
     def patch(self, request: Request, execution_id: int) -> Response:
         try:
-            execution = Execution.objects.select_related("action", "user", "action__integration").get(id=execution_id)
+            execution = Execution.objects.select_related("action", "user", "action__integration").prefetch_related("targets").get(id=execution_id)
         except Execution.DoesNotExist:
             raise NotFoundError(code="NOT_FOUND", message="Execution non trouvée", details={"execution_id": execution_id})
 

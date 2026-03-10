@@ -6,7 +6,7 @@ Tests for:
 - Mutex validation at execution submission
 - same_target=True: blocks only with target intersection
 - same_target=False: blocks globally
-- Active statuses: RUNNING, PENDING_APPROVAL, SUBMITTED
+- Active statuses: RUNNING, SUBMITTED
 - Symmetric enforcement (A→B and B→A)
 """
 import pytest
@@ -297,20 +297,21 @@ class TestStory255MutexValidation(TestCase):
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.data['error']['code'], 'MUTEX_VIOLATION')
 
-    def test_mutex_blocks_pending_approval_status(self):
-        """Task 5.2: PENDING_APPROVAL status blocks new executions."""
+    def test_mutex_does_not_block_pending_approval_status(self):
+        """Task 5.2: PENDING_APPROVAL is now a deprecated/dead status — no longer in ACTIVE_STATUSES.
+        Executions awaiting approval use SUBMITTED status with an approval gate step instead."""
         ActionMutex.objects.create(
             action=self.action_patching,
             incompatible_with=self.action_backup,
             same_target=True,
         )
-        
-        # Create PENDING_APPROVAL execution for backup
+
+        # Create PENDING_APPROVAL execution for backup (legacy/dead status)
         backup_exec = Execution.objects.create(
             user=self.user,
             action=self.action_backup,
             environment='prod',
-            status=ExecutionStatus.PENDING_APPROVAL,  # Active status
+            status=ExecutionStatus.PENDING_APPROVAL,  # Deprecated status — not in ACTIVE_STATUSES
         )
         ExecutionTarget.objects.create(
             execution=backup_exec,
@@ -318,7 +319,7 @@ class TestStory255MutexValidation(TestCase):
             target_id='srv-prod-01',
             target_name='srv-prod-01',
         )
-        
+
         allowed_targets = [
             {'name': 'srv-prod-01', 'environment': 'prod', 'target_type': 'server', 'metadata': None},
         ]
@@ -326,15 +327,15 @@ class TestStory255MutexValidation(TestCase):
             mock_inst = MagicMock()
             mock_inst.list_targets_for_user.return_value = (allowed_targets, 1, False)
             MockInventory.return_value = mock_inst
-            
+
             response = self.client.post('/api/v1/executions/', {
                 'action_id': self.action_patching.id,
                 'target_names': ['srv-prod-01'],
                 'parameters': {},
             }, format='json')
-        
-        self.assertEqual(response.status_code, 409)
-        self.assertEqual(response.data['error']['code'], 'MUTEX_VIOLATION')
+
+        # PENDING_APPROVAL no longer blocks — execution should succeed
+        self.assertEqual(response.status_code, 201)
 
     def test_mutex_symmetric_enforcement(self):
         """

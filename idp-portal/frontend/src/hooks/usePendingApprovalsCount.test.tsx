@@ -237,4 +237,61 @@ describe('usePendingApprovalsCount', () => {
       expect(executionService.getPendingApprovalsCount).not.toHaveBeenCalled();
     }, 10000);
   });
+
+  describe('dba_applicatif and dba_infrastructure profiles (AC9)', () => {
+    it('fetches count for dba_applicatif profile', async () => {
+      mockProfile('dba_applicatif');
+      vi.mocked(executionService.getPendingApprovalsCount).mockResolvedValue(4);
+
+      const { result } = renderHook(() => usePendingApprovalsCount());
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
+
+      expect(executionService.getPendingApprovalsCount).toHaveBeenCalled();
+      expect(result.current.count).toBe(4);
+    });
+
+    it('fetches count for dba_infrastructure profile', async () => {
+      mockProfile('dba_infrastructure');
+      vi.mocked(executionService.getPendingApprovalsCount).mockResolvedValue(6);
+
+      const { result } = renderHook(() => usePendingApprovalsCount());
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
+
+      expect(executionService.getPendingApprovalsCount).toHaveBeenCalled();
+      expect(result.current.count).toBe(6);
+    });
+  });
+
+  describe('visibilitychange refetch', () => {
+    it('refetches when tab becomes visible', async () => {
+      mockProfile('DBA');
+      let callCount = 0;
+      vi.mocked(executionService.getPendingApprovalsCount).mockImplementation(async () => {
+        callCount++;
+        return callCount;
+      });
+
+      const { result } = renderHook(() => usePendingApprovalsCount(60000));
+
+      await waitFor(() => {
+        expect(result.current.count).toBe(1);
+      });
+
+      expect(executionService.getPendingApprovalsCount).toHaveBeenCalledTimes(1);
+
+      Object.defineProperty(document, 'hidden', { value: false, configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+
+      await waitFor(() => {
+        expect(executionService.getPendingApprovalsCount).toHaveBeenCalledTimes(2);
+        expect(result.current.count).toBe(2);
+      });
+    });
+  });
 });

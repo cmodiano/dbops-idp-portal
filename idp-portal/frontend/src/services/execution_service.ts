@@ -17,7 +17,7 @@ export interface InventoryTarget {
 }
 
 /** Response from GET /inventory/targets */
-interface TargetsResponse {
+export interface TargetsResponse {
   items: InventoryTarget[];
   total: number;
   page: number;
@@ -36,6 +36,18 @@ export async function fetchInventoryTargets(search?: string): Promise<InventoryT
   if (search) params.set('search', search);
   const response = await apiFetchRaw<TargetsResponse>(`/inventory/targets?${params.toString()}`);
   return response?.items ?? [];
+}
+
+/**
+ * Story 71.1, AC5: Fetch targets with pagination response for TargetSelector.
+ * DIP: Removes direct apiFetchRaw import from TargetSelector.tsx.
+ */
+export async function fetchTargetsPaginated(search?: string): Promise<TargetsResponse> {
+  const params = new URLSearchParams();
+  params.set('page', '1');
+  params.set('page_size', '100');
+  if (search) params.set('search', search);
+  return apiFetchRaw<TargetsResponse>(`/inventory/targets?${params.toString()}`);
 }
 import type {
   ExecutionCreateRequest,

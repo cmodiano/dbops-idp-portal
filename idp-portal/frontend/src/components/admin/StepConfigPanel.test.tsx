@@ -300,6 +300,56 @@ describe('StepConfigPanel', () => {
     expect(onNodeUpdate).not.toHaveBeenCalled();
   });
 
+  it('does not call onNodeDelete when delete button is disabled', () => {
+    const onNodeDelete = vi.fn();
+    render(
+      <StepConfigPanel
+        node={makeNode()}
+        open={true}
+        onClose={vi.fn()}
+        onNodeUpdate={vi.fn()}
+        onNodeDelete={onNodeDelete}
+        disabled={true}
+      />,
+    );
+
+    const deleteBtn = screen.getByRole('button', { name: /Supprimer cette étape/i });
+    expect(deleteBtn).toBeDisabled();
+    fireEvent.click(deleteBtn);
+    expect(onNodeDelete).not.toHaveBeenCalled();
+  });
+
+  it('shows join_policy selector when incomingEdgeCount >= 2 (Story 67.4)', () => {
+    render(
+      <StepConfigPanel
+        node={makeNode()}
+        open={true}
+        onClose={vi.fn()}
+        onNodeUpdate={vi.fn()}
+        onNodeDelete={vi.fn()}
+        incomingEdgeCount={2}
+      />,
+    );
+
+    expect(screen.getByLabelText('Politique de convergence')).toBeInTheDocument();
+    expect(screen.getByText(/Politique de convergence/)).toBeInTheDocument();
+  });
+
+  it('hides join_policy selector when incomingEdgeCount < 2', () => {
+    render(
+      <StepConfigPanel
+        node={makeNode()}
+        open={true}
+        onClose={vi.fn()}
+        onNodeUpdate={vi.fn()}
+        onNodeDelete={vi.fn()}
+        incomingEdgeCount={1}
+      />,
+    );
+
+    expect(screen.queryByLabelText('Politique de convergence')).not.toBeInTheDocument();
+  });
+
   it('displays validation warning alert when retry values are invalid', () => {
     render(
       <StepConfigPanel

@@ -2,14 +2,14 @@
 Tests for Azure DevOps monitoring — Story 27.3.
 
 Covers:
-- poll_azure_devops_run_status: success polling, terminal status, error handling, rescheduling
-- Non-regression: AAP and Tower tests unaffected
+- poll_platform_job_status with platform_type='azure_devops': success polling, terminal status,
+  error handling, rescheduling
 """
 from __future__ import annotations
 
 from unittest.mock import patch, MagicMock, AsyncMock
 
-from executions.tasks import poll_azure_devops_run_status
+from executions.tasks import poll_platform_job_status
 
 
 def _make_azure_devops_adapter(status_data: dict, logs_data: dict) -> MagicMock:
@@ -21,7 +21,7 @@ def _make_azure_devops_adapter(status_data: dict, logs_data: dict) -> MagicMock:
 
 
 class TestPollAzureDevOpsRunStatus:
-    """Tests for poll_azure_devops_run_status Celery task."""
+    """Tests for poll_platform_job_status with platform_type='azure_devops'."""
 
     @patch("executions.tasks._update_execution_from_poll")
     @patch("executions.tasks._broadcast_execution_update")
@@ -50,14 +50,15 @@ class TestPollAzureDevOpsRunStatus:
             },
         )
         with patch("adapters.azure_devops_adapter.AzureDevOpsAdapter", return_value=adapter):
-            result = poll_azure_devops_run_status(
+            result = poll_platform_job_status(
                 execution_id=1,
                 platform_job_id="42",
-                pipeline_id="5",
+                platform_type="azure_devops",
                 base_url="https://dev.azure.com/org/proj",
                 credential_ref="test-pat",
                 auth_flow="basic",
                 poll_interval=5,
+                poll_kwargs={"pipeline_id": "5"},
             )
 
         assert result["outcome"] == "polling"
@@ -92,13 +93,14 @@ class TestPollAzureDevOpsRunStatus:
             },
         )
         with patch("adapters.azure_devops_adapter.AzureDevOpsAdapter", return_value=adapter):
-            result = poll_azure_devops_run_status(
+            result = poll_platform_job_status(
                 execution_id=1,
                 platform_job_id="42",
-                pipeline_id="5",
+                platform_type="azure_devops",
                 base_url="https://dev.azure.com/org/proj",
                 credential_ref="test-pat",
                 auth_flow="basic",
+                poll_kwargs={"pipeline_id": "5"},
             )
 
         assert result["outcome"] == "complete"
@@ -132,12 +134,13 @@ class TestPollAzureDevOpsRunStatus:
             },
         )
         with patch("adapters.azure_devops_adapter.AzureDevOpsAdapter", return_value=adapter):
-            result = poll_azure_devops_run_status(
+            result = poll_platform_job_status(
                 execution_id=1,
                 platform_job_id="42",
-                pipeline_id="5",
+                platform_type="azure_devops",
                 base_url="https://dev.azure.com/org/proj",
                 credential_ref="test-pat",
+                poll_kwargs={"pipeline_id": "5"},
             )
 
         assert result["outcome"] == "complete"
@@ -169,12 +172,13 @@ class TestPollAzureDevOpsRunStatus:
             },
         )
         with patch("adapters.azure_devops_adapter.AzureDevOpsAdapter", return_value=adapter):
-            result = poll_azure_devops_run_status(
+            result = poll_platform_job_status(
                 execution_id=1,
                 platform_job_id="42",
-                pipeline_id="5",
+                platform_type="azure_devops",
                 base_url="https://dev.azure.com/org/proj",
                 credential_ref="test-pat",
+                poll_kwargs={"pipeline_id": "5"},
             )
 
         assert result["outcome"] == "complete"
@@ -191,12 +195,13 @@ class TestPollAzureDevOpsRunStatus:
             "adapters.azure_devops_adapter.AzureDevOpsAdapter",
             side_effect=Exception("connection refused"),
         ):
-            result = poll_azure_devops_run_status(
+            result = poll_platform_job_status(
                 execution_id=1,
                 platform_job_id="42",
-                pipeline_id="5",
+                platform_type="azure_devops",
                 base_url="https://dev.azure.com/org/proj",
                 credential_ref="test-pat",
+                poll_kwargs={"pipeline_id": "5"},
             )
 
         assert result["outcome"] == "error"
@@ -227,13 +232,14 @@ class TestPollAzureDevOpsRunStatus:
             },
         )
         with patch("adapters.azure_devops_adapter.AzureDevOpsAdapter", return_value=adapter):
-            result = poll_azure_devops_run_status(
+            result = poll_platform_job_status(
                 execution_id=1,
                 platform_job_id="42",
-                pipeline_id="5",
+                platform_type="azure_devops",
                 base_url="https://dev.azure.com/org/proj",
                 credential_ref="entra-id-token",
                 auth_flow="pat",  # Bearer token
+                poll_kwargs={"pipeline_id": "5"},
             )
 
         assert result["outcome"] == "polling"
@@ -263,12 +269,13 @@ class TestPollAzureDevOpsRunStatus:
             },
         )
         with patch("adapters.azure_devops_adapter.AzureDevOpsAdapter", return_value=adapter):
-            result = poll_azure_devops_run_status(
+            result = poll_platform_job_status(
                 execution_id=1,
                 platform_job_id="42",
-                pipeline_id="5",
+                platform_type="azure_devops",
                 base_url="https://dev.azure.com/org/proj",
                 credential_ref="test-pat",
+                poll_kwargs={"pipeline_id": "5"},
             )
 
         assert result["outcome"] == "polling"

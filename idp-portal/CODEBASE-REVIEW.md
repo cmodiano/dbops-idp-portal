@@ -1,6 +1,6 @@
 # Revue Exhaustive du Codebase — IDP Portal
 
-**Date :** 2026-02-26 (mise à jour — audit complet #4)
+**Date :** 2026-03-10 (mise à jour — audit #6 qualité & nettoyage)
 **Scope :** Backend Django + Frontend React
 **Auteur :** Claude Code (revue automatisée)
 
@@ -27,6 +27,11 @@
 17. [Audit #3 — Nouveaux findings (2026-02-23)](#17-audit-3--nouveaux-findings-2026-02-23)
 18. [Audit #4 — Nouveaux findings (2026-02-26)](#18-audit-4--nouveaux-findings-2026-02-26)
 19. [Récapitulatif par priorité](#19-récapitulatif-par-priorité)
+20. [Audit #5 — Analyse structurelle (2026-02-27)](#20-audit-5--analyse-structurelle-2026-02-27)
+21. [Récapitulatif par priorité](#21-récapitulatif-par-priorité)
+22. [Mise à jour post-Epics 54–66](#22-mise-à-jour-post-epics-54-66-story-66-26-2026-03-09)
+23. [Bilan final Epic 66 — Release Readiness](#23-bilan-final-epic-66--release-readiness-story-66-27-2026-03-09)
+24. [Audit #6 — Qualité implémentation & nettoyage pré-release (2026-03-10)](#24-audit-6--qualité-implémentation--nettoyage-pré-release-2026-03-10)
 
 ---
 
@@ -417,11 +422,11 @@
 
 ---
 
-### SOLID-FE-4 [HIGH] — 🔄 EN COURS — Couplage services directs
+### SOLID-FE-4 [HIGH] — ✅ RÉSOLU (Story 71.1) — Couplage services directs
 
 **Avant :** 29 composants importent directement les services.
 
-**État actuel :** ~17 composants migrés sur ~25. Violations restantes dans les composants wizard/form complexes (`ExecutionWizard`, `ActionWizard`, etc.).
+**État actuel :** ~25/~25 composants migrés. Toutes les violations DIP résolues. Seuls restent `logger` et `AppLayout` (imports architecturaux acceptables, AC12).
 
 **Historique des migrations :**
 
@@ -433,17 +438,9 @@
 | 54.8 | IntegrationForm | useIntegrationFormState |
 | 54.12 | WorkflowBuilderCanvas | useWorkflowGraph |
 | 54.15 | CategoriesAdminTable, CategoryForm, EnginesAdminTable, EngineForm, IntegrationsTable, BusinessRulePolicySelector, ProfileImportModal | useCategoriesAdmin, useCategoryForm, useEnginesAdmin, useEngineForm, useIntegrationValidation, useBusinessRulePolicies, useProfileImport |
+| 71.1 | OutputSchemaPanel, FeatureFlagsPanel, BusinessRulesPolicyPanel, EvaluationStepConfig, TargetSelector, ReportingDashboard, AdminPlatformSection, ActionForm, ActionWizard | useOutputSchemasList, useFeatureFlagsAdmin, useBusinessRulePoliciesAdmin, useBusinessRulePoliciesActive, useDashboardReportingStats, useAdminPlatformStats + extensions useActionFormState, useActionWizardState |
 
-**SOLID-FE-4 🔄 ~17/~25 composants migrés (2026-02-28, Story 54.15)**
-
-**Fichiers encore concernés (exemples non-test) :**
-- `ExecutionWizard.tsx` → `catalog_service` + `execution_service`
-- `ActionWizard.tsx` → 7 fonctions de `admin_service`
-- `WorkflowStepsEditor.tsx` → `admin_service.getEligibleActionsForWorkflow()`
-- `ProfileForm.tsx`, `ProfileWizard.tsx` → `admin_service`
-- Et ~8 autres composants
-
-**Fix recommandé :** Continuer la migration progressive vers hooks (pattern établi par Story 48.8). Pattern de référence : `useActionsAdminPanel.ts`, `useAdminAnalytics.ts`.
+**SOLID-FE-4 ✅ ~25/~25 composants migrés (2026-03-10, Story 71.1)**
 
 ---
 
@@ -766,7 +763,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | ~~NEW-FE-1~~ | Nested key props TopNav | ~~LOW OUVERT~~ | ✅ **RÉSOLU** | Story 54.3 (2026-02-27) |
 | ~~NEW-FE-3~~ | `.catch()` silencieux ReportingDashboard | ~~LOW OUVERT~~ | ✅ **RÉSOLU** | Story 54.3 (2026-02-27) |
 | ~~NEW-FE-4~~ | Prop `allowedEnvironments` morte | ~~LOW OUVERT~~ | ✅ **RÉSOLU** | Story 54.3 (2026-02-27) |
-| SOLID-FE-4 | ~25 composants importent services directement | HIGH OUVERT | ⚠️ **OUVERT** | ~17/~25 migrés (Stories 35.3, 34.13, 48.8, 54.8, 54.12, 54.15) |
+| ~~SOLID-FE-4~~ | ~25 composants importent services directement | ~~HIGH OUVERT~~ | ✅ **RÉSOLU** | ~25/~25 migrés (Story 71.1, 2026-03-10) |
 
 ### Points positifs confirmés (audit #5)
 
@@ -797,7 +794,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 
 | # | Issue | Type | Effort |
 |---|-------|------|--------|
-| SOLID-FE-4 | ~8 composants restants importent directement les services (couplage DIP) — ~17/~25 migrés (Story 54.15) | Frontend | Élevé |
+| ~~SOLID-FE-4~~ | ~~~8 composants restants importent directement les services (couplage DIP)~~ ✅ RÉSOLU Story 71.1 (2026-03-10) — ~25/~25 migrés | Frontend | — |
 | ~~MAINT-BE-2~~ | ~~`idp_auth/views.py` module monolithique (851 LOC, 9 classes hétérogènes)~~ ✅ Résolu Story 54.7 | Backend | — |
 | ~~MAINT-BE-3~~ | ~~`InventoryQueryExecutor` God class (1167 LOC)~~ ✅ RESOLVED Story 54.14 | Backend | — |
 | ~~MAINT-FE-1~~ | ~~`IntegrationForm.tsx` — 730 LOC, composant god sans hook dédié~~ ✅ RÉSOLU Story 54.8 | Frontend | — |
@@ -887,7 +884,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 
 **Backlog technique (effort élevé) :**
 1. ~~MAINT-BE-3~~ — ✅ RÉSOLU (Story 54.14, 2026-02-28) — `InventoryQueryExecutor` (1167 LOC) décomposé en `InventoryQueryBuilder` (530 LOC) + `MappingValidator` (89 LOC) + `ResultPaginator` (83 LOC), `query_executor.py` réduit à 347 LOC
-2. SOLID-FE-4 — Migration progressive des ~25 composants vers hooks
+2. ~~SOLID-FE-4~~ — ✅ RÉSOLU (Story 71.1, 2026-03-10) — ~25/~25 composants migrés vers hooks
 3. ~~MAINT-BE-7 — Centraliser status mapping des adapters~~ ✅ RÉSOLU Story 54.11
 4. ~~SEC-13/14~~ — ✅ Corrections sécurité mineures (TLS, path traversal) — Story 54.4 (2026-02-27)
 
@@ -935,7 +932,7 @@ Le tableau §21 "Sécurité 12/14 | 2" est inexact — SEC-13 et SEC-14 ont ét�
 
 | # | Sévérité | Description | Statut |
 |---|----------|-------------|--------|
-| **SOLID-FE-4** | HIGH | ~8 composants restants importent directement les services (~17/~25 migrés, Stories 35.3–54.15) | Ouvert — backlog |
+| ~~**SOLID-FE-4**~~ | ~~HIGH~~ | ~~~25 composants importent directement les services~~ | ✅ RÉSOLU — Story 71.1 (2026-03-10) |
 | **MAINT-BE-9** | LOW | Validation en 4 couches dans vues d'exécution | Ouvert — backlog |
 | **INCON-2** | LOW | MD5 hash collision (documenté, acceptable pour N<1000) | Documenté — acceptable |
 | **PERF-4** | LOW | `<style>` inline dans 3 composants (impact négligeable) | Documenté — acceptable |
@@ -1013,3 +1010,76 @@ Tous les items de sécurité identifiés ont été évalués et clôturés :
 | **VERDICT** | **✅ RELEASE READY** |
 
 **Bilan cumulatif (2026-03-09, post-Epic 66) :** Sur les 133 findings historiques, **129 sont résolus** (97%). L'Epic 66 a traité 246+ findings additionnels avec un taux de résolution de ~94%. **Posture sécurité : 0 issues ouvertes.** Le codebase IDP Portal est déclaré prêt pour la première release v1.
+
+---
+
+## 24. Audit #6 — Qualité implémentation & nettoyage pré-release (2026-03-10)
+
+**Date :** 2026-03-10
+**Scope :** Backend Django — suppression rétrocompatibilité, bugs, performance, code smells
+**Auteur :** Claude Code (revue automatisée)
+
+Cet audit se concentre sur la suppression du code rétrocompatible accumulé (ADR-007 approval, singular step_ids, polling shims), la correction de bugs et edge cases, l'amélioration des performances (N+1), et la réduction du code dupliqué (refactoring.guru patterns).
+
+### 24.1 Suppression du code rétrocompatible
+
+| # | Sévérité | Fichier(s) | Description | Statut |
+|---|----------|------------|-------------|--------|
+| RC-01 | **HIGH** | `executions/models.py`, `services.py`, `serializers.py`, `views/approval_views.py`, `views/list_views.py`, `views/execution_views.py`, `tasks/scheduled.py` | **Migration complète PENDING_APPROVAL → step-based gates.** Suppression du statut `PENDING_APPROVAL`, des champs `approved_by`/`approved_at`/`approval_comment` du serializer, de la transition state machine PENDING_APPROVAL→RUNNING/REJECTED. Les actions avec `requires_approval` créent désormais un ExecutionStep WAITING de type GATE (`auto-approval-gate`). | ✅ Fait |
+| RC-02 | **MEDIUM** | `catalog/serializers.py`, `executions/views/approval_views.py`, `executions/tasks/gates.py`, `container_workflow_runtime.py`, `workflow_runtime.py`, `utils/workflow_parsing.py` | **Suppression retrocompat singular `on_success_step_id`/`on_error_step_id`.** Tous les accès utilisent désormais les listes plurielles `on_success_step_ids`/`on_error_step_ids`. | ✅ Fait |
+| RC-03 | **LOW** | `executions/tasks/polling.py`, `executions/tasks/__init__.py`, `idp_backend/settings.py` | **Suppression des 5 polling shims** (`poll_aap_job_status`, `poll_tower_job_status`, `poll_azure_devops_run_status`, `poll_github_actions_run_status`, `poll_terraform_cloud_run_status`) et du routing Celery dynamique associé. | ✅ Fait |
+
+### 24.2 Bugs et edge cases
+
+| # | Sévérité | Fichier | Description | Statut |
+|---|----------|---------|-------------|--------|
+| BUG-01 | **MEDIUM** | `catalog/validation.py` | **Workflow auto-référence non détectée.** `validate_workflow_steps()` ne vérifiait pas qu'un `referenced_action_id == action_id` → boucle infinie. Ajout d'un check explicite avec `ValidationError`. | ✅ Fait |
+| BUG-02 | **LOW** | `catalog/views/action_views.py` | **Parsing DB-dépendant pour contrainte d'unicité.** Parsait les messages d'erreur Oracle (`UK_ACTIONS_CATALOG_NAME`). Ajout d'un pré-check `Action.objects.filter(name=...).exists()` avant le create. | ✅ Fait |
+| BUG-03 | **LOW** | `catalog/serializers.py:861` | **Missing action_id None check.** `action_id = self.context.get('action_id')` utilisé sans vérification. Ajout d'un `if not action_id: raise ValidationError(...)`. | ✅ Fait |
+| BUG-04 | **LOW** | `catalog/serializers.py:97-100` | **Validation silencieuse si integration type absent du catalogue.** `DoesNotExist` catch sans log. Ajout d'un `logger.warning("integration_type_not_in_catalogue", ...)`. | ✅ Fait |
+
+### 24.3 Performance
+
+| # | Sévérité | Fichier | Description | Statut |
+|---|----------|---------|-------------|--------|
+| PERF-01 | **MEDIUM** | `executions/serializers.py:110` | **N+1 ExecutionSerializer.targets.** `obj.targets.all()` sans prefetch. Les vues doivent ajouter `.prefetch_related('targets')`. | ✅ Fait |
+| PERF-02 | **MEDIUM** | `executions/tasks/gates.py` | **N+1 gates.py step.execution.targets.** Ajout de `.prefetch_related('execution__targets')` au queryset initial des waiting steps. | ✅ Fait |
+| PERF-03 | **LOW** | `executions/models.py:44-66` | **Inconsistent select_related dans ExecutionManager.** `list_by_user()` et `list_by_status()` n'avaient pas `select_related` contrairement à `get_recent()`. Harmonisé. | ✅ Fait |
+| PERF-04 | **LOW** | `executions/tasks/gates.py:365-366` | **DB writes inutiles dans gate evaluation.** `step.save()` à chaque cycle même si output inchangé. Ajout d'une comparaison JSON avant sauvegarde. | ✅ Fait |
+
+### 24.4 Code smells (refactoring.guru)
+
+| # | Sévérité | Fichier(s) | Description | Statut |
+|---|----------|------------|-------------|--------|
+| SMELL-01 | **HIGH** | `executions/utils/step_config.py` (nouveau), `gates.py`, `approval_views.py`, `container_workflow_runtime.py` | **Duplication — Extract step config matching.** Pattern de recherche step_def par `config_step_id` puis fallback par `step_name` dupliqué 3-4 fois. Créé `find_step_config()` helper, utilisé dans les 3 endroits principaux. | ✅ Fait |
+| SMELL-02 | **HIGH** | `executions/tasks/gates.py`, `executions/views/approval_views.py` | **Duplication — Merge next-step-by-order functions.** `_get_next_step_id_by_order()` et `_get_next_step_def_by_order()` avaient ~60% de code identique + duplication dans `approval_views.py`. Fusionné en une seule `_get_next_step_by_order()` retournant le dict complet. | ✅ Fait |
+| SMELL-03 | **MEDIUM** | `catalog/serializers.py` | **Switch statement pour step types.** if/elif chain pour gate/service_call/evaluation/http_request. Remplacé par un registry `_STEP_TYPE_FIELDS` + boucle. | ✅ Fait |
+| SMELL-04 | **LOW** | `catalog/rbac_service.py:166` | **Exception silencieuse.** `except Exception as _: pass`. Ajout de `logger.debug("rbac_cache_write_failed", error=str(e))`. | ✅ Fait |
+| SMELL-05 | **BACKLOG** | `gates.py` (821 lignes), `container_workflow_runtime.py` (1670 lignes) | **God classes.** `_handle_gate_timeout` (206 lignes), `_transition_step_to_running` (188 lignes). Documenté pour refactoring futur. | 📋 Backlog |
+
+### 24.5 Impact frontend
+
+| # | Sévérité | Fichier(s) | Description | Statut |
+|---|----------|------------|-------------|--------|
+| FE-01 | **LOW** | `ExecutionStatusBanners.tsx`, `AuditEntryDrawer.tsx`, `types/executions.ts` | **Champs `approved_by`/`approved_at`/`approval_comment` supprimés de l'API** (`ExecutionSerializer`). Les types frontend les déclarent comme optionnels (`?`) donc pas de crash. L'info d'approbation est désormais accessible uniquement via les ExecutionSteps. | 📋 Backlog — adapter le frontend pour lire l'approbation depuis les steps |
+
+### 24.6 Statistiques
+
+| Catégorie | Total | Résolus | Backlog | Taux |
+|-----------|-------|---------|---------|------|
+| Retrocompat (RC) | 3 | 3 | 0 | **100%** ✅ |
+| Bugs (BUG) | 4 | 4 | 0 | **100%** ✅ |
+| Performance (PERF) | 4 | 4 | 0 | **100%** ✅ |
+| Code smells (SMELL) | 5 | 4 | 1 | **80%** ✅ |
+| Frontend (FE) | 1 | 0 | 1 | 📋 |
+| **TOTAL** | **17** | **15** | **2** | **88%** |
+
+### 24.7 Tests
+
+- **7171 tests passent** après l'ensemble des modifications (0 échec)
+- ~20 fichiers de tests mis à jour pour refléter les changements (singular→plural, step-based approval, shims supprimés)
+- Nouveaux tests ajoutés pour les scénarios `auto-approval-gate`
+
+### 24.8 Bilan cumulatif
+
+**Bilan cumulatif (2026-03-10, post-Audit #6) :** Sur les 17 findings de cet audit, **15 sont résolus** (88%). Les 2 items restants sont en backlog (god classes backend, adaptation frontend approval). Le codebase est nettoyé de tout code rétrocompatible inutile (PENDING_APPROVAL, singular step_ids, polling shims).

@@ -34,14 +34,7 @@ import SectionHelp from '../common/SectionHelp';
 import { ImpactLevelsLegend } from './ImpactLevelsLegend';
 import { ActionFormCollapseSections } from './ActionFormCollapseSections';
 import { AdminPreview } from './AdminPreview';
-import { ApiError } from '../../services/api_client';
-import {
-  updateActionSteps,
-  updateActionTags,
-  updateRemediationRules,
-  checkActionNameAvailable,
-} from '../../services/admin_service';
-import { useActionFormState } from '../../hooks/useActionFormState';
+import { useActionFormState, ApiError } from '../../hooks/useActionFormState';
 import { useActionFormValidation } from '../../hooks/useActionFormValidation';
 
 const { TextArea } = Input;
@@ -104,6 +97,10 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
     setRemediationRules,
     watchedIntegrationId,
     previewData,
+    handleUpdateSteps,
+    handleUpdateTags,
+    handleUpdateRemediationRules,
+    handleCheckNameAvailable,
   } = useActionFormState({ open, editAction, form, getIntegrationById });
 
   // Story 33.5: Validation extracted to hook
@@ -153,11 +150,11 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
       const actionId = editAction?.id ?? (result as ActionDetail | ActionResponse | undefined)?.id;
 
       if (actionId && executionSteps.length > 0) {
-        await updateActionSteps(actionId, { steps: executionSteps });
+        await handleUpdateSteps(actionId, executionSteps);
       }
 
       if (actionId) {
-        await updateActionTags(actionId, { tag_names: selectedTags });
+        await handleUpdateTags(actionId, selectedTags);
       }
 
       // Story 9.1, Task 6: Save remediation rules
@@ -165,7 +162,7 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
         const rulesToSave = remediationRules.length > 0
           ? remediationRules.map(({ id: _unused, ...rule }) => rule as RemediationRule)
           : null;
-        await updateRemediationRules(actionId, rulesToSave);
+        await handleUpdateRemediationRules(actionId, rulesToSave);
       }
 
       const done = (result as ActionDetail | ActionResponse) ?? editAction;
@@ -264,7 +261,7 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
                   validator: async (_, value) => {
                     const name = value ? String(value).trim() : '';
                     if (!name) return;
-                    const available = await checkActionNameAvailable(name, editAction?.id);
+                    const available = await handleCheckNameAvailable(name, editAction?.id);
                     if (!available) {
                       return Promise.reject(new Error('Une action avec ce nom existe déjà.'));
                     }

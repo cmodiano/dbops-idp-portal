@@ -18,12 +18,14 @@ class ExecutionStatus(models.TextChoices):
     - INTEGRATION_ERROR: Failed to submit to platform (platform unreachable, API error, etc.)
       This is a PRE-execution failure — the execution never reached the platform.
       Distinct from FAILED which means the platform received and processed the request but it failed.
-    - PENDING_APPROVAL: Waiting for approval (high-impact production actions)
+    - PENDING_APPROVAL: DEPRECATED (ADR-007) — kept for Oracle DB CHECK constraint compatibility.
+      Approvals are now handled via ExecutionStep WAITING gates.
+      Will be removed in a future migration.
     - RUNNING: Execution in progress on platform
     - COMPLETED: Execution finished successfully
     - FAILED: Execution failed during/after platform processing
     - CANCELLED: Execution cancelled by user
-    - REJECTED: Approval rejected
+    - REJECTED: Approval rejected (step-level rejection can set execution to FAILED)
     """
     SUBMITTED = 'SUBMITTED', 'Submitted'
     INTEGRATION_ERROR = 'INTEGRATION_ERROR', 'Integration Error'  # Story 18.6 (V057)
@@ -51,7 +53,7 @@ class ExecutionManager(models.Manager):
         Returns:
             QuerySet of executions for the user, ordered by created_at DESC
         """
-        return self.filter(user_id=user_id).order_by('-created_at')
+        return self.filter(user_id=user_id).select_related('action', 'user').order_by('-created_at')
 
     def list_by_status(self, status: str) -> models.QuerySet:
         """
@@ -63,7 +65,7 @@ class ExecutionManager(models.Manager):
         Returns:
             QuerySet filtered by status
         """
-        return self.filter(status=status)
+        return self.filter(status=status).select_related('action', 'user')
 
     def get_recent(self, limit: int = 100) -> models.QuerySet:
         """
@@ -199,20 +201,18 @@ class Execution(models.Model):
     @property
     def is_pending_approval(self) -> bool:
         """
-        ADR-007 (Story 57.12) : Dérivé depuis les ExecutionSteps.
-        True si l'exécution est en attente d'une action humaine, soit via :
-        - le mécanisme legacy (status == PENDING_APPROVAL)
-        - le nouveau mécanisme step-based (au moins un ExecutionStep est en statut WAITING)
+        ADR-007 (Story 57.12) : Dérivé depuis les ExecutionSteps uniquement.
+        True si l'exécution a au moins un ExecutionStep en statut WAITING.
 
         Note : la vérification step-based couvre tous les types de gate WAITING
         (gate_type=approval ET gate_type=maintenance_window). Cette approche est
         intentionnelle — les deux types représentent un blocage humain/opérationnel légitime.
         Vérifier gate_type=approval dans le champ JSON output de chaque step serait coûteux
         pour une propriété fréquemment appelée. Voir ADR-007 Phase 4.2 Dev Notes.
+
+        Legacy PENDING_APPROVAL status is no longer used. All approvals go through
+        ExecutionStep WAITING gates (see _create_execution_atomic).
         """
-        if self.status == ExecutionStatus.PENDING_APPROVAL:
-            return True
-        # Vérification step-based : un step WAITING existe (tous gate_types confondus)
         return self.executionstep_set.filter(
             status=ExecutionStepStatus.WAITING
         ).exists()

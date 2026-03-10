@@ -27,9 +27,8 @@ import { schemaToParameterList, parameterListToSchema } from '../../utils/parame
 import { impactRulesToList, listToImpactRules } from '../../utils/impactRulesSchema';
 import { validateWorkflowGraph } from '../../utils/workflowValidation';
 import { workflowStepsToReactFlow } from '../../utils/workflowConversion';
-import { ApiError } from '../../services/api_client';
-// DIP: services encapsulés dans useActionWizardState — SOLID-FE-4
-import { useActionWizardState } from '../../hooks/useActionWizardState';
+// DIP: services et ApiError encapsulés dans useActionWizardState — SOLID-FE-4 / Story 71.1 AC9
+import { useActionWizardState, ApiError } from '../../hooks/useActionWizardState';
 import { useEngines } from '../../hooks/useEngines';
 import { usePlatformIntegrations } from '../../hooks/usePlatformIntegrations';
 import { useCategories } from '../../hooks/useCategories';

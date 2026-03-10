@@ -250,8 +250,8 @@ class TestActionSerializerCoverage(TestCase):
                 'name': 'Step 1',
                 'referenced_action_id': ref.id,
                 'step_id': 's1',
-                'on_success_step_id': None,
-                'on_error_step_id': None,
+                'on_success_step_ids': [],
+                'on_error_step_ids': [],
                 'retry_enabled': True,
                 'retry_max_attempts': 3,
                 'retry_interval_seconds': 60,
@@ -1234,7 +1234,7 @@ class TestGetWorkflowStepsPartialFields(TestCase):
                 'order': 1,
                 'name': 'Minimal Step',
                 'referenced_action_id': ref.id,
-                # Pas de step_id, on_success_step_id, on_error_step_id, retry_*
+                # Pas de step_id, on_success_step_ids, on_error_step_ids, retry_*
             }],
         )
         s = ActionSerializer(wf)
@@ -1244,7 +1244,7 @@ class TestGetWorkflowStepsPartialFields(TestCase):
         # Les champs optionnels ne doivent PAS être présents
         self.assertNotIn('step_id', steps[0])
         self.assertNotIn('retry_enabled', steps[0])
-        self.assertNotIn('on_success_step_id', steps[0])
+        self.assertNotIn('on_success_step_ids', steps[0])
 
     def test_workflow_steps_step_not_dict_or_no_ref_id(self):
         """Step non-dict ignoré ; step sans referenced_action_id inclus (Story 57.13 gate/etc)."""
@@ -1300,7 +1300,7 @@ class TestGetWorkflowStepsPartialFields(TestCase):
                     'name': 'Approbation',
                     'step_type': 'gate',
                     'gate_type': 'approval',
-                    'on_success_step_id': 'platform-1',
+                    'on_success_step_ids': ['platform-1'],
                 },
                 {
                     'order': 2,
@@ -1308,7 +1308,7 @@ class TestGetWorkflowStepsPartialFields(TestCase):
                     'name': 'Execute',
                     'step_type': 'platform',
                     'referenced_action_id': ref_action.id,
-                    'on_success_step_id': None,
+                    'on_success_step_ids': [],
                 },
             ],
         )

@@ -50,8 +50,8 @@ class TestWorkflowRuntimeExceptionHandling:
                 "order": 1,
                 "name": "Test Step",
                 "referenced_action_id": self.referenced_action.id,
-                "on_success_step_id": None,
-                "on_error_step_id": None,
+                "on_success_step_ids": [],
+                "on_error_step_ids": [],
             },
         ]
         self.action.execution_steps = workflow_steps
@@ -109,8 +109,8 @@ class TestWorkflowRuntimeExceptionHandling:
             "step_id": "step-no-ref",
             "order": 1,
             "name": "No Reference Step",
-            "on_success_step_id": None,
-            "on_error_step_id": None,
+            "on_success_step_ids": [],
+            "on_error_step_ids": [],
         }
 
         with patch('executions.workflow_step_executor.logger') as mock_logger:

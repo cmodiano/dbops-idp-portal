@@ -373,20 +373,14 @@ class ContainerWorkflowRuntime:
         Story 67.2 — AC1, AC2, AC7.
         """
         if outcome == ExecutionStatus.COMPLETED:
-            has_routing = 'on_success_step_ids' in step or 'on_success_step_id' in step
+            has_routing = 'on_success_step_ids' in step
             if not has_routing:
                 # Mode linéaire sans routing explicite — fallback sur step suivant par ordre
                 return self._get_linear_next_step_ids(step)
             ids = step.get('on_success_step_ids')
-            if ids is None:
-                v = step.get('on_success_step_id')
-                ids = [v] if v else []
             return ids or []
         else:  # FAILED, CANCELLED, etc.
             ids = step.get('on_error_step_ids')
-            if ids is None:
-                v = step.get('on_error_step_id')
-                ids = [v] if v else []
             return ids or []
 
     def _get_linear_next_step_ids(self, step: dict) -> list[str]:
@@ -438,13 +432,9 @@ class ContainerWorkflowRuntime:
             for t in (step.get('on_success_step_ids') or []):
                 if t:
                     all_targets.add(t)
-            if sv := step.get('on_success_step_id'):
-                all_targets.add(sv)
             for t in (step.get('on_error_step_ids') or []):
                 if t:
                     all_targets.add(t)
-            if ev := step.get('on_error_step_id'):
-                all_targets.add(ev)
             for target_id in all_targets:
                 target_preds.setdefault(target_id, []).append((sid, status))
 

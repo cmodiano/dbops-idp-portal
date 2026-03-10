@@ -168,11 +168,11 @@ class TestEvaluateWaitingGatesErrorPersistFailed:
 
 @pytest.mark.django_db
 class TestGetNextStepIdByOrder:
-    """_get_next_step_id_by_order — helper used in _handle_gate_timeout."""
+    """_get_next_step_by_order — helper used in _handle_gate_timeout."""
 
     def test_get_next_step_id_excludes_parallel_members(self):
         """Excludes parallel_group member steps from next step lookup."""
-        from executions.tasks.gates import _get_next_step_id_by_order
+        from executions.tasks.gates import _get_next_step_by_order
 
         steps = [
             {'step_id': 's1', 'order': 1, 'step_type': 'platform'},
@@ -182,7 +182,8 @@ class TestGetNextStepIdByOrder:
             {'step_id': 's3', 'order': 5, 'step_type': 'platform'},
         ]
         current = {'step_id': 'pg-1', 'order': 2}
-        next_id = _get_next_step_id_by_order(steps, current)
+        next_step = _get_next_step_by_order(steps, current)
+        next_id = next_step.get('step_id') if next_step else None
         assert next_id == 's3'
         assert next_id != 'p1'
         assert next_id != 'p2'

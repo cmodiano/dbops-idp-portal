@@ -3,7 +3,7 @@ Tests for AAP monitoring integration — Story 27.1.
 
 Covers:
 - ExecutionLogsView: GET /executions/{id}/logs
-- poll_aap_job_status Celery task
+- poll_platform_job_status with platform_type='aap'
 - ExecutionConsumer channel group messaging
 - build_auth_headers utility
 """
@@ -195,12 +195,12 @@ class TestExecutionLogsView:
 
 
 # ---------------------------------------------------------------------------
-# poll_aap_job_status Celery task
+# poll_platform_job_status with platform_type='aap'
 # ---------------------------------------------------------------------------
 
 @pytest.mark.django_db
 class TestPollAAPJobStatus:
-    """Tests for poll_aap_job_status Celery task — Story 27.1 AC4."""
+    """Tests for poll_platform_job_status with platform_type='aap' — Story 27.1 AC4."""
 
     def setup_method(self) -> None:
         self.user = UserFactory.create(profile="DBA")
@@ -217,7 +217,7 @@ class TestPollAAPJobStatus:
         self, mock_apply_async: MagicMock, mock_broadcast: MagicMock, MockAdapter: MagicMock,
     ) -> None:
         """Running job → updates DB, broadcasts, re-schedules."""
-        from executions.tasks import poll_aap_job_status
+        from executions.tasks import poll_platform_job_status
 
         execution = ExecutionFactory.create(
             action=self.action,
@@ -250,9 +250,10 @@ class TestPollAAPJobStatus:
         mock_instance.get_status = fake_get_status
         mock_instance.get_job_logs = fake_get_job_logs
 
-        result = poll_aap_job_status(
+        result = poll_platform_job_status(
             execution_id=execution.id,
             platform_job_id="aap-123",
+            platform_type="aap",
             base_url="https://aap.example.com",
             credential_ref="token123",
         )
@@ -268,7 +269,7 @@ class TestPollAAPJobStatus:
         self, mock_apply_async: MagicMock, mock_broadcast: MagicMock, MockAdapter: MagicMock,
     ) -> None:
         """Completed job → updates DB, broadcasts, does NOT re-schedule."""
-        from executions.tasks import poll_aap_job_status
+        from executions.tasks import poll_platform_job_status
 
         execution = ExecutionFactory.create(
             action=self.action,
@@ -301,9 +302,10 @@ class TestPollAAPJobStatus:
         mock_instance.get_status = fake_get_status
         mock_instance.get_job_logs = fake_get_job_logs
 
-        result = poll_aap_job_status(
+        result = poll_platform_job_status(
             execution_id=execution.id,
             platform_job_id="aap-123",
+            platform_type="aap",
             base_url="https://aap.example.com",
             credential_ref="token123",
         )

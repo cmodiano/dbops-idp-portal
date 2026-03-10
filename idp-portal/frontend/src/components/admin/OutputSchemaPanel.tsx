@@ -1,15 +1,14 @@
 /**
  * OutputSchemaPanel — Panneau admin pour déclarer le schéma d'output d'une action.
  * Story 63.9: Déclarer les outputs par action.
+ * Story 71.1, AC1: Migration DIP — utilise useOutputSchemasList au lieu d'importer directement le service.
  *
  * Permet à un admin de sélectionner un OutputSchema (type 'action') depuis l'API,
  * prévisualise les output_fields du schéma sélectionné.
  */
 
-import { useEffect, useState } from 'react';
 import { Select, Space, Typography, Alert } from 'antd';
-import { fetchOutputSchemasList } from '../../services/output_schema_service';
-import type { OutputSchemaListItem } from '../../services/output_schema_service';
+import { useOutputSchemasList } from '../../hooks/useOutputSchemas';
 
 const { Text } = Typography;
 
@@ -25,27 +24,7 @@ export interface OutputSchemaPanelProps {
 }
 
 export function OutputSchemaPanel({ value, onChange, isAdmin, disabled }: OutputSchemaPanelProps) {
-  const [schemas, setSchemas] = useState<OutputSchemaListItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!isAdmin) return;
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    fetchOutputSchemasList('action')
-      .then((data) => {
-        if (!cancelled) setSchemas(data);
-      })
-      .catch(() => {
-        if (!cancelled) setError('Impossible de charger les schémas d\'output.');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [isAdmin]);
+  const { schemas, loading, error } = useOutputSchemasList('action', isAdmin);
 
   if (!isAdmin) return null;
 

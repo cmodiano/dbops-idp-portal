@@ -2,6 +2,7 @@
  * ReportingDashboard - Dashboard with advanced analytics and comparisons.
  * Story 8.3, AC1, AC2, AC6, AC8; Story 8.4 (advanced filters); Story 8.5 (export); Story 8.6 (comparison).
  * Story 9.4: StatCards moved to ExecutionsPage.
+ * Story 71.1, AC6: Migration DIP — utilise useDashboardReportingStats au lieu d'importer directement dashboard_service.
  *
  * Displays:
  * - Mode selector: Stats vs Comparison (Story 8.6, AC1)
@@ -10,7 +11,7 @@
  * - Link to Executions page
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { Row, Col, Segmented, Alert, Space, Typography } from 'antd';
 import { Link } from 'react-router';
 import { ArrowRightOutlined } from '@ant-design/icons';
@@ -27,22 +28,10 @@ import { ComparisonSummaryCards } from './ComparisonSummaryCards';
 import { ComparisonExecutionsDrawer } from './ComparisonExecutionsDrawer';
 import { AdminPlatformSection } from './AdminPlatformSection';
 import { OperationsActivitySection } from './OperationsActivitySection';
-import logger from '../../../services/logger';
-import {
-  fetchStatsByTechnology,
-  fetchStatsByEnvironment,
-  fetchTimeSeries,
-  fetchFilterOptions,
-  fetchComparison,
-} from '../../../services/dashboard_service';
-import { normalizeEnvironmentStats } from '../../../utils/environmentHelpers';
+import { useDashboardReportingStats } from '../../../hooks/useDashboardStats';
 import { useUrlFilters } from '../../../hooks/useUrlFilters';
 import type {
-  TechnologyStats,
-  EnvironmentStats,
-  DashboardTimeSeriesPoint,
   DashboardFilters,
-  FilterOptions,
   ComparisonDimension,
   ComparisonResult,
   ComparisonMetric,
@@ -63,16 +52,29 @@ export function ReportingDashboard() {
   // URL-synced filters (Story 8.4, AC6, AC8)
   const [filters, setFilters] = useUrlFilters();
 
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Determine if custom date range is set (disables Segmented)
+  const hasCustomDateRange = !!(filters.fromDate && filters.toDate);
 
-  // Filter options from API (Story 8.4, Task 14)
-  const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null);
+  // Current period from filters or default
+  const period = filters.days || 14;
 
-  // Data states (Story 9.4: stats moved to ExecutionsPage)
-  const [techStats, setTechStats] = useState<TechnologyStats[]>([]);
-  const [envStats, setEnvStats] = useState<EnvironmentStats[]>([]);
-  const [timeSeries, setTimeSeries] = useState<DashboardTimeSeriesPoint[]>([]);
+  // Build API filters object (used by both data loading and child components)
+  const apiFilters: DashboardFilters = {
+    ...filters,
+    days: hasCustomDateRange ? undefined : period,
+  };
+
+  // Story 71.1, AC6: All dashboard data fetching via hook
+  const {
+    techStats,
+    envStats,
+    timeSeries,
+    filterOptions,
+    loading,
+    error,
+    setError,
+    compare,
+  } = useDashboardReportingStats(apiFilters);
 
   // Comparison mode states (Story 8.6, AC1)
   const [mode, setMode] = useState<DashboardMode>('stats');
@@ -88,18 +90,6 @@ export function ReportingDashboard() {
   // Drill-down drawer state (Story 8.6, AC6)
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerMetric, setDrawerMetric] = useState<ComparisonMetric | undefined>();
-
-  // Determine if custom date range is set (disables Segmented)
-  const hasCustomDateRange = !!(filters.fromDate && filters.toDate);
-
-  // Current period from filters or default
-  const period = filters.days || 14;
-
-  // Build API filters object (used by both data loading and child components)
-  const apiFilters: DashboardFilters = {
-    ...filters,
-    days: hasCustomDateRange ? undefined : period,
-  };
 
   // Handle period change via Segmented
   const handlePeriodChange = useCallback(
@@ -142,7 +132,7 @@ export function ReportingDashboard() {
     setLastComparisonValue2(value2);
 
     try {
-      const result = await fetchComparison({
+      const result = await compare({
         dimension,
         value1,
         value2,
@@ -158,59 +148,13 @@ export function ReportingDashboard() {
     } finally {
       setComparisonLoading(false);
     }
-  }, []);
+  }, [compare]);
 
   // Handle drill-down to executions (Story 8.6, AC6)
   const handleMetricClick = useCallback((metric: ComparisonMetric) => {
     setDrawerMetric(metric);
     setDrawerOpen(true);
   }, []);
-
-  // Load filter options on mount (Story 8.4, Task 14)
-  useEffect(() => {
-    fetchFilterOptions()
-      .then(setFilterOptions)
-      .catch((err: unknown) => {
-        logger.warn('reporting_filter_options_error', { error: err instanceof Error ? err.message : String(err), fallback: 'default_options' });
-      });
-  }, []);
-
-  // Load dashboard data when filters change
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadData() {
-      setLoading(true);
-      setError(null);
-
-      try {
-        // Story 9.4: stats (StatCards) moved to ExecutionsPage
-        const [techData, envData, timeData] = await Promise.all([
-          fetchStatsByTechnology(apiFilters),
-          fetchStatsByEnvironment(apiFilters),
-          fetchTimeSeries(apiFilters),
-        ]);
-
-        if (cancelled) return;
-
-        setTechStats(techData);
-        setEnvStats(normalizeEnvironmentStats(envData));
-        setTimeSeries(timeData);
-      } catch (err) {
-        if (cancelled) return;
-        setError(err instanceof Error ? err.message : 'Erreur lors du chargement');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    loadData();
-
-    return () => {
-      cancelled = true;
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- apiFilters is derived from filters/period/hasCustomDateRange already in deps
-  }, [filters, hasCustomDateRange, period]);
 
   return (
     <Space orientation="vertical" size="middle" style={{ width: '100%' }}>

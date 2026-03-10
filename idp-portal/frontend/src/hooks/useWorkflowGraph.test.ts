@@ -268,4 +268,38 @@ describe('useWorkflowGraph — coverage', () => {
     // nodes=[] from mock, so count=0
     expect(result.current.workflowNodeCount).toBe(0);
   });
+
+  it('loadImportedWorkflow sets nodes and edges', () => {
+    const newNodes = [{ id: 'step-1', type: 'workflowStep', position: { x: 0, y: 0 }, data: {} }];
+    const newEdges = [{ id: 'e1', source: 'step-1', target: 'end', sourceHandle: 'success' }];
+    const { result } = renderHook(() => useWorkflowGraph(defaultProps), { wrapper });
+
+    act(() => {
+      result.current.loadImportedWorkflow(newNodes, newEdges);
+    });
+
+    expect(mockSetNodes).toHaveBeenCalledWith(newNodes);
+    expect(mockSetEdges).toHaveBeenCalledWith(newEdges);
+  });
+
+  it('handleAddSpecialStep adds gate step when not disabled', () => {
+    const { result } = renderHook(() => useWorkflowGraph(defaultProps), { wrapper });
+
+    act(() => {
+      result.current.handleAddSpecialStep('gate');
+    });
+
+    expect(mockSetNodes).toHaveBeenCalled();
+    expect(result.current.configPanelOpen).toBe(true);
+  });
+
+  it('handleAddSpecialStep does nothing when disabled', () => {
+    const { result } = renderHook(() => useWorkflowGraph({ ...defaultProps, disabled: true }), { wrapper });
+
+    act(() => {
+      result.current.handleAddSpecialStep('gate');
+    });
+
+    expect(result.current.configPanelOpen).toBe(false);
+  });
 });

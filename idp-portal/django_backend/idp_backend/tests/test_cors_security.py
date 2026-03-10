@@ -72,11 +72,11 @@ class TestCeleryCredentialsSecurity:
         credential_params = {'password', 'token', 'secret', 'credential', 'api_key'}
         assert param_names.isdisjoint(credential_params)
 
-    def test_poll_aap_job_status_no_credential_params(self):
-        """poll_aap_job_status must not accept credential parameters."""
+    def test_poll_platform_job_status_no_credential_params(self):
+        """poll_platform_job_status must not accept credential parameters."""
         import inspect
-        from executions.tasks import poll_aap_job_status
-        sig = inspect.signature(poll_aap_job_status)
+        from executions.tasks import poll_platform_job_status
+        sig = inspect.signature(poll_platform_job_status)
         param_names = set(sig.parameters.keys())
         credential_params = {'password', 'token', 'secret', 'credential', 'api_key'}
         assert param_names.isdisjoint(credential_params)

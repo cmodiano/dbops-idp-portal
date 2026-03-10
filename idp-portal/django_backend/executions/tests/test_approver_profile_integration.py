@@ -226,12 +226,30 @@ class TestIntegrationRetroCompatNoApproverIds(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Test 3 : Rétrocompatibilité — PENDING_APPROVAL → seul admin peut approuver
+# Test 3 : ADR-007 — auto-approval-gate → seul admin peut approuver/rejeter
 # ---------------------------------------------------------------------------
+
+def _make_auto_approval_gate(execution):
+    """Create an auto-approval-gate step (like _create_execution_atomic does)."""
+    step = ExecutionStep.objects.create(
+        execution=execution,
+        step_order=0,
+        step_name="Approval Gate",
+        config_step_id="auto-approval-gate",
+        step_type=ExecutionStepType.GATE,
+        status=ExecutionStepStatus.WAITING,
+    )
+    step.set_output({
+        "gate_conditions": [{"type": "approval_granted"}],
+        "gate_status": [{"type": "approval_granted", "satisfied": False}],
+    })
+    step.save()
+    return step
+
 
 @pytest.mark.django_db
 class TestIntegrationRetroCompatPendingApproval(TestCase):
-    """AC5 : PENDING_APPROVAL conserve la restriction admin (IsAdminUser)."""
+    """ADR-007: auto-approval-gate conserve la restriction admin (IsAdminUser)."""
 
     def setUp(self):
         self.client = APIClient()
@@ -239,57 +257,51 @@ class TestIntegrationRetroCompatPendingApproval(TestCase):
         self.action = ActionFactory(
             status="published",
             integration=self.integration,
-            execution_steps=[{
-                "step_id": "gate-step",
-                "name": "gate-step",
-                "step_type": "gate",
-                "gate_type": "approval",
-            }]
         )
 
-    def test_admin_user_can_approve_pending_approval(self):
-        """Admin (DBOPS string profile) peut approuver une exécution PENDING_APPROVAL."""
+    def test_admin_user_can_approve_auto_approval_gate(self):
+        """Admin (DBOPS) peut approuver via auto-approval-gate."""
         admin_user = UserFactory(username="integ_admin_approve_58_4", profile="DBOPS")
         self.client.force_authenticate(user=admin_user)
         execution = ExecutionFactory(
             action=self.action,
             user=admin_user,
-            status=ExecutionStatus.PENDING_APPROVAL,
+            status=ExecutionStatus.SUBMITTED,
         )
-        with patch('executions.views.approval_views.ExecutionService.launch_workflow'):
-            response = self.client.post(
-                f"/api/v1/executions/{execution.id}/approve/",
-                format='json',
-            )
+        _make_auto_approval_gate(execution)
+        response = self.client.post(
+            f"/api/v1/executions/{execution.id}/approve/",
+            format='json',
+        )
         self.assertEqual(response.status_code, 200)
-        execution.refresh_from_db()
-        self.assertEqual(execution.status, ExecutionStatus.RUNNING)
 
-    def test_non_admin_user_cannot_approve_pending_approval(self):
-        """Non-admin (is_approver=True mais pas admin) ne peut PAS approuver PENDING_APPROVAL."""
+    def test_non_admin_user_cannot_approve_auto_approval_gate(self):
+        """Non-admin ne peut PAS approuver via auto-approval-gate."""
         approver_profile = _make_profile("Approver Not Admin", is_approver=True, is_admin=False)
         approver_user = _make_user_with_orm_profile("integ_approver_no_admin_58_4", approver_profile)
         self.client.force_authenticate(user=approver_user)
         execution = ExecutionFactory(
             action=self.action,
             user=approver_user,
-            status=ExecutionStatus.PENDING_APPROVAL,
+            status=ExecutionStatus.SUBMITTED,
         )
+        _make_auto_approval_gate(execution)
         response = self.client.post(
             f"/api/v1/executions/{execution.id}/approve/",
             format='json',
         )
         self.assertEqual(response.status_code, 403)
 
-    def test_admin_user_can_reject_pending_approval(self):
-        """Admin peut rejeter une exécution PENDING_APPROVAL."""
+    def test_admin_user_can_reject_auto_approval_gate(self):
+        """Admin peut rejeter via auto-approval-gate."""
         admin_user = UserFactory(username="integ_admin_reject_58_4", profile="DBOPS")
         self.client.force_authenticate(user=admin_user)
         execution = ExecutionFactory(
             action=self.action,
             user=admin_user,
-            status=ExecutionStatus.PENDING_APPROVAL,
+            status=ExecutionStatus.SUBMITTED,
         )
+        _make_auto_approval_gate(execution)
         response = self.client.post(
             f"/api/v1/executions/{execution.id}/reject/",
             {"rejection_reason": "Refus admin"},
@@ -297,18 +309,19 @@ class TestIntegrationRetroCompatPendingApproval(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         execution.refresh_from_db()
-        self.assertEqual(execution.status, ExecutionStatus.REJECTED)
+        self.assertEqual(execution.status, ExecutionStatus.FAILED)
 
-    def test_non_admin_user_cannot_reject_pending_approval(self):
-        """Non-admin ne peut pas rejeter une exécution PENDING_APPROVAL."""
+    def test_non_admin_user_cannot_reject_auto_approval_gate(self):
+        """Non-admin ne peut pas rejeter via auto-approval-gate."""
         approver_profile = _make_profile("Approver Reject No Admin", is_approver=True, is_admin=False)
         approver_user = _make_user_with_orm_profile("integ_approver_no_admin_reject_58_4", approver_profile)
         self.client.force_authenticate(user=approver_user)
         execution = ExecutionFactory(
             action=self.action,
             user=approver_user,
-            status=ExecutionStatus.PENDING_APPROVAL,
+            status=ExecutionStatus.SUBMITTED,
         )
+        _make_auto_approval_gate(execution)
         response = self.client.post(
             f"/api/v1/executions/{execution.id}/reject/",
             format='json',

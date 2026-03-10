@@ -121,7 +121,7 @@ class TestGateConditionsIntegrationFlow:
                 'name': 'Prepare deployment',
                 'type': 'platform',
                 'referenced_action_id': ref_action1.id,
-                'on_success_step_id': 'deploy',
+                'on_success_step_ids': ['deploy'],
             },
             {
                 'order': 2,

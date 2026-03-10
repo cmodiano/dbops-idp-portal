@@ -41,7 +41,7 @@ def validate_action_mutex(
 
     Implementation notes:
     - Checks BOTH directions (A→B and B→A) for symmetric enforcement
-    - Active statuses: RUNNING, PENDING_APPROVAL, SUBMITTED
+    - Active statuses: RUNNING, SUBMITTED (ADR-007: PENDING_APPROVAL removed)
     - same_target=True: blocks only if targets intersect
     - same_target=False: blocks globally regardless of targets
     """
@@ -49,9 +49,9 @@ def validate_action_mutex(
     from executions.models import Execution, ExecutionStatus  # noqa: PLC0415
 
     # Define active statuses that block new executions
+    # ADR-007: PENDING_APPROVAL removed — approval is now step-based (SUBMITTED status)
     ACTIVE_STATUSES = [
         ExecutionStatus.RUNNING,
-        ExecutionStatus.PENDING_APPROVAL,
         ExecutionStatus.SUBMITTED,
     ]
 

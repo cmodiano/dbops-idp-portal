@@ -15,7 +15,6 @@ from django.db import transaction
 from django.utils import timezone
 
 from executions.models import (
-    ExecutionStatus,
     RecurringPattern,
     ScheduledExecution,
     ScheduledExecutionStatus,
@@ -93,8 +92,8 @@ def process_pending_scheduled_executions(self: Any) -> dict:
             )
             execution = ExecutionService().create_execution(exec_req)
 
-            # AC4: Launch execution (unless pending approval)
-            if execution.status != ExecutionStatus.PENDING_APPROVAL:
+            # AC4: Launch execution (unless pending approval via step gate — ADR-007)
+            if not execution.is_pending_approval:
                 try:
                     if se.action.item_type == "workflow":
                         from executions.container_workflow_runtime import ContainerWorkflowRuntime

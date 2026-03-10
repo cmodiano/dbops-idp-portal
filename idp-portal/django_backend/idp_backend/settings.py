@@ -699,21 +699,9 @@ CELERY_TASK_EAGER_PROPAGATES = True
 import adapters as _adapters_pkg  # noqa: F401,E402 — déclenche l'enregistrement des adapters
 from adapters.registry import adapter_registry as _adapter_registry  # noqa: E402
 
-# Mapping shim task name → platform_type (pour les routes des shims backward-compat).
-# Les nouvelles plateformes sans shim utilisent poll_platform_job_status directement.
-_SHIM_PLATFORM_MAP = {
-    'executions.tasks.poll_aap_job_status': 'aap',
-    'executions.tasks.poll_tower_job_status': 'tower',
-    'executions.tasks.poll_azure_devops_run_status': 'azure_devops',
-    'executions.tasks.poll_github_actions_run_status': 'github_actions',
-    'executions.tasks.poll_terraform_cloud_run_status': 'terraform_cloud',
-}
-
+# poll_platform_job_status utilise get_platform_queue() au runtime pour résoudre
+# la queue via l'AdapterRegistry — pas besoin de route statique ici.
 CELERY_TASK_ROUTES = {
-    task: {'queue': _adapter_registry.get_queue(platform)}
-    for task, platform in _SHIM_PLATFORM_MAP.items()
-}
-CELERY_TASK_ROUTES.update({
     # Tasks Beat restent sur default
     'executions.tasks.evaluate_waiting_gates': {'queue': 'default'},
     'executions.tasks.process_pending_scheduled_executions': {'queue': 'default'},
@@ -722,9 +710,9 @@ CELERY_TASK_ROUTES.update({
     'executions.tasks.trigger_platform_job': {'queue': 'default'},
     # Story 57.7 — Reprise workflow après gate (approbation) — doit être sur default (worker écoute cette queue)
     'executions.tasks.resume_container_workflow_from_gate': {'queue': 'default'},
-})
+}
 
-del _adapters_pkg, _adapter_registry, _SHIM_PLATFORM_MAP  # nettoyer le namespace settings
+del _adapters_pkg, _adapter_registry  # nettoyer le namespace settings
 
 # ============================================================================
 # Django Channels / WebSocket Configuration (Story 22.13)

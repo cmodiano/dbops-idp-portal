@@ -98,10 +98,6 @@ def get_workflow_entry_step_ids(steps: list | None) -> list[str]:
                 for sid in ids:
                     if isinstance(sid, str) and sid.strip():
                         all_targets.add(sid.strip())
-        for key in ('on_success_step_id', 'on_error_step_id'):
-            sid = step.get(key)
-            if isinstance(sid, str) and sid.strip():
-                all_targets.add(sid.strip())
     entry_ids: list[str] = []
     for step in steps:
         if not isinstance(step, dict):

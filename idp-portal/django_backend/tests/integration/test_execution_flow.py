@@ -197,72 +197,91 @@ class TestExecutionFlow(TestCase):
 
     def test_execution_approval_flow(self):
         """
-        Test execution flow with approval for production.
-
-        Story 22.12 review fix: Use state machine for status transitions.
-        Note: Approval workflow endpoints (/approve, /reject) are not yet implemented (Story 7.4).
-        This test simulates the approval by directly updating approval metadata and
-        transitioning to RUNNING via update_status().
+        Audit #5: Approval now uses step-based gate (no more PENDING_APPROVAL status).
+        Simulates approval by creating a SUBMITTED execution with an approval gate step,
+        then approving the step (COMPLETED) and transitioning to RUNNING.
         """
+        from executions.models import ExecutionStep, ExecutionStepType, ExecutionStepStatus
+
         execution = Execution.objects.create(
             action=self.action,
             user=self.user,
             environment='prod',
-            status=ExecutionStatus.PENDING_APPROVAL
+            status=ExecutionStatus.SUBMITTED,
         )
-
-        AuditLog.objects.create_entry(
-            user_id=str(self.user.id),
-            action_type='EXECUTION_PENDING_APPROVAL',
-            entity_type='execution',
-            entity_id=execution.id,
-            details={'environment': 'prod', 'requires_approval': True}
+        # Create approval gate step (as the service now does for requires_approval)
+        step = ExecutionStep.objects.create(
+            execution=execution,
+            step_order=0,
+            step_name='Approval Gate',
+            config_step_id='auto-approval-gate',
+            step_type=ExecutionStepType.GATE,
+            status=ExecutionStepStatus.WAITING,
         )
+        step.set_output({
+            'gate_conditions': [{'type': 'approval_granted'}],
+            'gate_status': [{'type': 'approval_granted', 'satisfied': False}],
+        })
+        step.save()
 
-        # Approver approves (simulate approval metadata update)
-        execution.approved_by = self.approver
-        execution.approved_at = timezone.now()
-        execution.approval_comment = 'Approved for prod deployment'
-        execution.save(update_fields=['approved_by', 'approved_at', 'approval_comment'])
+        # Simulate approval: mark step as COMPLETED
+        step.approved_by = self.approver
+        step.approved_at = timezone.now()
+        step.approval_comment = 'Approved for prod deployment'
+        step.status = ExecutionStepStatus.COMPLETED
+        step.completed_at = timezone.now()
+        step.save()
 
-        # Transition to RUNNING via state machine (Story 22.12 review fix)
-        # In production, this would be done by POST /api/v1/executions/{id}/approve endpoint
+        # Transition execution to RUNNING
         execution_service = ExecutionService()
         execution_service.update_status(execution.id, ExecutionStatus.RUNNING, str(self.approver.id))
 
-        # Verify approval metadata
         execution.refresh_from_db()
-        self.assertEqual(execution.approved_by_id, self.approver.id)
-        self.assertIsNotNone(execution.approved_at)
-        self.assertEqual(execution.approval_comment, 'Approved for prod deployment')
         self.assertEqual(execution.status, ExecutionStatus.RUNNING)
+        step.refresh_from_db()
+        self.assertEqual(step.approved_by_id, self.approver.id)
+        self.assertIsNotNone(step.approved_at)
+        self.assertEqual(step.approval_comment, 'Approved for prod deployment')
 
     def test_execution_rejection_flow(self):
         """
-        Test execution rejection for production.
-
-        Story 22.12 review fix: Use state machine for status transitions.
+        Audit #5: Rejection now uses step-based gate.
         """
+        from executions.models import ExecutionStep, ExecutionStepType, ExecutionStepStatus
+
         execution = Execution.objects.create(
             action=self.action,
             user=self.user,
             environment='prod',
-            status=ExecutionStatus.PENDING_APPROVAL
+            status=ExecutionStatus.SUBMITTED,
+        )
+        step = ExecutionStep.objects.create(
+            execution=execution,
+            step_order=0,
+            step_name='Approval Gate',
+            config_step_id='auto-approval-gate',
+            step_type=ExecutionStepType.GATE,
+            status=ExecutionStepStatus.WAITING,
+        )
+        step.set_output({
+            'gate_conditions': [{'type': 'approval_granted'}],
+        })
+        step.save()
+
+        # Simulate rejection: mark step as FAILED
+        step.status = ExecutionStepStatus.FAILED
+        step.completed_at = timezone.now()
+        step.approval_comment = 'Rejected - missing change window'
+        step.save()
+
+        # Transition execution to FAILED (rejection → execution fails)
+        execution_service = ExecutionService()
+        execution_service.update_status(
+            execution.id, ExecutionStatus.FAILED, str(self.approver.id)
         )
 
-        # Approver rejects (simulate rejection metadata update)
-        execution.approved_by = self.approver
-        execution.approved_at = timezone.now()
-        execution.approval_comment = 'Rejected - missing change window'
-        execution.save(update_fields=['approved_by', 'approved_at', 'approval_comment'])
-
-        # Transition to REJECTED via state machine (Story 22.12 review fix)
-        execution_service = ExecutionService()
-        execution_service.update_status(execution.id, ExecutionStatus.REJECTED, str(self.approver.id))
-
-        # Verify rejection
         execution.refresh_from_db()
-        self.assertEqual(execution.status, ExecutionStatus.REJECTED)
+        self.assertEqual(execution.status, ExecutionStatus.FAILED)
 
     def test_execution_cancellation(self):
         """

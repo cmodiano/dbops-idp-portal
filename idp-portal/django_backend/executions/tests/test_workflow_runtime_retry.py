@@ -50,7 +50,7 @@ class TestIsRetryableError:
         self.action.execution_steps = ([{
             "step_id": "s1", "order": 1, "name": "Step 1",
             "referenced_action_id": self.ref_action.id,
-            "on_success_step_id": None,
+            "on_success_step_ids": [],
         }])
         self.action.save()
         self.execution = Execution.objects.create(
@@ -179,7 +179,7 @@ class TestExecuteStepWithRetryDisabled:
         self.action.execution_steps = ([{
             "step_id": "s1", "order": 1, "name": "Step 1",
             "referenced_action_id": self.ref_action.id,
-            "on_success_step_id": None,
+            "on_success_step_ids": [],
         }])
         self.action.save()
 
@@ -241,7 +241,7 @@ class TestExecuteStepWithRetryBackoff:
         self.action.execution_steps = ([{
             "step_id": "s1", "order": 1, "name": "Step 1",
             "referenced_action_id": self.ref_action.id,
-            "on_success_step_id": None,
+            "on_success_step_ids": [],
         }])
         self.action.save()
 
@@ -362,7 +362,7 @@ class TestExecuteStepWithRetryPermanentError:
         self.action.execution_steps = ([{
             "step_id": "s1", "order": 1, "name": "Step 1",
             "referenced_action_id": self.ref_action.id,
-            "on_success_step_id": None,
+            "on_success_step_ids": [],
         }])
         self.action.save()
 
@@ -420,7 +420,7 @@ class TestExecuteStepWithRetryCancellation:
         self.action.execution_steps = ([{
             "step_id": "s1", "order": 1, "name": "Step 1",
             "referenced_action_id": self.ref_action.id,
-            "on_success_step_id": None,
+            "on_success_step_ids": [],
         }])
         self.action.save()
 
@@ -474,7 +474,7 @@ class TestExecuteStepWithRetryAuditTrail:
         self.action.execution_steps = ([{
             "step_id": "s1", "order": 1, "name": "Step 1",
             "referenced_action_id": self.ref_action.id,
-            "on_success_step_id": None,
+            "on_success_step_ids": [],
         }])
         self.action.save()
 

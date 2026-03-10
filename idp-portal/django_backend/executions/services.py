@@ -197,15 +197,15 @@ class ExecutionService:
     @transaction.atomic
     def _create_execution_atomic(self, request: ExecutionRequest) -> Execution:
         """Internal atomic execution creation (after integration validation).
-        Story 25.4 / 7.4: If requires_approval for this environment, create as PENDING_APPROVAL
-        so the execution waits for DBA approval before being launched.
+
+        Legacy PENDING_APPROVAL status is no longer set. When requires_approval is true,
+        the execution is created as SUBMITTED and an ExecutionStep WAITING gate is created
+        so the approval goes through the step-based gate mechanism (ADR-007).
         """
         requires_approval = bool(
             (request.parameters or {}).get("_env_config", {}).get("requires_approval", False)
         )
-        initial_status = (
-            ExecutionStatus.PENDING_APPROVAL if requires_approval else ExecutionStatus.SUBMITTED
-        )
+        initial_status = ExecutionStatus.SUBMITTED
 
         execution = Execution.objects.create(
             action=request.action,
@@ -214,6 +214,23 @@ class ExecutionService:
             status=initial_status,
             parent_execution_id=request.parent_execution_id,
         )
+
+        # ADR-007: Create an approval gate step instead of PENDING_APPROVAL status
+        if requires_approval:
+            from executions.models import ExecutionStepType  # noqa: PLC0415
+            step = ExecutionStep.objects.create(
+                execution=execution,
+                step_order=0,
+                step_name='Approval Gate',
+                config_step_id='auto-approval-gate',
+                step_type=ExecutionStepType.GATE,
+                status=ExecutionStepStatus.WAITING,
+            )
+            step.set_output({
+                'gate_conditions': [{'type': 'approval_granted'}],
+                'gate_status': [{'type': 'approval_granted', 'satisfied': False}],
+            })
+            step.save()
 
         # Set parameters if provided
         if request.parameters:
@@ -289,12 +306,8 @@ class ExecutionService:
             audit_details['referenced_action_ids'] = request.delegated_referenced_action_ids
             audit_details['validation_result'] = 'success'
 
-        # Audit (Story 25.4: PENDING_APPROVAL when requires_approval for env)
-        audit_action = (
-            AuditActionType.EXECUTION_PENDING_APPROVAL
-            if initial_status == ExecutionStatus.PENDING_APPROVAL
-            else AuditActionType.EXECUTION_SUBMITTED
-        )
+        # Audit: always SUBMITTED now (approval is step-based, not status-based)
+        audit_action = AuditActionType.EXECUTION_SUBMITTED
         AuditService.create_entry(
             user_id=str(request.user.id),
             action_type=audit_action,
@@ -434,7 +447,7 @@ class ExecutionService:
         """
         Start the workflow runtime for an execution (Story 7.4 / 25.4).
         Runtime dispatch via RuntimeRegistry (Story 34.4 — SOLID-BE-7).
-        Used after creation (when not PENDING_APPROVAL) and after DBA approval.
+        Used after creation (when no approval gate) and after DBA approval via step gate.
         """
         # Late import to avoid circular dependency:
         # runtime_registry → adapter modules → executions.models → executions.services
@@ -462,10 +475,9 @@ class ExecutionService:
 
         State machine: valid transitions for execution status.
 
-        SECURITY (Story 22.12): PENDING_APPROVAL → SUBMITTED is explicitly FORBIDDEN.
-          Allowing it would let executions bypass the DBA approval workflow,
-          violating SOC1 compliance. An execution that requires approval must
-          go through RUNNING (after DBA approval) or REJECTED (if DBA refuses).
+        ADR-007: PENDING_APPROVAL is no longer used at the Execution level.
+        Approvals are handled via ExecutionStep WAITING gates.
+        The PENDING_APPROVAL enum value is kept for DB CHECK constraint compatibility.
 
         Valid transitions by state (with business rationale):
         ┌─────────────────────┬────────────────────────────────────────────────────────┐
@@ -473,11 +485,8 @@ class ExecutionService:
         ├─────────────────────┼────────────────────────────────────────────────────────┤
         │ SUBMITTED           │ → RUNNING: Normal execution start                      │
         │                     │ → CANCELLED: User cancels before start                 │
-        │                     │ → PENDING_APPROVAL: Elevation to approval required     │
+        │                     │ → FAILED: Approval gate rejected (ADR-007)             │
         │                     │ → INTEGRATION_ERROR: Platform integration failed       │
-        ├─────────────────────┼────────────────────────────────────────────────────────┤
-        │ PENDING_APPROVAL    │ → RUNNING: DBA approves (via /approve endpoint)        │
-        │                     │ → REJECTED: DBA rejects (via /reject endpoint)         │
         ├─────────────────────┼────────────────────────────────────────────────────────┤
         │ RUNNING             │ → COMPLETED: Execution succeeded                       │
         │                     │ → FAILED: Execution failed                             │
@@ -490,9 +499,11 @@ class ExecutionService:
         │ INTEGRATION_ERROR   │ (terminal state - Story 18.6)                          │
         └─────────────────────┴────────────────────────────────────────────────────────┘
         """
+        # PENDING_APPROVAL transitions removed (ADR-007): approval is now step-based.
+        # PENDING_APPROVAL status is kept in the enum for DB CHECK constraint compatibility
+        # but is no longer reachable. Any attempt to transition to/from it will raise ValueError.
         valid_transitions = {
-            ExecutionStatus.SUBMITTED: [ExecutionStatus.RUNNING, ExecutionStatus.CANCELLED, ExecutionStatus.PENDING_APPROVAL, ExecutionStatus.INTEGRATION_ERROR],
-            ExecutionStatus.PENDING_APPROVAL: [ExecutionStatus.RUNNING, ExecutionStatus.REJECTED],
+            ExecutionStatus.SUBMITTED: [ExecutionStatus.RUNNING, ExecutionStatus.CANCELLED, ExecutionStatus.FAILED, ExecutionStatus.INTEGRATION_ERROR],
             ExecutionStatus.RUNNING: [ExecutionStatus.COMPLETED, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED],
             ExecutionStatus.COMPLETED: [],
             ExecutionStatus.FAILED: [],
@@ -537,7 +548,7 @@ class ExecutionService:
             ExecutionStatus.COMPLETED: AuditActionType.EXECUTION_COMPLETED,
             ExecutionStatus.FAILED: AuditActionType.EXECUTION_FAILED,
             ExecutionStatus.CANCELLED: AuditActionType.EXECUTION_CANCELLED,
-            ExecutionStatus.PENDING_APPROVAL: AuditActionType.EXECUTION_PENDING_APPROVAL,
+            # PENDING_APPROVAL audit mapping removed (ADR-007): approval is step-based.
             ExecutionStatus.REJECTED: AuditActionType.EXECUTION_REJECTED,
         }
         audit_action_type = status_to_audit_type.get(new_status)  # type: ignore[call-overload]

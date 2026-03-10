@@ -46,6 +46,11 @@ def validate_workflow_steps(steps: list[dict[str, Any]], action_id: int | None =
         step_type = step.get('step_type') or 'platform'
         if step_type == 'platform' and step.get('referenced_action_id') is None:
             raise serializers.ValidationError(f"Step {i}: referenced_action_id is required for platform steps")
+        if step_type == 'platform' and action_id is not None:
+            if step.get('referenced_action_id') == action_id:
+                raise serializers.ValidationError(
+                    f"Step {i}: referenced_action_id cannot reference the workflow's own action (self-reference → infinite loop)"
+                )
 
     # Detect whether this payload uses branching/retry features (Story 16.2).
     # Story 67.1: only on_success_step_ids / on_error_step_ids (plural) are supported.

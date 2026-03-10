@@ -7,11 +7,12 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { fetchInventoryItems } from '../services/execution_service';
+import { fetchInventoryItems, fetchTargetsPaginated } from '../services/execution_service';
 import type { InventoryItem } from '../types/api';
 import logger from '../services/logger';
 
 export type { Target } from '../components/catalog/TargetSelector';
+export type { InventoryTarget } from '../services/execution_service';
 
 export interface UseTargetInventoryOptions {
   open: boolean;
@@ -180,4 +181,37 @@ export function useTargetInventory({
     inventoryWarnings,
     loadingInventory,
   };
+}
+
+/**
+ * Story 71.1, AC5: Hook DIP léger pour TargetSelector.
+ * Encapsule fetchTargetsPaginated() pour supprimer l'import direct de execution_service.
+ */
+export function useTargetsPaginated(search?: string) {
+  const [targets, setTargets] = useState<import('../services/execution_service').InventoryTarget[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    fetchTargetsPaginated(search || undefined)
+      .then((response) => {
+        if (!cancelled) setTargets(response?.items ?? []);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Erreur lors du chargement des cibles');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [search]);
+
+  return { targets, loading, error };
 }
