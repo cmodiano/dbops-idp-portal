@@ -410,6 +410,7 @@ class ApproveExecutionView(APIView):
             # Auto-approval-gate: launch the workflow now that approval is granted
             _eid_launch = execution_id
             _corr = correlation_id
+            _user_id = user_id
 
             def _launch_after_approval() -> None:
                 try:
@@ -424,6 +425,26 @@ class ApproveExecutionView(APIView):
                         correlation_id=_corr,
                         exc_info=True,
                     )
+                    try:
+                        self.get_execution_service().update_status(
+                            _eid_launch,
+                            ExecutionStatus.INTEGRATION_ERROR,
+                            _user_id,
+                        )
+                    except ValueError as ve:
+                        logger.error(
+                            "unexpected_state_machine_error_after_approval_launch",
+                            execution_id=_eid_launch,
+                            error=str(ve),
+                            correlation_id=_corr,
+                        )
+                        fallback_exec = Execution.objects.get(id=_eid_launch)
+                        fallback_exec.status = ExecutionStatus.INTEGRATION_ERROR
+                        if not fallback_exec.completed_at:
+                            fallback_exec.completed_at = timezone.now()
+                        fallback_exec.save(update_fields=["status", "completed_at"])
+
+                    Execution.objects.filter(id=_eid_launch).update(error_message=str(e))
 
             transaction.on_commit(_launch_after_approval)
         elif on_success_step_ids:

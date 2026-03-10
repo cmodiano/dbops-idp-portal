@@ -5,6 +5,7 @@ Legacy PENDING_APPROVAL execution-level status is no longer used.
 """
 import pytest
 import threading
+from unittest.mock import patch
 from rest_framework.test import APIClient
 
 from tests.factories import UserFactory, ActionFactory, IntegrationFactory, ExecutionFactory
@@ -116,6 +117,26 @@ class TestApproveExecution:
         assert 'id' in body['data']
         assert 'status' in body['data']
         assert body['data']['status'] == ExecutionStepStatus.COMPLETED
+
+    def test_approve_auto_gate_launch_failure_marks_integration_error(self):
+        """Auto-gate launch failure must mark execution INTEGRATION_ERROR."""
+        execution, _step = _create_execution_with_approval_gate(
+            self.action,
+            UserFactory.create(profile='DBA', username='requester_launch_fail'),
+        )
+        url = f'/api/v1/executions/{execution.id}/approve/'
+
+        with patch('executions.views.approval_views.transaction.on_commit', side_effect=lambda fn: fn()):
+            with patch(
+                'executions.views.approval_views.ExecutionService.launch_workflow',
+                side_effect=RuntimeError('launch failed in callback'),
+            ):
+                response = self.client.post(url)
+
+        assert response.status_code == 200
+        execution.refresh_from_db()
+        assert execution.status == ExecutionStatus.INTEGRATION_ERROR
+        assert execution.error_message == 'launch failed in callback'
 
 
 @pytest.mark.django_db
