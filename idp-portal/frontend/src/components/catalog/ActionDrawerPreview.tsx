@@ -26,7 +26,7 @@
  * Story 7.1: Business variant with sanitized descriptions, impact callout, larger execute button.
  */
 
-import { Card, Typography, Button, Descriptions, Space, Empty, Tag, Tooltip, Divider, Badge, Alert, theme, Spin } from 'antd';
+import { Card, Typography, Button, Descriptions, Space, Empty, Tag, Tooltip, Divider, Badge, Alert, theme, Spin, Collapse } from 'antd';
 import { PlayCircleOutlined, FileTextOutlined, BarChartOutlined } from '@ant-design/icons';
 import { WorkflowIcon } from '../icons/WorkflowIcon';
 import { lazy, Suspense } from 'react';
@@ -34,7 +34,7 @@ import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
 
 const Markdown = lazy(() => import('react-markdown'));
-import type { ActionPreviewData } from '../../types/api';
+import type { ActionPreviewData, IncludedAction } from '../../types/api';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { ImpactIndicator } from '../shared/ImpactIndicator';
@@ -80,6 +80,40 @@ function extractParametersWithTypes(schema: Record<string, unknown> | null): Par
   }
 
   return [];
+}
+
+/** Story 69.4: Workflow included actions with per-action parameters in Collapse accordion. */
+function WorkflowIncludedActions({ actions, isBusiness }: { actions: IncludedAction[]; isBusiness: boolean }) {
+  const items = actions.map((action, index) => {
+    const params = extractParametersWithTypes(action.parameters_schema as Record<string, unknown> | null);
+    return {
+      key: String(index),
+      label: `${action.name}${action.engine ? ` (${action.engine})` : ''}`,
+      children: (
+        <div data-testid={`included-action-params-${index}`}>
+          {params.length > 0 ? (
+            <ul style={{ margin: 0, paddingLeft: 20 }}>
+              {params.map((param) => (
+                <li key={param.name}>
+                  <Text code>{param.name}</Text>
+                  <Text type="secondary"> : {param.type}</Text>
+                  {param.required && <Text type="danger"> *</Text>}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <Text type="secondary">Aucun parametre</Text>
+          )}
+        </div>
+      ),
+    };
+  });
+
+  return (
+    <div data-testid="workflow-included-actions" role="group" aria-label={isBusiness ? 'Options des actions du workflow' : 'Actions incluses dans le workflow'}>
+      <Collapse defaultActiveKey={['0']} items={items} />
+    </div>
+  );
 }
 
 export function ActionDrawerPreview({
@@ -202,29 +236,38 @@ export function ActionDrawerPreview({
           </Descriptions>
         )}
 
-        {/* Parameters with types - Story 3.2, AC1; Story 7.1: simplified label */}
-        <div>
-          <Text strong style={{ display: 'block', marginBottom: 8 }}>
-            {parametersLabel}
-          </Text>
-          {parameters.length > 0 ? (
-            <ul style={{ margin: 0, paddingLeft: 20 }}>
-              {parameters.map((param) => (
-                <li key={param.name}>
-                  <Text code>{param.name}</Text>
-                  <Text type="secondary"> : {param.type}</Text>
-                  {param.required && <Text type="danger"> *</Text>}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <Empty
-              description="Aucun parametre defini"
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              style={{ margin: 0 }}
-            />
-          )}
-        </div>
+        {/* Parameters / Included actions - Story 3.2, AC1; Story 7.1; Story 69.4 */}
+        {isWorkflow && (action.included_actions ?? []).length > 0 ? (
+          <div>
+            <Text strong style={{ display: 'block', marginBottom: 8 }}>
+              {isBusiness ? 'Options des actions' : 'Actions incluses'}
+            </Text>
+            <WorkflowIncludedActions actions={action.included_actions!} isBusiness={isBusiness} />
+          </div>
+        ) : (
+          <div>
+            <Text strong style={{ display: 'block', marginBottom: 8 }}>
+              {parametersLabel}
+            </Text>
+            {parameters.length > 0 ? (
+              <ul style={{ margin: 0, paddingLeft: 20 }}>
+                {parameters.map((param) => (
+                  <li key={param.name}>
+                    <Text code>{param.name}</Text>
+                    <Text type="secondary"> : {param.type}</Text>
+                    {param.required && <Text type="danger"> *</Text>}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <Empty
+                description="Aucun parametre defini"
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                style={{ margin: 0 }}
+              />
+            )}
+          </div>
+        )}
 
         {/* Documentation section - Story 3.4, FR12, AC1, AC2, AC3, AC5 */}
         <Divider style={{ margin: '16px 0' }} />

@@ -871,7 +871,7 @@ development_status:
     69-1-backend-exposition-technologies-actions-workflow: done
     69-2-cartes-catalogue-icones-technologies-indicateur-workflow: done # Code review adversariale 2026-03-09: 7 issues (1H+3M+3L), 6 auto-fixées — paddingBottom workflow, overflow color adaptive, double filtrage supprimé, test boundary 3 techs, aria-label overflow, getEngineIcon refactoré — 45/45 tests pass ✅
     69-3-cartes-catalogue-extrait-enrichi-technologies-actions: done # Code review adversariale 2026-03-09: 4 issues (1H+2M+1L), 3 auto-fixées — double opacité WCAG supprimée, test label "Actions :" ajouté, assertion boundary maxVisible ajoutée — 53/53 tests pass
-    69-4-drawer-detail-liste-actions-parametres: backlog
+    69-4-drawer-detail-liste-actions-parametres: done # Code review adversariale 2026-03-09: 7 issues (0H+4M+3L), 4 auto-fixées — role="group" ajouté pour aria-label, code mort ?? null supprimé, afterEach mock reset, test aria-label renforcé — 66/66 tests pass, 450/450 catalogue ✅
     epic-69-retrospective: optional
     # === Epic 70: CaC — Simplification Import/Export (API unique, pas de sync plateforme) ===
     # Réf: planning-artifacts/epic-70-cac-simplification-import-api-unique.md
