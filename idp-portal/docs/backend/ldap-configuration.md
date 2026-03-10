@@ -45,6 +45,62 @@ Sans variable d'environnement définie, `PORTAL_AUTH_METHODS` vaut `["ldap", "sa
 
 ---
 
+## Variable `PORTAL_REQUIRED_GROUPS`
+
+### Description
+
+`PORTAL_REQUIRED_GROUPS` permet de restreindre l'accès au portail aux seuls comptes appartenant à au moins un des groupes AD configurés. C'est la couche de restriction applicative qui s'applique **après** l'authentification LDAP réussie.
+
+### Configuration
+
+| Paramètre | Valeur par défaut | Source |
+|---|---|---|
+| `PORTAL_REQUIRED_GROUPS` | `""` (vide = pas de restriction) | Variable d'environnement `PORTAL_REQUIRED_GROUPS` |
+
+### Valeurs valides
+
+- **Vide** (défaut) — Aucune restriction de groupe ; comportement identique à la story 68-1
+- **Liste de noms** — Noms courts (ex: `GRP-IDP-ADMIN`) ou DNs complets ; séparés par des virgules
+
+### Logique de matching
+
+Le matching est **substring case-insensitive** : le nom configuré est recherché comme sous-chaîne dans chaque DN de groupe AD de l'utilisateur.
+
+```python
+# Exemple
+# PORTAL_REQUIRED_GROUPS = ["GRP-IDP-ADMIN"]
+# Groupes AD de l'utilisateur = ["CN=GRP-IDP-ADMIN,OU=Groups,DC=example,DC=com"]
+# → "grp-idp-admin" IN "cn=grp-idp-admin,ou=groups,dc=example,dc=com" → True ✓
+```
+
+Cela permet de configurer le nom court du groupe (`GRP-IDP-ADMIN`) sans connaître le DN complet.
+
+### Exemples `.env`
+
+```env
+# Pas de restriction (défaut) — accès à tous les comptes authentifiés
+PORTAL_REQUIRED_GROUPS=
+
+# Restriction à un groupe (nom court recommandé)
+PORTAL_REQUIRED_GROUPS=GRP-IDP-ADMIN
+
+# Restriction à l'un ou l'autre des groupes (OR logic)
+PORTAL_REQUIRED_GROUPS=GRP-IDP-ADMIN,GRP-IDP-DBA-PRIVILEGED
+```
+
+> ⚠️ **Important** : La variable d'environnement utilise la virgule comme séparateur. Ne pas utiliser des DNs complets (ex: `CN=GRP-IDP-ADMIN,OU=Groups,DC=example,DC=com`) car les virgules seraient interprétées comme des séparateurs, générant des fragments invalides (`OU=Groups`, `DC=example`…) qui matcheraient des utilisateurs non autorisés. Utiliser uniquement des noms courts (ex: `GRP-IDP-ADMIN`).
+
+### Comportement
+
+| `PORTAL_REQUIRED_GROUPS` | Utilisateur | Résultat |
+|---|---|---|
+| `[]` (vide) | Tout compte authentifié | 200 — Pas de restriction |
+| `["GRP-IDP-ADMIN"]` | Membre de `GRP-IDP-ADMIN` | 200 — Accès accordé |
+| `["GRP-IDP-ADMIN"]` | Non-membre | 403 `INSUFFICIENT_PRIVILEGES` |
+| `["GRP-A", "GRP-B"]` | Membre de `GRP-B` uniquement | 200 — Un seul groupe suffit (OR) |
+
+---
+
 ## Endpoint `POST /api/v1/auth/portal-login`
 
 ### Description
@@ -87,6 +143,7 @@ Set-Cookie: refresh_token=<JWT>; Path=/api/v1/auth; HttpOnly; SameSite=Lax
 |---|---|---|
 | 400 | — | Champ `username` ou `password` manquant |
 | 401 | `INVALID_CREDENTIALS` | Username ou password incorrect |
+| 403 | `INSUFFICIENT_PRIVILEGES` | Compte non membre d'un groupe requis (`PORTAL_REQUIRED_GROUPS`) |
 | 403 | `NO_PROFILE` | Aucun profil IDP associé aux groupes AD du compte |
 | 429 | `RATE_LIMIT_EXCEEDED` | Trop de tentatives (limite : 5/min par IP) |
 | 503 | `LDAP_UNAVAILABLE` | Service LDAP inaccessible |
@@ -108,15 +165,33 @@ Set-Cookie: refresh_token=<JWT>; Path=/api/v1/auth; HttpOnly; SameSite=Lax
 
 Epic 68 exige que le portail IDP soit accessible **uniquement aux comptes AD à haut privilège** (comptes dédiés, distincts des comptes laptop quotidiens). L'utilisateur saisit manuellement son identifiant et mot de passe — il n'y a pas de SSO transparent.
 
+### Interface frontend
+
+Le frontend propose un **formulaire username/password** (LDAP) comme méthode principale d'authentification. Le bouton SSO (SAML) est **conditionnel** : il n'apparaît que si la variable `VITE_PORTAL_AUTH_METHODS` contient `saml`.
+
+#### Variable `VITE_PORTAL_AUTH_METHODS`
+
+| Paramètre | Valeur par défaut | Type |
+|---|---|---|
+| `VITE_PORTAL_AUTH_METHODS` | `"ldap"` | Variable d'environnement Vite (build time) |
+
+| Environnement | Valeur recommandée | Effet |
+|---|---|---|
+| Production | `ldap` | Formulaire LDAP uniquement, pas de bouton SSO |
+| Développement | `ldap,saml` | Formulaire LDAP + bouton SSO (transition) |
+| Docker | `ldap,saml` | Formulaire LDAP + bouton SSO |
+
 ### Flux d'authentification `portal-login`
 
 ```
-1. Utilisateur saisit username + password
-2. POST /api/v1/auth/portal-login/
+1. Utilisateur saisit username + password dans le formulaire LoginPage
+2. Frontend appelle loginWithCredentials() → POST /api/v1/auth/portal-login/
 3. Validation du corps de la requête
 4. LDAPService.authenticate(username, password) → LDAP bind
    ├── Échec bind → 401 INVALID_CREDENTIALS (+ audit USER_LOGIN échec)
    └── Succès → récupération des groupes AD (memberOf)
+4.5. [Story 68.2] Vérification PORTAL_REQUIRED_GROUPS (si non vide)
+   └── Pas dans groupe requis → 403 INSUFFICIENT_PRIVILEGES (+ audit USER_LOGIN échec)
 5. Profile.objects.find_by_ad_groups(ad_groups)
    └── Aucun profil → 403 NO_PROFILE (+ audit USER_LOGIN échec)
 6. AuthService.create_or_update_user() → JIT provisioning
@@ -163,4 +238,4 @@ THROTTLE_PORTAL_LOGIN_RATE=5/minute
 
 ---
 
-*Document généré pour Story 68.1 — Configuration LDAP comme méthode d'authentification prioritaire.*
+*Document mis à jour pour Story 68.3 — Frontend : authentification explicite sans SSO transparent, formulaire LDAP prioritaire, variable `VITE_PORTAL_AUTH_METHODS`.*

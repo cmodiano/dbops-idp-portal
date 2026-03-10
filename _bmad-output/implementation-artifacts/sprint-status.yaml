@@ -858,10 +858,10 @@ development_status:
     # === Epic 68: Authentification LDAP prioritaire (comptes à haut privilège) ===
     # Réf: implementation-artifacts/67-2-exigence-auth-ldap-comptes-privileges.md
     # Requis sécurité : LDAP prioritaire, accès portail réservé aux comptes à haut privilège (séparation laptop / privilégié)
-    epic-68: backlog
-    68-1-configuration-ldap-methode-prioritaire: backlog
-    68-2-restriction-acces-comptes-haut-privilege: backlog
-    68-3-authentification-explicite-sans-sso-transparent: backlog
+    epic-68: in-progress
+    68-1-configuration-ldap-methode-prioritaire: done
+    68-2-restriction-acces-comptes-haut-privilege: done
+    68-3-authentification-explicite-sans-sso-transparent: done
     68-4-validation-non-regression-saml: backlog
     epic-68-retrospective: optional
     # === Epic 69: Représentation enrichie des workflows dans le catalogue ===

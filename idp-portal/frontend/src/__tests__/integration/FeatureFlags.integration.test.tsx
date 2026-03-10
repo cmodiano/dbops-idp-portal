@@ -60,6 +60,7 @@ function mockAuthenticated() {
     isAuthenticated: true,
     isLoading: false,
     login: vi.fn(),
+    loginWithCredentials: vi.fn(),
     logout: vi.fn().mockResolvedValue(undefined),
     refreshToken: vi.fn().mockResolvedValue('integration-test-token'),
     hasTab: vi.fn().mockReturnValue(true),

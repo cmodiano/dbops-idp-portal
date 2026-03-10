@@ -126,7 +126,7 @@ describe('App routing', () => {
   it('redirects to /login when not authenticated', async () => {
     render(<App />);
     await waitFor(() => {
-      expect(screen.getByText(/connexion|login|SSO/i)).toBeInTheDocument();
+      expect(screen.getByText(/Se connecter|connexion|login|SSO/i)).toBeInTheDocument();
     });
   });
 

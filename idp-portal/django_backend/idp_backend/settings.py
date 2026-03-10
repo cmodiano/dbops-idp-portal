@@ -538,6 +538,17 @@ PORTAL_AUTH_METHODS = [
     if m.strip()
 ]
 
+# High-privilege group restriction for portal access (Story 68.2)
+# Comma-separated list of AD group names (partial or full DN) that a user must belong
+# to at least ONE of, in order to access the portal via /auth/portal-login.
+# Empty string (default) = no group restriction (backward-compatible).
+# Example: "GRP-IDP-ADMIN,GRP-IDP-DBA-PRIVILEGED"
+PORTAL_REQUIRED_GROUPS = [
+    g.strip()
+    for g in os.getenv("PORTAL_REQUIRED_GROUPS", "").split(",")
+    if g.strip()
+]
+
 # ============================================================================
 # SAML Configuration (Story M.7)
 # ============================================================================

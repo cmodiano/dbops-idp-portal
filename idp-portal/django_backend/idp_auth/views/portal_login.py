@@ -1,6 +1,7 @@
 """
 Vue d'authentification portail via LDAP pour utilisateurs interactifs à haut privilège.
 Story 68.1 — fondations de la priorité LDAP.
+Story 68.2 — restriction d'accès aux comptes à haut privilège via PORTAL_REQUIRED_GROUPS.
 """
 
 import structlog
@@ -48,7 +49,7 @@ class PortalLoginView(APIView):
             200: OpenApiResponse(description='JWT retourné dans data.access_token'),
             400: OpenApiResponse(description='Validation — username ou password manquant'),
             401: OpenApiResponse(description='INVALID_CREDENTIALS — credentials invalides'),
-            403: OpenApiResponse(description='NO_PROFILE — aucun profil AD associé'),
+            403: OpenApiResponse(description='NO_PROFILE ou INSUFFICIENT_PRIVILEGES — accès refusé'),
             429: OpenApiResponse(description='RATE_LIMIT_EXCEEDED — trop de tentatives'),
             503: OpenApiResponse(description='LDAP_UNAVAILABLE — service LDAP inaccessible'),
         },
@@ -97,6 +98,37 @@ class PortalLoginView(APIView):
                 message='Credentials invalides',
                 details={},
             )
+
+        # Step 3.5: Check high-privilege group membership (Story 68.2)
+        if settings.PORTAL_REQUIRED_GROUPS:
+            privileged = any(
+                required.lower() in group.lower()
+                for required in settings.PORTAL_REQUIRED_GROUPS
+                for group in ad_groups
+            )
+            if not privileged:
+                log.warning(
+                    'portal_login_insufficient_privileges',
+                    ldap_username=username,
+                    ad_groups=ad_groups,
+                )
+                AuditService.create_entry(
+                    user_id='unknown',
+                    action_type=AuditActionType.USER_LOGIN,
+                    entity_type=AuditEntityType.USER,
+                    entity_id=0,
+                    details={
+                        'success': False,
+                        'reason': 'insufficient_privileges',
+                        'username': username,
+                        'ad_groups': ad_groups,
+                    },
+                )
+                raise ForbiddenError(
+                    code='INSUFFICIENT_PRIVILEGES',
+                    message='Votre compte ne dispose pas des privilèges requis pour accéder au portail.',
+                    details={},
+                )
 
         # Step 4: Resolve profile from AD groups
         profiles = Profile.objects.find_by_ad_groups(ad_groups)

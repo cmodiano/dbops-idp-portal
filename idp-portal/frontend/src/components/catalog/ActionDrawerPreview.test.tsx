@@ -15,6 +15,7 @@ vi.mock('../../contexts/AuthContext', () => ({
     user: null,
     accessToken: null,
     login: vi.fn(),
+    loginWithCredentials: vi.fn(),
     logout: vi.fn(),
     refreshToken: vi.fn(),
     hasTab: vi.fn().mockReturnValue(true),
@@ -310,6 +311,7 @@ describe('ActionDrawerPreview', () => {
         user: null,
         accessToken: null,
         login: vi.fn(),
+        loginWithCredentials: vi.fn(),
         logout: vi.fn(),
         refreshToken: vi.fn().mockResolvedValue(null),
         hasTab: vi.fn().mockReturnValue(true),
@@ -324,6 +326,7 @@ describe('ActionDrawerPreview', () => {
         user: null,
         accessToken: null,
         login: vi.fn(),
+        loginWithCredentials: vi.fn(),
         logout: vi.fn(),
         refreshToken: vi.fn().mockResolvedValue(null),
         hasTab: vi.fn().mockReturnValue(true),
@@ -358,7 +361,7 @@ describe('ActionDrawerPreview', () => {
     });
 
     it('displays original description for default variant', () => {
-      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: false, isLoading: false, user: null, accessToken: null, login: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
+      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: false, isLoading: false, user: null, accessToken: null, login: vi.fn(), loginWithCredentials: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
       renderWithTheme(
         <ActionDrawerPreview action={actionWithTechnicalTerms} />
       );
@@ -376,7 +379,7 @@ describe('ActionDrawerPreview', () => {
     });
 
     it('does not show impact Alert for default variant', () => {
-      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: false, isLoading: false, user: null, accessToken: null, login: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
+      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: false, isLoading: false, user: null, accessToken: null, login: vi.fn(), loginWithCredentials: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
       renderWithTheme(
         <ActionDrawerPreview action={actionWithTechnicalTerms} />
       );
@@ -397,7 +400,7 @@ describe('ActionDrawerPreview', () => {
     });
 
     it('shows engine and platform for default variant', () => {
-      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: false, isLoading: false, user: null, accessToken: null, login: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
+      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: false, isLoading: false, user: null, accessToken: null, login: vi.fn(), loginWithCredentials: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
       renderWithTheme(
         <ActionDrawerPreview action={actionWithTechnicalTerms} />
       );
@@ -435,7 +438,7 @@ describe('ActionDrawerPreview', () => {
     });
 
     it('renders normal Execute button for default variant', () => {
-      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: false, isLoading: false, user: null, accessToken: null, login: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
+      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: false, isLoading: false, user: null, accessToken: null, login: vi.fn(), loginWithCredentials: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
       renderWithTheme(
         <ActionDrawerPreview action={actionWithTechnicalTerms} />
       );
@@ -699,6 +702,7 @@ describe('ActionDrawerPreview', () => {
         user: null,
         accessToken: null,
         login: vi.fn(),
+        loginWithCredentials: vi.fn(),
         logout: vi.fn(),
         refreshToken: vi.fn().mockResolvedValue(null),
         hasTab: vi.fn().mockReturnValue(true),
@@ -721,6 +725,7 @@ describe('ActionDrawerPreview', () => {
         user: null,
         accessToken: null,
         login: vi.fn(),
+        loginWithCredentials: vi.fn(),
         logout: vi.fn(),
         refreshToken: vi.fn().mockResolvedValue(null),
         hasTab: vi.fn().mockReturnValue(true),
@@ -735,6 +740,7 @@ describe('ActionDrawerPreview', () => {
         user: null,
         accessToken: null,
         login: vi.fn(),
+        loginWithCredentials: vi.fn(),
         logout: vi.fn(),
         refreshToken: vi.fn().mockResolvedValue(null),
         hasTab: vi.fn().mockReturnValue(true),
@@ -756,6 +762,7 @@ describe('ActionDrawerPreview', () => {
         user: null,
         accessToken: null,
         login: vi.fn(),
+        loginWithCredentials: vi.fn(),
         logout: vi.fn(),
         refreshToken: vi.fn().mockResolvedValue(null),
         hasTab: vi.fn().mockReturnValue(true),
@@ -815,7 +822,7 @@ describe('ActionDrawerPreview', () => {
     });
 
     it('hides metrics section for business variant (AC1 - business exclusion)', () => {
-      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: true, isLoading: false, user: null, accessToken: null, login: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
+      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: true, isLoading: false, user: null, accessToken: null, login: vi.fn(), loginWithCredentials: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
       renderWithTheme(<ActionDrawerPreview action={actionWithStats} />);
 
       expect(screen.queryByTestId('metrics-section')).not.toBeInTheDocument();
