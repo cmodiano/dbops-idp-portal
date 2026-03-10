@@ -318,6 +318,21 @@ async def test_dashboard_consumer_handle_authenticated_message_no_exception():
     await consumer.handle_authenticated_message({"type": "ping"})
 
 
+@pytest.mark.asyncio
+async def test_dashboard_consumer_execution_update_forwards_payload():
+    """DashboardConsumer.execution_update forwards compact payload."""
+    consumer = DashboardConsumer()
+    consumer._safe_send = AsyncMock()
+
+    await consumer.execution_update({"data": {"execution_id": 42, "status": "RUNNING"}})
+
+    consumer._safe_send.assert_called_once_with({
+        "type": "execution_update",
+        "execution_id": 42,
+        "status": "RUNNING",
+    })
+
+
 # ============================================================================
 # Story 59-2 — SEC-2 : vérification d'accès après auth JWT
 # ============================================================================

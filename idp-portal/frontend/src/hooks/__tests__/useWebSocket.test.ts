@@ -255,6 +255,28 @@ describe('useWebSocket', () => {
     expect(MockWebSocket.instances).toHaveLength(1);
   });
 
+  it('does not reconnect on authorization failure (code 4003)', async () => {
+    const { result } = renderHook(() => useWebSocket(1));
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const ws = MockWebSocket.instances[0];
+    act(() => {
+      ws.simulateClose(4003, 'Forbidden');
+    });
+
+    expect(result.current.error).toBe('Accès non autorisé au flux WebSocket');
+    expect(result.current.isAuthenticated).toBe(false);
+
+    await act(async () => {
+      vi.advanceTimersByTime(3000);
+    });
+
+    expect(MockWebSocket.instances).toHaveLength(1);
+  });
+
   it('reconnects after normal close', async () => {
     renderHook(() => useWebSocket(1));
 

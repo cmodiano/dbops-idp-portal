@@ -12,6 +12,7 @@ from typing import Any
 
 import structlog
 from celery import shared_task  # type: ignore[import-untyped]
+from django.db import transaction
 from django.utils import timezone
 
 from executions.models import (
@@ -115,8 +116,11 @@ def evaluate_waiting_gates(self: Any) -> dict:
                     'error_message': str(e),
                     'occurred_at': timezone.now().isoformat(),
                 }
-                step.set_output(output)
-                step.save()
+                # CAS guard: do not overwrite a step already transitioned by another worker.
+                ExecutionStep.objects.filter(
+                    id=step.id,
+                    status=ExecutionStepStatus.WAITING,
+                ).update(output=json.dumps(output))
             except Exception as save_error:  # noqa: BLE001 — best-effort-non-critical: error persist failure must not break gate loop
                 logger.error(
                     "evaluate_waiting_gates_error_persist_failed",
@@ -368,13 +372,26 @@ def _update_waiting_context(step: ExecutionStep, gate_status: dict, correlation_
 
     output['last_evaluated_at'] = timezone.now().isoformat()
 
+    updated = 0
     if output_changed:
-        step.set_output(output)
-        step.save()
+        # CAS write: only persist while still WAITING to avoid status regression.
+        updated = ExecutionStep.objects.filter(
+            id=step.id,
+            status=ExecutionStepStatus.WAITING,
+        ).update(output=json.dumps(output))
+        if updated == 0:
+            logger.debug(
+                "evaluate_waiting_gates_step_context_skipped_not_waiting",
+                step_id=step.id,
+                execution_id=step.execution_id,
+                correlation_id=correlation_id,
+            )
+            return
+        step.output = json.dumps(output)
 
     # V113: Durable event so UI can refresh gate status on reconnect.
     # Skip for approval gates — no meaningful change until approval.
-    if output_changed and not is_approval_gate:
+    if output_changed and updated == 1 and not is_approval_gate:
         try:
             from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
             WorkflowEventService.emit_step_output_updated(step.execution_id, step)
@@ -449,15 +466,33 @@ def _handle_gate_timeout(step: ExecutionStep, gate_status: dict, correlation_id:
     # Story 30.7 (CELERY-5): Always set error_message, even for SKIPPED steps
     error_msg = f"Gate timeout exceeded after {timeout_hours}h"
 
-    if timeout_action == 'SKIPPED':
-        step.status = ExecutionStepStatus.SKIPPED
-        step.error_message = error_msg
-    else:
-        step.status = ExecutionStepStatus.FAILED
-        step.error_message = error_msg
+    next_step_status = (
+        ExecutionStepStatus.SKIPPED if timeout_action == 'SKIPPED'
+        else ExecutionStepStatus.FAILED
+    )
+    completed_at = timezone.now()
+    updated = ExecutionStep.objects.filter(
+        id=step.id,
+        status=ExecutionStepStatus.WAITING,
+    ).update(
+        status=next_step_status,
+        error_message=error_msg,
+        completed_at=completed_at,
+    )
+    if updated == 0:
+        logger.warning(
+            "evaluate_waiting_gates_step_timeout_already_processed",
+            step_id=step.id,
+            execution_id=step.execution_id,
+            timeout_action=timeout_action,
+            correlation_id=correlation_id,
+        )
+        return
 
-    step.completed_at = timezone.now()
-    step.save()
+    # Keep local instance in sync for downstream events/audit payloads.
+    step.status = next_step_status
+    step.error_message = error_msg
+    step.completed_at = completed_at
 
     # V113: Remove from runnable queue and emit durable event (best-effort)
     try:
@@ -676,89 +711,108 @@ def resume_container_workflow_from_gate(
             )
             return {'outcome': 'cancelled'}
 
-        execution = Execution.objects.select_related('action').get(id=execution_id)
-
-        # Vérifier que l'exécution est toujours en RUNNING
-        if execution.status != ExecutionStatus.RUNNING:
-            logger.warning(
-                "resume_container_workflow_gate_not_running",
-                execution_id=execution_id,
-                status=execution.status,
-                correlation_id=correlation_id,
+        with transaction.atomic():
+            execution = (
+                Execution.objects.select_related('action')
+                .select_for_update()
+                .get(id=execution_id)
             )
-            return {'outcome': 'not_running', 'status': str(execution.status)}
 
-        # Trouver les steps restants à partir de on_success_step_ids (Story 67.4: union)
-        all_steps = execution.action.execution_steps or []
-        remaining_steps = []
-        found_ids: set[str] = set()
-        for step_id in step_ids:
-            if not step_id or not isinstance(step_id, str):
-                continue
+            # Vérifier que l'exécution est toujours en RUNNING
+            if execution.status != ExecutionStatus.RUNNING:
+                logger.warning(
+                    "resume_container_workflow_gate_not_running",
+                    execution_id=execution_id,
+                    status=execution.status,
+                    correlation_id=correlation_id,
+                )
+                return {'outcome': 'not_running', 'status': str(execution.status)}
+
+            # Idempotency guard: if any target step already has a persisted execution step,
+            # this resume request has effectively already been applied.
+            already_resumed = ExecutionStep.objects.filter(
+                execution=execution,
+                config_step_id__in=step_ids,
+            ).exclude(status=ExecutionStepStatus.PENDING).exists()
+            if already_resumed:
+                logger.info(
+                    "resume_container_workflow_gate_already_applied",
+                    execution_id=execution_id,
+                    on_success_step_ids=step_ids,
+                    correlation_id=correlation_id,
+                )
+                return {'outcome': 'already_resumed', 'resumed_from': step_ids}
+
+            # Trouver les steps restants à partir de on_success_step_ids (Story 67.4: union)
+            all_steps = execution.action.execution_steps or []
+            remaining_steps = []
+            found_ids: set[str] = set()
+            for step_id in step_ids:
+                if not step_id or not isinstance(step_id, str):
+                    continue
+                for s in all_steps:
+                    if isinstance(s, dict) and s.get('step_id') == step_id:
+                        found_ids.add(step_id)
+                        break
+            # Inclure tous les steps à partir du premier trouvé (ordre préservé)
+            collect = False
             for s in all_steps:
-                if isinstance(s, dict) and s.get('step_id') == step_id:
-                    found_ids.add(step_id)
-                    break
-        # Inclure tous les steps à partir du premier trouvé (ordre préservé)
-        collect = False
-        for s in all_steps:
-            if isinstance(s, dict):
-                sid = s.get('step_id')
-                if sid in found_ids:
-                    collect = True
-                if collect:
-                    remaining_steps.append(s)
+                if isinstance(s, dict):
+                    sid = s.get('step_id')
+                    if sid in found_ids:
+                        collect = True
+                    if collect:
+                        remaining_steps.append(s)
 
-        if not found_ids:
-            logger.error(
-                "resume_container_workflow_gate_step_not_found",
-                execution_id=execution_id,
-                on_success_step_ids=step_ids,
-                correlation_id=correlation_id,
-            )
-            return {'outcome': 'step_not_found', 'step_id': first_step_id}
+            if not found_ids:
+                logger.error(
+                    "resume_container_workflow_gate_step_not_found",
+                    execution_id=execution_id,
+                    on_success_step_ids=step_ids,
+                    correlation_id=correlation_id,
+                )
+                return {'outcome': 'step_not_found', 'step_id': first_step_id}
 
-        # Reconstruire le contexte _step_outputs depuis les ExecutionStep COMPLETED existants
-        from executions.models import ExecutionStep, ExecutionStepStatus
-        completed_steps = ExecutionStep.objects.filter(
-            execution=execution,
-            status=ExecutionStepStatus.COMPLETED,
-        ).order_by('step_order')
+            # Reconstruire le contexte _step_outputs depuis les ExecutionStep COMPLETED existants
+            completed_steps = ExecutionStep.objects.filter(
+                execution=execution,
+                status=ExecutionStepStatus.COMPLETED,
+            ).order_by('step_order')
 
-        # _step_outputs is keyed by step_id (config's step_id UUID).
-        # Use config_step_id directly when available; fall back to name→id mapping for old records.
-        step_name_to_id = {
-            s.get('name'): s.get('step_id')
-            for s in all_steps
-            if isinstance(s, dict) and s.get('name') and s.get('step_id')
-        }
+            # _step_outputs is keyed by step_id (config's step_id UUID).
+            # Use config_step_id directly when available; fall back to name→id mapping for old records.
+            step_name_to_id = {
+                s.get('name'): s.get('step_id')
+                for s in all_steps
+                if isinstance(s, dict) and s.get('name') and s.get('step_id')
+            }
 
-        # Reprendre le workflow depuis le step cible
-        runtime = ContainerWorkflowRuntime(execution)
-        # Restaurer le contexte des outputs de steps déjà exécutés (keyed par step_id)
-        for db_step in completed_steps:
-            step_output = db_step.get_output() or {}
-            # Primary: use config_step_id (robust UUID-based matching)
-            step_id_key = db_step.config_step_id
-            # Fallback for old records: map step_name → step_id via config
-            if not step_id_key and db_step.step_name:
-                step_id_key = step_name_to_id.get(db_step.step_name)
-            if step_id_key:
-                runtime._step_outputs[step_id_key] = step_output
-        runtime.workflow_steps = remaining_steps
-        # Story 67.4: Vague initiale explicite pour reprendre exactement aux step_ids cibles.
-        # IMPORTANT: toujours défini (pas seulement fan-out 2+ step_ids) sinon
-        # _execute_workflow_steps recalcule les entry points du sous-graphe remaining_steps
-        # et peut ré-exécuter le gate step lui-même (boucle infinie d'approbation).
-        runtime._initial_wave = [s for s in step_ids if isinstance(s, str) and s]
-        # Resume: _step_order_counter must continue from max existing step_order
-        # to avoid UK_EXEC_STEPS_EXEC_ORDER violation (step_order already used by gate)
-        from django.db.models import Max
-        max_order = ExecutionStep.objects.filter(execution=execution).aggregate(
-            Max('step_order')
-        )['step_order__max']
-        runtime._step_order_counter = max_order if max_order is not None else 0
-        runtime._execute_workflow_steps()
+            # Reprendre le workflow depuis le step cible
+            runtime = ContainerWorkflowRuntime(execution)
+            # Restaurer le contexte des outputs de steps déjà exécutés (keyed par step_id)
+            for db_step in completed_steps:
+                step_output = db_step.get_output() or {}
+                # Primary: use config_step_id (robust UUID-based matching)
+                step_id_key = db_step.config_step_id
+                # Fallback for old records: map step_name → step_id via config
+                if not step_id_key and db_step.step_name:
+                    step_id_key = step_name_to_id.get(db_step.step_name)
+                if step_id_key:
+                    runtime._step_outputs[step_id_key] = step_output
+            runtime.workflow_steps = remaining_steps
+            # Story 67.4: Vague initiale explicite pour reprendre exactement aux step_ids cibles.
+            # IMPORTANT: toujours défini (pas seulement fan-out 2+ step_ids) sinon
+            # _execute_workflow_steps recalcule les entry points du sous-graphe remaining_steps
+            # et peut ré-exécuter le gate step lui-même (boucle infinie d'approbation).
+            runtime._initial_wave = [s for s in step_ids if isinstance(s, str) and s]
+            # Resume: _step_order_counter must continue from max existing step_order
+            # to avoid UK_EXEC_STEPS_EXEC_ORDER violation (step_order already used by gate)
+            from django.db.models import Max
+            max_order = ExecutionStep.objects.filter(execution=execution).aggregate(
+                Max('step_order')
+            )['step_order__max']
+            runtime._step_order_counter = max_order if max_order is not None else 0
+            runtime._execute_workflow_steps()
 
         logger.info(
             "resume_container_workflow_gate_complete",

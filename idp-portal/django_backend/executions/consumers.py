@@ -405,5 +405,68 @@ class DashboardConsumer(AuthenticatedWebSocketConsumer):
     for the dashboard.
     """
 
+    async def connect(self) -> None:
+        self.group_name = "dashboard"
+        self._group_joined = False
+        await super().connect()
+
+    async def receive(self, text_data: str | None = None, bytes_data: bytes | None = None) -> None:
+        was_authenticated = self.authenticated
+        await super().receive(text_data=text_data, bytes_data=bytes_data)
+
+        if not was_authenticated and self.authenticated:
+            if hasattr(self, "channel_layer") and self.channel_layer is not None:
+                try:
+                    await self.channel_layer.group_add(self.group_name, self.channel_name)
+                    self._group_joined = True
+                    await self._safe_send({"type": "connection_ack"})
+                    logger.info(
+                        "ws_dashboard_group_joined",
+                        group_name=self.group_name,
+                        user_id=self.user_id,
+                    )
+                except Exception as e:  # noqa: BLE001
+                    logger.error(
+                        "ws_dashboard_group_add_failed",
+                        group_name=self.group_name,
+                        user_id=self.user_id,
+                        error=str(e),
+                        error_type=type(e).__name__,
+                        exc_info=True,
+                    )
+                    self._group_joined = False
+                    await self.close()
+
     async def handle_authenticated_message(self, message: dict) -> None:
-        pass
+        # Dashboard channel is push-only for now.
+        logger.debug("ws_dashboard_authenticated_message_ignored", message_type=message.get("type"))
+
+    async def _safe_send(self, payload: dict) -> None:
+        try:
+            await self.send(text_data=json.dumps(payload))
+        except StopConsumer:
+            return
+        except Exception as e:  # noqa: BLE001
+            logger.debug("ws_dashboard_send_failed", error=str(e), error_type=type(e).__name__)
+
+    async def execution_update(self, event: dict) -> None:
+        await self._safe_send({"type": "execution_update", **event.get("data", {})})
+
+    async def disconnect(self, code: int) -> None:
+        group_joined = getattr(self, "_group_joined", False)
+        if (
+            group_joined
+            and hasattr(self, "channel_layer")
+            and self.channel_layer is not None
+        ):
+            try:
+                await self.channel_layer.group_discard(self.group_name, self.channel_name)
+            except Exception as e:  # noqa: BLE001
+                logger.warning(
+                    "ws_dashboard_group_discard_failed",
+                    group_name=self.group_name,
+                    error=str(e),
+                    error_type=type(e).__name__,
+                    exc_info=True,
+                )
+        await super().disconnect(code)

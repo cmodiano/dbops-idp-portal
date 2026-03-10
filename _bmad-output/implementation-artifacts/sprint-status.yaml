@@ -889,7 +889,7 @@ development_status:
     71-2-frontend-lire-approbation-depuis-execution-steps: done
     71-3-consolidation-status-config: done
     71-4-css-tokens-topnav: done
-    71-5-pipeline-validation-unifie-vues-execution: backlog
+    71-5-pipeline-validation-unifie-vues-execution: done
     71-6-refactoring-god-classes-gates-container-runtime: backlog
     71-7-atomicite-container-workflow: backlog
     71-8-task-soft-time-limit-celery: backlog

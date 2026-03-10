@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 import os
 from pathlib import Path
+from typing import Any
 from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
@@ -472,6 +473,16 @@ CORS_ALLOWED_ORIGINS = [
     os.getenv('CORS_ORIGIN', 'http://localhost:5173'),
 ]
 
+# WebSocket origin allowlist (Channels ASGI handshake hardening).
+# Defaults to CORS origins for same frontend origins.
+_ws_origins_env = os.getenv('WEBSOCKET_ALLOWED_ORIGINS', '')
+WEBSOCKET_ALLOWED_ORIGINS = (
+    [o.strip() for o in _ws_origins_env.split(',') if o.strip()]
+    if _ws_origins_env
+    else CORS_ALLOWED_ORIGINS
+)
+del _ws_origins_env
+
 # Allow credentials (cookies) for httpOnly refresh token
 CORS_ALLOW_CREDENTIALS = True
 
@@ -717,12 +728,26 @@ del _adapters_pkg, _adapter_registry  # nettoyer le namespace settings
 # ============================================================================
 # Django Channels / WebSocket Configuration (Story 22.13)
 # ============================================================================
-# Uses InMemoryChannelLayer for development; switch to Redis for production.
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels.layers.InMemoryChannelLayer",
-    },
-}
+CHANNEL_LAYER_BACKEND = os.getenv('CHANNEL_LAYER_BACKEND', '').lower()
+CHANNEL_REDIS_URL = os.getenv('CHANNEL_REDIS_URL', os.getenv('REDIS_URL', 'redis://localhost:6379/2'))
+CHANNEL_LAYERS: dict[str, dict[str, Any]]
+
+if CHANNEL_LAYER_BACKEND in {'inmemory', 'memory', 'in_memory'}:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer",
+        },
+    }
+else:
+    # Default to Redis for non-test multi-process reliability.
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {
+                "hosts": [CHANNEL_REDIS_URL],
+            },
+        },
+    }
 
 # ============================================================================
 # Workflow Retry Configuration (Story 20.3)

@@ -172,6 +172,18 @@ def _broadcast_execution_update(
                     },
                 },
             )
+
+        # Dashboard stream: compact status updates for recent executions.
+        async_to_sync(channel_layer.group_send)(
+            "dashboard",
+            {
+                "type": "execution_update",
+                "data": {
+                    "execution_id": execution_id,
+                    "status": status_data.get("status"),
+                },
+            },
+        )
     except ImportError:
         logger.debug("poll_broadcast_skipped_no_channels", execution_id=execution_id)
     except Exception as e:  # noqa: BLE001 — best-effort-non-critical: channels broadcast is non-critical, polling must not be interrupted

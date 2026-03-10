@@ -25,7 +25,7 @@ class TestResumeContainerWorkflowGenericException:
         """Exception non-DoesNotExist → {'outcome': 'error', 'error': str(exc)}."""
         with patch('executions.cancellation_cache.is_cancelled', return_value=False):
             with patch.object(Execution.objects, 'select_related') as mock_qs:
-                mock_qs.return_value.get.side_effect = RuntimeError("Unexpected DB error")
+                mock_qs.return_value.select_for_update.return_value.get.side_effect = RuntimeError("Unexpected DB error")
                 result = resume_container_workflow_from_gate.run(
                     execution_id=1, on_success_step_ids='step-1'
                 )
@@ -101,6 +101,33 @@ class TestUpdateWaitingContextEmitFailure:
         assert 'last_evaluated_at' in output
         assert 'gate_status' in output
 
+    def test_context_update_skips_when_step_not_waiting(self):
+        """CAS guard: update is skipped when another worker already moved status."""
+        user = UserFactory(username='update_ctx_skip_user', profile='DBA')
+        action = ActionFactory(execution_steps=[])
+        execution = ExecutionFactory(action=action, status=ExecutionStatus.RUNNING, user=user)
+        step = ExecutionStepFactory(
+            execution=execution,
+            status=ExecutionStepStatus.RUNNING,
+        )
+        step.set_output({
+            'gate_conditions': [{'type': 'maintenance_window'}],
+            'gate_status': [],
+        })
+        step.save()
+
+        gate_status = {
+            'gates': [{'type': 'maintenance_window', 'satisfied': False, 'reason': 'Outside window'}],
+            'timeout_triggered': False,
+        }
+
+        with patch('executions.services.workflow_events.WorkflowEventService') as mock_events:
+            _update_waiting_context(step, gate_status, 'corr-123')
+            mock_events.emit_step_output_updated.assert_not_called()
+
+        step.refresh_from_db()
+        assert step.status == ExecutionStepStatus.RUNNING
+
 
 @pytest.mark.django_db
 class TestHandleGateTimeoutFailedPath:
@@ -134,13 +161,39 @@ class TestHandleGateTimeoutFailedPath:
         assert step.status == ExecutionStepStatus.FAILED
         assert execution.status == ExecutionStatus.FAILED
 
+    def test_timeout_already_processed_returns_early(self):
+        """CAS guard: no-op when step already transitioned by another worker."""
+        user = UserFactory(username='timeout_noop_user', profile='DBA')
+        action = ActionFactory(execution_steps=[{'name': 'Gate', 'step_type': 'gate'}])
+        execution = ExecutionFactory(action=action, status=ExecutionStatus.RUNNING, user=user)
+        step = ExecutionStepFactory(
+            execution=execution,
+            status=ExecutionStepStatus.RUNNING,
+            step_name='Gate',
+        )
+
+        gate_status = {
+            'timeout_triggered': True,
+            'action': 'FAILED',
+            'timeout_hours': 48,
+        }
+
+        with patch('executions.services.runnable_steps.RunnableStepService', MagicMock()) as _:
+            with patch('executions.services.workflow_events.WorkflowEventService', MagicMock()) as _:
+                _handle_gate_timeout(step, gate_status, 'corr-123')
+
+        step.refresh_from_db()
+        execution.refresh_from_db()
+        assert step.status == ExecutionStepStatus.RUNNING
+        assert execution.status == ExecutionStatus.RUNNING
+
 
 @pytest.mark.django_db
 class TestEvaluateWaitingGatesErrorPersistFailed:
-    """evaluate_waiting_gates — error persist to step output fails → logged, continues."""
+    """evaluate_waiting_gates — evaluator error is isolated and task continues."""
 
-    def test_error_persist_failed_logged_task_continues(self):
-        """GateEvaluator raises → step.save fails in error persist block → error logged."""
+    def test_evaluator_error_task_continues(self):
+        """GateEvaluator raises on one step → task still completes with errors count."""
         step = ExecutionStepFactory(
             execution=ExecutionFactory(status=ExecutionStatus.RUNNING),
             status=ExecutionStepStatus.WAITING,
@@ -148,22 +201,41 @@ class TestEvaluateWaitingGatesErrorPersistFailed:
         step.set_output({'gate_conditions': [{'type': 'maintenance_window'}]})
         step.save()
 
-        save_call_count = [0]
-        original_save = ExecutionStep.save
-
-        def save_that_fails_once(self, *args, **kwargs):
-            save_call_count[0] += 1
-            if save_call_count[0] == 1:
-                raise RuntimeError("DB save failed")
-            return original_save(self, *args, **kwargs)
-
         with patch('executions.gate_evaluator.GateEvaluator') as mock_eval_cls:
             mock_eval_cls.return_value.evaluate.side_effect = RuntimeError("Evaluation error")
-            with patch.object(ExecutionStep, 'save', save_that_fails_once):
-                result = evaluate_waiting_gates()
+            result = evaluate_waiting_gates()
 
         assert result['errors'] == 1
         assert result['waiting_steps'] == 1
+
+
+@pytest.mark.django_db
+class TestResumeContainerWorkflowIdempotency:
+    """resume_container_workflow_from_gate idempotency guards."""
+
+    def test_resume_returns_already_resumed_when_target_step_exists(self):
+        user = UserFactory(username='resume_user', profile='DBA')
+        action = ActionFactory(
+            item_type='workflow',
+            execution_steps=[
+                {'step_id': 'gate-ok', 'name': 'Gate OK', 'order': 1, 'step_type': 'gate'},
+                {'step_id': 'deploy', 'name': 'Deploy', 'order': 2, 'step_type': 'platform'},
+            ],
+        )
+        execution = ExecutionFactory(action=action, status=ExecutionStatus.RUNNING, user=user)
+        ExecutionStepFactory(
+            execution=execution,
+            config_step_id='deploy',
+            status=ExecutionStepStatus.RUNNING,
+            step_name='Deploy',
+        )
+
+        result = resume_container_workflow_from_gate.run(
+            execution_id=execution.id,
+            on_success_step_ids=['deploy'],
+        )
+
+        assert result['outcome'] == 'already_resumed'
 
 
 @pytest.mark.django_db

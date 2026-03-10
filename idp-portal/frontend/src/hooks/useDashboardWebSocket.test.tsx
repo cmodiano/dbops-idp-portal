@@ -193,6 +193,31 @@ describe('useDashboardWebSocket', () => {
     expect(result.current.isAuthenticated).toBe(false);
   });
 
+  it('does not reconnect on authorization failure code 4003', async () => {
+    const onExecutionsUpdate = vi.fn();
+
+    const { result } = renderHook(() =>
+      useDashboardWebSocket({
+        recentExecutions: mockExecutions,
+        onExecutionsUpdate,
+      })
+    );
+
+    await waitFor(() => {
+      expect(MockWebSocket.instances.length).toBe(1);
+    });
+
+    act(() => {
+      MockWebSocket.instances[0].simulateOpen();
+      MockWebSocket.instances[0].simulateClose(4003, 'Forbidden');
+    });
+
+    await new Promise((r) => setTimeout(r, 100));
+    expect(MockWebSocket.instances.length).toBe(1);
+    expect(result.current.error).toBe('Accès non autorisé au flux WebSocket');
+    expect(result.current.isAuthenticated).toBe(false);
+  });
+
   it('sets connected=true on WebSocket open', async () => {
     const onExecutionsUpdate = vi.fn();
 

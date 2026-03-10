@@ -7,6 +7,7 @@ anyio==4.12.1
 asgiref==3.11.1
     # via
     #   channels
+    #   channels-redis
     #   daphne
     #   django
     #   django-cors-headers
@@ -38,6 +39,10 @@ cffi==2.0.0
     #   autobahn
     #   cryptography
 channels==4.3.2
+    # via
+    #   idp-portal-backend (pyproject.toml)
+    #   channels-redis
+channels-redis==4.3.0
     # via idp-portal-backend (pyproject.toml)
 charset-normalizer==3.4.4
     # via
@@ -132,7 +137,9 @@ lxml==6.0.2
 markupsafe==3.0.3
     # via jinja2
 msgpack==1.1.2
-    # via autobahn
+    # via
+    #   autobahn
+    #   channels-redis
 oracledb==3.4.2
     # via idp-portal-backend (pyproject.toml)
 packaging==26.0
@@ -180,6 +187,7 @@ pyyaml==6.0.3
 redis==6.4.0
     # via
     #   idp-portal-backend (pyproject.toml)
+    #   channels-redis
     #   kombu
 referencing==0.37.0
     # via

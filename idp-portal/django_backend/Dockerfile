@@ -68,18 +68,12 @@ RUN SECRET_KEY=build-only-not-used \
 # Switch to non-root user
 USER idp
 
-# Expose Gunicorn port
+# Expose ASGI server port
 EXPOSE 8000
 
 # Healthcheck (with trailing slash for Django APPEND_SLASH compatibility)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8000/api/v1/health/ || exit 1
 
-# Start Gunicorn
-CMD ["gunicorn", "idp_backend.wsgi:application", \
-    "--bind", "0.0.0.0:8000", \
-    "--workers", "4", \
-    "--timeout", "60", \
-    "--access-logfile", "-", \
-    "--error-logfile", "-", \
-    "--log-level", "info"]
+# Start Daphne (ASGI) for HTTP + WebSocket support
+CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "idp_backend.asgi:application"]

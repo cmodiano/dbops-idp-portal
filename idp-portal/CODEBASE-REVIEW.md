@@ -736,7 +736,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | ~~**MAINT-BE-6**~~ | ~~MEDIUM~~ | ~~**Profils hardcodés** — `_ALLOWED_PROFILES = {"dba_applicatif", "dba_infrastructure", "dbops"}` en constante module. Ajout d'un profil = modification du code. Devrait être config-driven ou DB-backed~~ **Résolu — Story 54.5 (2026-02-27)** | `idp_auth/views.py` | 48–49 |
 | ~~**MAINT-BE-7**~~ | ~~MEDIUM~~ | ~~**Status mapping dupliqué dans les adapters** — chaque adapter définit son propre `STATUS_MAP` dict (AAP, GitHub Actions, TFC, Azure DevOps). Pattern identique, pas de base commune. Extraction vers `adapters/status_mappers.py` possible~~ **✅ RESOLVED Story 54.11 (2026-02-28)** | `adapters/*.py` | — |
 | ~~**MAINT-BE-8**~~ | ~~LOW~~ | ~~**Late imports `PLC0415`** — 3+ imports tardifs dans `executions/services.py` pour éviter des dépendances circulaires. Indicateur de couplage entre modules~~ **✅ RESOLVED Story 54.16 (2026-02-28) — commentaires explicatifs ajoutés sur les late imports** | `executions/services.py` | 438, 924 |
-| **MAINT-BE-9** | LOW | **Validation en 4 couches dans les vues d'exécution** — `ExecutionPayloadValidator` → `TargetValidator` → `EnvironmentConfigResolver` → serializer DRF implicite. Debug difficile quand une erreur survient. Pipeline unifié recommandé | `executions/views/execution_views.py` | — |
+| ~~**MAINT-BE-9**~~ | ~~LOW~~ | ~~**Validation en 4 couches dans les vues d'exécution** — `ExecutionPayloadValidator` → `TargetValidator` → `EnvironmentConfigResolver` → serializer DRF implicite. Debug difficile quand une erreur survient. Pipeline unifié recommandé~~ **✅ RESOLVED Story 71.5 (2026-03-10)** | `executions/validators/pipeline.py`, `executions/validators/result.py` | — |
 
 #### Frontend
 
@@ -825,7 +825,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | NEW-FE-3 | `.catch()` silencieux (ReportingDashboard) | Frontend | Trivial |
 | NEW-FE-4 | Prop `allowedEnvironments` ignorée (code mort) | Frontend | Trivial |
 | ~~MAINT-BE-8~~ | ~~Late imports `PLC0415` (couplage inter-modules)~~ | ~~Backend~~ | ~~Faible~~ ✅ Story 54.16 |
-| MAINT-BE-9 | Validation en 4 couches dans vues d'exécution | Backend | Moyen |
+| ~~MAINT-BE-9~~ | ~~Validation en 4 couches dans vues d'exécution~~ | ~~Backend~~ | ~~Moyen~~ ✅ Story 71.5 |
 | ~~MAINT-FE-4~~ | ~~Debounce pattern dupliqué (hook vs setTimeout)~~ | ~~Frontend~~ | ~~Trivial~~ ✅ Story 54.16 |
 | ~~MAINT-FE-5~~ | ~~Date formatting copié dans plusieurs composants~~ | ~~Frontend~~ | ~~Trivial~~ ✅ Story 54.16 |
 | INCON-2 | MD5 hash collision (documenté, acceptable pour N<1000) | Backend | — |
@@ -935,12 +935,12 @@ Le tableau §21 "Sécurité 12/14 | 2" est inexact — SEC-13 et SEC-14 ont ét�
 | # | Sévérité | Description | Statut |
 |---|----------|-------------|--------|
 | ~~**SOLID-FE-4**~~ | ~~HIGH~~ | ~~~25 composants importent directement les services~~ | ✅ RÉSOLU — Story 71.1 (2026-03-10) |
-| **MAINT-BE-9** | LOW | Validation en 4 couches dans vues d'exécution | Ouvert — backlog |
+| ~~**MAINT-BE-9**~~ | ~~LOW~~ | ~~Validation en 4 couches dans vues d'exécution~~ | ✅ RÉSOLU — Story 71.5 (2026-03-10) |
 | **INCON-2** | LOW | MD5 hash collision (documenté, acceptable pour N<1000) | Documenté — acceptable |
 | **PERF-4** | LOW | `<style>` inline dans 3 composants (impact négligeable) | Documenté — acceptable |
 | **16.4** | INFO | STATUS_CONFIG locals potentiellement consolidables | ✅ RESOLVED — Story 71.3 |
 
-**Bilan mis à jour (2026-03-10, post-Story 71.3) :** Sur 133 findings, **130 sont résolus** (97.7%). 3 issues ouvertes en backlog (MAINT-BE-9, INCON-2, PERF-4). 16.4 résolu par Story 71.3. Posture sécurité : 0 ouvertes. Architecture SOLID : excellente.
+**Bilan mis à jour (2026-03-10, post-Story 71.5) :** Sur 133 findings, **131 sont résolus** (98.5%). 2 issues ouvertes en backlog (INCON-2, PERF-4). MAINT-BE-9 résolu par Story 71.5. Posture sécurité : 0 ouvertes. Architecture SOLID : excellente.
 
 ---
 
@@ -1086,4 +1086,4 @@ Cet audit se concentre sur la suppression du code rétrocompatible accumulé (AD
 
 **Bilan cumulatif (2026-03-10, post-Audit #6) :** Sur les 17 findings de cet audit, **15 sont résolus** (88%). Les 2 items restants sont en backlog (god classes backend, adaptation frontend approval). Le codebase est nettoyé de tout code rétrocompatible inutile (PENDING_APPROVAL, singular step_ids, polling shims).
 
-*Convergence avec les bilans historiques :* Les 133 findings des audits §1–§22 sont à **131 résolus** (98.5%) après Story 71.3. Les 3 ouvertes (MAINT-BE-9, INCON-2, PERF-4) restent en backlog/acceptable. 16.4 résolu par Story 71.3. L'Audit #6 (17 findings) est un périmètre additionnel.
+*Convergence avec les bilans historiques :* Les 133 findings des audits §1–§22 sont à **131 résolus** (98.5%) après Story 71.5. Les 2 ouvertes (INCON-2, PERF-4) restent en backlog/acceptable. MAINT-BE-9 résolu par Story 71.5. L'Audit #6 (17 findings) est un périmètre additionnel.
