@@ -149,12 +149,12 @@ Aucun écart ouvert restant pour ces types.
 
 ## 6. Documentation obsolète
 
-| Document | Contenu obsolète | À mettre à jour |
-|----------|------------------|-----------------|
-| `docs/backend/database-schema.md` | "45 migrations V000–V044" | 117 migrations V000–V116 |
-| `django_backend/MIGRATION_STRATEGY.md` | "V041 dernière migration Flyway" | V116 |
-| `docs/backend/schema-differences.md` | CHANGE_TYPE_CONFIG dans ACTIONS_CATALOG | Colonne supprimée (V109) |
-| `docs/backend/migration/migration-audit-epic41.md` | Périmètre V000–V088 | Étendu à V116 |
+| Document | Contenu obsolète (historique) | Statut |
+|----------|------------------------------|--------|
+| `docs/backend/database-schema.md` | "45 migrations V000–V044" | OK — 118 migrations V000–V117 (2026-03-10) |
+| `django_backend/MIGRATION_STRATEGY.md` | "V041 dernière migration Flyway" | OK — V117 (2026-03-10) |
+| `docs/backend/schema-differences.md` | CHANGE_TYPE_CONFIG dans ACTIONS_CATALOG | OK — colonne supprimée V109, doc à jour (2026-03-10) |
+| `docs/backend/migration/migration-audit-epic41.md` | Périmètre V000–V088 | À mettre à jour — étendre à V117 |
 
 ---
 
