@@ -24,7 +24,7 @@ import {
   HeartOutlined,
   HeartFilled,
 } from '@ant-design/icons';
-import type { ActionPreviewData, ActionEngine } from '../../types/api';
+import type { ActionPreviewData, ActionEngine, IncludedAction } from '../../types/api';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { ImpactIndicator } from '../shared/ImpactIndicator';
@@ -116,6 +116,43 @@ function TechnologyIcons({ technologies, maxVisible = 3, iconSize = 24 }: Techno
   );
 }
 
+/** Story 69.3: Display included action names with engine icons for workflow cards. */
+interface IncludedActionsSummaryProps {
+  actions: IncludedAction[];
+  maxVisible?: number;
+}
+
+function IncludedActionsSummary({ actions, maxVisible = 2 }: IncludedActionsSummaryProps) {
+  const visible = actions.slice(0, maxVisible);
+  const overflow = actions.length - maxVisible;
+
+  return (
+    <div
+      data-testid="included-actions-summary"
+      aria-label="Actions incluses dans le workflow"
+      style={{ color: 'inherit' }}
+    >
+      <Text type="secondary" style={{ fontSize: 12 }}>
+        {'Actions : '}
+        {visible.map((a, i) => (
+          <span key={a.id} style={{ whiteSpace: 'nowrap' }}>
+            {a.engine ? (
+              <span style={{ display: 'inline-flex', verticalAlign: 'middle', marginRight: 2 }}>
+                {getEngineIconAtSize(a.engine, 14)}
+              </span>
+            ) : null}
+            {a.name}
+            {i < visible.length - 1 ? ', ' : ''}
+          </span>
+        ))}
+        {overflow > 0 && (
+          <span>{` et ${overflow} autre${overflow > 1 ? 's' : ''}`}</span>
+        )}
+      </Text>
+    </div>
+  );
+}
+
 const MAX_VISIBLE_TAGS = 3;
 
 export const ActionCard = memo(function ActionCard({
@@ -142,6 +179,9 @@ export const ActionCard = memo(function ActionCard({
   const displayDescription = isBusiness
     ? sanitizeDescription(action.description)
     : action.description;
+
+  // Story 69.3: Extract included actions for workflow cards
+  const includedActions = action.included_actions ?? [];
 
   // Story 69.2: For workflows with technologies, show multiple tech icons; fallback to single engine icon
   // Story 5.7, AC3; Story 18.2: Use shared iconHelpers for workflow, engine-specific SVG for actions
@@ -230,6 +270,11 @@ export const ActionCard = memo(function ActionCard({
         >
           {displayDescription || 'Aucune description'}
         </Paragraph>
+
+        {/* Story 69.3: Included actions summary for workflows */}
+        {isWorkflow && includedActions.length > 0 && (
+          <IncludedActionsSummary actions={includedActions} maxVisible={2} />
+        )}
 
         {/* Tags — pastel, pill-shaped */}
         {visibleTags.length > 0 && (

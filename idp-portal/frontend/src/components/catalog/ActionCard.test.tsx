@@ -397,6 +397,125 @@ describe('ActionCard', () => {
     });
   });
 
+  // Story 69.3: Included actions summary tests
+  describe('Story 69.3 — included actions summary', () => {
+    const workflowWith2Actions: ActionPreviewData = {
+      ...mockAction,
+      item_type: 'workflow',
+      included_actions: [
+        { id: 1, name: 'Backup', engine: 'oracle' },
+        { id: 2, name: 'Deploy', engine: 'sqlserver' },
+      ],
+    };
+
+    const workflowWith4Actions: ActionPreviewData = {
+      ...mockAction,
+      item_type: 'workflow',
+      included_actions: [
+        { id: 1, name: 'Backup', engine: 'oracle' },
+        { id: 2, name: 'Deploy', engine: 'sqlserver' },
+        { id: 3, name: 'Validate', engine: 'db2' },
+        { id: 4, name: 'Cleanup', engine: null },
+      ],
+    };
+
+    const simpleAction: ActionPreviewData = {
+      ...mockAction,
+      item_type: 'action',
+      engine: 'Oracle',
+    };
+
+    const workflowEmptyActions: ActionPreviewData = {
+      ...mockAction,
+      item_type: 'workflow',
+      included_actions: [],
+    };
+
+    const workflowNoActionsField: ActionPreviewData = {
+      ...mockAction,
+      item_type: 'workflow',
+    };
+
+    const workflowWith1Action: ActionPreviewData = {
+      ...mockAction,
+      item_type: 'workflow',
+      included_actions: [
+        { id: 1, name: 'Backup', engine: 'oracle' },
+      ],
+    };
+
+    it('workflow displays included actions names with "Actions :" label', () => {
+      renderWithTheme(<ActionCard action={workflowWith2Actions} />);
+
+      const summary = screen.getByTestId('included-actions-summary');
+      expect(summary).toBeInTheDocument();
+      expect(screen.getByText(/Actions\s*:/)).toBeInTheDocument();
+      expect(screen.getByText(/Backup/)).toBeInTheDocument();
+      expect(screen.getByText(/Deploy/)).toBeInTheDocument();
+      // Boundary: exactly maxVisible actions = no overflow
+      expect(screen.queryByText(/autre/)).not.toBeInTheDocument();
+    });
+
+    it('workflow shows overflow indicator "et 2 autres" when > maxVisible actions', () => {
+      renderWithTheme(<ActionCard action={workflowWith4Actions} />);
+
+      const summary = screen.getByTestId('included-actions-summary');
+      expect(summary).toBeInTheDocument();
+      expect(screen.getByText(/Backup/)).toBeInTheDocument();
+      expect(screen.getByText(/Deploy/)).toBeInTheDocument();
+      expect(screen.getByText(/et 2 autres/)).toBeInTheDocument();
+    });
+
+    it('simple action has no included actions summary', () => {
+      renderWithTheme(<ActionCard action={simpleAction} />);
+
+      expect(screen.queryByTestId('included-actions-summary')).not.toBeInTheDocument();
+    });
+
+    it('workflow with empty included_actions has no summary', () => {
+      renderWithTheme(<ActionCard action={workflowEmptyActions} />);
+
+      expect(screen.queryByTestId('included-actions-summary')).not.toBeInTheDocument();
+    });
+
+    it('workflow without included_actions field has no summary', () => {
+      renderWithTheme(<ActionCard action={workflowNoActionsField} />);
+
+      expect(screen.queryByTestId('included-actions-summary')).not.toBeInTheDocument();
+    });
+
+    it('workflow with single action shows it without overflow', () => {
+      renderWithTheme(<ActionCard action={workflowWith1Action} />);
+
+      const summary = screen.getByTestId('included-actions-summary');
+      expect(summary).toBeInTheDocument();
+      expect(screen.getByText(/Backup/)).toBeInTheDocument();
+      expect(screen.queryByText(/autre/)).not.toBeInTheDocument();
+    });
+
+    it('included actions summary has aria-label for accessibility', () => {
+      renderWithTheme(<ActionCard action={workflowWith2Actions} />);
+
+      const summary = screen.getByTestId('included-actions-summary');
+      expect(summary).toHaveAttribute('aria-label', 'Actions incluses dans le workflow');
+    });
+
+    it('action with null engine shows name without icon', () => {
+      const workflowNullEngine: ActionPreviewData = {
+        ...mockAction,
+        item_type: 'workflow',
+        included_actions: [
+          { id: 1, name: 'Generic Task', engine: null },
+        ],
+      };
+      renderWithTheme(<ActionCard action={workflowNullEngine} />);
+
+      const summary = screen.getByTestId('included-actions-summary');
+      expect(summary).toBeInTheDocument();
+      expect(screen.getByText(/Generic Task/)).toBeInTheDocument();
+    });
+  });
+
   // Story 7.1: Business variant tests
   describe('business variant (Story 7.1)', () => {
     const actionWithTechnicalTerms: ActionPreviewData = {
