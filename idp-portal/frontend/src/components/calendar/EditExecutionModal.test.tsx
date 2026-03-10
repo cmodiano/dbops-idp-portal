@@ -52,14 +52,14 @@ function Wrapper({ execution, open }: { execution: ScheduledExecutionListItem | 
 describe('EditExecutionModal — Story 11.11 AC4', () => {
   it('shows scheduled_at field for one-time execution', () => {
     render(<Wrapper execution={oneTimeExecution} open />);
-    expect(screen.getByText("Date/heure planifiée (UTC)")).toBeInTheDocument();
-    expect(screen.queryByText("Prochaine date d'exécution (UTC)")).not.toBeInTheDocument();
+    expect(screen.getByText("Date/heure planifiée (heure locale)")).toBeInTheDocument();
+    expect(screen.queryByText("Prochaine date d'exécution (heure locale)")).not.toBeInTheDocument();
   });
 
   it('shows next_execution_date field for recurring execution', () => {
     render(<Wrapper execution={recurringExecution} open />);
-    expect(screen.getByText("Prochaine date d'exécution (UTC)")).toBeInTheDocument();
-    expect(screen.queryByText("Date/heure planifiée (UTC)")).not.toBeInTheDocument();
+    expect(screen.getByText("Prochaine date d'exécution (heure locale)")).toBeInTheDocument();
+    expect(screen.queryByText("Date/heure planifiée (heure locale)")).not.toBeInTheDocument();
   });
 
   it('does not show environment, parameters, or target fields', () => {
@@ -73,7 +73,7 @@ describe('EditExecutionModal — Story 11.11 AC4', () => {
   it('renders nothing when execution is null', () => {
     render(<Wrapper execution={null} open />);
     // Modal is open but no form content
-    expect(screen.queryByText("Date/heure planifiée (UTC)")).not.toBeInTheDocument();
-    expect(screen.queryByText("Prochaine date d'exécution (UTC)")).not.toBeInTheDocument();
+    expect(screen.queryByText("Date/heure planifiée (heure locale)")).not.toBeInTheDocument();
+    expect(screen.queryByText("Prochaine date d'exécution (heure locale)")).not.toBeInTheDocument();
   });
 });

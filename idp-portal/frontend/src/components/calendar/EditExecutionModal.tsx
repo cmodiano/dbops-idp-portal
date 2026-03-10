@@ -42,11 +42,11 @@ export function EditExecutionModal({ execution, open, loading, form, onCancel, o
       {execution && (
         <Form form={form} layout="vertical">
           {isRecurring ? (
-            <Form.Item name="next_execution_date" label="Prochaine date d'exécution (UTC)" rules={[{ required: true, message: 'Requis' }]}>
+            <Form.Item name="next_execution_date" label="Prochaine date d'exécution (heure locale)" rules={[{ required: true, message: 'Requis' }]}>
               <DatePicker showTime format="DD/MM/YYYY HH:mm" style={{ width: '100%' }} disabledDate={(d) => d && d.isBefore(dayjs().startOf('minute'))} />
             </Form.Item>
           ) : (
-            <Form.Item name="scheduled_at" label="Date/heure planifiée (UTC)" rules={[{ required: true, message: 'Requis' }]}>
+            <Form.Item name="scheduled_at" label="Date/heure planifiée (heure locale)" rules={[{ required: true, message: 'Requis' }]}>
               <DatePicker showTime format="DD/MM/YYYY HH:mm" style={{ width: '100%' }} disabledDate={(d) => d && d.isBefore(dayjs().startOf('minute'))} />
             </Form.Item>
           )}
