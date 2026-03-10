@@ -21,6 +21,7 @@ import { AUDIT_STATUS_CONFIG as STATUS_CONFIG } from '../../utils/execution-stat
 import { ACTION_TYPE_LABELS } from '../../constants/auditActionTypes';
 import { ENTITY_TYPE_LABELS, formatDate, getEntityLabel } from './auditLabels';
 import { getEnvironmentLabel } from '../../utils/environmentHelpers';
+import { getApprovalInfoFromSteps } from '../../utils/executionHelpers';
 
 const { Text } = Typography;
 
@@ -182,29 +183,32 @@ export function AuditEntryDrawer({
             );
           })()}
 
-          {/* Approval section for EXECUTION_APPROVED */}
-          {entry.action_type === 'EXECUTION_APPROVED' && (
-            <>
-              <Divider titlePlacement="left" plain style={{ fontSize: 13 }}>
-                Approbation
-              </Divider>
-              <Descriptions size="small" column={1} style={{ marginBottom: 16 }}>
-                <Descriptions.Item label="Approuvé par">
-                  {entry.user_name ?? entry.user_id ?? '—'}
-                </Descriptions.Item>
-                {execution?.approved_at && (
-                  <Descriptions.Item label="Date d'approbation">
-                    {formatDate(execution.approved_at)}
+          {/* Approval section for EXECUTION_APPROVED (Story 71.2: read from steps per ADR-007) */}
+          {entry.action_type === 'EXECUTION_APPROVED' && (() => {
+            const approvalInfo = getApprovalInfoFromSteps(steps);
+            return (
+              <>
+                <Divider titlePlacement="left" plain style={{ fontSize: 13 }}>
+                  Approbation
+                </Divider>
+                <Descriptions size="small" column={1} style={{ marginBottom: 16 }}>
+                  <Descriptions.Item label="Approuvé par">
+                    {entry.user_name ?? entry.user_id ?? '—'}
                   </Descriptions.Item>
-                )}
-                {execution?.approval_comment && (
-                  <Descriptions.Item label="Commentaire">
-                    {execution.approval_comment}
-                  </Descriptions.Item>
-                )}
-              </Descriptions>
-            </>
-          )}
+                  {approvalInfo.approvedAt && (
+                    <Descriptions.Item label="Date d'approbation">
+                      {formatDate(approvalInfo.approvedAt)}
+                    </Descriptions.Item>
+                  )}
+                  {approvalInfo.approvalComment && (
+                    <Descriptions.Item label="Commentaire">
+                      {approvalInfo.approvalComment}
+                    </Descriptions.Item>
+                  )}
+                </Descriptions>
+              </>
+            );
+          })()}
 
           {/* Execution context section — action, targets, parameters (Story 61.10) */}
           {entry.entity_type === 'execution' && (() => {

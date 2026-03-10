@@ -2,8 +2,31 @@
  * Execution helpers (Story 17.15).
  */
 
-import type { ExecutionResponse } from '../types/api';
+import type { ExecutionResponse, ExecutionStepResponse } from '../types/api';
 import type { WizardInitialParams } from '../types/wizard';
+
+/** Approval info extracted from execution steps (ADR-007, Story 71.2). */
+export interface ApprovalInfo {
+  approvedById: number | null;
+  approvedAt: string | null;
+  approvalComment: string | null;
+}
+
+/**
+ * Extract approval info from execution steps.
+ * Finds the first step with `approved_by_id` set (source of truth per ADR-007).
+ */
+export function getApprovalInfoFromSteps(steps: ExecutionStepResponse[]): ApprovalInfo {
+  const approvalStep = steps.find(s => s.approved_by_id != null);
+  if (!approvalStep) {
+    return { approvedById: null, approvedAt: null, approvalComment: null };
+  }
+  return {
+    approvedById: approvalStep.approved_by_id ?? null,
+    approvedAt: approvalStep.approved_at ?? null,
+    approvalComment: approvalStep.approval_comment ?? null,
+  };
+}
 
 /**
  * Extract wizard pre-fill parameters from a past execution.

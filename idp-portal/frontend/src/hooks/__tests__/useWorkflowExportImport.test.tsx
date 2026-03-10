@@ -144,7 +144,7 @@ describe('useWorkflowExportImport', () => {
   });
 
   it('handleImportFile handles invalid format', async () => {
-    vi.mocked(parseWorkflowFile).mockReturnValue({
+    vi.mocked(parseWorkflowFile).mockReturnValueOnce({
       valid: false,
       errors: ['Invalid format'],
       data: null,
@@ -220,7 +220,7 @@ describe('useWorkflowExportImport', () => {
         onMetadataImport,
       };
 
-      vi.mocked(parseWorkflowFile).mockReturnValue({
+      vi.mocked(parseWorkflowFile).mockReturnValueOnce({
         valid: true,
         errors: [],
         data: {
@@ -258,11 +258,11 @@ describe('useWorkflowExportImport', () => {
 
     it('shows confirm modal when workflow has nodes, then loads on Ok', async () => {
       let capturedOnOk: (() => void) | undefined;
-      mockModal.confirm.mockImplementation((opts: { onOk?: () => void }) => {
+      mockModal.confirm.mockImplementationOnce((opts: { onOk?: () => void }) => {
         capturedOnOk = opts.onOk;
       });
 
-      vi.mocked(parseWorkflowFile).mockReturnValue({
+      vi.mocked(parseWorkflowFile).mockReturnValueOnce({
         valid: true,
         errors: [],
         data: {
@@ -325,35 +325,37 @@ describe('useWorkflowExportImport', () => {
 
     it('shows error on FileReader error', async () => {
       const OriginalFileReader = global.FileReader;
-      global.FileReader = class MockFileReader {
-        onload: ((e: ProgressEvent<FileReader>) => void) | null = null;
-        onerror: (() => void) | null = null;
-        readAsText() {
-          queueMicrotask(() => this.onerror?.());
-        }
-      } as unknown as typeof FileReader;
+      try {
+        global.FileReader = class MockFileReader {
+          onload: ((e: ProgressEvent<FileReader>) => void) | null = null;
+          onerror: (() => void) | null = null;
+          readAsText() {
+            queueMicrotask(() => this.onerror?.());
+          }
+        } as unknown as typeof FileReader;
 
-      const { result } = renderHook(() => useWorkflowExportImport(defaultParams), { wrapper });
-      const file = new File(['x'], 'f.json', { type: 'application/json' });
-      const event = {
-        target: { files: [file], value: 'f.json' },
-      } as unknown as React.ChangeEvent<HTMLInputElement>;
+        const { result } = renderHook(() => useWorkflowExportImport(defaultParams), { wrapper });
+        const file = new File(['x'], 'f.json', { type: 'application/json' });
+        const event = {
+          target: { files: [file], value: 'f.json' },
+        } as unknown as React.ChangeEvent<HTMLInputElement>;
 
-      act(() => {
-        result.current.handleImportFile(event);
-      });
+        act(() => {
+          result.current.handleImportFile(event);
+        });
 
-      await waitFor(() => {
-        expect(mockNotification.error).toHaveBeenCalledWith(
-          expect.objectContaining({ title: 'Erreur lors de la lecture du fichier' })
-        );
-      });
-
-      global.FileReader = OriginalFileReader;
+        await waitFor(() => {
+          expect(mockNotification.error).toHaveBeenCalledWith(
+            expect.objectContaining({ title: 'Erreur lors de la lecture du fichier' })
+          );
+        });
+      } finally {
+        global.FileReader = OriginalFileReader;
+      }
     });
 
     it('shows modal.error when format is invalid', async () => {
-      vi.mocked(parseWorkflowFile).mockReturnValue({
+      vi.mocked(parseWorkflowFile).mockReturnValueOnce({
         valid: false,
         errors: ['Error 1', 'Error 2'],
         data: null,

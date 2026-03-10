@@ -5,8 +5,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { prepareWizardParamsFromExecution } from './executionHelpers';
-import type { ExecutionResponse } from '../types/api';
+import { prepareWizardParamsFromExecution, getApprovalInfoFromSteps } from './executionHelpers';
+import type { ExecutionResponse, ExecutionStepResponse } from '../types/api';
 
 function makeExecution(overrides?: Partial<ExecutionResponse>): ExecutionResponse {
   return {
@@ -104,5 +104,114 @@ describe('prepareWizardParamsFromExecution', () => {
     expect(result).not.toBeNull();
     expect(result!.targetNames).toBeUndefined();
     expect(result!.parameters).toEqual({ db_name: 'mydb' });
+  });
+});
+
+// --- Tests for getApprovalInfoFromSteps (Story 71.2, AC2/AC7) ---
+
+function makeStep(overrides?: Partial<ExecutionStepResponse>): ExecutionStepResponse {
+  return {
+    id: 1,
+    execution_id: 100,
+    step_order: 1,
+    step_name: 'vault',
+    step_type: 'vault',
+    status: 'COMPLETED',
+    started_at: '2026-01-28T10:00:00Z',
+    completed_at: '2026-01-28T10:01:00Z',
+    output: null,
+    platform_job_id: null,
+    error_message: null,
+    ...overrides,
+  };
+}
+
+describe('getApprovalInfoFromSteps', () => {
+  it('returns nulls when no step has approval info', () => {
+    const steps = [makeStep(), makeStep({ id: 2, step_order: 2 })];
+    const result = getApprovalInfoFromSteps(steps);
+    expect(result).toEqual({ approvedById: null, approvedAt: null, approvalComment: null });
+  });
+
+  it('returns nulls for empty steps array', () => {
+    const result = getApprovalInfoFromSteps([]);
+    expect(result).toEqual({ approvedById: null, approvedAt: null, approvalComment: null });
+  });
+
+  it('extracts approval info from a COMPLETED approval step', () => {
+    const steps = [
+      makeStep({ id: 1, step_order: 1 }),
+      makeStep({
+        id: 2,
+        step_order: 2,
+        status: 'COMPLETED',
+        approved_by_id: 42,
+        approved_at: '2026-01-28T10:02:00Z',
+        approval_comment: 'Looks good',
+      }),
+    ];
+    const result = getApprovalInfoFromSteps(steps);
+    expect(result).toEqual({
+      approvedById: 42,
+      approvedAt: '2026-01-28T10:02:00Z',
+      approvalComment: 'Looks good',
+    });
+  });
+
+  it('extracts approval info from a REJECTED step (approval_comment as rejection reason)', () => {
+    const steps = [
+      makeStep({
+        id: 1,
+        step_order: 1,
+        status: 'FAILED',
+        approved_by_id: 7,
+        approved_at: '2026-01-28T10:03:00Z',
+        approval_comment: 'Not ready for prod',
+      }),
+    ];
+    const result = getApprovalInfoFromSteps(steps);
+    expect(result).toEqual({
+      approvedById: 7,
+      approvedAt: '2026-01-28T10:03:00Z',
+      approvalComment: 'Not ready for prod',
+    });
+  });
+
+  it('returns first step with approval when multiple steps have approval info', () => {
+    const steps = [
+      makeStep({
+        id: 1,
+        step_order: 1,
+        approved_by_id: 10,
+        approved_at: '2026-01-28T10:00:00Z',
+        approval_comment: 'First',
+      }),
+      makeStep({
+        id: 2,
+        step_order: 2,
+        approved_by_id: 20,
+        approved_at: '2026-01-28T11:00:00Z',
+        approval_comment: 'Second',
+      }),
+    ];
+    const result = getApprovalInfoFromSteps(steps);
+    expect(result.approvedById).toBe(10);
+    expect(result.approvalComment).toBe('First');
+  });
+
+  it('handles step with approved_by_id but no comment', () => {
+    const steps = [
+      makeStep({
+        id: 1,
+        approved_by_id: 5,
+        approved_at: '2026-01-28T10:00:00Z',
+      }),
+    ];
+    const result = getApprovalInfoFromSteps(steps);
+    expect(result).toEqual({
+      approvedById: 5,
+      approvedAt: '2026-01-28T10:00:00Z',
+      approvalComment: null,
+    });
   });
 });

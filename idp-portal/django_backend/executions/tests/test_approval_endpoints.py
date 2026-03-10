@@ -93,13 +93,13 @@ class TestApproveExecution:
 
         assert response.status_code == 400
 
-    def test_approve_nonexistent_returns_400(self):
-        """Approve nonexistent execution -> HTTP 400 (no step found)."""
+    def test_approve_nonexistent_returns_404(self):
+        """Approve nonexistent execution -> HTTP 404 (execution not found)."""
         url = '/api/v1/executions/999999/approve/'
 
         response = self.client.post(url)
 
-        assert response.status_code == 400
+        assert response.status_code == 404
 
     def test_approve_response_format_data_wrapper(self):
         """Response format is {"data": ExecutionStepSerializer}."""
@@ -195,13 +195,13 @@ class TestRejectExecution:
 
         assert response.status_code == 400
 
-    def test_reject_nonexistent_returns_400(self):
-        """Reject nonexistent execution -> HTTP 400 (no step found)."""
+    def test_reject_nonexistent_returns_404(self):
+        """Reject nonexistent execution -> HTTP 404 (execution not found)."""
         url = '/api/v1/executions/999999/reject/'
 
         response = self.client.post(url, format='json')
 
-        assert response.status_code == 400
+        assert response.status_code == 404
 
     def test_reject_response_format_data_wrapper(self):
         """Response format is {"data": ExecutionSerializer}."""

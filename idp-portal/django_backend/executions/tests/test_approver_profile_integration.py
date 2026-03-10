@@ -268,12 +268,21 @@ class TestIntegrationRetroCompatPendingApproval(TestCase):
             user=admin_user,
             status=ExecutionStatus.SUBMITTED,
         )
-        _make_auto_approval_gate(execution)
+        step = _make_auto_approval_gate(execution)
         response = self.client.post(
             f"/api/v1/executions/{execution.id}/approve/",
             format='json',
         )
         self.assertEqual(response.status_code, 200)
+        # Verify gate and execution state actually changed (test would fail if 200 without advancing)
+        step.refresh_from_db()
+        self.assertEqual(step.status, ExecutionStepStatus.COMPLETED)
+        execution.refresh_from_db()
+        self.assertIn(
+            execution.status,
+            (ExecutionStatus.RUNNING, ExecutionStatus.COMPLETED),
+            "Execution must advance from SUBMITTED after approval",
+        )
 
     def test_non_admin_user_cannot_approve_auto_approval_gate(self):
         """Non-admin ne peut PAS approuver via auto-approval-gate."""

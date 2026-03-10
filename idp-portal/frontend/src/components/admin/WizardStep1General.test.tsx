@@ -170,7 +170,13 @@ describe('WizardStep1General — coverage extras', () => {
           <WizardStep1General {...defaultProps} form={form} />
           <button
             type="button"
-            onClick={() => form.validateFields(['name'])}
+            onClick={async () => {
+              try {
+                await form.validateFields(['name']);
+              } catch {
+                // expected validation error when checkName returns false
+              }
+            }}
           >
             Validate
           </button>
@@ -281,7 +287,16 @@ describe('WizardStep1General — coverage extras', () => {
       return (
         <Form form={form} name="testReject">
           <WizardStep1General {...defaultProps} form={form} />
-          <button type="button" onClick={() => form.validateFields(['name'])}>
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await form.validateFields(['name']);
+              } catch {
+                // expected validation error when checkName returns false
+              }
+            }}
+          >
             Validate
           </button>
         </Form>
@@ -307,17 +322,19 @@ describe('WizardStep1General — coverage extras', () => {
 
     const tagsSelect = screen.getByRole('combobox', { name: /Tags/i });
     await userEvent.click(tagsSelect);
-    // In tags mode, typing and Enter adds a tag - triggers onChange with array
+    // In tags mode, typing and Enter adds a tag - triggers onChange with array of strings
     await userEvent.type(tagsSelect, 'newtag{Enter}');
 
     await waitFor(() => {
-      expect(setSelectedTags).toHaveBeenCalled();
+      expect(setSelectedTags).toHaveBeenLastCalledWith(expect.arrayContaining(['newtag']));
     });
   });
 
   it('Catégorie Select avec allowClear permet de vider la sélection', async () => {
+    let formInstance: ReturnType<typeof Form.useForm>[0];
     function FormWrapper() {
       const [form] = Form.useForm();
+      formInstance = form;
       return (
         <Form form={form} initialValues={{ category: 'cat1' }}>
           <WizardStep1General
@@ -337,7 +354,7 @@ describe('WizardStep1General — coverage extras', () => {
     if (clearBtn) {
       await userEvent.click(clearBtn as HTMLElement);
     }
-    expect(categorySelect).toBeInTheDocument();
+    expect(formInstance!.getFieldValue('category')).toBeUndefined();
   });
 
   it('description accepte jusqu\'à 4000 caractères', async () => {
@@ -346,7 +363,16 @@ describe('WizardStep1General — coverage extras', () => {
       return (
         <Form form={form} name="testDesc">
           <WizardStep1General {...defaultProps} form={form} />
-          <button type="button" onClick={() => form.validateFields(['description'])}>
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await form.validateFields(['description']);
+              } catch {
+                // expected validation error if description exceeds limit
+              }
+            }}
+          >
             Validate
           </button>
         </Form>
@@ -371,7 +397,16 @@ describe('WizardStep1General — coverage extras', () => {
       return (
         <Form form={form} name="testType" initialValues={{ name: 'X', description: 'Y' }}>
           <WizardStep1General {...defaultProps} form={form} showTypeSelector={true} />
-          <button type="button" onClick={() => form.validateFields()}>
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await form.validateFields();
+              } catch {
+                // expected validation error when item_type is required but not set
+              }
+            }}
+          >
             Submit
           </button>
         </Form>

@@ -65,6 +65,9 @@ class TestPollAzureDevOpsRunStatus:
         mock_broadcast.assert_called_once()
         mock_update.assert_called_once()
         mock_apply_async.assert_called_once()
+        # Verify poll_kwargs["pipeline_id"] is forwarded to the Azure DevOps adapter
+        adapter.get_status.assert_called_once()
+        assert adapter.get_status.call_args.kwargs.get("pipeline_id") == "5"
 
     @patch("executions.tasks._update_execution_from_poll")
     @patch("executions.tasks._broadcast_execution_update")

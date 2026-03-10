@@ -45,7 +45,7 @@ export async function fetchInventoryTargets(search?: string): Promise<InventoryT
 export async function fetchTargetsPaginated(search?: string): Promise<TargetsResponse> {
   const params = new URLSearchParams();
   params.set('page', '1');
-  params.set('page_size', '100');
+  params.set('page_size', '5000');
   if (search) params.set('search', search);
   return apiFetchRaw<TargetsResponse>(`/inventory/targets?${params.toString()}`);
 }

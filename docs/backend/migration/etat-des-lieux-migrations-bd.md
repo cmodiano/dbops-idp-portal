@@ -19,7 +19,7 @@
 
 ### 2.1 Périmètre
 
-- **117 scripts** : `V000__create_schema_version.sql` → `V116__add_config_step_id_to_execution_steps.sql`
+- **118 scripts** : `V000__create_schema_version.sql` → `V117__add_missing_audit_types_align_django.sql`
 - **Commande** : `flyway migrate` (via `scripts/run_migrations.sh` ou `flyway.conf`)
 - **Historique** : table `flyway_schema_history`
 
@@ -114,23 +114,21 @@
 
 | Migration | Type | Commentaire |
 |-----------|------|--------------|
-| `core/0009_add_scheduled_execution_recurring_enabled_audit_type` | DDL (choices) | **Écart** : `SCHEDULED_EXECUTION_RECURRING_ENABLED` absent de `CK_AUDIT_LOG_ACTION_TYPE` Oracle |
+| `core/0009_add_scheduled_execution_recurring_enabled_audit_type` | DDL (choices) | **Résolu** : V117 aligne `CK_AUDIT_LOG_ACTION_TYPE` Oracle avec Django |
 | `reference/0004_refengine_icon_url_fix_paths` | DML (RunPython) | Correction de chemins d’icônes — pas de script Flyway |
 
 ---
 
 ## 5. Écarts et risques
 
-### 5.1 SCHEDULED_EXECUTION_RECURRING_ENABLED
+### 5.1 SCHEDULED_EXECUTION_RECURRING_ENABLED — Résolu (V117)
 
 - **Django** : `core/migrations/0009` ajoute ce type d’audit (Story 66-16)
-- **Flyway / baseline** : absent de `CK_AUDIT_LOG_ACTION_TYPE`
-- **Impact** : insertion d’un audit avec ce type → violation de contrainte CHECK en Oracle
-- **Action** : créer une migration Flyway `V117__add_scheduled_execution_recurring_enabled_audit_type.sql` et mettre à jour le baseline
+- **Résolution** : `V117__add_missing_audit_types_align_django.sql` a ajouté `SCHEDULED_EXECUTION_RECURRING_ENABLED` à `CK_AUDIT_LOG_ACTION_TYPE` Oracle (2026-03-10)
 
-### 5.2 Types d’audit Django non vérifiés dans baseline
+### 5.2 Types d’audit Django — Résolus (V117)
 
-Types présents dans Django `core/0009` à confirmer dans le baseline :
+Les types suivants (présents dans Django `core/0009`) ont été ajoutés à `CK_AUDIT_LOG_ACTION_TYPE` par **V117** :
 
 - `EXECUTION_STEP_POLICY_APPROVAL_REQUIRED`
 - `EXECUTION_STEP_POLICY_AUTO_APPROVED`
@@ -138,7 +136,7 @@ Types présents dans Django `core/0009` à confirmer dans le baseline :
 - `POLICY_CREATED`, `POLICY_UPDATED`, `POLICY_DELETED`
 - `EXECUTION_POLLING_EXHAUSTED`
 
-Si ces types sont utilisés en production sans migration Flyway, risque de violation de contrainte.
+Aucun écart ouvert restant pour ces types.
 
 ### 5.3 reference/0004 — Migration DML
 

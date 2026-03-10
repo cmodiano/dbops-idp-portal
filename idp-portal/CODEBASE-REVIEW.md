@@ -904,10 +904,11 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | Fichiers FE > 500 LOC | — | — | — | — | **4** (IntegrationForm, ActionWizard, execution_service, ProfileForm) | Nouveau |
 | God classes/methods | — | — | — | — | **3** (QueryExecutor, idp_auth/views, IntegrationForm) | -1 (update_status story 54.6) |
 
-**Bilan global (audit #5) :** Sur 133 findings cumulés, **117 sont résolus** (88%). Les 13 issues restantes de l'audit #5 se concentrent sur la **maintenabilité structurelle** : god classes/modules qui, bien que fonctionnellement corrects, posent des risques de maintenabilité à terme. Aucune issue CRITICAL. La posture sécurité est **entièrement résolue** (0 ouvertes — SEC-13, SEC-14 corrigés story 54.4). L'architecture SOLID est globalement exemplaire (registries, ISP, DI, hooks) — les findings restants sont du polissage structurel et des extractions de responsabilités dans les fichiers les plus volumineux.
+**Bilan global (audit #5, snapshot 2026-02-27) :** Sur 133 findings cumulés, **117 sont résolus** (88%). Les 13 issues restantes de l'audit #5 se concentrent sur la **maintenabilité structurelle** : god classes/modules qui, bien que fonctionnellement corrects, posent des risques de maintenabilité à terme. Aucune issue CRITICAL. La posture sécurité est **entièrement résolue** (0 ouvertes — SEC-13, SEC-14 corrigés story 54.4). L'architecture SOLID est globalement exemplaire (registries, ISP, DI, hooks) — les findings restants sont du polissage structurel et des extractions de responsabilités dans les fichiers les plus volumineux.
 
 ---
 
+<a id="22-mise-à-jour-post-epics-54-66-story-66-26-2026-03-09"></a>
 ## 22. Mise à jour post-Epics 54–66 (Story 66-26, 2026-03-09)
 
 **Date de révision :** 2026-03-09 — Story 66-26 (revue documentation)
@@ -938,7 +939,7 @@ Le tableau §21 "Sécurité 12/14 | 2" est inexact — SEC-13 et SEC-14 ont ét�
 | **PERF-4** | LOW | `<style>` inline dans 3 composants (impact négligeable) | Documenté — acceptable |
 | **16.4** | INFO | STATUS_CONFIG locals potentiellement consolidables | Info — backlog |
 
-**Bilan mis à jour (2026-03-09) :** Sur 133 findings, **129 sont résolus** (97%). 4 issues ouvertes en backlog, 1 INFO. Posture sécurité : 0 ouvertes. Architecture SOLID : excellente.
+**Bilan mis à jour (2026-03-10, post-Story 71.1) :** Sur 133 findings, **130 sont résolus** (98%). 3 issues ouvertes en backlog, 1 INFO. Posture sécurité : 0 ouvertes. Architecture SOLID : excellente (SOLID-FE-4 résolu Story 71.1).
 
 ---
 
@@ -1009,7 +1010,7 @@ Tous les items de sécurité identifiés ont été évalués et clôturés :
 | Tests nouveaux ajoutés (~95 tests sur l'epic) | ✅ |
 | **VERDICT** | **✅ RELEASE READY** |
 
-**Bilan cumulatif (2026-03-09, post-Epic 66) :** Sur les 133 findings historiques, **129 sont résolus** (97%). L'Epic 66 a traité 246+ findings additionnels avec un taux de résolution de ~94%. **Posture sécurité : 0 issues ouvertes.** Le codebase IDP Portal est déclaré prêt pour la première release v1.
+**Bilan cumulatif (2026-03-09, post-Epic 66 — snapshot avant Story 71.1) :** Sur les 133 findings historiques, **129 étaient résolus** (97%). L'Epic 66 a traité 246+ findings additionnels avec un taux de résolution de ~94%. **Posture sécurité : 0 issues ouvertes.** Story 71.1 (2026-03-10) a porté le total à **130 résolus** (98%). Le codebase IDP Portal est déclaré prêt pour la première release v1.
 
 ---
 
@@ -1083,3 +1084,5 @@ Cet audit se concentre sur la suppression du code rétrocompatible accumulé (AD
 ### 24.8 Bilan cumulatif
 
 **Bilan cumulatif (2026-03-10, post-Audit #6) :** Sur les 17 findings de cet audit, **15 sont résolus** (88%). Les 2 items restants sont en backlog (god classes backend, adaptation frontend approval). Le codebase est nettoyé de tout code rétrocompatible inutile (PENDING_APPROVAL, singular step_ids, polling shims).
+
+*Convergence avec les bilans historiques :* Les 133 findings des audits §1–§22 sont à **130 résolus** (98%) après Story 71.1. Les 3 ouvertes + 1 INFO (MAINT-BE-9, INCON-2, PERF-4, 16.4) restent en backlog/acceptable. L'Audit #6 (17 findings) est un périmètre additionnel.

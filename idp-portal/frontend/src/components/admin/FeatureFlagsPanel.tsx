@@ -7,7 +7,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import { Table, Switch, Slider, App, Tag, Typography } from 'antd';
+import { Table, Switch, Slider, App, Tag, Typography, Alert } from 'antd';
 import type { TableProps } from 'antd';
 import { useFeatureFlagsAdmin, type FeatureFlagDetail } from '../../hooks/useFeatureFlagsAdmin';
 import { useFeatureFlagContext } from '../../contexts/FeatureFlagContext';
@@ -18,7 +18,7 @@ const { Text } = Typography;
 export function FeatureFlagsPanel() {
   const { notification } = App.useApp();
   const { refresh: refreshGlobalContext } = useFeatureFlagContext();
-  const { flags, loading, handleToggle, handleRolloutChange } = useFeatureFlagsAdmin();
+  const { flags, loading, error, handleToggle, handleRolloutChange } = useFeatureFlagsAdmin();
   const [updatingKeys, setUpdatingKeys] = useState<Set<string>>(new Set());
 
   const onToggle = useCallback(async (flagKey: string, enabled: boolean) => {
@@ -116,14 +116,17 @@ export function FeatureFlagsPanel() {
   ];
 
   return (
-    <Table<FeatureFlagDetail>
-      columns={columns}
-      dataSource={flags}
-      loading={loading}
-      rowKey="flag_key"
-      size="small"
-      pagination={false}
-      locale={{ emptyText: 'Aucun feature flag configuré' }}
-    />
+    <>
+      {error && <Alert type="error" title={error} showIcon style={{ marginBottom: 16 }} />}
+      <Table<FeatureFlagDetail>
+        columns={columns}
+        dataSource={flags}
+        loading={loading}
+        rowKey="flag_key"
+        size="small"
+        pagination={false}
+        locale={{ emptyText: 'Aucun feature flag configuré' }}
+      />
+    </>
   );
 }

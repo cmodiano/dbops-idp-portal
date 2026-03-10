@@ -10,7 +10,7 @@ from typing import cast
 import structlog
 
 from django.db import connection, transaction
-from django.db.models import Q
+from django.db.models import Q, Subquery
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
@@ -261,10 +261,13 @@ class PendingApprovalsView(APIView):
                 pk__in=approval_exec_ids
             )
         else:
-            run_filter = Q(
-                status__in=active_statuses,
-                executionstep__status=ExecutionStepStatus.WAITING,
-                executionstep__output__contains="approval_granted",
+            # Subquery to avoid duplicate Execution rows when multiple WAITING approval steps exist
+            approval_exec_ids_subquery = ExecutionStep.objects.filter(
+                status=ExecutionStepStatus.WAITING,
+                output__contains="approval_granted",
+            ).values("execution_id")
+            run_filter = Q(status__in=active_statuses) & Q(
+                pk__in=Subquery(approval_exec_ids_subquery)
             )
         # ADR-007: PENDING_APPROVAL status is no longer used. Only step-based filter.
         # Pas de .distinct() : Oracle ORA-22848 avec CLOB (Action.execution_steps, etc.)
@@ -331,6 +334,13 @@ class ApproveExecutionView(APIView):
     )
     @transaction.atomic
     def post(self, request: Request, execution_id: int) -> Response:
+        # Return 404 when the Execution does not exist
+        if not Execution.objects.filter(id=execution_id).exists():
+            raise NotFoundError(
+                code="NOT_FOUND",
+                message="Exécution introuvable",
+                details={"execution_id": execution_id},
+            )
         # ADR-007: Only step-based approval path. Find the first WAITING approval step.
         step = _find_first_waiting_approval_step(execution_id)
         if step is None:
@@ -349,7 +359,7 @@ class ApproveExecutionView(APIView):
         if is_auto_gate:
             if not is_admin_user(request.user):
                 raise PermissionDenied("Seuls les administrateurs peuvent approuver cette exécution")
-            step_config: dict = {}
+            step_config = _get_step_config(step)
         else:
             # Story 58.4 AC3: check approver permission for step gate path
             step_config = _get_step_config(step)
@@ -486,6 +496,13 @@ class RejectExecutionView(APIView):
     )
     @transaction.atomic
     def post(self, request: Request, execution_id: int) -> Response:
+        # Return 404 when the Execution does not exist
+        if not Execution.objects.filter(id=execution_id).exists():
+            raise NotFoundError(
+                code="NOT_FOUND",
+                message="Exécution introuvable",
+                details={"execution_id": execution_id},
+            )
         # ADR-007: Only step-based rejection path. Find the first WAITING approval step.
         step = _find_first_waiting_approval_step(execution_id)
         if step is None:
@@ -503,7 +520,7 @@ class RejectExecutionView(APIView):
         if is_auto_gate:
             if not is_admin_user(request.user):
                 raise PermissionDenied("Seuls les administrateurs peuvent rejeter cette exécution")
-            step_config: dict = {}
+            step_config = _get_step_config(step)
         else:
             # Story 58.4 AC3: check approver permission for step gate path
             step_config = _get_step_config(step)

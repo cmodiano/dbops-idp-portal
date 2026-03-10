@@ -50,7 +50,7 @@ export function BusinessRulesPolicyPanel() {
       setEditPolicy(detail);
       setModalOpen(true);
     } catch (err) {
-      notification.error({ title: 'Erreur lors du chargement de la règle' });
+      notification.error({ message: 'Erreur lors du chargement de la règle' });
       logger.error('business_rule_policy_load_error', { error: String(err) });
     }
   };
@@ -65,9 +65,9 @@ export function BusinessRulesPolicyPanel() {
       onOk: async () => {
         try {
           await remove(record.id);
-          notification.success({ title: `Règle « ${record.name} » supprimée` });
+          notification.success({ message: `Règle « ${record.name} » supprimée` });
         } catch (err) {
-          notification.error({ title: 'Erreur lors de la suppression' });
+          notification.error({ message: 'Erreur lors de la suppression' });
           logger.error('business_rule_policy_delete_error', { error: String(err) });
         }
       },
@@ -79,10 +79,10 @@ export function BusinessRulesPolicyPanel() {
     try {
       if (editPolicy) {
         await update(editPolicy.id, payload);
-        notification.success({ title: `Règle « ${payload.name} » mise à jour` });
+        notification.success({ message: `Règle « ${payload.name} » mise à jour` });
       } else {
         await create(payload);
-        notification.success({ title: `Règle « ${payload.name} » créée` });
+        notification.success({ message: `Règle « ${payload.name} » créée` });
       }
       setModalOpen(false);
       setEditPolicy(null);

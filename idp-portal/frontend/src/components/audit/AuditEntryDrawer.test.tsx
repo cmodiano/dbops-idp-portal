@@ -68,11 +68,29 @@ const mockExecution: ExecutionResponse = {
   started_at: '2025-01-15T10:00:00Z',
   completed_at: '2025-01-15T10:30:00Z',
   created_at: '2025-01-15T09:55:00Z',
-  approved_at: '2025-01-15T09:58:00Z',
-  approval_comment: 'Approuvé avec réserves',
 };
 
 const mockSteps: ExecutionStepResponse[] = [];
+
+/** Steps with approval info for tests that need approval data (Story 71.2). */
+const mockStepsWithApproval: ExecutionStepResponse[] = [
+  {
+    id: 1,
+    execution_id: 123,
+    step_order: 1,
+    step_name: 'Approval Gate',
+    step_type: 'platform',
+    status: 'COMPLETED',
+    started_at: '2025-01-15T09:57:00Z',
+    completed_at: '2025-01-15T09:58:00Z',
+    output: null,
+    platform_job_id: null,
+    error_message: null,
+    approved_by_id: 10,
+    approved_at: '2025-01-15T09:58:00Z',
+    approval_comment: 'Approuvé avec réserves',
+  },
+];
 
 const defaultProps = {
   open: true,
@@ -93,13 +111,13 @@ describe('AuditEntryDrawer', () => {
   });
 
   it('test_drawer_shows_approval_comment_when_available — affiche le commentaire si disponible', () => {
-    render(<AuditEntryDrawer {...defaultProps} execution={mockExecution} />);
+    render(<AuditEntryDrawer {...defaultProps} execution={mockExecution} steps={mockStepsWithApproval} />);
     expect(screen.getByText('Approuvé avec réserves')).toBeInTheDocument();
   });
 
   it('test_drawer_shows_approval_date_when_available — affiche la date d\'approbation si disponible', () => {
-    render(<AuditEntryDrawer {...defaultProps} execution={mockExecution} />);
-    const expectedDate = dayjs(mockExecution.approved_at!).format('DD/MM/YYYY HH:mm');
+    render(<AuditEntryDrawer {...defaultProps} execution={mockExecution} steps={mockStepsWithApproval} />);
+    const expectedDate = dayjs(mockStepsWithApproval[0].approved_at!).format('DD/MM/YYYY HH:mm');
     expect(screen.getByText(expectedDate)).toBeInTheDocument();
   });
 

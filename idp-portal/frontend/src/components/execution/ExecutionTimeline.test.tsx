@@ -422,12 +422,27 @@ describe('ExecutionTimeline', () => {
 
     it('shows rejected banner when execution is REJECTED', () => {
       mockUseWebSocket.mockReturnValue({
-        steps: [],
+        steps: [
+          {
+            id: 1,
+            execution_id: 1,
+            step_order: 1,
+            step_name: 'Approval Gate',
+            step_type: 'platform',
+            status: 'FAILED',
+            started_at: '2026-02-01T10:00:00Z',
+            completed_at: '2026-02-01T10:00:00Z',
+            output: null,
+            platform_job_id: null,
+            error_message: null,
+            approved_by_id: 5,
+            approved_at: '2026-02-01T10:00:00Z',
+            approval_comment: 'Policy violation',
+          },
+        ],
         execution: {
           id: 1,
           status: 'REJECTED',
-          approval_comment: 'Policy violation',
-          approved_at: '2026-02-01T10:00:00Z',
         } as unknown as import('../../types/api').ExecutionResponse,
         loading: false,
         error: null,
@@ -456,6 +471,9 @@ describe('ExecutionTimeline', () => {
             output: null,
             platform_job_id: null,
             error_message: null,
+            approved_by_id: 10,
+            approved_at: '2026-02-01T09:55:00Z',
+            approval_comment: 'Approved after review',
           },
         ],
         execution: {
@@ -463,9 +481,6 @@ describe('ExecutionTimeline', () => {
           status: 'COMPLETED',
           started_at: '2026-02-01T10:00:00Z',
           completed_at: '2026-02-01T10:00:10Z',
-          approved_by: 10,
-          approved_at: '2026-02-01T09:55:00Z',
-          approval_comment: 'Approved after review',
         } as unknown as import('../../types/api').ExecutionResponse,
         loading: false,
         error: null,

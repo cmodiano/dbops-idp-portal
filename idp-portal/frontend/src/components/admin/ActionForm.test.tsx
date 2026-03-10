@@ -57,7 +57,9 @@ vi.mock('../../hooks/usePlatformIntegrations', () => ({
   }),
 }));
 
-const mockExportYaml = vi.fn().mockResolvedValue(undefined);
+const { mockExportYaml } = vi.hoisted(() => ({
+  mockExportYaml: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock('../../hooks/useEntityExport', () => ({
   useEntityExport: () => ({ exportYaml: mockExportYaml, loading: false }),
 }));
