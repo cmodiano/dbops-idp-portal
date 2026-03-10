@@ -373,8 +373,10 @@ class ContainerWorkflowRuntime:
         Story 67.2 — AC1, AC2, AC7.
         """
         if outcome == ExecutionStatus.COMPLETED:
-            # Opt out of linear fallback if step defines either success or error routing
-            has_routing = 'on_success_step_ids' in step or 'on_error_step_ids' in step
+            # Opt out of linear fallback only if step defines explicit success routing.
+            # Steps with only on_error_step_ids must use linear fallback on success.
+            # Note: on_success_step_id (singular) is legacy; no active code uses it (RC-02).
+            has_routing = 'on_success_step_ids' in step
             if not has_routing:
                 # Mode linéaire sans routing explicite — fallback sur step suivant par ordre
                 return self._get_linear_next_step_ids(step)

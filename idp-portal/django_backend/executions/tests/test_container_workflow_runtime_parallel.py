@@ -557,6 +557,32 @@ class TestRetroCompatSingular:
 
 
 @pytest.mark.django_db(transaction=True)
+class TestPartialBranchesLinearFallbackOnSuccess:
+    """Step with only on_error_step_ids must use linear fallback on success (not terminate)."""
+
+    def test_get_next_step_ids_only_on_error_uses_linear_fallback_on_success(self):
+        """Step with only on_error_step_ids + COMPLETED → linear fallback, not []."""
+        execution = Execution.objects.create(
+            action=ActionFactory(name="W", status=ActionStatus.PUBLISHED, item_type=ActionItemType.WORKFLOW),
+            user=UserFactory(),
+            environment="dev",
+            status=ExecutionStatus.SUBMITTED,
+        )
+        runtime = ContainerWorkflowRuntime(execution)
+        runtime.workflow_steps = [
+            {"step_id": "step-1", "order": 1, "on_error_step_ids": ["step-err"]},
+            {"step_id": "step-2", "order": 2},
+            {"step_id": "step-err", "order": 99},
+        ]
+        runtime._step_lookup_by_id = {s["step_id"]: s for s in runtime.workflow_steps}
+
+        step = runtime.workflow_steps[0]
+        next_ids = runtime._get_next_step_ids(step, ExecutionStatus.COMPLETED)
+
+        assert next_ids == ["step-2"], "Linear fallback to next step by order (not [] from premature routing)"
+
+
+@pytest.mark.django_db(transaction=True)
 class TestLinearRetrocompat:
     """AC7: Rétrocompatibilité mode linéaire — pas de champs de routing → exécution par ordre."""
 
