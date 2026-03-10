@@ -29,11 +29,17 @@ class ExecutionPayloadValidator:
                 details={"action_id": action_id},
             )
         try:
-            return cast(Action, Action.objects.get(id=int(action_id), status=ActionStatus.PUBLISHED))
+            normalized_action_id = int(action_id)
         except (ValueError, TypeError):
             raise BadRequestError(code="BAD_REQUEST", message="action_id invalide", details={"action_id": action_id})
+        try:
+            return cast(Action, Action.objects.get(id=normalized_action_id, status=ActionStatus.PUBLISHED))
         except Action.DoesNotExist:
-            raise NotFoundError(code="ACTION_NOT_FOUND", message="Action non trouvée", details={"action_id": action_id})
+            raise NotFoundError(
+                code="ACTION_NOT_FOUND",
+                message="Action non trouvée",
+                details={"action_id": normalized_action_id},
+            )
 
     @staticmethod
     def validate(payload: dict, request: Any) -> dict:
@@ -86,13 +92,13 @@ class ExecutionPayloadValidator:
                 raise BadRequestError(
                     code="BAD_REQUEST",
                     message="target_names est requis pour cette action",
-                    details={"action_id": action_id, "requires_target": True},
+                    details={"action_id": action.id, "requires_target": True},
                 )
             if environment:
                 logger.warning(
                     "deprecated_environment_with_targets",
                     message="environment fourni avec target_names sera ignoré (dérivé du target)",
-                    action_id=action_id,
+                    action_id=action.id,
                     environment=environment,
                     correlation_id=correlation_id,
                 )
@@ -112,7 +118,7 @@ class ExecutionPayloadValidator:
 
         return {
             'action': action,
-            'action_id': action_id,
+            'action_id': action.id,
             'environment': environment,
             'target_names': target_names,
             'parameters': parameters,

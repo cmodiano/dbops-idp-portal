@@ -264,6 +264,7 @@ class TestExecutionValidationPipeline(TestCase):
             'action_id': self.action.id,
             'environment': 'dev',
             'target_names': ['server1'],
+            'page_me': True,
         }
 
         with patch(
@@ -292,6 +293,6 @@ class TestExecutionValidationPipeline(TestCase):
                             )
 
         assert result.correlation_id == 'test-corr-pipeline'
-        assert result.page_me is False
+        assert result.page_me is True
         assert result.env_config is not None
         assert result.env_config['impact_level'] == 'low'

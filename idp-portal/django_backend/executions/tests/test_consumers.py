@@ -334,6 +334,85 @@ async def test_dashboard_consumer_execution_update_forwards_payload():
 
 
 # ============================================================================
+# DashboardConsumer RBAC — dashboard permission before group_add
+# ============================================================================
+
+def _make_dashboard_consumer() -> DashboardConsumer:
+    """Helper: create DashboardConsumer with minimal attributes."""
+    consumer = DashboardConsumer()
+    consumer.group_name = "dashboard"
+    consumer.channel_name = "test_channel"
+    consumer.authenticated = False
+    consumer.user_id = None
+    consumer._group_joined = False
+    return consumer
+
+
+@pytest.mark.asyncio
+async def test_dashboard_consumer_authorized_admin_joins_group():
+    """Dashboard RBAC: Admin user → _check_dashboard_access True → group_add called."""
+    consumer = _make_dashboard_consumer()
+    mock_channel_layer = AsyncMock()
+    consumer.channel_layer = mock_channel_layer
+    consumer.close = AsyncMock()
+    consumer._safe_send = AsyncMock()
+
+    async def mock_super_receive(self_inner, **kwargs):
+        consumer.authenticated = True
+        consumer.user_id = "7"
+
+    with patch.object(consumer, '_check_dashboard_access', new=AsyncMock(return_value=True)):
+        with patch.object(AuthenticatedWebSocketConsumer, 'receive', mock_super_receive):
+            await consumer.receive(text_data='{"type":"auth","token":"tok"}')
+
+    mock_channel_layer.group_add.assert_called_once_with("dashboard", "test_channel")
+    consumer.close.assert_not_called()
+    assert consumer._group_joined is True
+
+
+@pytest.mark.asyncio
+async def test_dashboard_consumer_unauthorized_non_admin_closes_4003():
+    """Dashboard RBAC: Non-admin user → _check_dashboard_access False → close(4003), no group_add."""
+    consumer = _make_dashboard_consumer()
+    mock_channel_layer = AsyncMock()
+    consumer.channel_layer = mock_channel_layer
+    consumer.close = AsyncMock()
+
+    async def mock_super_receive(self_inner, **kwargs):
+        consumer.authenticated = True
+        consumer.user_id = "99"
+
+    with patch.object(consumer, '_check_dashboard_access', new=AsyncMock(return_value=False)):
+        with patch.object(AuthenticatedWebSocketConsumer, 'receive', mock_super_receive):
+            await consumer.receive(text_data='{"type":"auth","token":"tok"}')
+
+    consumer.close.assert_called_once_with(code=4003)
+    mock_channel_layer.group_add.assert_not_called()
+    assert consumer._group_joined is False
+
+
+@pytest.mark.asyncio
+async def test_dashboard_consumer_access_check_exception_closes_4003():
+    """Dashboard RBAC: _check_dashboard_access raises → fail-secure close(4003), no group_add."""
+    consumer = _make_dashboard_consumer()
+    mock_channel_layer = AsyncMock()
+    consumer.channel_layer = mock_channel_layer
+    consumer.close = AsyncMock()
+
+    async def mock_super_receive(self_inner, **kwargs):
+        consumer.authenticated = True
+        consumer.user_id = "7"
+
+    with patch.object(consumer, '_check_dashboard_access', new=AsyncMock(side_effect=RuntimeError("db error"))):
+        with patch.object(AuthenticatedWebSocketConsumer, 'receive', mock_super_receive):
+            await consumer.receive(text_data='{"type":"auth","token":"tok"}')
+
+    consumer.close.assert_called_once_with(code=4003)
+    mock_channel_layer.group_add.assert_not_called()
+    assert consumer._group_joined is False
+
+
+# ============================================================================
 # Story 59-2 — SEC-2 : vérification d'accès après auth JWT
 # ============================================================================
 

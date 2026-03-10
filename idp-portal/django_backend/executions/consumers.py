@@ -410,11 +410,60 @@ class DashboardConsumer(AuthenticatedWebSocketConsumer):
         self._group_joined = False
         await super().connect()
 
+    async def _check_dashboard_access(self) -> bool:
+        """Check if user has dashboard permission (admin profile per dashboard RBAC).
+
+        Same logic as HTTP dashboard views: _filter_queryset_by_ownership uses IsAdminUser.
+        Only users with admin profile can join the shared dashboard group (broadcasts
+        execution_update to all clients — no per-user filtering).
+        """
+        user_id = self.user_id
+        if not user_id:
+            return False
+
+        def _check_sync() -> bool:
+            from django.contrib.auth import get_user_model
+
+            from core.permissions import is_admin_user
+
+            User = get_user_model()
+            try:
+                user = User.objects.get(id=user_id)
+            except User.DoesNotExist:
+                return False
+            return is_admin_user(user)
+
+        return await sync_to_async(_check_sync)()
+
     async def receive(self, text_data: str | None = None, bytes_data: bytes | None = None) -> None:
         was_authenticated = self.authenticated
         await super().receive(text_data=text_data, bytes_data=bytes_data)
 
         if not was_authenticated and self.authenticated:
+            # Dashboard RBAC: same check as HTTP dashboard views (IsAdminUser)
+            try:
+                authorized = await self._check_dashboard_access()
+            except Exception as e:  # noqa: BLE001 — fail-secure: any unexpected error → deny
+                logger.error(
+                    "ws_dashboard_access_check_failed",
+                    group_name=self.group_name,
+                    user_id=self.user_id,
+                    error=str(e),
+                    error_type=type(e).__name__,
+                    exc_info=True,
+                )
+                self._group_joined = False
+                await self.close(code=4003)
+                return
+            if not authorized:
+                logger.warning(
+                    "ws_dashboard_authorization_failed",
+                    group_name=self.group_name,
+                    user_id=self.user_id,
+                )
+                self._group_joined = False
+                await self.close(code=4003)
+                return
             if hasattr(self, "channel_layer") and self.channel_layer is not None:
                 try:
                     await self.channel_layer.group_add(self.group_name, self.channel_name)

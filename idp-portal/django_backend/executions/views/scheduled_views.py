@@ -199,7 +199,7 @@ class ScheduledExecutionsView(APIView):
         if environment is None:
             raise BadRequestError(
                 code="BAD_REQUEST",
-                message="action_id et environment sont requis",
+                message="environment est requis",
                 details={"action_id": action_id, "environment": environment},
             )
 

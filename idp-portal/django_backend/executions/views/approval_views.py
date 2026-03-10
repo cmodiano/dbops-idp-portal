@@ -167,13 +167,21 @@ def _get_step_config(step: ExecutionStep) -> dict:
 
 def _get_on_success_step_ids(step_config: dict, execution_steps: list) -> list[str]:
     """Story 67.4: Retourne la liste des step_ids à reprendre après approbation.
-    Priorité: on_success_step_ids > _get_next_step_by_order.
+
+    ADR-007 (step_type présent): on_success_step_ids si présent, sinon _get_next_step_by_order.
+    Legacy (sans step_type): bypass on_success_step_ids, retourne le next step par ordre.
     """
+    is_adr007_step = bool(step_config.get("step_type"))
+    if not is_adr007_step:
+        next_step = _get_next_step_by_order(execution_steps, step_config)
+        next_id = next_step.get("step_id") if next_step else None
+        return [next_id] if next_id else []
+
     ids = step_config.get("on_success_step_ids")
     if isinstance(ids, list) and len(ids) > 0:
         return [s for s in ids if isinstance(s, str) and s]
     next_step = _get_next_step_by_order(execution_steps, step_config)
-    next_id = next_step.get('step_id') if next_step else None
+    next_id = next_step.get("step_id") if next_step else None
     return [next_id] if next_id else []
 
 

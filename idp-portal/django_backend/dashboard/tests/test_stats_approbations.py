@@ -230,7 +230,7 @@ class TestDashboardStatsApprobationsDelay:
         delay = response.data['data']['avg_approval_delay_s']
         assert delay is not None
         expected_delay = (approved - execution.created_at).total_seconds()
-        assert delay >= expected_delay - 1.0  # tolérance timing/float
+        assert delay == pytest.approx(expected_delay, abs=1.0)
 
     def test_avg_delay_gate_step_path(self):
         """Délai = step.approved_at - execution.created_at via gate step ADR-007.
@@ -253,7 +253,7 @@ class TestDashboardStatsApprobationsDelay:
         delay = response.data['data']['avg_approval_delay_s']
         assert delay is not None
         expected_delay = (step_approved - execution.created_at).total_seconds()
-        assert delay >= expected_delay - 1.0  # tolérance timing/float
+        assert delay == pytest.approx(expected_delay, abs=1.0)
 
     def test_avg_delay_excludes_negative_deltas(self):
         """Délai négatif (approved_at < created_at) doit être exclu.

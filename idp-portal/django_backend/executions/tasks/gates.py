@@ -797,7 +797,10 @@ def resume_container_workflow_from_gate(
                 Max('step_order')
             )['step_order__max']
             runtime._step_order_counter = max_order if max_order is not None else 0
-            runtime._execute_workflow_steps()
+            # All locking, idempotency checks, and runtime preparation done above.
+            # Exit transaction here to release select_for_update lock before downstream work.
+        # Execute workflow steps AFTER releasing the DB lock (child executions, tasks, etc.)
+        runtime._execute_workflow_steps()
 
         logger.info(
             "resume_container_workflow_gate_complete",

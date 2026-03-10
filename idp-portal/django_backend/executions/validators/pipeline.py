@@ -125,6 +125,7 @@ class ExecutionValidationPipeline:
             )
             parameters = (parameters.copy() if parameters else {})
             parameters["workflow_step_parameters"] = normalized_wsp
+            workflow_step_parameters = normalized_wsp
 
         # Step 5: Validate mutex
         target_ids_for_mutex = [t['name'] for t in validated_targets] if validated_targets else []
