@@ -26,19 +26,6 @@ export interface TargetsResponse {
 }
 
 /**
- * Fetch targets from inventory API (RBAC filtered).
- * Used for pattern resolution and manual target validation.
- */
-export async function fetchInventoryTargets(search?: string): Promise<InventoryTarget[]> {
-  const params = new URLSearchParams();
-  params.set('page', '1');
-  params.set('page_size', '5000');
-  if (search) params.set('search', search);
-  const response = await apiFetchRaw<TargetsResponse>(`/inventory/targets?${params.toString()}`);
-  return response?.items ?? [];
-}
-
-/**
  * Story 71.1, AC5: Fetch targets with pagination response for TargetSelector.
  * DIP: Removes direct apiFetchRaw import from TargetSelector.tsx.
  */
@@ -48,6 +35,15 @@ export async function fetchTargetsPaginated(search?: string): Promise<TargetsRes
   params.set('page_size', '5000');
   if (search) params.set('search', search);
   return apiFetchRaw<TargetsResponse>(`/inventory/targets?${params.toString()}`);
+}
+
+/**
+ * Fetch targets from inventory API (RBAC filtered).
+ * Used for pattern resolution and manual target validation.
+ */
+export async function fetchInventoryTargets(search?: string): Promise<InventoryTarget[]> {
+  const response = await fetchTargetsPaginated(search);
+  return response?.items ?? [];
 }
 import type {
   ExecutionCreateRequest,

@@ -740,8 +740,9 @@ describe('ActionForm — coverage extension', () => {
       render(<ActionForm {...defaultProps} editAction={mockEditAction} />);
     });
 
+    const user = userEvent.setup();
     const exportBtn = screen.getByRole('button', { name: /Exporter en YAML/i });
-    await userEvent.click(exportBtn);
+    await user.click(exportBtn);
 
     await waitFor(() => {
       expect(mockExportYaml).toHaveBeenCalled();

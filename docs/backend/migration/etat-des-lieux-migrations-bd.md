@@ -11,7 +11,7 @@
 |-----------|-------------|------------------|------|
 | **Flyway** | `idp-portal/database/migrations/` | V000–V117 (118 scripts) | Schéma Oracle en production |
 | **Baseline** | `idp-portal/database/baseline/baseline_schema_v088.sql` | État V116 | Nouveaux environnements vierges |
-| **Django** | `idp-portal/django_backend/*/migrations/` | 69 migrations (8 apps) | Tests SQLite + mapping ORM Oracle |
+| **Django** | `idp-portal/django_backend/*/migrations/` | 60 migrations (8 apps) | Tests SQLite + mapping ORM Oracle |
 
 ---
 

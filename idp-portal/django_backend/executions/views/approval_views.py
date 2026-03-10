@@ -330,7 +330,7 @@ class ApproveExecutionView(APIView):
                 ),
             },
         ),
-        responses={200: ExecutionSerializer},
+        responses={200: ExecutionStepSerializer},
     )
     @transaction.atomic
     def post(self, request: Request, execution_id: int) -> Response:
@@ -401,14 +401,12 @@ class ApproveExecutionView(APIView):
 
         execution = step.execution
 
-        if on_success_step_ids:
-            _eid, _sids = execution_id, on_success_step_ids
-            transaction.on_commit(
-                lambda: resume_container_workflow_from_gate.apply_async(
-                    args=[_eid, _sids], queue="default"
-                )
-            )
-        elif is_auto_gate:
+        # ADR-007: Check is_auto_gate FIRST. The auto-approval-gate is a synthetic step
+        # not in action.execution_steps, so find_step_config returns None and
+        # _get_on_success_step_ids falls through to _get_next_step_by_order, returning
+        # the first workflow step. That would incorrectly trigger resume_container_workflow_from_gate,
+        # which exits early (execution is SUBMITTED, not RUNNING). We must launch the workflow.
+        if is_auto_gate:
             # Auto-approval-gate: launch the workflow now that approval is granted
             _eid_launch = execution_id
             _corr = correlation_id
@@ -416,7 +414,7 @@ class ApproveExecutionView(APIView):
             def _launch_after_approval() -> None:
                 try:
                     exec_obj = Execution.objects.select_related('action').get(id=_eid_launch)
-                    ExecutionService.launch_workflow(exec_obj, _corr)
+                    self.get_execution_service().launch_workflow(exec_obj, _corr)
                 except Exception as e:  # noqa: BLE001
                     logger.error(
                         "integration_error_on_approval_launch",
@@ -428,6 +426,13 @@ class ApproveExecutionView(APIView):
                     )
 
             transaction.on_commit(_launch_after_approval)
+        elif on_success_step_ids:
+            _eid, _sids = execution_id, on_success_step_ids
+            transaction.on_commit(
+                lambda: resume_container_workflow_from_gate.apply_async(
+                    args=[_eid, _sids], queue="default"
+                )
+            )
         else:
             if execution.status == ExecutionStatus.RUNNING:
                 execution.status = ExecutionStatus.COMPLETED

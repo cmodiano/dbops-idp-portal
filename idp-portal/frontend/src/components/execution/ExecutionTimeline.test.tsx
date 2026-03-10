@@ -428,7 +428,7 @@ describe('ExecutionTimeline', () => {
             execution_id: 1,
             step_order: 1,
             step_name: 'Approval Gate',
-            step_type: 'platform',
+            step_type: 'gate',
             status: 'FAILED',
             started_at: '2026-02-01T10:00:00Z',
             completed_at: '2026-02-01T10:00:00Z',

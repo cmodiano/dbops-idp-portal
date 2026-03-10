@@ -261,6 +261,7 @@ class TestIntegrationRetroCompatPendingApproval(TestCase):
 
     def test_admin_user_can_approve_auto_approval_gate(self):
         """Admin (DBOPS) peut approuver via auto-approval-gate."""
+        from executions.services import ExecutionService
         admin_user = UserFactory(username="integ_admin_approve_58_4", profile="DBOPS")
         self.client.force_authenticate(user=admin_user)
         execution = ExecutionFactory(
@@ -269,11 +270,17 @@ class TestIntegrationRetroCompatPendingApproval(TestCase):
             status=ExecutionStatus.SUBMITTED,
         )
         step = _make_auto_approval_gate(execution)
-        with self.captureOnCommitCallbacks(execute=True):
-            response = self.client.post(
-                f"/api/v1/executions/{execution.id}/approve/",
-                format='json',
-            )
+
+        def _mock_launch(exec_obj, correlation_id=None):
+            exec_obj.status = ExecutionStatus.RUNNING
+            exec_obj.save()
+
+        with patch.object(ExecutionService, "launch_workflow", side_effect=_mock_launch):
+            with self.captureOnCommitCallbacks(execute=True):
+                response = self.client.post(
+                    f"/api/v1/executions/{execution.id}/approve/",
+                    format='json',
+                )
         self.assertEqual(response.status_code, 200)
         # Verify gate and execution state actually changed (test would fail if 200 without advancing)
         step.refresh_from_db()
@@ -311,13 +318,15 @@ class TestIntegrationRetroCompatPendingApproval(TestCase):
             user=admin_user,
             status=ExecutionStatus.SUBMITTED,
         )
-        _make_auto_approval_gate(execution)
+        step = _make_auto_approval_gate(execution)
         response = self.client.post(
             f"/api/v1/executions/{execution.id}/reject/",
             {"rejection_reason": "Refus admin"},
             format='json',
         )
         self.assertEqual(response.status_code, 200)
+        step.refresh_from_db()
+        self.assertEqual(step.status, ExecutionStepStatus.FAILED)
         execution.refresh_from_db()
         self.assertEqual(execution.status, ExecutionStatus.FAILED)
 

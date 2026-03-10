@@ -19,7 +19,7 @@ Le portail IDP utilise **Oracle Database** avec **28 tables** organisées en **6
 
 ## Diagramme ER Complet
 
-Représentation des 28 tables principales (schéma V000–V117).
+Représentation des 28 tables principales (schéma V000 à V117).
 
 ```
                                        ┌──────────────────────┐

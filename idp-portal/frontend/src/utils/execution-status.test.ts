@@ -87,9 +87,10 @@ describe('STEP_STATUS_BADGE_CONFIG', () => {
     'FAILED',
     'SKIPPED',
     'CANCELLED',
+    'WAITING',
   ] as const;
 
-  it('couvre les 6 statuts step (dont CANCELLED défensif)', () => {
+  it('couvre les 7 statuts step (dont CANCELLED défensif, WAITING gate)', () => {
     expectedStatuses.forEach((status) => {
       expect(STEP_STATUS_BADGE_CONFIG).toHaveProperty(status);
     });

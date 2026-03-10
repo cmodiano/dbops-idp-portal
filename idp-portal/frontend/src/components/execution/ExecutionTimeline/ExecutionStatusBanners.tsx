@@ -132,7 +132,7 @@ export function ExecutionStatusBanners({
                 <span style={{ cursor: 'default', color: 'inherit', textDecoration: 'none' }}>Trace d'audit</span>
               </Tooltip>
               {/* Story 71.2: Show approval info from steps (ADR-007) */}
-              {approvalInfo.approvedById != null && approvalInfo.approvedAt && (
+              {approvalInfo.approvedAt && (
                 <>
                   <br />
                   <Text type="secondary" style={{ fontSize: 12 }}>

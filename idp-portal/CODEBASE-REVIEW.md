@@ -426,7 +426,7 @@
 
 **Avant :** 29 composants importent directement les services.
 
-**État actuel :** ~25/~25 composants migrés. Toutes les violations DIP résolues. Seuls restent `logger` et `AppLayout` (imports architecturaux acceptables, AC12).
+**État actuel :** 25/25 composants migrés. Toutes les violations DIP résolues. Seuls restent `logger` et `AppLayout` (imports architecturaux acceptables, AC12).
 
 **Historique des migrations :**
 
@@ -440,7 +440,7 @@
 | 54.15 | CategoriesAdminTable, CategoryForm, EnginesAdminTable, EngineForm, IntegrationsTable, BusinessRulePolicySelector, ProfileImportModal | useCategoriesAdmin, useCategoryForm, useEnginesAdmin, useEngineForm, useIntegrationValidation, useBusinessRulePolicies, useProfileImport |
 | 71.1 | OutputSchemaPanel, FeatureFlagsPanel, BusinessRulesPolicyPanel, EvaluationStepConfig, TargetSelector, ReportingDashboard, AdminPlatformSection, ActionForm, ActionWizard | useOutputSchemasList, useFeatureFlagsAdmin, useBusinessRulePoliciesAdmin, useBusinessRulePoliciesActive, useDashboardReportingStats, useAdminPlatformStats + extensions useActionFormState, useActionWizardState |
 
-**SOLID-FE-4 ✅ ~25/~25 composants migrés (2026-03-10, Story 71.1)**
+**SOLID-FE-4 ✅ 25/25 composants migrés (2026-03-10, Story 71.1)**
 
 ---
 
@@ -940,7 +940,7 @@ Le tableau §21 "Sécurité 12/14 | 2" est inexact — SEC-13 et SEC-14 ont ét�
 | **PERF-4** | LOW | `<style>` inline dans 3 composants (impact négligeable) | Documenté — acceptable |
 | **16.4** | INFO | STATUS_CONFIG locals potentiellement consolidables | ✅ RESOLVED — Story 71.3 |
 
-**Bilan mis à jour (2026-03-10, post-Story 71.3) :** Sur 133 findings, **131 sont résolus** (98.5%). 3 issues ouvertes en backlog (MAINT-BE-9, INCON-2, PERF-4). 16.4 résolu par Story 71.3. Posture sécurité : 0 ouvertes. Architecture SOLID : excellente.
+**Bilan mis à jour (2026-03-10, post-Story 71.3) :** Sur 133 findings, **130 sont résolus** (97.7%). 3 issues ouvertes en backlog (MAINT-BE-9, INCON-2, PERF-4). 16.4 résolu par Story 71.3. Posture sécurité : 0 ouvertes. Architecture SOLID : excellente.
 
 ---
 
@@ -986,7 +986,7 @@ Les 246+ findings Epic 66 s'ajoutent aux 133 findings des audits historiques (§
 | MEDIUM — Qualité | EXE-MED-10, AUD-MED-03 | Testabilité throttle, duplication `_is_auditor()` |
 | ADRs manquants | 4 ADRs | Celery, Oracle, CaC, Parallel Group |
 | Tests frontend | ~15 fichiers | Services/hooks non couverts |
-| CSS tokens | TopNav.css | Couleurs hardcodées → design tokens |
+| ~~CSS tokens~~ | ~~TopNav.css~~ | ~~Couleurs hardcodées → design tokens~~ — **Résolu** (story 71.4) : 15 `rgba(0,135,78,…)` remplacées par `color-mix(in srgb, var(--ant-color-primary) X%, transparent)` |
 
 ### Évaluation sécurité finale
 
