@@ -15,8 +15,9 @@ import { Card, Form, Row, Col, Select, DatePicker, Button, Badge, Space, theme }
 import { FilterOutlined, ClearOutlined } from '@ant-design/icons';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
-import type { DashboardFilters, FilterOptions } from '../../../types/api';
+import type { DashboardFilters, DashboardFilterStatus, FilterOptions } from '../../../types/api';
 import { getEnvironmentLabel, sortEnvironments } from '../../../utils/environmentHelpers';
+import { EXECUTION_STATUS_FILTER_OPTIONS } from '../../../utils/execution-status';
 
 const { RangePicker } = DatePicker;
 
@@ -36,16 +37,10 @@ const DEFAULT_ENVIRONMENT_OPTIONS = [
   { label: 'Production', value: 'prod' },
 ];
 
-/** Default status options (includes all execution statuses including approval workflow). */
-const STATUS_OPTIONS = [
+/** Dashboard status filter options: execution statuses + PENDING (DashboardFilterStatus includes PENDING). */
+const DASHBOARD_STATUS_FILTER_OPTIONS: { label: string; value: DashboardFilterStatus }[] = [
   { label: 'En attente', value: 'PENDING' },
-  { label: 'Soumis', value: 'SUBMITTED' },
-  { label: 'En cours', value: 'RUNNING' },
-  { label: 'Terminé', value: 'COMPLETED' },
-  { label: 'Échoué', value: 'FAILED' },
-  { label: 'Annulé', value: 'CANCELLED' },
-  { label: 'Approbation requise', value: 'PENDING_APPROVAL' },
-  { label: 'Rejeté', value: 'REJECTED' },
+  ...EXECUTION_STATUS_FILTER_OPTIONS,
 ];
 
 export interface AdvancedFiltersPanelProps {
@@ -243,7 +238,7 @@ export function AdvancedFiltersPanel({
                 allowClear
                 value={filters.status}
                 onChange={handleStatusChange}
-                options={STATUS_OPTIONS}
+                options={DASHBOARD_STATUS_FILTER_OPTIONS}
                 disabled={loading}
                 data-testid="filter-status"
               />

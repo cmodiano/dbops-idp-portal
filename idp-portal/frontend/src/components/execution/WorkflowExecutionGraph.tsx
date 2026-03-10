@@ -50,7 +50,7 @@ import { buildParallelGroupMap, computeParallelGroupStatus } from '../../utils/p
 
 const { Text } = Typography;
 
-// Couleurs graphe React Flow — config locale justifiée (Story 35.1 AC4 Option B, SOLID-FE-10).
+// Couleurs graphe React Flow — config locale justifiée (Story 35.1 AC4 Option B, SOLID-FE-10, §16.4).
 // Les couleurs hex servent la lisibilité visuelle du graphe React Flow, pas les badges Ant Design.
 // RUNNING = orange (#fa8c16) pour étape active très visible (vs bleu #3B82F6 dans STEP_STATUS_COLOR).
 // SELECTED = gold (#faad14) — sélection nœud AC7, aucun équivalent dans execution-status.ts.

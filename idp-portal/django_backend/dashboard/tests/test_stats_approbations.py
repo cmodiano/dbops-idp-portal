@@ -251,7 +251,7 @@ class TestDashboardStatsApprobationsDelay:
         response = self.client.get(URL)
         delay = response.data['data']['avg_approval_delay_s']
         assert delay is not None
-        assert delay >= 1800.0  # au moins 1800s (delta exact dépend de auto_now_add)
+        assert delay >= 1799.0  # au moins ~1800s (tolérance timing/float)
 
     def test_avg_delay_excludes_negative_deltas(self):
         """Délai négatif (approved_at < created_at) doit être exclu.

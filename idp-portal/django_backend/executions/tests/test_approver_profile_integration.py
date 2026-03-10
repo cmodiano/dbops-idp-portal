@@ -269,10 +269,11 @@ class TestIntegrationRetroCompatPendingApproval(TestCase):
             status=ExecutionStatus.SUBMITTED,
         )
         step = _make_auto_approval_gate(execution)
-        response = self.client.post(
-            f"/api/v1/executions/{execution.id}/approve/",
-            format='json',
-        )
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                f"/api/v1/executions/{execution.id}/approve/",
+                format='json',
+            )
         self.assertEqual(response.status_code, 200)
         # Verify gate and execution state actually changed (test would fail if 200 without advancing)
         step.refresh_from_db()

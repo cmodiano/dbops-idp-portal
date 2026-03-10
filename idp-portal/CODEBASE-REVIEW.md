@@ -571,16 +571,17 @@ Rapport détaillé : [`docs/backend/story-48-9-except-exception-audit-report.md`
 
 ---
 
-### 16.4 [INFO] — STATUS_CONFIG duplication résiduelle
+### 16.4 [INFO] — STATUS_CONFIG duplication résiduelle — ✅ RESOLVED (Story 71.3, 2026-03-10)
 
-5 composants définissent encore leur propre `STATUS_CONFIG` local au lieu d'importer depuis `execution-status.ts` ou `executionRenderers.tsx` :
-- `ExecutionView.tsx:45` — status exécution
-- `StepDetailDrawer.tsx:22` — status step
-- `WorkflowExecutionGraph.tsx:52` — couleurs nœuds graph
-- `IntegrationsTable.tsx:16` — status intégration (domaine différent)
-- `ComparisonExecutionsDrawer.tsx:36` — status comparaison
+**Résumé des actions :**
+- `ExecutionView.tsx`, `StepDetailDrawer.tsx`, `ComparisonExecutionsDrawer.tsx` — Consolidés vers `execution-status.ts` (Story 48.5)
+- `ExecutionsFiltersPanel.tsx`, `AdvancedFiltersPanel.tsx` — STATUS_OPTIONS consolidés vers `EXECUTION_STATUS_FILTER_OPTIONS` dans `execution-status.ts` (Story 71.3)
+- `WorkflowExecutionGraph.tsx` STATUS_COLORS — Config locale justifiée (hex React Flow, SELECTED sans équivalent)
+- `IntegrationsTable.tsx` STATUS_CONFIG — Config locale justifiée (domaine distinct valid/invalid/deprecated)
+- `executionStatusRenderer.tsx` STATUS_CONFIG — Config locale justifiée (Icons + labels féminins, SOLID-FE-10)
+- `AuditFiltersPanel.tsx` STATUS_OPTIONS — Config locale justifiée (domaine audit distinct)
 
-Les 3 premiers pourraient potentiellement être consolidés. `IntegrationsTable` a un domaine différent (status intégration vs exécution). `ComparisonExecutionsDrawer` est un cas spécialisé.
+Aucune duplication active ne subsiste. Les cas locaux sont documentés avec commentaires §16.4.
 
 ---
 
@@ -834,7 +835,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 
 | # | Issue | Type |
 |---|-------|------|
-| 16.4 | STATUS_CONFIG locals potentiellement consolidables | Frontend |
+| ~~16.4~~ | ~~STATUS_CONFIG locals potentiellement consolidables~~ | ✅ RESOLVED — Story 71.3 |
 
 ---
 
@@ -937,9 +938,9 @@ Le tableau §21 "Sécurité 12/14 | 2" est inexact — SEC-13 et SEC-14 ont ét�
 | **MAINT-BE-9** | LOW | Validation en 4 couches dans vues d'exécution | Ouvert — backlog |
 | **INCON-2** | LOW | MD5 hash collision (documenté, acceptable pour N<1000) | Documenté — acceptable |
 | **PERF-4** | LOW | `<style>` inline dans 3 composants (impact négligeable) | Documenté — acceptable |
-| **16.4** | INFO | STATUS_CONFIG locals potentiellement consolidables | Info — backlog |
+| **16.4** | INFO | STATUS_CONFIG locals potentiellement consolidables | ✅ RESOLVED — Story 71.3 |
 
-**Bilan mis à jour (2026-03-10, post-Story 71.1) :** Sur 133 findings, **130 sont résolus** (98%). 3 issues ouvertes en backlog, 1 INFO. Posture sécurité : 0 ouvertes. Architecture SOLID : excellente (SOLID-FE-4 résolu Story 71.1).
+**Bilan mis à jour (2026-03-10, post-Story 71.3) :** Sur 133 findings, **131 sont résolus** (98.5%). 3 issues ouvertes en backlog (MAINT-BE-9, INCON-2, PERF-4). 16.4 résolu par Story 71.3. Posture sécurité : 0 ouvertes. Architecture SOLID : excellente.
 
 ---
 
@@ -1085,4 +1086,4 @@ Cet audit se concentre sur la suppression du code rétrocompatible accumulé (AD
 
 **Bilan cumulatif (2026-03-10, post-Audit #6) :** Sur les 17 findings de cet audit, **15 sont résolus** (88%). Les 2 items restants sont en backlog (god classes backend, adaptation frontend approval). Le codebase est nettoyé de tout code rétrocompatible inutile (PENDING_APPROVAL, singular step_ids, polling shims).
 
-*Convergence avec les bilans historiques :* Les 133 findings des audits §1–§22 sont à **130 résolus** (98%) après Story 71.1. Les 3 ouvertes + 1 INFO (MAINT-BE-9, INCON-2, PERF-4, 16.4) restent en backlog/acceptable. L'Audit #6 (17 findings) est un périmètre additionnel.
+*Convergence avec les bilans historiques :* Les 133 findings des audits §1–§22 sont à **131 résolus** (98.5%) après Story 71.3. Les 3 ouvertes (MAINT-BE-9, INCON-2, PERF-4) restent en backlog/acceptable. 16.4 résolu par Story 71.3. L'Audit #6 (17 findings) est un périmètre additionnel.
