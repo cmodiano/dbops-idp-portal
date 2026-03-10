@@ -867,8 +867,8 @@ development_status:
     # === Epic 69: Représentation enrichie des workflows dans le catalogue ===
     # Réf: planning-artifacts/epic-69-representation-workflows-catalogue.md
     # Icônes technologies, indicateur workflow (bas gauche, couleur thème), extrait enrichi, drawer actions+paramètres
-    epic-69: backlog
-    69-1-backend-exposition-technologies-actions-workflow: backlog
+    epic-69: in-progress
+    69-1-backend-exposition-technologies-actions-workflow: done
     69-2-cartes-catalogue-icones-technologies-indicateur-workflow: backlog
     69-3-cartes-catalogue-extrait-enrichi-technologies-actions: backlog
     69-4-drawer-detail-liste-actions-parametres: backlog

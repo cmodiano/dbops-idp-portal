@@ -208,6 +208,81 @@ class StatusUpdateSerializer(serializers.Serializer):
     )
 
 
+class WorkflowEnrichmentMixin:
+    """
+    Story 69.1: Mixin exposing `technologies` and `included_actions` derived fields.
+
+    Uses per-instance cache to avoid duplicate DB queries when multiple
+    SerializerMethodField methods resolve the same referenced actions.
+
+    Subclasses can set `_included_actions_fields` to control which fields
+    are returned in `included_actions` (default includes parameters_schema
+    for detail view; list view overrides to exclude it).
+    """
+    _included_actions_fields: tuple[str, ...] = ('id', 'name', 'engine', 'parameters_schema')
+    # DB fields to fetch in cache — must be superset of _included_actions_fields + 'name' for get_workflow_steps
+    _cache_db_fields: tuple[str, ...] = ('id', 'name', 'engine', 'parameters_schema')
+
+    def _get_referenced_actions_cache(self, obj: Action) -> tuple[list[int], dict[int, dict]]:
+        cache_attr = f'_ref_actions_{obj.id}'
+        if not hasattr(self, cache_attr):
+            if obj.item_type != 'workflow' or not obj.execution_steps:
+                setattr(self, cache_attr, ([], {}))
+            else:
+                action_ids = [
+                    step['referenced_action_id']
+                    for step in obj.execution_steps
+                    if isinstance(step, dict) and step.get('referenced_action_id') is not None
+                ]
+                if action_ids:
+                    actions_map = {
+                        a['id']: a
+                        for a in Action.objects.filter(id__in=set(action_ids)).values(
+                            *self._cache_db_fields
+                        )
+                    }
+                else:
+                    actions_map = {}
+                setattr(self, cache_attr, (action_ids, actions_map))
+        result: tuple[list[int], dict[int, dict]] = getattr(self, cache_attr)
+        return result
+
+    @extend_schema_field({'type': 'array', 'items': {'type': 'string'}, 'example': ['oracle', 'sqlserver']})
+    def get_technologies(self, obj: Action) -> list[str]:
+        if obj.item_type != 'workflow' or not obj.execution_steps:
+            return [obj.engine] if obj.engine else []
+        action_ids, actions_map = self._get_referenced_actions_cache(obj)
+        if not action_ids:
+            return [obj.engine] if obj.engine else []
+        seen = set()
+        engines = []
+        for aid in action_ids:
+            a = actions_map.get(aid)
+            if a and a['engine'] and a['engine'] not in seen:
+                seen.add(a['engine'])
+                engines.append(a['engine'])
+        return engines
+
+    @extend_schema_field({'type': 'array', 'items': {'type': 'object', 'properties': {
+        'id': {'type': 'integer'}, 'name': {'type': 'string'},
+        'engine': {'type': 'string'}, 'parameters_schema': {'type': 'object', 'nullable': True},
+    }}})
+    def get_included_actions(self, obj: Action) -> list[dict]:
+        if obj.item_type != 'workflow' or not obj.execution_steps:
+            return []
+        action_ids, actions_map = self._get_referenced_actions_cache(obj)
+        if not action_ids:
+            return []
+        seen = set()
+        result = []
+        fields = self._included_actions_fields
+        for aid in action_ids:
+            if aid not in seen and aid in actions_map:
+                seen.add(aid)
+                result.append({f: actions_map[aid][f] for f in fields})
+        return result
+
+
 class ActionFieldValidationMixin:
     """
     Story 34.1 (SOLID-BE-11): DRY mixin pour la validation des champs engine/platform/category.
@@ -278,7 +353,7 @@ class ActionFieldValidationMixin:
         )
     ]
 )
-class ActionSerializer(ActionFieldValidationMixin, serializers.ModelSerializer):
+class ActionSerializer(WorkflowEnrichmentMixin, ActionFieldValidationMixin, serializers.ModelSerializer):
     """
     Read-only serializer for Action model.
     Used for list/detail read operations (GET) — matches ActionResponse/ActionDetail.
@@ -318,6 +393,9 @@ class ActionSerializer(ActionFieldValidationMixin, serializers.ModelSerializer):
         required=False, allow_null=True,
         help_text="Politiques de règles métier évaluées sur la sortie d'étape (ex. revue si modification Terraform)"
     )
+    # Story 69.1: Derived fields for workflow technologies and included actions
+    technologies = serializers.SerializerMethodField()
+    included_actions = serializers.SerializerMethodField()
     # Story 5.7: workflow_steps for workflows (converted from execution_steps)
     workflow_steps = serializers.SerializerMethodField()
     
@@ -408,6 +486,8 @@ class ActionSerializer(ActionFieldValidationMixin, serializers.ModelSerializer):
             'status', 'created_by', 'created_at', 'updated_at',
             'tags', 'documentation_md', 'remediation_rules',
             'execution_steps', 'notification_config', 'workflow_steps',
+            # Story 69.1: technologies and included_actions derived fields
+            'technologies', 'included_actions',
             # Story 28.1: business_rule_policies
             'business_rule_policies',
             # Story 28.4: FK to predefined business rule policy
@@ -462,18 +542,9 @@ class ActionSerializer(ActionFieldValidationMixin, serializers.ModelSerializer):
             return None
 
         # Story 18.3: Batch-fetch action names for platform steps
-        # Story 57.13: Include gate, service_call, evaluation, http_request (no referenced_action_id)
-        action_ids = {
-            step['referenced_action_id']
-            for step in execution_steps
-            if isinstance(step, dict)
-            and step.get('referenced_action_id') is not None
-        }
-        action_names = {}
-        if action_ids:
-            action_names = dict(
-                Action.objects.filter(id__in=action_ids).values_list('id', 'name')
-            )
+        # Story 69.1: Reuse mixin cache to avoid duplicate DB query
+        _, actions_map = self._get_referenced_actions_cache(obj)
+        action_names = {aid: a['name'] for aid, a in actions_map.items()}
 
         # Convert execution_steps to workflow_steps format
         # Story 16.2: Include step_id, branches (on_success/on_error), and retry config
@@ -681,11 +752,18 @@ class ActionCreateSerializer(ActionFieldValidationMixin, serializers.Serializer)
         return data
 
 
-class ActionListSerializer(serializers.ModelSerializer):
+class ActionListSerializer(WorkflowEnrichmentMixin, serializers.ModelSerializer):
     """Serializer for GET /admin/actions (simplified list with execution_count)."""
+
+    # Story 69.1: included_actions without parameters_schema in list view
+    _included_actions_fields: tuple[str, ...] = ('id', 'name', 'engine')
+    _cache_db_fields: tuple[str, ...] = ('id', 'name', 'engine')
 
     tags = serializers.SerializerMethodField()
     execution_count = serializers.SerializerMethodField()
+    # Story 69.1: Derived fields for workflow technologies and included actions
+    technologies = serializers.SerializerMethodField()
+    included_actions = serializers.SerializerMethodField()
     # Story 31.8: notification_config exposed in list view
     notification_config = serializers.JSONField(read_only=True, allow_null=True)
 
@@ -695,6 +773,8 @@ class ActionListSerializer(serializers.ModelSerializer):
             'id', 'name', 'description', 'item_type', 'category', 'engine', 'platform',
             'status', 'created_by', 'created_at', 'updated_at',
             'tags', 'execution_count',
+            # Story 69.1: technologies and included_actions derived fields
+            'technologies', 'included_actions',
             # Story 31.8: notification configuration
             'notification_config',
             # Story 18.1: soft-delete fields for admin list
