@@ -420,6 +420,7 @@ class ContainerWorkflowRuntime:
         gérées dans cette story.
 
         Story 67.3 — AC: #1, #5, #6, #7, #8.
+        Story 67.8 — all_failed (tous les prédécesseurs en échec) | one_failed (au moins un en échec).
         """
         # Build: target_step_id → [(source_step_id, source_outcome)]
         # Considère TOUS les targets possibles de la vague (success ET error paths)
@@ -472,6 +473,14 @@ class ContainerWorkflowRuntime:
             elif join_policy == 'all_done':
                 # Tous terminés par définition dans le contexte fan-out
                 result.append(target_id)
+            elif join_policy == 'all_failed':
+                # Story 67.8: D runs only if ALL predecessors failed
+                if all(s == ExecutionStatus.FAILED for s in pred_statuses):
+                    result.append(target_id)
+            elif join_policy == 'one_failed':
+                # Story 67.8: D runs if at least one predecessor failed
+                if any(s == ExecutionStatus.FAILED for s in pred_statuses):
+                    result.append(target_id)
             else:
                 # Politique inconnue → all_success par défaut (défensif)
                 if all(s == ExecutionStatus.COMPLETED for s in pred_statuses):
@@ -820,9 +829,11 @@ class ContainerWorkflowRuntime:
             parent_step.error_message = f"Platform step failed: {exc}"
             parent_step.save()
             if child_execution is not None:
+                now = timezone.now()
                 Execution.objects.filter(id=child_execution.id).update(
                     status=ExecutionStatus.FAILED,
-                    completed_at=timezone.now(),
+                    started_at=now,
+                    completed_at=now,
                     error_message=str(exc),
                 )
             logger.error(
@@ -1037,10 +1048,12 @@ class ContainerWorkflowRuntime:
                     correlation_id=self.correlation_id,
                     exc_info=True,
                 )
-                # Mark child as FAILED explicitly before refresh
+                # Mark child as FAILED explicitly before refresh (started_at for duration display)
+                now = timezone.now()
                 Execution.objects.filter(id=child_execution.id).update(
                     status=ExecutionStatus.FAILED,
-                    completed_at=timezone.now(),
+                    started_at=now,
+                    completed_at=now,
                     error_message=f"Simulation failed: {sim_error}",
                 )
         else:
