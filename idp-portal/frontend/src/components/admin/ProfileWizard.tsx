@@ -154,14 +154,6 @@ export function ProfileWizard({
         is_approver: values.is_approver,
       };
 
-      // Create or update profile
-      let profile: ProfileResponse;
-      if (isEditMode && editProfile) {
-        profile = await handleUpdateProfile(editProfile.id, profilePayload);
-      } else {
-        profile = await handleCreateProfile(profilePayload as ProfileCreate);
-      }
-
       // Build action permissions payload
       const actionsType = values.actions_type ?? 'all';
       const actionsPayload: ProfileActionPermissionsUpdate = {
@@ -179,20 +171,31 @@ export function ProfileWizard({
         target_patterns: targetsType === 'pattern' ? (values.target_patterns ?? []) : [],
       };
 
-      // Save permissions in parallel
-      try {
-        await Promise.all([
-          handlePutProfileActions(profile.id, actionsPayload),
-          handlePutProfileTargets(profile.id, targetsPayload),
-        ]);
-      } catch (permErr) {
-        // Profile created/updated but permissions failed - still call onSuccess
-        notification.warning({
-          message: 'Permissions non enregistrées',
-          description: permErr instanceof Error ? permErr.message : 'Les permissions n\'ont pas pu être enregistrées. Éditez le profil pour réessayer.',
+      // Create or update profile
+      let profile: ProfileResponse;
+      if (isEditMode && editProfile) {
+        // Consolidated update: profile + permissions in one call → single audit entry
+        profile = await handleUpdateProfile(editProfile.id, {
+          ...profilePayload,
+          action_permissions: actionsPayload,
+          target_permissions: targetsPayload,
         });
-        onSuccess?.(profile);
-        return;
+      } else {
+        profile = await handleCreateProfile(profilePayload as ProfileCreate);
+        // New profile: save permissions in parallel (no consolidation needed)
+        try {
+          await Promise.all([
+            handlePutProfileActions(profile.id, actionsPayload),
+            handlePutProfileTargets(profile.id, targetsPayload),
+          ]);
+        } catch (permErr) {
+          notification.warning({
+            message: 'Permissions non enregistrées',
+            description: permErr instanceof Error ? permErr.message : 'Les permissions n\'ont pas pu être enregistrées. Éditez le profil pour réessayer.',
+          });
+          onSuccess?.(profile);
+          return;
+        }
       }
 
       onSuccess?.(profile);

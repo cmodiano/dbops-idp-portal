@@ -1,6 +1,6 @@
 """DRF serializers for profiles and permissions API (Story M.5)."""
 
-from typing import Any
+from typing import Any, cast
 
 import structlog
 from rest_framework import serializers
@@ -74,6 +74,9 @@ class ProfileUpdateSerializer(serializers.Serializer):
     is_admin = serializers.BooleanField(required=False, allow_null=True)
     is_auditor = serializers.BooleanField(required=False, allow_null=True)
     is_approver = serializers.BooleanField(required=False, allow_null=True)
+    # Optional: when provided, profile + permissions updated in one call → single audit entry
+    action_permissions = serializers.DictField(required=False, allow_null=True)
+    target_permissions = serializers.DictField(required=False, allow_null=True)
 
     def validate_name(self, value: str | None) -> str | None:
         """Strip name if provided."""
@@ -88,6 +91,22 @@ class ProfileUpdateSerializer(serializers.Serializer):
             return None
         stripped = value.strip()
         return stripped if stripped else None
+
+    def validate_action_permissions(self, value: dict[str, Any] | None) -> dict[str, Any] | None:
+        """Validate action_permissions with ProfileActionPermissionsSerializer when provided."""
+        if value is None:
+            return None
+        ser = ProfileActionPermissionsSerializer(data=value, context=self.context)
+        ser.is_valid(raise_exception=True)
+        return cast(dict[str, Any], ser.validated_data)
+
+    def validate_target_permissions(self, value: dict[str, Any] | None) -> dict[str, Any] | None:
+        """Validate target_permissions with ProfileTargetPermissionsSerializer when provided."""
+        if value is None:
+            return None
+        ser = ProfileTargetPermissionsSerializer(data=value, context=self.context)
+        ser.is_valid(raise_exception=True)
+        return cast(dict[str, Any], ser.validated_data)
 
 
 class ProfileListSerializer(ProfileBoolFieldsMixin, serializers.ModelSerializer):

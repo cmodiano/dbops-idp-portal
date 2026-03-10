@@ -171,21 +171,34 @@ class ProfileViewSet(viewsets.ViewSet):
         return Response({"data": serializer.data})
 
     def update(self, request: Request, pk: Any = None) -> Response:
-        """PUT /admin/profiles/{id} - Update profile."""
+        """PUT /admin/profiles/{id} - Update profile. Optionally include action_permissions and target_permissions for consolidated update (single audit entry)."""
         profile_id = self._get_profile_id(pk)
-        
-        serializer = ProfileUpdateSerializer(data=request.data)
+
+        serializer = ProfileUpdateSerializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
-        
+        data = serializer.validated_data
+
+        action_permissions = data.pop('action_permissions', None)
+        target_permissions = data.pop('target_permissions', None)
+        profile_data = {k: v for k, v in data.items() if v is not None or k in ('description',)}
+
         service = self.get_profile_service()
         try:
-            profile = service.update_profile(profile_id, serializer.validated_data, user=request.user)
+            if action_permissions is not None or target_permissions is not None:
+                profile = service.update_profile_with_permissions(
+                    profile_id,
+                    profile_data,
+                    action_permissions,
+                    target_permissions,
+                    user=request.user,
+                )
+            else:
+                profile = service.update_profile(profile_id, profile_data, user=request.user)
         except ValueError as e:
-            # Handle duplicate name error
             raise InvalidStateError(
                 code="DUPLICATE_NAME",
                 message=str(e),
-                details={"name": serializer.validated_data.get('name')}
+                details={"name": profile_data.get('name')}
             )
 
         if profile is None:

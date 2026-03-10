@@ -14,8 +14,6 @@ import type {
   ProfileUpdate,
   ProfileResponse,
   ProfileActionsType,
-  ProfileActionPermissionsUpdate,
-  ProfileTargetPermissionsUpdate,
   ProfileTargetPermissionsResponse,
 } from '../../types/api';
 // DIP: services encapsulés dans useProfileFormState — SOLID-FE-4
@@ -128,8 +126,6 @@ export function ProfileForm({
     loadingData: loadingActions,
     profileActionsPerms,
     profileTargetsPerms,
-    handlePutProfileActions,
-    handlePutProfileTargets,
   } = useProfileFormState({ open, editProfileId: editProfile?.id });
 
   // Story 13.7: Load environments from inventory
@@ -192,43 +188,39 @@ export function ProfileForm({
   const handleSubmit = async () => {
     setPermError(null);
     const values = await form.validateFields();
-    const payload: ProfileCreate | ProfileUpdate = {
+    const basePayload: ProfileCreate | ProfileUpdate = {
       name: values.name.trim(),
       description: values.description?.trim() || null,
       ad_group: values.ad_group.trim(),
       is_admin: values.is_admin,
       is_auditor: values.is_auditor,
     };
-    const res = await onSubmit(payload);
     if (isEdit && editProfile) {
+      // Consolidated update: profile + permissions in one call → single audit entry
       const at = values.actions_type ?? 'all';
-      const actionsPayload: ProfileActionPermissionsUpdate = {
-        actions_type: at,
-        action_ids: at === 'list' ? (values.action_ids ?? []) : [],
-        tag_patterns: at === 'pattern' ? (values.tag_patterns ?? []) : [],
-        environments: values.environments ?? [],
-      };
-      // Story 23.7 - Include filter_by_attribute for engine-based filtering
       const tt = getTargetsTypeFromMode(targetsMode);
-      const targetsPayload: ProfileTargetPermissionsUpdate = {
-        targets_type: tt,
-        target_names: tt === 'list' ? (values.target_names ?? []) : [],
-        target_patterns: tt === 'pattern' ? (values.target_patterns ?? []) : [],
-        filter_by_attribute: getFilterByAttribute(targetsMode),
-        exclusion_patterns: values.exclusion_patterns ?? [], // Story 25.6
+      const payload: ProfileUpdate = {
+        ...basePayload,
+        action_permissions: {
+          actions_type: at,
+          action_ids: at === 'list' ? (values.action_ids ?? []) : [],
+          tag_patterns: at === 'pattern' ? (values.tag_patterns ?? []) : [],
+          environments: values.environments ?? [],
+        },
+        target_permissions: {
+          targets_type: tt,
+          target_names: tt === 'list' ? (values.target_names ?? []) : [],
+          target_patterns: tt === 'pattern' ? (values.target_patterns ?? []) : [],
+          filter_by_attribute: getFilterByAttribute(targetsMode),
+          exclusion_patterns: values.exclusion_patterns ?? [],
+        },
       };
-      try {
-        await Promise.all([
-          handlePutProfileActions(editProfile.id, actionsPayload),
-          handlePutProfileTargets(editProfile.id, targetsPayload),
-        ]);
-      } catch {
-        setPermError('Profil mis à jour, mais erreur lors de la sauvegarde des permissions. Réessayez en éditant le profil.');
-        if (res && onSuccess) onSuccess(res);
-        return;
-      }
+      const res = await onSubmit(payload);
+      if (res && onSuccess) onSuccess(res);
+    } else {
+      const res = await onSubmit(basePayload);
+      if (res && onSuccess) onSuccess(res);
     }
-    if (res && onSuccess) onSuccess(res);
   };
 
   return (
