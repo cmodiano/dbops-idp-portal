@@ -3,7 +3,7 @@ services:
   # Container 0: Redis (Broker Celery — Story 47.1)
   # ==========================================================================
   redis:
-    image: redis:7.2-alpine
+    image: redis:7.4-alpine
     container_name: idp-redis
     ports:
       - "127.0.0.1:6379:6379"
@@ -39,7 +39,8 @@ services:
       - oracle-data:/opt/oracle/oradata
 
     healthcheck:
-      test: ["CMD", "bash", "-c", "echo 'SELECT 1 FROM DUAL;' | sqlplus -s sys/${ORACLE_PASSWORD:-Oracle123!}@//localhost:1521/FREEPDB1 as sysdba | grep -q '1'"]
+      # OS-authenticated sqlplus (no password in connect string — avoids @ / parsing issues)
+      test: ["CMD", "bash", "-c", "echo 'ALTER SESSION SET CONTAINER = FREEPDB1; SELECT 1 FROM DUAL;' | sqlplus -s / as sysdba | grep -q '1'"]
       interval: 30s
       timeout: 10s
       retries: 20
@@ -61,8 +62,10 @@ services:
 
     environment:
       - DJANGO_SETTINGS_MODULE=idp_backend.settings
-      - DEBUG=${DEBUG:-false}
-      - AUTH_DEV_BYPASS=${AUTH_DEV_BYPASS:-false}
+      # DEBUG=true for local Docker dev — allows localhost CORS; set DEBUG=false for prod-like runs
+      - DEBUG=${DEBUG:-true}
+      # AUTH_DEV_BYPASS=true — login as dev-user / any-password without LDAP; set false for prod
+      - AUTH_DEV_BYPASS=${AUTH_DEV_BYPASS:-true}
       - SECRET_KEY=${SECRET_KEY:?SECRET_KEY is required}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:?JWT_SECRET_KEY is required}
       - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1}
@@ -130,7 +133,7 @@ services:
 
     environment:
       - DJANGO_SETTINGS_MODULE=idp_backend.settings
-      - DEBUG=${DEBUG:-false}
+      - DEBUG=${DEBUG:-true}
       - AUTH_DEV_BYPASS=${AUTH_DEV_BYPASS:-false}
       - SECRET_KEY=${SECRET_KEY:?SECRET_KEY is required}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:?JWT_SECRET_KEY is required}
@@ -176,7 +179,7 @@ services:
     command: celery -A idp_backend beat --loglevel=info --schedule=/tmp/celerybeat-schedule
     environment:
       - DJANGO_SETTINGS_MODULE=idp_backend.settings
-      - DEBUG=${DEBUG:-false}
+      - DEBUG=${DEBUG:-true}
       - AUTH_DEV_BYPASS=${AUTH_DEV_BYPASS:-false}
       - SECRET_KEY=${SECRET_KEY:?SECRET_KEY is required}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:?JWT_SECRET_KEY is required}

@@ -148,77 +148,43 @@ def evaluate_waiting_gates(self: Any) -> dict:
     }
 
 
-def _transition_step_to_running(step: ExecutionStep, gate_status: dict, correlation_id: str) -> None:
+def _perform_step_transition(step: ExecutionStep, correlation_id: str) -> bool:
     """
-    Transition an ExecutionStep from WAITING to RUNNING and trigger execution.
+    CAS update: transition step from WAITING to RUNNING.
 
-    Story 25.3: Sets status=RUNNING, started_at, triggers the actual step execution via
-    retry_workflow_step, and creates an audit trail entry.
+    Story 71.6: Extracted from _transition_step_to_running (subtask 5.1).
 
-    Uses atomic update with WHERE clause to prevent race conditions between
-    multiple Celery Beat workers.
+    Returns:
+        True if the transition was applied, False if another worker already processed it.
     """
-    # Atomic transition with race condition protection
     now = timezone.now()
     updated = ExecutionStep.objects.filter(
         id=step.id,
-        status=ExecutionStepStatus.WAITING,  # Only update if still WAITING
+        status=ExecutionStepStatus.WAITING,
     ).update(
         status=ExecutionStepStatus.RUNNING,
         started_at=now,
     )
-
     if updated == 0:
-        # Another worker already transitioned this step
         logger.warning(
             "evaluate_waiting_gates_step_already_running",
             step_id=step.id,
             execution_id=step.execution_id,
             correlation_id=correlation_id,
         )
-        return
+        return False
 
-    # V113: Remove from runnable queue now that step is RUNNING (best-effort)
-    try:
-        from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
-        RunnableStepService.delete(step.id)
-    except Exception as e:
-        logger.error(
-            "evaluate_waiting_gates_runnable_step_delete_failed",
-            step_id=step.id,
-            execution_id=step.execution_id,
-            error=str(e),
-            correlation_id=correlation_id,
-            exc_info=True,
-        )
-
-    # Refresh step to get updated fields
     step.refresh_from_db()
+    _cleanup_step_resources(step, ExecutionStepStatus.WAITING, correlation_id)
+    return True
 
-    # V113: Durable event for UI catch-up (best-effort)
-    try:
-        from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
-        WorkflowEventService.emit_step_status_changed(
-            step.execution_id, step, old_status=ExecutionStepStatus.WAITING,
-        )
-    except Exception as e:
-        logger.error(
-            "evaluate_waiting_gates_emit_step_status_changed_failed",
-            step_id=step.id,
-            execution_id=step.execution_id,
-            error=str(e),
-            correlation_id=correlation_id,
-            exc_info=True,
-        )
 
-    logger.info(
-        "evaluate_waiting_gates_step_satisfied",
-        step_id=step.id,
-        execution_id=step.execution_id,
-        correlation_id=correlation_id,
-    )
+def _emit_gate_satisfied_audit(step: ExecutionStep, correlation_id: str) -> None:
+    """
+    Emit audit trail entry for a gate step that has been satisfied.
 
-    # Audit trail: gate conditions satisfied
+    Story 71.6: Extracted from _transition_step_to_running (subtask 5.2).
+    """
     waiting_duration = (timezone.now() - step.created_at).total_seconds()
     AuditService.create_entry(
         user_id=str(step.execution.user_id),
@@ -236,99 +202,31 @@ def _transition_step_to_running(step: ExecutionStep, gate_status: dict, correlat
         correlation_id=correlation_id,
     )
 
-    # Story 25.3: Trigger actual step execution
-    # Find the step definition from the action's workflow to pass to retry_workflow_step
+
+def _transition_step_to_running(step: ExecutionStep, gate_status: dict, correlation_id: str) -> None:
+    """
+    Transition an ExecutionStep from WAITING to RUNNING and trigger execution.
+
+    Story 25.3: Sets status=RUNNING, started_at, triggers the actual step execution.
+    Story 71.6: Refactored into orchestrator calling sub-functions.
+    """
+    if not _perform_step_transition(step, correlation_id):
+        return
+
+    logger.info(
+        "evaluate_waiting_gates_step_satisfied",
+        step_id=step.id,
+        execution_id=step.execution_id,
+        correlation_id=correlation_id,
+    )
+
+    _emit_gate_satisfied_audit(step, correlation_id)
+
+    # Trigger actual step execution
     action = step.execution.action
-    execution_steps = action.execution_steps or []
-
     from executions.utils.step_config import find_step_config  # noqa: PLC0415
-    step_def = find_step_config(execution_steps, step)
-
-    if step_def:
-        # Story 57.7: Détecter si c'est un step ADR-007 container workflow
-        # Les steps ADR-007 ont un step_type ; les old-style steps n'en ont pas
-        is_adr007_step = bool(step_def.get('step_type'))
-        on_success_step_ids = step_def.get('on_success_step_ids') or []
-
-        # Fallback: linear order when gate has no explicit on_success_step_ids
-        if is_adr007_step and not on_success_step_ids:
-            next_s = _get_next_step_by_order(execution_steps, step_def)
-            next_id = next_s.get('step_id') if next_s else None
-            if next_id:
-                on_success_step_ids = [next_id]
-
-        # Access through package namespace for testability (retry_workflow_step)
-        import executions.tasks as _tasks
-
-        if is_adr007_step and on_success_step_ids:
-            # Container workflow ADR-007 : reprendre depuis le prochain step
-            resume_container_workflow_from_gate.apply_async(
-                args=[step.execution_id, on_success_step_ids],
-                queue="default",
-            )
-            logger.info(
-                "evaluate_waiting_gates_step_container_workflow_resumed",
-                step_id=step.id,
-                execution_id=step.execution_id,
-                on_success_step_ids=on_success_step_ids,
-                correlation_id=correlation_id,
-            )
-        elif is_adr007_step and not on_success_step_ids:
-            # Gate est le dernier step du workflow — compléter l'exécution
-            try:
-                execution = step.execution
-                if execution.status == ExecutionStatus.RUNNING:
-                    updated = Execution.objects.filter(
-                        id=execution.id,
-                        status=ExecutionStatus.RUNNING,
-                    ).update(
-                        status=ExecutionStatus.COMPLETED,
-                        completed_at=timezone.now(),
-                    )
-                    if updated:
-                        AuditService.create_entry(
-                            user_id=str(execution.user_id),
-                            action_type=AuditActionType.EXECUTION_COMPLETED,
-                            entity_type=AuditEntityType.EXECUTION,
-                            entity_id=execution.id,
-                            details={'execution_id': str(execution.id), 'action_name': execution.action.name if execution.action else None},
-                            correlation_id=correlation_id,
-                        )
-                        logger.info(
-                            "evaluate_waiting_gates_step_container_workflow_completed",
-                            step_id=step.id,
-                            execution_id=step.execution_id,
-                            correlation_id=correlation_id,
-                        )
-            except Exception as exc:  # noqa: BLE001 — resilience-boundary: gate completion update failure logged
-                logger.error(
-                    "evaluate_waiting_gates_step_container_workflow_complete_error",
-                    execution_id=step.execution_id,
-                    error=str(exc),
-                    correlation_id=correlation_id,
-                    exc_info=True,
-                )
-        else:
-            # Old-style workflow : comportement existant
-            _tasks.retry_workflow_step.apply_async(
-                args=[step.execution_id, step_def, 1],
-            )
-            logger.info(
-                "evaluate_waiting_gates_step_execution_triggered",
-                step_id=step.id,
-                execution_id=step.execution_id,
-                step_def_id=step_def.get('step_id'),
-                correlation_id=correlation_id,
-            )
-    else:
-        # Story 25.3 code review fix LOW-1: ERROR instead of WARNING (step in zombie state)
-        logger.error(
-            "evaluate_waiting_gates_step_def_not_found",
-            step_id=step.id,
-            step_name=step.step_name,
-            execution_id=step.execution_id,
-            correlation_id=correlation_id,
-        )
+    step_def = find_step_config(action.execution_steps or [], step)
+    _resume_workflow_after_gate(step, action, step_def, correlation_id, old_style_step_def=step_def)
 
 
 def _update_waiting_context(step: ExecutionStep, gate_status: dict, correlation_id: str) -> None:
@@ -452,24 +350,174 @@ def _get_next_step_by_order(execution_steps: list, current_step_config: dict) ->
     return None
 
 
-def _handle_gate_timeout(step: ExecutionStep, gate_status: dict, correlation_id: str) -> None:
+def _cleanup_step_resources(step: ExecutionStep, old_status: ExecutionStepStatus, correlation_id: str) -> None:
     """
-    Handle a gate timeout condition — transition step to FAILED or SKIPPED.
+    Best-effort cleanup: remove step from runnable queue and emit durable status-changed event.
 
-    Story 25.3: Based on on_timeout value, transitions the step and creates audit trail.
-    Story 30.7 (CELERY-4/CELERY-5): Actually continue the workflow after timeout
-    instead of leaving it blocked. SKIPPED steps get an explicit error_message.
+    Story 71.6: Extracted from _transition_step_to_running and _handle_gate_timeout
+    to eliminate duplication (~30 LOC x2).
     """
-    timeout_action = gate_status.get('action', 'FAILED')
-    timeout_hours = gate_status.get('timeout_hours')
+    try:
+        from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
+        RunnableStepService.delete(step.id)
+    except Exception as e:
+        logger.error(
+            "evaluate_waiting_gates_runnable_step_delete_failed",
+            step_id=step.id,
+            execution_id=step.execution_id,
+            error=str(e),
+            correlation_id=correlation_id,
+            exc_info=True,
+        )
+    try:
+        from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
+        WorkflowEventService.emit_step_status_changed(
+            step.execution_id, step, old_status=old_status,
+        )
+    except Exception as e:
+        logger.error(
+            "evaluate_waiting_gates_emit_step_status_changed_failed",
+            step_id=step.id,
+            execution_id=step.execution_id,
+            error=str(e),
+            correlation_id=correlation_id,
+            exc_info=True,
+        )
 
-    # Story 30.7 (CELERY-5): Always set error_message, even for SKIPPED steps
-    error_msg = f"Gate timeout exceeded after {timeout_hours}h"
 
-    next_step_status = (
-        ExecutionStepStatus.SKIPPED if timeout_action == 'SKIPPED'
-        else ExecutionStepStatus.FAILED
-    )
+def _complete_execution_on_last_step(step: ExecutionStep, correlation_id: str) -> None:
+    """
+    Complete the parent execution when the gate is the last step (CAS update).
+
+    Story 71.6: Extracted from _transition_step_to_running and _handle_gate_timeout
+    to eliminate duplication (~30 LOC x2).
+    """
+    try:
+        execution = step.execution
+        if execution.status == ExecutionStatus.RUNNING:
+            updated = Execution.objects.filter(
+                id=execution.id,
+                status=ExecutionStatus.RUNNING,
+            ).update(
+                status=ExecutionStatus.COMPLETED,
+                completed_at=timezone.now(),
+            )
+            if updated:
+                AuditService.create_entry(
+                    user_id=str(execution.user_id),
+                    action_type=AuditActionType.EXECUTION_COMPLETED,
+                    entity_type=AuditEntityType.EXECUTION,
+                    entity_id=execution.id,
+                    details={'execution_id': str(execution.id), 'action_name': execution.action.name if execution.action else None},
+                    correlation_id=correlation_id,
+                )
+                logger.info(
+                    "gate_execution_completed_last_step",
+                    step_id=step.id,
+                    execution_id=step.execution_id,
+                    correlation_id=correlation_id,
+                )
+    except Exception as exc:  # noqa: BLE001 — resilience-boundary: gate completion update failure logged
+        logger.error(
+            "gate_execution_complete_error",
+            execution_id=step.execution_id,
+            error=str(exc),
+            correlation_id=correlation_id,
+            exc_info=True,
+        )
+
+
+def _resume_workflow_after_gate(
+    step: ExecutionStep,
+    action: Any,
+    step_def: dict | None,
+    correlation_id: str,
+    old_style_step_def: dict | None = None,
+) -> None:
+    """
+    Resume the workflow after a gate step is satisfied or timed out (SKIPPED).
+
+    Handles ADR-007 container workflows (resume_container_workflow_from_gate or
+    complete execution) and old-style workflows (retry_workflow_step).
+
+    Story 71.6: Extracted from _transition_step_to_running and _handle_gate_timeout
+    to eliminate duplication (~20 LOC x2).
+
+    Args:
+        step: The gate ExecutionStep
+        action: The parent Action (with execution_steps)
+        step_def: The step config dict from find_step_config (may be None)
+        correlation_id: Correlation ID for logging
+        old_style_step_def: Step def to pass to retry_workflow_step for old-style workflows.
+                           If None, old-style path is a no-op.
+    """
+    execution_steps = action.execution_steps or []
+
+    if step_def is None:
+        logger.error(
+            "gate_resume_step_def_not_found",
+            step_id=step.id,
+            step_name=step.step_name,
+            execution_id=step.execution_id,
+            correlation_id=correlation_id,
+        )
+        return
+
+    is_adr007_step = bool(step_def.get('step_type'))
+    on_success_step_ids = step_def.get('on_success_step_ids') or []
+
+    # Fallback: linear order when gate has no explicit on_success_step_ids
+    if is_adr007_step and not on_success_step_ids:
+        next_s = _get_next_step_by_order(execution_steps, step_def)
+        next_id = next_s.get('step_id') if next_s else None
+        if next_id:
+            on_success_step_ids = [next_id]
+
+    if is_adr007_step and on_success_step_ids:
+        resume_container_workflow_from_gate.apply_async(
+            args=[step.execution_id, on_success_step_ids],
+            queue="default",
+        )
+        logger.info(
+            "gate_resume_container_workflow",
+            step_id=step.id,
+            execution_id=step.execution_id,
+            on_success_step_ids=on_success_step_ids,
+            correlation_id=correlation_id,
+        )
+    elif is_adr007_step and not on_success_step_ids:
+        # Gate is last step — complete execution
+        _complete_execution_on_last_step(step, correlation_id)
+    elif old_style_step_def:
+        # Old-style workflow
+        import executions.tasks as _tasks
+        _tasks.retry_workflow_step.apply_async(
+            args=[step.execution_id, old_style_step_def, 1],
+        )
+        logger.info(
+            "gate_resume_old_style_workflow",
+            step_id=step.id,
+            execution_id=step.execution_id,
+            step_def_id=old_style_step_def.get('step_id') or old_style_step_def.get('name'),
+            correlation_id=correlation_id,
+        )
+
+
+def _perform_timeout_step_update(
+    step: ExecutionStep,
+    next_step_status: ExecutionStepStatus,
+    error_msg: str,
+    timeout_action: str,
+    correlation_id: str,
+) -> bool:
+    """
+    CAS update: transition step from WAITING to SKIPPED/FAILED on timeout.
+
+    Story 71.6: Extracted from _handle_gate_timeout (subtask 4.2).
+
+    Returns:
+        True if the update was applied, False if another worker already processed it.
+    """
     completed_at = timezone.now()
     updated = ExecutionStep.objects.filter(
         id=step.id,
@@ -487,40 +535,91 @@ def _handle_gate_timeout(step: ExecutionStep, gate_status: dict, correlation_id:
             timeout_action=timeout_action,
             correlation_id=correlation_id,
         )
-        return
+        return False
 
     # Keep local instance in sync for downstream events/audit payloads.
     step.status = next_step_status
     step.error_message = error_msg
     step.completed_at = completed_at
 
-    # V113: Remove from runnable queue and emit durable event (best-effort)
+    _cleanup_step_resources(step, ExecutionStepStatus.WAITING, correlation_id)
+    return True
+
+
+def _mark_execution_failed(execution: Execution, step: ExecutionStep, correlation_id: str) -> None:
+    """
+    Mark a parent execution as FAILED (resilience boundary — best-effort).
+
+    Story 71.6: Extracted from _handle_gate_timeout (subtask 4.4).
+    """
     try:
-        from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
-        RunnableStepService.delete(step.id)
-    except Exception as e:
+        updated = Execution.objects.filter(
+            id=execution.id,
+        ).exclude(
+            status__in=[ExecutionStatus.COMPLETED, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED],
+        ).update(
+            status=ExecutionStatus.FAILED,
+            completed_at=timezone.now(),
+        )
+        if updated:
+            logger.info(
+                "gate_timeout_execution_failed",
+                execution_id=execution.id,
+                step_id=step.id,
+                correlation_id=correlation_id,
+            )
+    except Exception as exc:  # noqa: BLE001 — resilience-boundary: timeout execution update failure logged, task continues
         logger.error(
-            "evaluate_waiting_gates_timeout_runnable_step_delete_failed",
-            step_id=step.id,
+            "gate_timeout_execution_update_error",
             execution_id=step.execution_id,
-            error=str(e),
+            error=str(exc),
             correlation_id=correlation_id,
             exc_info=True,
         )
-    try:
-        from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
-        WorkflowEventService.emit_step_status_changed(
-            step.execution_id, step, old_status=ExecutionStepStatus.WAITING,
+
+
+def _handle_timeout_continuation(
+    step: ExecutionStep,
+    timeout_action: str,
+    correlation_id: str,
+) -> None:
+    """
+    Continue workflow after gate timeout: SKIPPED → resume next step, FAILED → mark execution failed.
+
+    Story 71.6: Extracted from _handle_gate_timeout (subtask 4.3).
+    """
+    if timeout_action == 'SKIPPED':
+        action = step.execution.action
+        execution_steps = action.execution_steps or []
+        from executions.utils.step_config import find_step_config  # noqa: PLC0415
+        step_def = find_step_config(execution_steps, step)
+        old_style_next = (
+            _get_next_step_by_order(execution_steps, step_def) if step_def else None
         )
-    except Exception as e:
-        logger.error(
-            "evaluate_waiting_gates_timeout_emit_step_status_changed_failed",
-            step_id=step.id,
-            execution_id=step.execution_id,
-            error=str(e),
-            correlation_id=correlation_id,
-            exc_info=True,
-        )
+        _resume_workflow_after_gate(step, action, step_def, correlation_id, old_style_step_def=old_style_next)
+    else:
+        _mark_execution_failed(step.execution, step, correlation_id)
+
+
+def _handle_gate_timeout(step: ExecutionStep, gate_status: dict, correlation_id: str) -> None:
+    """
+    Handle a gate timeout condition — transition step to FAILED or SKIPPED.
+
+    Story 25.3: Based on on_timeout value, transitions the step and creates audit trail.
+    Story 30.7 (CELERY-4/CELERY-5): Continue the workflow after timeout.
+    Story 71.6: Refactored into orchestrator calling sub-functions.
+    """
+    timeout_action = gate_status.get('action', 'FAILED')
+    timeout_hours = gate_status.get('timeout_hours')
+    error_msg = f"Gate timeout exceeded after {timeout_hours}h"
+
+    next_step_status = (
+        ExecutionStepStatus.SKIPPED if timeout_action == 'SKIPPED'
+        else ExecutionStepStatus.FAILED
+    )
+
+    if not _perform_timeout_step_update(step, next_step_status, error_msg, timeout_action, correlation_id):
+        return
 
     logger.info(
         "evaluate_waiting_gates_step_timeout",
@@ -553,121 +652,7 @@ def _handle_gate_timeout(step: ExecutionStep, gate_status: dict, correlation_id:
         correlation_id=correlation_id,
     )
 
-    # Story 30.7 (CELERY-4): Continue workflow after gate timeout.
-    # If FAILED → mark execution as FAILED.
-    # If SKIPPED → trigger next step execution.
-    if timeout_action == 'SKIPPED':
-        action = step.execution.action
-        execution_steps = action.execution_steps or []
-
-        from executions.utils.step_config import find_step_config  # noqa: PLC0415
-        step_def = find_step_config(execution_steps, step)
-
-        # Story 57.7: Container workflow (ADR-007) uses resume_container_workflow_from_gate
-        is_adr007_step = bool(step_def and step_def.get('step_type'))
-        on_success_step_ids = (step_def.get('on_success_step_ids') or []) if step_def else []
-        if is_adr007_step and not on_success_step_ids and step_def:
-            next_s = _get_next_step_by_order(execution_steps, step_def)
-            next_id = next_s.get('step_id') if next_s else None
-            if next_id:
-                on_success_step_ids = [next_id]
-
-        if is_adr007_step and on_success_step_ids:
-            resume_container_workflow_from_gate.apply_async(
-                args=[step.execution_id, on_success_step_ids],
-                queue="default",
-            )
-            logger.info(
-                "evaluate_waiting_gates_step_timeout_container_workflow_resumed",
-                step_id=step.id,
-                execution_id=step.execution_id,
-                on_success_step_ids=on_success_step_ids,
-                correlation_id=correlation_id,
-            )
-        elif is_adr007_step and not on_success_step_ids:
-            # Gate is last step — complete execution
-            try:
-                execution = step.execution
-                if execution.status == ExecutionStatus.RUNNING:
-                    updated = Execution.objects.filter(
-                        id=execution.id,
-                        status=ExecutionStatus.RUNNING,
-                    ).update(
-                        status=ExecutionStatus.COMPLETED,
-                        completed_at=timezone.now(),
-                    )
-                    if updated:
-                        AuditService.create_entry(
-                            user_id=str(execution.user_id),
-                            action_type=AuditActionType.EXECUTION_COMPLETED,
-                            entity_type=AuditEntityType.EXECUTION,
-                            entity_id=execution.id,
-                            details={'execution_id': str(execution.id), 'action_name': execution.action.name if execution.action else None},
-                            correlation_id=correlation_id,
-                        )
-                        logger.info(
-                            "evaluate_waiting_gates_step_timeout_container_workflow_completed",
-                            step_id=step.id,
-                            execution_id=step.execution_id,
-                            correlation_id=correlation_id,
-                        )
-            except Exception as exc:  # noqa: BLE001
-                logger.error(
-                    "evaluate_waiting_gates_step_timeout_execution_update_error",
-                    execution_id=step.execution_id,
-                    error=str(exc),
-                    correlation_id=correlation_id,
-                    exc_info=True,
-                )
-        else:
-            # Old-style workflow: find next step by order (same logic as ADR-007 path)
-            next_step_def = (
-                _get_next_step_by_order(execution_steps, step_def)
-                if step_def
-                else None
-            )
-
-            if next_step_def and next_step_def.get('name'):
-                import executions.tasks as _tasks
-                _tasks.retry_workflow_step.apply_async(
-                    args=[step.execution_id, next_step_def, 1],
-                )
-                logger.info(
-                    "evaluate_waiting_gates_step_timeout_next_step_triggered",
-                    step_id=step.id,
-                    execution_id=step.execution_id,
-                    next_step_name=next_step_def.get('name'),
-                    correlation_id=correlation_id,
-                )
-            else:
-                logger.info(
-                    "evaluate_waiting_gates_step_timeout_no_next_step",
-                    step_id=step.id,
-                    execution_id=step.execution_id,
-                    correlation_id=correlation_id,
-                )
-    else:
-        # FAILED → mark execution as FAILED
-        try:
-            execution = step.execution
-            if execution.status not in {ExecutionStatus.COMPLETED, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED}:
-                execution.status = ExecutionStatus.FAILED
-                execution.completed_at = timezone.now()
-                execution.save()
-                logger.info(
-                    "evaluate_waiting_gates_step_timeout_execution_failed",
-                    execution_id=execution.id,
-                    step_id=step.id,
-                    correlation_id=correlation_id,
-                )
-        except Exception as exc:  # noqa: BLE001 — resilience-boundary: timeout execution update failure logged, task continues
-            logger.error(
-                "evaluate_waiting_gates_step_timeout_execution_update_error",
-                execution_id=step.execution_id,
-                error=str(exc),
-                correlation_id=correlation_id,
-                exc_info=True,
-            )
+    _handle_timeout_continuation(step, timeout_action, correlation_id)
 
 
 @shared_task(bind=True, max_retries=0, name="executions.tasks.resume_container_workflow_from_gate")

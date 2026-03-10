@@ -108,6 +108,9 @@ export interface ExecutionStepResponse {
   approved_by_id?: number | null;
   approved_at?: string | null;
   approval_comment?: string | null;
+  /** ADR-007: Rejection fields for gate steps (V118) */
+  rejected_by_id?: number | null;
+  rejected_at?: string | null;
 }
 
 /** Step logs from GET /executions/{id}/steps/{step_id}/logs (Story 4.7, AC6). */

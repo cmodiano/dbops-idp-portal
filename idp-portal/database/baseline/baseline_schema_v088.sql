@@ -2,7 +2,7 @@
 -- Baseline Schema V088 — IDP Portal
 -- ===========================================================================
 -- Date            : 2026-03-08
--- Version couverte: V000–V116 (incl. V112 IaC sync, V113 indexes+WORKFLOW_EVENTS+RUNNABLE_STEPS, V114–V116)
+-- Version couverte: V000–V118 (incl. V112 IaC sync, V113 indexes+WORKFLOW_EVENTS+RUNNABLE_STEPS, V114–V118)
 -- Auteur          : Agent de développement (Story 41-2)
 --
 -- Usage           : NOUVEAUX ENVIRONNEMENTS UNIQUEMENT (base Oracle vierge)
@@ -10,10 +10,10 @@
 --
 -- Procédure de déploiement :
 --   1. sqlplus idp_user/password@HOST:1521/XEPDB1 @database/baseline/baseline_schema_v088.sql
---   2. flyway -baselineVersion=116 -baselineDescription=baseline_schema_v088 baseline
+--   2. flyway -baselineVersion=118 -baselineDescription=baseline_schema_v088 baseline
 --
--- Ce script couvre TOUTES les migrations V000–V116. Aucune migration incrémentale
--- n'est nécessaire après application. État identique à V000→V116 sans phases intermédiaires.
+-- Ce script couvre TOUTES les migrations V000–V118. Aucune migration incrémentale
+-- n'est nécessaire après application. État identique à V000→V118 sans phases intermédiaires.
 -- ===========================================================================
 --
 -- Objets créés :
@@ -1419,9 +1419,9 @@ COMMIT;
 -- FIN DU SCRIPT BASELINE V088
 -- ===========================================================================
 -- Après application de ce script :
---   flyway baseline -baselineVersion=116 -baselineDescription=baseline_schema_v088
+--   flyway baseline -baselineVersion=118 -baselineDescription=baseline_schema_v088
 --
--- Aucune migration incrémentale requise — état identique à V000→V116.
+-- Aucune migration incrémentale requise — état identique à V000→V118.
 --
 -- Validation rapide :
 --   SELECT COUNT(*) FROM user_tables;             -- doit retourner 28 (26 + WORKFLOW_EVENTS + RUNNABLE_STEPS)

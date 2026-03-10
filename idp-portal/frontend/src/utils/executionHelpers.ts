@@ -12,6 +12,13 @@ export interface ApprovalInfo {
   approvalComment: string | null;
 }
 
+/** Rejection info extracted from execution steps (ADR-007, V118). */
+export interface RejectionInfo {
+  rejectedById: number | null;
+  rejectedAt: string | null;
+  rejectionReason: string | null;
+}
+
 /**
  * Extract approval info from execution steps.
  * Finds the first step with `approved_by_id` set (source of truth per ADR-007).
@@ -25,6 +32,22 @@ export function getApprovalInfoFromSteps(steps: ExecutionStepResponse[]): Approv
     approvedById: approvalStep.approved_by_id ?? null,
     approvedAt: approvalStep.approved_at ?? null,
     approvalComment: approvalStep.approval_comment ?? null,
+  };
+}
+
+/**
+ * Extract rejection info from execution steps (ADR-007, V118).
+ * Finds the first step with `rejected_by_id` set (gate rejection).
+ */
+export function getRejectionInfoFromSteps(steps: ExecutionStepResponse[]): RejectionInfo {
+  const rejectionStep = steps.find(s => s.rejected_by_id != null);
+  if (!rejectionStep) {
+    return { rejectedById: null, rejectedAt: null, rejectionReason: null };
+  }
+  return {
+    rejectedById: rejectionStep.rejected_by_id ?? null,
+    rejectedAt: rejectionStep.rejected_at ?? null,
+    rejectionReason: rejectionStep.approval_comment ?? null,
   };
 }
 

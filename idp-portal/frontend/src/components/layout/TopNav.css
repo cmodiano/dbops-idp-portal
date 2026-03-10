@@ -33,6 +33,10 @@ html.dark .nav-pill {
   border-color: color-mix(in srgb, var(--ant-color-primary) 20%, transparent);
 }
 
+html.light .nav-pill:hover {
+  border-color: color-mix(in srgb, var(--ant-color-primary) 20%, transparent) !important;
+}
+
 html.dark .nav-pill:hover {
   background: rgba(255, 255, 255, 0.08) !important;
   border-color: color-mix(in srgb, var(--ant-color-primary) 25%, transparent);
@@ -98,6 +102,10 @@ html.dark .nav-icon-btn {
   border-color: color-mix(in srgb, var(--ant-color-primary) 20%, transparent);
 }
 
+html.light .nav-icon-btn:hover {
+  border-color: color-mix(in srgb, var(--ant-color-primary) 20%, transparent) !important;
+}
+
 html.dark .nav-icon-btn:hover {
   background: rgba(255, 255, 255, 0.1) !important;
   border-color: rgba(255, 255, 255, 0.08);
@@ -139,6 +147,10 @@ html.dark .theme-toggle {
   border-color: color-mix(in srgb, var(--ant-color-primary) 20%, transparent);
 }
 
+html.light .theme-toggle:hover {
+  border-color: color-mix(in srgb, var(--ant-color-primary) 20%, transparent) !important;
+}
+
 html.dark .theme-toggle:hover {
   background: rgba(255, 255, 255, 0.1) !important;
   border-color: rgba(255, 255, 255, 0.08);
@@ -167,6 +179,10 @@ html.dark .nav-profile {
 .nav-profile:hover {
   background: color-mix(in srgb, var(--ant-color-primary) 10%, transparent) !important;
   border-color: color-mix(in srgb, var(--ant-color-primary) 20%, transparent);
+}
+
+html.light .nav-profile:hover {
+  border-color: color-mix(in srgb, var(--ant-color-primary) 20%, transparent) !important;
 }
 
 html.dark .nav-profile:hover {

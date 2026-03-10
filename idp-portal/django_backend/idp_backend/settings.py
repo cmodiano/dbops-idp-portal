@@ -728,7 +728,12 @@ del _adapters_pkg, _adapter_registry  # nettoyer le namespace settings
 # ============================================================================
 # Django Channels / WebSocket Configuration (Story 22.13)
 # ============================================================================
-CHANNEL_LAYER_BACKEND = os.getenv('CHANNEL_LAYER_BACKEND', '').lower()
+# Default: inmemory for non-production, redis for production (override via CHANNEL_LAYER_BACKEND env)
+_channel_backend_raw = os.getenv('CHANNEL_LAYER_BACKEND')
+CHANNEL_LAYER_BACKEND = (
+    _channel_backend_raw if _channel_backend_raw
+    else ('redis' if APP_ENV.lower() == 'production' else 'inmemory')
+).lower()
 CHANNEL_REDIS_URL = os.getenv('CHANNEL_REDIS_URL', os.getenv('REDIS_URL', 'redis://localhost:6379/2'))
 CHANNEL_LAYERS: dict[str, dict[str, Any]]
 

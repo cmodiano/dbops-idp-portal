@@ -1057,7 +1057,7 @@ Cet audit se concentre sur la suppression du code rétrocompatible accumulé (AD
 | SMELL-02 | **HIGH** | `executions/tasks/gates.py`, `executions/views/approval_views.py` | **Duplication — Merge next-step-by-order functions.** `_get_next_step_id_by_order()` et `_get_next_step_def_by_order()` avaient ~60% de code identique + duplication dans `approval_views.py`. Fusionné en une seule `_get_next_step_by_order()` retournant le dict complet. | ✅ Fait |
 | SMELL-03 | **MEDIUM** | `catalog/serializers.py` | **Switch statement pour step types.** if/elif chain pour gate/service_call/evaluation/http_request. Remplacé par un registry `_STEP_TYPE_FIELDS` + boucle. | ✅ Fait |
 | SMELL-04 | **LOW** | `catalog/rbac_service.py:166` | **Exception silencieuse.** `except Exception as _: pass`. Ajout de `logger.debug("rbac_cache_write_failed", error=str(e))`. | ✅ Fait |
-| SMELL-05 | **BACKLOG** | `gates.py` (821 lignes), `container_workflow_runtime.py` (1670 lignes) | **God classes.** `_handle_gate_timeout` (206 lignes), `_transition_step_to_running` (188 lignes). Documenté pour refactoring futur. | 📋 Backlog |
+| SMELL-05 | **BACKLOG** | `gates.py` (821 lignes), `container_workflow_runtime.py` (1422 lignes) | **God classes.** `_handle_gate_timeout` (216→55 LOC), `_transition_step_to_running` (181→26 LOC). Helpers extraits, paires séquentiel/parallèle fusionnées via `ParallelContext`. Story 71.6. | ✅ Fait |
 
 ### 24.5 Impact frontend
 

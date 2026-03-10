@@ -85,6 +85,7 @@
 1. `sqlplus ... @database/baseline/baseline_schema_v088.sql`
 2. `flyway baseline -baselineVersion=116 -baselineDescription=baseline_schema_v088`
 3. `flyway migrate` (pour V117+ futures)
+4. `manage.py migrate --fake-initial` — applique les migrations Django de données (ex. `reference/0004_refengine_icon_url_fix_paths`) qui corrigent les chemins `icon_url` des REF_ENGINES ; les migrations DDL sont fakées car les tables existent déjà.
 
 ---
 
@@ -115,7 +116,7 @@
 | Migration | Type | Commentaire |
 |-----------|------|--------------|
 | `core/0009_add_scheduled_execution_recurring_enabled_audit_type` | DDL (choices) | **Résolu** : V117 aligne `CK_AUDIT_LOG_ACTION_TYPE` Oracle avec Django |
-| `reference/0004_refengine_icon_url_fix_paths` | DML (RunPython) | Correction de chemins d’icônes — pas de script Flyway |
+| `reference/0004_refengine_icon_url_fix_paths` | DML (RunPython) | Correction de chemins d’icônes — appliquée via `manage.py migrate` après baseline (§ 3.3) |
 
 ---
 
@@ -142,7 +143,8 @@ Aucun écart ouvert restant pour ces types.
 
 - **Rôle** : correction des chemins `icon_url` pour REF_ENGINES (Story 31.3)
 - **Type** : `RunPython` (données uniquement)
-- **Flyway** : pas d’équivalent — corrections appliquées via fixtures ou manuellement
+- **Flyway** : pas d’équivalent — corrections appliquées via `manage.py migrate` après baseline + Flyway (voir § 3.3)
+- **Approche retenue** : la procédure nouveaux environnements (§ 3.3) exécute explicitement `manage.py migrate --fake-initial` après le baseline SQL et Flyway ; la migration `reference/0004_refengine_icon_url_fix_paths` s'applique ainsi de façon déterministe et corrige les six moteurs intégrés (Oracle, SQL Server, DB2 avec chemins canoniques `/icons/engines/...`). Le baseline SQL n'inclut pas ces valeurs ; aucune migration Flyway ne les applique.
 - **Risque** : faible (données de référence, pas de schéma)
 
 ---
@@ -172,7 +174,7 @@ Aucun écart ouvert restant pour ces types.
 
 ## 8. Modifications effectuées (2026-03-10)
 
-1. **V117 créée** : `V117__add_missing_audit_types_align_django.sql` — ajoute SCHEDULED_EXECUTION_RECURRING_ENABLED, EXECUTION_STEP_POLICY_*, POLICY_*, EXECUTION_POLLING_EXHAUSTED à `CK_AUDIT_LOG_ACTION_TYPE`.
+1. **V117 créée** : `V117__add_missing_audit_types_align_django.sql` — ajoute à `CK_AUDIT_LOG_ACTION_TYPE` : SCHEDULED_EXECUTION_RECURRING_ENABLED, EXECUTION_STEP_POLICY_APPROVAL_REQUIRED, EXECUTION_STEP_POLICY_AUTO_APPROVED, EXECUTION_STEP_POLICY_EVALUATION_FAILED, POLICY_CREATED, POLICY_UPDATED, POLICY_DELETED, EXECUTION_POLLING_EXHAUSTED.
 2. **Documentation mise à jour** : `database-schema.md`, `MIGRATION_STRATEGY.md`, `schema-differences.md`, `database/baseline/README.md`.
 
 ---

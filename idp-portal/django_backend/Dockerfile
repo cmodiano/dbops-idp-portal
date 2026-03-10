@@ -75,5 +75,16 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8000/api/v1/health/ || exit 1
 
-# Start Daphne (ASGI) for HTTP + WebSocket support
-CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "idp_backend.asgi:application"]
+# Start Gunicorn with ASGI worker for HTTP + WebSocket support
+# Uses native ASGI worker (Gunicorn 25+) — 4 workers, 60s timeout, access/error logging
+CMD ["gunicorn", "idp_backend.asgi:application", \
+    "--worker-class", "asgi", \
+    "--workers", "4", \
+    "--bind", "0.0.0.0:8000", \
+    "--timeout", "60", \
+    "--graceful-timeout", "30", \
+    "--keep-alive", "5", \
+    "--access-logfile", "-", \
+    "--error-logfile", "-", \
+    "--capture-output", \
+    "--enable-stdio-inheritance"]

@@ -35,7 +35,7 @@ export default function DashboardPage() {
 
       {/* Story 8.3: Reporting dashboard with statistics and charts */}
       {/* Story 9.4: StatCards moved to ExecutionsPage */}
-      <ReportingDashboard />
+      <ReportingDashboard recentExecutions={recentExecutions} />
     </div>
   );
 }

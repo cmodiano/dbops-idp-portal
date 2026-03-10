@@ -13,7 +13,7 @@
 
 import { useState, useCallback } from 'react';
 import { Row, Col, Segmented, Alert, Space, Typography } from 'antd';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { ArrowRightOutlined } from '@ant-design/icons';
 import { TechnologyBarChart } from './TechnologyBarChart';
 import { EnvironmentBarChart } from './EnvironmentBarChart';
@@ -28,6 +28,7 @@ import { ComparisonSummaryCards } from './ComparisonSummaryCards';
 import { ComparisonExecutionsDrawer } from './ComparisonExecutionsDrawer';
 import { AdminPlatformSection } from './AdminPlatformSection';
 import { OperationsActivitySection } from './OperationsActivitySection';
+import { RecentExecutions } from '../RecentExecutions';
 import { useDashboardReportingStats } from '../../../hooks/useDashboardStats';
 import { useUrlFilters } from '../../../hooks/useUrlFilters';
 import type {
@@ -35,6 +36,7 @@ import type {
   ComparisonDimension,
   ComparisonResult,
   ComparisonMetric,
+  DashboardRecentExecution,
 } from '../../../types/api';
 import type { DashboardMode } from './ComparisonModeSelector';
 
@@ -48,7 +50,14 @@ const PERIOD_OPTIONS = [
   { label: '90 jours', value: 90 },
 ];
 
-export function ReportingDashboard() {
+export interface ReportingDashboardProps {
+  /** Recent executions from WebSocket (Story 5.1, useDashboardWebSocket). */
+  recentExecutions?: DashboardRecentExecution[];
+}
+
+export function ReportingDashboard({ recentExecutions = [] }: ReportingDashboardProps) {
+  const navigate = useNavigate();
+
   // URL-synced filters (Story 8.4, AC6, AC8)
   const [filters, setFilters] = useUrlFilters();
 
@@ -204,6 +213,12 @@ export function ReportingDashboard() {
           )}
 
           {/* Story 9.4: StatCards moved to ExecutionsPage */}
+
+          {/* Exécutions récentes (WebSocket live updates) */}
+          <RecentExecutions
+            executions={recentExecutions}
+            onRowClick={(exec) => navigate(`/executions/${exec.id}`)}
+          />
 
           {/* Section admin — Utilisation de la plateforme (Story 60.3) */}
           <AdminPlatformSection filters={apiFilters} />
