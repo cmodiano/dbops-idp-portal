@@ -876,8 +876,8 @@ development_status:
     # === Epic 70: CaC — Simplification Import/Export (API unique, pas de sync plateforme) ===
     # Réf: planning-artifacts/epic-70-cac-simplification-import-api-unique.md
     # Import uniquement via API (CI/CD) ; suppression sync_config et features UI import YAML
-    epic-70: backlog
-    70-1-supprimer-commande-sync-config: backlog
+    epic-70: in-progress
+    70-1-supprimer-commande-sync-config: done
     70-2-supprimer-features-ui-import-yaml: backlog
     70-3-mise-a-jour-documentation-cac: backlog
     epic-70-retrospective: optional
