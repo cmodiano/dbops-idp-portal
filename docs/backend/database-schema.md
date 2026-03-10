@@ -2,7 +2,7 @@
 
 ## Vue d'ensemble
 
-Le portail IDP utilise **Oracle Database** avec **13 tables principales** organisées en **6 domaines fonctionnels**. Le schéma est géré par **Flyway** (45 migrations: V000 à V044) avec cohabitation Django ORM.
+Le portail IDP utilise **Oracle Database** avec **28 tables** organisées en **6 domaines fonctionnels**. Le schéma est géré par **Flyway** (118 migrations: V000 à V117) avec cohabitation Django ORM.
 
 ### Caractéristiques techniques
 
@@ -91,8 +91,7 @@ Le portail IDP utilise **Oracle Database** avec **13 tables principales** organi
 │ PARAMETERS_SCHEMA (CLOB)        │              │ AUTH_FLOW            │
 │ IMPACT_RULES (CLOB)             │              │ TOKEN_URL            │
 │ EXECUTION_STEPS (CLOB)          │              │ CONFIG (CLOB)        │
-│ CHANGE_TYPE_CONFIG (CLOB)       │              │ CREATED_AT           │
-│ DOCUMENTATION_MD (CLOB)         │              │ UPDATED_AT           │
+│ DOCUMENTATION_MD (CLOB)         │              │ CREATED_AT           │
 │ REMEDIATION_RULES (CLOB)        │              └──────────────────────┘
 │ DEFAULT_IMPACT_LEVEL            │
 │ STATUS                          │
@@ -304,7 +303,6 @@ Table principale du catalogue d'actions.
 | PARAMETERS_SCHEMA | CLOB | NULL | JSON Schema des paramètres |
 | IMPACT_RULES | CLOB | NULL | Règles d'impact JSON |
 | EXECUTION_STEPS | CLOB | NULL | Étapes d'exécution JSON |
-| CHANGE_TYPE_CONFIG | CLOB | NULL | Config changement par env (V019) |
 | DOCUMENTATION_MD | CLOB | NULL | Documentation Markdown (V022) |
 | REMEDIATION_RULES | CLOB | NULL | Règles de remédiation (V031) |
 | DEFAULT_IMPACT_LEVEL | VARCHAR2(20) | NULL, CHECK (...) | Niveau d'impact par défaut (V014) |
@@ -823,7 +821,7 @@ Le système utilise un **scheduler externe** (Control-M ou Django scheduler) pou
 | V010-V013 | RBAC | PROFILES, permissions action/target, suppression rbac_policies |
 | V014 | Catalog | DEFAULT_IMPACT_LEVEL |
 | V015-V016 | Cleanup | Suppression SCHEMA_VERSION et séquences |
-| V017-V019 | Catalog | Change model code, change_type_config par env |
+| V017-V019 | Catalog | Change model code (CHANGE_TYPE_CONFIG migré vers EXECUTION_STEPS en V108, colonne supprimée V109) |
 | V020-V026 | Integrations | INTEGRATIONS, auth_flow, token_url, config |
 | V021 | Catalog | USER_FAVORITES |
 | V022 | Catalog | DOCUMENTATION_MD (markdown) |
@@ -864,7 +862,7 @@ V018__drop_category_column.sql
   → CATEGORY rendue nullable, contrainte/index supprimés (colonne conservée) ; migration des données vers TAGS
 
 V019__change_type_config_per_env.sql
-  → CHANGE_TYPE_CONFIG (JSON par environnement)
+  → CHANGE_TYPE_CONFIG (migré vers EXECUTION_STEPS en V108, colonne supprimée V109)
 
 V021__create_user_favorites.sql
   → Création table USER_FAVORITES

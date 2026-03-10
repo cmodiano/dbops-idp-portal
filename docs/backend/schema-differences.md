@@ -74,7 +74,6 @@ L'analyse comparative du schéma base de données Oracle entre le backend FastAP
 | PARAMETERS_SCHEMA | CLOB | TextField | PARAMETERS_SCHEMA | ✅ |
 | IMPACT_RULES | CLOB | TextField | IMPACT_RULES | ✅ |
 | EXECUTION_STEPS | CLOB | TextField | EXECUTION_STEPS | ✅ |
-| CHANGE_TYPE_CONFIG | CLOB | TextField | CHANGE_TYPE_CONFIG | ✅ |
 | DOCUMENTATION_MD | CLOB | TextField | DOCUMENTATION_MD | ✅ |
 | REMEDIATION_RULES | CLOB | TextField | REMEDIATION_RULES | ✅ |
 | DEFAULT_IMPACT_LEVEL | VARCHAR2(20) CHECK | CharField choices | DEFAULT_IMPACT_LEVEL | ✅ |

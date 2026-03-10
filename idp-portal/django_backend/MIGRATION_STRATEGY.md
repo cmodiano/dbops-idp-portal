@@ -280,9 +280,9 @@ Oracle utilise `GENERATED ALWAYS AS IDENTITY` pour les colonnes auto-increment.
 
 ## Version de Référence Flyway
 
-**Dernière migration Flyway avant bascule:** V041
+**Dernière migration Flyway:** V117 (état mars 2026)
 
-**Date de bascule prévue:** Après complétion de l'Epic M (migration FastAPI → Django)
+**Note:** La bascule vers Django migrations uniquement n'a pas été effectuée. Flyway continue de gérer le schéma Oracle. Voir `docs/backend/migration/etat-des-lieux-migrations-bd.md`.
 
 ## Checklist de Validation
 

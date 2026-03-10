@@ -37,7 +37,7 @@ flyway \
   baseline
 ```
 
-> Cette commande enregistre une ligne dans `flyway_schema_history` indiquant que la base est déjà au niveau V116 (success=true). Flyway ne re-jouera pas V000–V116. **Aucune migration incrémentale n'est nécessaire pour V000–V116.** Les migrations futures (V117 et au-delà) devront toutefois être appliquées via `flyway migrate` lorsqu'elles seront disponibles — ne pas les ignorer.
+> Cette commande enregistre une ligne dans `flyway_schema_history` indiquant que la base est déjà au niveau V116 (success=true). Flyway ne re-jouera pas V000–V116. **Aucune migration incrémentale n'est nécessaire pour V000–V116.** Les migrations futures (V117 et au-delà) devront être appliquées via `flyway migrate` — notamment **V117** (types d'audit manquants : SCHEDULED_EXECUTION_RECURRING_ENABLED, EXECUTION_STEP_POLICY_*, POLICY_*, EXECUTION_POLLING_EXHAUSTED).
 
 ### Étape 3 : Vérifier le résultat
 
