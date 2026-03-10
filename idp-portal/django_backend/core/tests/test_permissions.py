@@ -1,8 +1,6 @@
 """
 Unit tests for core/permissions.py — AdminProfilePermission + IsAdminUser.
 
-Backward-compat aliases: DBOPSProfilePermission = AdminProfilePermission, IsDBAOrDBOPS = IsAdminUser.
-
 Story 22.1: CRIT-1 fix — verify Profile.objects.find_by_ad_groups() is used
 instead of the non-existent service.get_profiles_by_ad_groups().
 
@@ -19,9 +17,7 @@ from django.test import override_settings
 
 from core.permissions import (
     AdminProfilePermission,
-    DBOPSProfilePermission,
     IsAdminUser,
-    IsDBAOrDBOPS,
 )
 
 
@@ -74,19 +70,6 @@ def _mock_profile_filter(mock_filter, is_admin: bool):
     mock_p = MagicMock()
     mock_p.is_admin_bool = is_admin
     mock_filter.return_value.first.return_value = mock_p
-
-
-@pytest.mark.unit
-class TestBackwardCompatAliases:
-    """Story 56.4: Assert backward-compat aliases still point to original classes."""
-
-    def test_dbops_profile_permission_is_admin_profile_permission(self):
-        """DBOPSProfilePermission must be the same object as AdminProfilePermission."""
-        assert DBOPSProfilePermission is AdminProfilePermission
-
-    def test_is_dba_or_dbops_is_admin_user(self):
-        """IsDBAOrDBOPS must be the same object as IsAdminUser."""
-        assert IsDBAOrDBOPS is IsAdminUser
 
 
 @pytest.mark.unit
@@ -656,80 +639,6 @@ class TestAdminProfilePermissionMissingBranches:
         assert result is False
         mock_logger.warning.assert_called_once()
         assert mock_logger.warning.call_args[0][0] == "profile_db_unavailable_admin_check"
-
-
-# ============================================================================
-# _get_admin_profile_names — Story 56.4 (AC4)
-# ============================================================================
-
-@pytest.mark.unit
-class TestGetAdminProfileNames:
-    """Tests for _get_admin_profile_names() helper (Story 56.4 AC4 — deprecated Story 56.7)."""
-
-    def test_returns_settings_value_when_defined(self):
-        """AC4: Returns ADMIN_PROFILE_NAMES from settings when defined."""
-        from core.permissions import _get_admin_profile_names
-        custom = {'automation', 'operator'}
-        with override_settings(ADMIN_PROFILE_NAMES=custom):
-            result = _get_admin_profile_names()
-        assert result == {'automation', 'operator'}
-
-    def test_returns_default_fallback_when_not_defined(self):
-        """AC4: Returns default set when ADMIN_PROFILE_NAMES is not defined in settings."""
-        from core.permissions import _get_admin_profile_names
-        from django.conf import settings as django_settings
-        # Temporarily remove the setting to test fallback
-        original = django_settings.ADMIN_PROFILE_NAMES
-        del django_settings.ADMIN_PROFILE_NAMES
-        try:
-            result = _get_admin_profile_names()
-        finally:
-            django_settings.ADMIN_PROFILE_NAMES = original
-        assert result == {'dbops', 'dba', 'dba_applicatif', 'dba_infrastructure'}
-
-    def test_default_set_contains_all_legacy_profiles(self):
-        """AC4: Default set includes all legacy admin profiles for backward compat."""
-        from core.permissions import _get_admin_profile_names
-        result = _get_admin_profile_names()
-        assert 'dbops' in result
-        assert 'dba' in result
-        assert 'dba_applicatif' in result
-        assert 'dba_infrastructure' in result
-
-
-# ============================================================================
-# _get_dbops_profile_names — Story 56.4 (deprecated Story 56.7)
-# ============================================================================
-
-@pytest.mark.unit
-class TestGetDbopsProfileNames:
-    """Tests for _get_dbops_profile_names() helper (Story 56.4 — deprecated Story 56.7)."""
-
-    def test_returns_settings_value_when_defined(self):
-        """Returns DBOPS_PROFILE_NAMES from settings when defined."""
-        from core.permissions import _get_dbops_profile_names
-        custom = {'dbops', 'dbops_secondary'}
-        with override_settings(DBOPS_PROFILE_NAMES=custom):
-            result = _get_dbops_profile_names()
-        assert result == {'dbops', 'dbops_secondary'}
-
-    def test_returns_default_fallback_when_not_defined(self):
-        """Returns default set {'dbops'} when DBOPS_PROFILE_NAMES is not defined in settings."""
-        from core.permissions import _get_dbops_profile_names
-        from django.conf import settings as django_settings
-        original = django_settings.DBOPS_PROFILE_NAMES
-        del django_settings.DBOPS_PROFILE_NAMES
-        try:
-            result = _get_dbops_profile_names()
-        finally:
-            django_settings.DBOPS_PROFILE_NAMES = original
-        assert result == {'dbops'}
-
-    def test_default_set_contains_dbops(self):
-        """Default set includes 'dbops' for backward compatibility."""
-        from core.permissions import _get_dbops_profile_names
-        result = _get_dbops_profile_names()
-        assert 'dbops' in result
 
 
 # ============================================================================

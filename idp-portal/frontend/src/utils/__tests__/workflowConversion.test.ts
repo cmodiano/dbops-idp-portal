@@ -51,8 +51,6 @@ describe('workflowStepsToReactFlow', () => {
     step_id: 'step-1',
     name: 'Step 1',
     referenced_action_id: 10,
-    on_success_step_id: null,
-    on_error_step_id: null,
     retry_enabled: false,
     retry_max_attempts: null,
     retry_interval_seconds: null,
@@ -86,8 +84,8 @@ describe('workflowStepsToReactFlow', () => {
     expect(startEdge!.sourceHandle).toBe('output');
   });
 
-  it('creates success edges to End node when on_success_step_id is null', () => {
-    const steps = [makeStep({ on_success_step_id: null })];
+  it('creates success edges to End node when on_success_step_ids is empty', () => {
+    const steps = [makeStep({ on_success_step_ids: [] })];
     const { edges } = workflowStepsToReactFlow(steps);
     const endEdge = edges.find(
       (e) => e.source === 'step-1' && e.sourceHandle === 'success' && e.target === END_NODE_ID
@@ -95,8 +93,8 @@ describe('workflowStepsToReactFlow', () => {
     expect(endEdge).toBeDefined();
   });
 
-  it('creates error edges to End node when on_error_step_id is null', () => {
-    const steps = [makeStep({ on_error_step_id: null })];
+  it('creates error edges to End node when on_error_step_ids is empty', () => {
+    const steps = [makeStep({ on_error_step_ids: [] })];
     const { edges } = workflowStepsToReactFlow(steps);
     const endEdge = edges.find(
       (e) => e.source === 'step-1' && e.sourceHandle === 'error' && e.target === END_NODE_ID
@@ -104,9 +102,9 @@ describe('workflowStepsToReactFlow', () => {
     expect(endEdge).toBeDefined();
   });
 
-  it('creates success edges between steps when on_success_step_id is set', () => {
+  it('creates success edges between steps when on_success_step_ids is set', () => {
     const steps = [
-      makeStep({ step_id: 'step-1', on_success_step_id: 'step-2' }),
+      makeStep({ step_id: 'step-1', on_success_step_ids: ['step-2'] }),
       makeStep({ step_id: 'step-2', order: 2, name: 'Step 2' }),
     ];
     const { edges } = workflowStepsToReactFlow(steps);
@@ -117,9 +115,9 @@ describe('workflowStepsToReactFlow', () => {
     expect(successEdge!.style).toEqual(expect.objectContaining({ stroke: STYLE_TOKENS.iconSuccess }));
   });
 
-  it('creates error edges between steps when on_error_step_id is set', () => {
+  it('creates error edges between steps when on_error_step_ids is set', () => {
     const steps = [
-      makeStep({ step_id: 'step-1', on_error_step_id: 'step-2' }),
+      makeStep({ step_id: 'step-1', on_error_step_ids: ['step-2'] }),
       makeStep({ step_id: 'step-2', order: 2, name: 'Step 2' }),
     ];
     const { edges } = workflowStepsToReactFlow(steps);
@@ -145,7 +143,7 @@ describe('workflowStepsToReactFlow', () => {
 
   it('populates on_success_step_name and on_error_step_name in node data', () => {
     const steps = [
-      makeStep({ step_id: 'step-1', on_success_step_id: 'step-2', on_error_step_id: 'step-3' }),
+      makeStep({ step_id: 'step-1', on_success_step_ids: ['step-2'], on_error_step_ids: ['step-3'] }),
       makeStep({ step_id: 'step-2', order: 2, name: 'Success Step' }),
       makeStep({ step_id: 'step-3', order: 3, name: 'Error Step' }),
     ];
@@ -406,15 +404,14 @@ describe('reactFlowToWorkflowSteps', () => {
 
   it('round-trips correctly: steps → reactflow → steps (Story 67.4)', () => {
     const originalSteps: WorkflowStep[] = [
-      { order: 1, step_id: 'step-1', name: 'Step 1', referenced_action_id: 10, on_success_step_id: 'step-2', on_error_step_id: null, retry_enabled: true, retry_max_attempts: 3, retry_interval_seconds: 5, retry_backoff_multiplier: 2 },
-      { order: 2, step_id: 'step-2', name: 'Step 2', referenced_action_id: 20, on_success_step_id: null, on_error_step_id: null, retry_enabled: false, retry_max_attempts: null, retry_interval_seconds: null, retry_backoff_multiplier: null },
+      { order: 1, step_id: 'step-1', name: 'Step 1', referenced_action_id: 10, on_success_step_ids: ['step-2'], on_error_step_ids: [], retry_enabled: true, retry_max_attempts: 3, retry_interval_seconds: 5, retry_backoff_multiplier: 2 },
+      { order: 2, step_id: 'step-2', name: 'Step 2', referenced_action_id: 20, on_success_step_ids: [], on_error_step_ids: [], retry_enabled: false, retry_max_attempts: null, retry_interval_seconds: null, retry_backoff_multiplier: null },
     ];
     const { nodes, edges } = workflowStepsToReactFlow(originalSteps);
     const roundTripped = reactFlowToWorkflowSteps(nodes, edges);
 
     expect(roundTripped).toHaveLength(2);
     expect(roundTripped[0].step_id).toBe('step-1');
-    // Story 67.4: rétrocompat — on_success_step_id singulier produit un tableau 1 élément
     expect(roundTripped[0].on_success_step_ids).toEqual(['step-2']);
     expect(roundTripped[0].retry_enabled).toBe(true);
     expect(roundTripped[0].retry_max_attempts).toBe(3);
@@ -567,9 +564,9 @@ describe('Story 67.4 — reactFlowToWorkflowSteps multi-connexions', () => {
     expect(steps[0].on_success_step_ids).toEqual(['stepB', 'stepC']);
   });
 
-  it('6.2 — rétrocompat singulier : on_success_step_id → workflowStepsToReactFlow crée 1 edge', () => {
+  it('6.2 — on_success_step_ids : workflowStepsToReactFlow crée 1 edge', () => {
     const steps: WorkflowStep[] = [
-      { order: 1, step_id: 'stepA', name: null, step_type: 'platform', on_success_step_id: 'stepB' },
+      { order: 1, step_id: 'stepA', name: null, step_type: 'platform', on_success_step_ids: ['stepB'] },
     ];
     const { edges } = workflowStepsToReactFlow(steps);
     const successEdges = edges.filter(e => e.source === 'stepA' && e.sourceHandle === 'success' && e.target !== END_NODE_ID);

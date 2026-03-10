@@ -6,7 +6,7 @@ Covers:
 - get_status(): mapping Azure DevOps state+result → IDP Portal status
 - get_job_logs(): success, timeout, 404, logs empty
 - cancel_execution(): success and errors
-- _map_azure_devops_status(): status mapping utility
+- map_azure_devops_status(): status mapping utility
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ import httpx
 
 from adapters.azure_devops_adapter import (
     AzureDevOpsAdapter,
-    _map_azure_devops_status,
+    map_azure_devops_status,
 )
 from core.exceptions import ServiceUnavailableError
 
@@ -32,32 +32,32 @@ def adapter() -> AzureDevOpsAdapter:
 
 
 # ---------------------------------------------------------------------------
-# _map_azure_devops_status
+# map_azure_devops_status
 # ---------------------------------------------------------------------------
 
 class TestMapAzureDevOpsStatus:
     """Tests for status mapping utility."""
 
     def test_in_progress(self) -> None:
-        assert _map_azure_devops_status("inProgress", None) == "RUNNING"
+        assert map_azure_devops_status("inProgress", None) == "RUNNING"
 
     def test_canceling(self) -> None:
-        assert _map_azure_devops_status("canceling", None) == "RUNNING"
+        assert map_azure_devops_status("canceling", None) == "RUNNING"
 
     def test_completed_succeeded(self) -> None:
-        assert _map_azure_devops_status("completed", "succeeded") == "COMPLETED"
+        assert map_azure_devops_status("completed", "succeeded") == "COMPLETED"
 
     def test_completed_failed(self) -> None:
-        assert _map_azure_devops_status("completed", "failed") == "FAILED"
+        assert map_azure_devops_status("completed", "failed") == "FAILED"
 
     def test_completed_canceled(self) -> None:
-        assert _map_azure_devops_status("completed", "canceled") == "CANCELLED"
+        assert map_azure_devops_status("completed", "canceled") == "CANCELLED"
 
     def test_unknown_state(self) -> None:
-        assert _map_azure_devops_status("unknown", None) == "SUBMITTED"
+        assert map_azure_devops_status("unknown", None) == "SUBMITTED"
 
     def test_completed_unknown_result(self) -> None:
-        assert _map_azure_devops_status("completed", "unknown") == "FAILED"
+        assert map_azure_devops_status("completed", "unknown") == "FAILED"
 
 
 # ---------------------------------------------------------------------------

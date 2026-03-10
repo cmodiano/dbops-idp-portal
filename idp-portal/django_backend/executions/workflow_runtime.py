@@ -117,7 +117,7 @@ class WorkflowRuntime:
     """
     Main workflow runtime orchestrator.
 
-    Executes workflow steps following conditional branches (on_success_step_id, on_error_step_id).
+    Executes workflow steps following conditional branches (on_success_step_ids, on_error_step_ids).
     Handles loop detection, state management, and execution updates.
 
     Story 34.7: Delegates retry logic to RetryHandler and step execution to StepExecutor (SRP).
@@ -162,7 +162,7 @@ class WorkflowRuntime:
         Load workflow steps from action's execution_steps.
 
         Returns:
-            List of step dicts with step_id, on_success_step_id, on_error_step_id, etc.
+            List of step dicts with step_id, on_success_step_ids, on_error_step_ids, etc.
         """
         steps = self.action.execution_steps or []
         if not isinstance(steps, list):
@@ -251,8 +251,8 @@ class WorkflowRuntime:
         - If outcome is ERROR: follow on_error_step_id
         - If next step is None/NULL: workflow terminates
 
-        Backward compatibility (Story 16.3 guardrail):
-        - If on_success_step_id/on_error_step_id are absent, use linear order (next step by order)
+        Linear fallback (Story 16.3):
+        - If on_success_step_ids/on_error_step_ids are absent, use linear order (next step by order)
 
         Args:
             current_step: Current step dict
@@ -263,19 +263,14 @@ class WorkflowRuntime:
         """
         is_success = outcome == StepOutcome.SUCCESS
 
-        # Branching logic (Story 16.2 fields):
-        # Only treat the relevant branch key as "explicit" for the outcome.
-        # This avoids a subtle retro-compat bug where having ONLY on_error_step_id would
-        # incorrectly terminate a success path (AC1).
-        if is_success and ('on_success_step_id' in current_step or 'on_success_step_ids' in current_step):
-            # TODO 67.3+: WorkflowRuntime ne supporte pas encore le parallélisme.
-            # Si on_success_step_ids (pluriel) est présent, prendre le premier élément.
+        # Branching logic (Story 16.2, 67.1): only on_success_step_ids / on_error_step_ids.
+        if is_success and 'on_success_step_ids' in current_step:
             ids_plural = current_step.get('on_success_step_ids')
             next_step_id: str | None
-            if ids_plural and isinstance(ids_plural, list):
+            if ids_plural and isinstance(ids_plural, list) and len(ids_plural) > 0:
                 next_step_id = str(ids_plural[0])
             else:
-                next_step_id = current_step.get('on_success_step_id')
+                next_step_id = None
             logger.debug(
                 "workflow_branch_resolution",
                 current_step_id=current_step.get('step_id'),
@@ -285,14 +280,12 @@ class WorkflowRuntime:
             )
             return next_step_id
 
-        if (not is_success) and ('on_error_step_id' in current_step or 'on_error_step_ids' in current_step):
-            # TODO 67.3+: WorkflowRuntime ne supporte pas encore le parallélisme.
-            # Si on_error_step_ids (pluriel) est présent, prendre le premier élément.
+        if (not is_success) and 'on_error_step_ids' in current_step:
             ids_plural = current_step.get('on_error_step_ids')
-            if ids_plural and isinstance(ids_plural, list):
+            if ids_plural and isinstance(ids_plural, list) and len(ids_plural) > 0:
                 next_step_id = str(ids_plural[0])
             else:
-                next_step_id = current_step.get('on_error_step_id')
+                next_step_id = None
             logger.debug(
                 "workflow_branch_resolution",
                 current_step_id=current_step.get('step_id'),
@@ -333,8 +326,8 @@ class WorkflowRuntime:
         Execute the complete workflow following branches.
 
         Implements AC1-AC5:
-        - AC1: Follow on_success_step_id on success
-        - AC2: Follow on_error_step_id on error
+        - AC1: Follow on_success_step_ids on success
+        - AC2: Follow on_error_step_ids on error
         - AC4: Convergence (same next step from success/error paths)
         - AC5: Loop detection (max MAX_STEP_TRANSITIONS transitions)
 
@@ -450,7 +443,7 @@ class WorkflowRuntime:
                 return ExecutionStatus.RUNNING
 
             # AC2: If step failed and no error path, workflow fails
-            if result.is_error and 'on_error_step_id' not in current_step:
+            if result.is_error and 'on_error_step_ids' not in current_step:
                 # Backward compat: no explicit error path = fail workflow
                 logger.warning(
                     "workflow_step_failed_no_error_path",

@@ -240,14 +240,14 @@ export const SortableStepCard: FC<SortableStepCardProps> = ({
               </Text>
               <Select
                 style={{ width: 260, marginTop: 4, display: 'block' }}
-                value={(step.on_success_step_id ?? EXIT_VALUE) as string}
-                onChange={(v) => onStepChange(index, 'on_success_step_id', v === EXIT_VALUE ? null : v)}
+                value={(step.on_success_step_ids?.[0] ?? EXIT_VALUE) as string}
+                onChange={(v) => onStepChange(index, 'on_success_step_ids', v === EXIT_VALUE ? [] : [v])}
                 options={[
                   { value: EXIT_VALUE, label: '(fin du workflow)' },
                   ...getBranchOptions(step.step_id),
                 ]}
                 placeholder="Sélectionner une étape..."
-                aria-label={`on_success_step_id de l'étape ${step.order}`}
+                aria-label={`on_success_step_ids de l'étape ${step.order}`}
                 disabled={disabled}
                 allowClear={false}
               />
@@ -259,14 +259,14 @@ export const SortableStepCard: FC<SortableStepCardProps> = ({
               </Text>
               <Select
                 style={{ width: 260, marginTop: 4, display: 'block' }}
-                value={(step.on_error_step_id ?? EXIT_VALUE) as string}
-                onChange={(v) => onStepChange(index, 'on_error_step_id', v === EXIT_VALUE ? null : v)}
+                value={(step.on_error_step_ids?.[0] ?? EXIT_VALUE) as string}
+                onChange={(v) => onStepChange(index, 'on_error_step_ids', v === EXIT_VALUE ? [] : [v])}
                 options={[
                   { value: EXIT_VALUE, label: '(fin du workflow)' },
                   ...getBranchOptions(step.step_id),
                 ]}
                 placeholder="Sélectionner une étape..."
-                aria-label={`on_error_step_id de l'étape ${step.order}`}
+                aria-label={`on_error_step_ids de l'étape ${step.order}`}
                 disabled={disabled}
                 allowClear={false}
               />

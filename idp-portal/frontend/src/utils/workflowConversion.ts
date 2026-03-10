@@ -48,21 +48,17 @@ export function workflowStepsToReactFlow(
       retry_max_attempts: step.retry_max_attempts ?? null,
       retry_interval_seconds: step.retry_interval_seconds ?? null,
       retry_backoff_multiplier: step.retry_backoff_multiplier ?? null,
-      on_success_step_id: step.on_success_step_id ?? null,
-      on_error_step_id: step.on_error_step_id ?? null,
+      on_success_step_id: step.on_success_step_ids?.[0] ?? null,
+      on_error_step_id: step.on_error_step_ids?.[0] ?? null,
       // Story 67.4: résoudre le nom à partir des tableaux en priorité (fan-out multi-cibles)
       on_success_step_name: (() => {
-        const ids = step.on_success_step_ids?.length
-          ? step.on_success_step_ids
-          : step.on_success_step_id ? [step.on_success_step_id] : [];
+        const ids = step.on_success_step_ids ?? [];
         if (ids.length === 0) return null;
         const firstName = steps.find((s) => s.step_id === ids[0])?.name ?? ids[0];
         return ids.length > 1 ? `${firstName} (+${ids.length - 1})` : firstName;
       })(),
       on_error_step_name: (() => {
-        const ids = step.on_error_step_ids?.length
-          ? step.on_error_step_ids
-          : step.on_error_step_id ? [step.on_error_step_id] : [];
+        const ids = step.on_error_step_ids ?? [];
         if (ids.length === 0) return null;
         const firstName = steps.find((s) => s.step_id === ids[0])?.name ?? ids[0];
         return ids.length > 1 ? `${firstName} (+${ids.length - 1})` : firstName;
@@ -98,20 +94,8 @@ export function workflowStepsToReactFlow(
     const sourceId = step.step_id;
     if (!sourceId) return;
 
-    // Story 67.4: rétrocompat — préférer on_success_step_ids[], fallback sur on_success_step_id (singulier)
-    const successTargets: string[] =
-      step.on_success_step_ids?.length
-        ? step.on_success_step_ids
-        : step.on_success_step_id
-          ? [step.on_success_step_id]
-          : [];
-
-    const errorTargets: string[] =
-      step.on_error_step_ids?.length
-        ? step.on_error_step_ids
-        : step.on_error_step_id
-          ? [step.on_error_step_id]
-          : [];
+    const successTargets: string[] = step.on_success_step_ids ?? [];
+    const errorTargets: string[] = step.on_error_step_ids ?? [];
 
     // Créer une edge par target success
     if (successTargets.length > 0) {

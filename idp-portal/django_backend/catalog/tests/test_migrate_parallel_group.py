@@ -305,45 +305,6 @@ class TestMigrateParallelGroupCommand(TestCase):
         self.assertIn('Migration terminée', output)
 
     # -----------------------------------------------------------------------
-    # Extra — clé singulière legacy on_success_step_id → parallel_group
-    # -----------------------------------------------------------------------
-
-    def test_legacy_singular_success_id_migrated_and_cleaned(self):
-        """Extra: parent avec on_success_step_id (singulier legacy) pointant vers un parallel_group.
-        Après migration : on_success_step_ids contient les branches, on_success_step_id est supprimé.
-        """
-        steps = [
-            # Utilise la forme singulière legacy
-            {
-                'step_id': 'start',
-                'step_type': 'platform',
-                'referenced_action_id': 1,
-                'on_success_step_id': 'pg1',
-            },
-            _make_pg_step('pg1', ['branch1', 'branch2'], on_all_success_step_id='end'),
-            _make_platform_step('branch1', 2),
-            _make_platform_step('branch2', 3),
-            _make_platform_step('end', 4, on_success_step_ids=[]),
-        ]
-        action = self._create_workflow_action(name='Workflow legacy singular', execution_steps=steps)
-
-        call_command('migrate_parallel_group', stdout=StringIO())
-
-        action.refresh_from_db()
-        result_steps = action.execution_steps
-
-        # parallel_group supprimé
-        self.assertFalse(any(s.get('step_type') == 'parallel_group' for s in result_steps))
-
-        start = next(s for s in result_steps if s['step_id'] == 'start')
-
-        # Pluriel correct : pointe vers les branches
-        self.assertEqual(sorted(start['on_success_step_ids']), ['branch1', 'branch2'])
-
-        # Singulier legacy nettoyé (ne doit plus pointer vers pg1 supprimé)
-        self.assertNotIn('on_success_step_id', start)
-
-    # -----------------------------------------------------------------------
     # 2.9 — step parallel_group orphelin (aucun parent) → warning, step supprimé
     # -----------------------------------------------------------------------
 

@@ -60,8 +60,8 @@ const mockWorkflowSteps: WorkflowStep[] = [
     referenced_action_id: 10,
     action_name: 'Build Action',
     step_id: 'step-1',
-    on_success_step_id: 'step-2',
-    on_error_step_id: null,
+    on_success_step_ids: ['step-2'],
+    on_error_step_ids: [],
     retry_enabled: false,
   },
   {
@@ -70,8 +70,8 @@ const mockWorkflowSteps: WorkflowStep[] = [
     referenced_action_id: 11,
     action_name: 'Deploy Action',
     step_id: 'step-2',
-    on_success_step_id: null,
-    on_error_step_id: null,
+    on_success_step_ids: [],
+    on_error_step_ids: [],
     retry_enabled: false,
   },
 ];

@@ -740,7 +740,6 @@ DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'idp-portal@example.com')
 PAGE_INDIVIDUAL_API_URL = os.getenv('PAGE_INDIVIDUAL_API_URL', '')
 # Epic 56 — Décorrélation : canal page on-call (agnostique)
 PAGE_ONCALL_API_URL = os.getenv('PAGE_ONCALL_API_URL', '')
-PAGE_DBA_API_URL = os.getenv('PAGE_DBA_API_URL', '')  # Backward compat — alias page_oncall
 
 # Story 57.5 — ADR-007 http_request SSRF allowlist
 # Comma-separated list of allowed hostnames for http_request workflow steps.
@@ -756,6 +755,5 @@ del _allowed_http_hosts_env
 INVENTORY_FALLBACK_SCHEMA = os.getenv('INVENTORY_FALLBACK_SCHEMA', 'DBOPS_INVENTORY')
 
 # Story 65.2 — fan-out ThreadPoolExecutor max workers
-# Nom conservé pour rétrocompatibilité avec les envs existants (anciennement parallel_group).
 # Utilisé par ContainerWorkflowRuntime._execute_fan_out() (Story 67.2).
 PARALLEL_GROUP_MAX_WORKERS = int(os.environ.get('PARALLEL_GROUP_MAX_WORKERS', '5'))

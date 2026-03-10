@@ -421,6 +421,9 @@ class ContainerWorkflowRuntime:
 
         Story 67.3 — AC: #1, #5, #6, #7, #8.
         Story 67.8 — all_failed (tous les prédécesseurs en échec) | one_failed (au moins un en échec).
+
+        Note : join_policy n'est évaluée que si le step cible a 2+ prédécesseurs dans la vague courante.
+        Si 1 seul prédécesseur, le step est inclus inconditionnellement (politique ignorée).
         """
         # Build: target_step_id → [(source_step_id, source_outcome)]
         # Considère TOUS les targets possibles de la vague (success ET error paths)

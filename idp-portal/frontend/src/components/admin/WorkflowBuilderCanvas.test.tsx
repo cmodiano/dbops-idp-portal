@@ -52,8 +52,6 @@ describe('workflowStepsToReactFlow', () => {
         step_id: 'step-a',
         name: 'Create PDB',
         referenced_action_id: 100,
-        on_success_step_id: null,
-        on_error_step_id: null,
         retry_enabled: true,
         retry_max_attempts: 3,
         retry_interval_seconds: 60,
@@ -89,7 +87,7 @@ describe('workflowStepsToReactFlow', () => {
 
   it('creates success edges with green style and customEdge type', () => {
     const steps: WorkflowStep[] = [
-      { order: 1, step_id: 'a', name: null, referenced_action_id: 100, on_success_step_id: 'b' },
+      { order: 1, step_id: 'a', name: null, referenced_action_id: 100, on_success_step_ids: ['b'] },
       { order: 2, step_id: 'b', name: null, referenced_action_id: 101 },
     ];
 
@@ -104,7 +102,7 @@ describe('workflowStepsToReactFlow', () => {
 
   it('creates error edges with red style', () => {
     const steps: WorkflowStep[] = [
-      { order: 1, step_id: 'a', name: null, referenced_action_id: 100, on_error_step_id: 'c' },
+      { order: 1, step_id: 'a', name: null, referenced_action_id: 100, on_error_step_ids: ['c'] },
       { order: 2, step_id: 'c', name: null, referenced_action_id: 102 },
     ];
 
@@ -118,7 +116,7 @@ describe('workflowStepsToReactFlow', () => {
 
   it('creates both success and error edges for branching step', () => {
     const steps: WorkflowStep[] = [
-      { order: 1, step_id: 'a', name: null, referenced_action_id: 100, on_success_step_id: 'b', on_error_step_id: 'c' },
+      { order: 1, step_id: 'a', name: null, referenced_action_id: 100, on_success_step_ids: ['b'], on_error_step_ids: ['c'] },
       { order: 2, step_id: 'b', name: null, referenced_action_id: 101 },
       { order: 3, step_id: 'c', name: null, referenced_action_id: 102 },
     ];
@@ -185,7 +183,7 @@ describe('workflowStepsToReactFlow', () => {
 
   it('draws edges to End for steps with null success/error (end of workflow)', () => {
     const steps: WorkflowStep[] = [
-      { order: 1, step_id: 'a', name: null, referenced_action_id: 100, on_success_step_id: 'b' },
+      { order: 1, step_id: 'a', name: null, referenced_action_id: 100, on_success_step_ids: ['b'] },
       { order: 2, step_id: 'b', name: null, referenced_action_id: 101 }, // no output → End
     ];
     const { edges } = workflowStepsToReactFlow(steps);
@@ -196,7 +194,7 @@ describe('workflowStepsToReactFlow', () => {
 
   it('populates on_success_step_id and on_error_step_id in node data for tooltip', () => {
     const steps: WorkflowStep[] = [
-      { order: 1, step_id: 'a', name: 'Step A', referenced_action_id: 100, on_success_step_id: 'b', on_error_step_id: 'c' },
+      { order: 1, step_id: 'a', name: 'Step A', referenced_action_id: 100, on_success_step_ids: ['b'], on_error_step_ids: ['c'] },
       { order: 2, step_id: 'b', name: null, referenced_action_id: 101 },
       { order: 3, step_id: 'c', name: null, referenced_action_id: 102 },
     ];
@@ -242,11 +240,11 @@ describe('reactFlowToWorkflowSteps', () => {
     expect(steps[0].referenced_action_id).toBe(100);
     expect(steps[0].retry_enabled).toBe(true);
     expect(steps[0].retry_max_attempts).toBe(5);
-    expect(steps[0].on_success_step_id).toBeNull();
-    expect(steps[0].on_error_step_id).toBeNull();
+    expect(steps[0].on_success_step_ids).toEqual([]);
+    expect(steps[0].on_error_step_ids).toEqual([]);
   });
 
-  it('maps edges to on_success_step_id and on_error_step_id', () => {
+  it('maps edges to on_success_step_ids and on_error_step_ids', () => {
     const nodes: Node[] = [
       { id: 'a', type: 'workflowStep', position: { x: 0, y: 0 }, data: { action_id: 100, name: null, retry_enabled: false } },
       { id: 'b', type: 'workflowStep', position: { x: 280, y: 0 }, data: { action_id: 101, name: null, retry_enabled: false } },
@@ -260,10 +258,10 @@ describe('reactFlowToWorkflowSteps', () => {
 
     const steps = reactFlowToWorkflowSteps(nodes, edges);
 
-    expect(steps[0].on_success_step_id).toBe('b');
-    expect(steps[0].on_error_step_id).toBe('c');
-    expect(steps[1].on_success_step_id).toBeNull();
-    expect(steps[2].on_error_step_id).toBeNull();
+    expect(steps[0].on_success_step_ids).toEqual(['b']);
+    expect(steps[0].on_error_step_ids).toEqual(['c']);
+    expect(steps[1].on_success_step_ids).toEqual([]);
+    expect(steps[2].on_error_step_ids).toEqual([]);
   });
 
   it('round-trips correctly: steps → reactflow → steps', () => {
@@ -273,8 +271,7 @@ describe('reactFlowToWorkflowSteps', () => {
         step_id: 'step-1',
         name: 'Étape un',
         referenced_action_id: 100,
-        on_success_step_id: 'step-2',
-        on_error_step_id: null,
+        on_success_step_ids: ['step-2'],
         retry_enabled: true,
         retry_max_attempts: 3,
         retry_interval_seconds: 60,
@@ -285,8 +282,6 @@ describe('reactFlowToWorkflowSteps', () => {
         step_id: 'step-2',
         name: null,
         referenced_action_id: 101,
-        on_success_step_id: null,
-        on_error_step_id: null,
         retry_enabled: false,
         retry_max_attempts: null,
         retry_interval_seconds: null,
@@ -301,12 +296,12 @@ describe('reactFlowToWorkflowSteps', () => {
     expect(roundTripped[0].step_id).toBe('step-1');
     expect(roundTripped[0].name).toBe('Étape un');
     expect(roundTripped[0].referenced_action_id).toBe(100);
-    expect(roundTripped[0].on_success_step_id).toBe('step-2');
+    expect(roundTripped[0].on_success_step_ids).toEqual(['step-2']);
     expect(roundTripped[0].retry_enabled).toBe(true);
     expect(roundTripped[0].retry_max_attempts).toBe(3);
 
     expect(roundTripped[1].step_id).toBe('step-2');
-    expect(roundTripped[1].on_success_step_id).toBeNull();
+    expect(roundTripped[1].on_success_step_ids).toEqual([]);
     expect(roundTripped[1].retry_enabled).toBe(false);
   });
 
@@ -326,8 +321,8 @@ describe('reactFlowToWorkflowSteps', () => {
 
     expect(steps).toHaveLength(1);
     expect(steps[0].step_id).toBe('step-1');
-    // Edge to END_NODE_ID should be excluded → on_success_step_id = null
-    expect(steps[0].on_success_step_id).toBeNull();
+    // Edge to END_NODE_ID should be excluded → on_success_step_ids = []
+    expect(steps[0].on_success_step_ids).toEqual([]);
   });
 });
 
@@ -579,7 +574,7 @@ describe('WorkflowBuilderCanvas Component', () => {
 
   it('renders existing workflow steps as nodes (plus start/end)', async () => {
     const steps: WorkflowStep[] = [
-      { order: 1, step_id: 'step-1', name: 'Étape A', referenced_action_id: 100, on_success_step_id: 'step-2' },
+      { order: 1, step_id: 'step-1', name: 'Étape A', referenced_action_id: 100, on_success_step_ids: ['step-2'] },
       { order: 2, step_id: 'step-2', name: 'Étape B', referenced_action_id: 101 },
     ];
     const onChange = vi.fn();
@@ -597,7 +592,7 @@ describe('WorkflowBuilderCanvas Component', () => {
 
   it('renders edges between connected steps', async () => {
     const steps: WorkflowStep[] = [
-      { order: 1, step_id: 'a', name: null, referenced_action_id: 100, on_success_step_id: 'b', on_error_step_id: 'c' },
+      { order: 1, step_id: 'a', name: null, referenced_action_id: 100, on_success_step_ids: ['b'], on_error_step_ids: ['c'] },
       { order: 2, step_id: 'b', name: null, referenced_action_id: 101 },
       { order: 3, step_id: 'c', name: null, referenced_action_id: 102 },
     ];

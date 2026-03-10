@@ -4,12 +4,13 @@ Story 16.2: Workflow steps validation (branches, retry, cycles).
 Story 67.1: Multi-target support — on_success_step_ids / on_error_step_ids (arrays).
             Removes parallel_group validation.
 Story 67.3: join_policy validation — all_success | one_success | all_done.
+Story 67.8: all_failed | one_failed.
 """
 
 from typing import Any
 from rest_framework import serializers
 
-VALID_JOIN_POLICIES = frozenset({'all_success', 'one_success', 'all_done'})
+VALID_JOIN_POLICIES = frozenset({'all_success', 'one_success', 'all_done', 'all_failed', 'one_failed'})
 
 
 def validate_workflow_steps(steps: list[dict[str, Any]], action_id: int | None = None) -> list[dict[str, Any]]:
@@ -22,8 +23,7 @@ def validate_workflow_steps(steps: list[dict[str, Any]], action_id: int | None =
     - At least one step has an exit point (on_success_step_ids=[] or null)
     - Retry constraints: max_attempts >= 1, interval_seconds >= 1 when retry_enabled=true
 
-    Story 67.1: Replaces singular on_success_step_id/on_error_step_id with arrays.
-                Removes parallel_group validation. Adds retrocompat normalization.
+    Story 67.1: Uses on_success_step_ids/on_error_step_ids (arrays) for branching.
 
     Args:
         steps: List of workflow step dicts
@@ -47,26 +47,12 @@ def validate_workflow_steps(steps: list[dict[str, Any]], action_id: int | None =
         if step_type == 'platform' and step.get('referenced_action_id') is None:
             raise serializers.ValidationError(f"Step {i}: referenced_action_id is required for platform steps")
 
-    # Story 67.1 AC #2: Retrocompat normalization — convert singular to plural for each step.
-    # This must happen before uses_branches_or_retry detection so that plural fields are present.
-    for step in steps:
-        if isinstance(step, dict):
-            if 'on_success_step_id' in step and 'on_success_step_ids' not in step:
-                val = step['on_success_step_id']
-                step['on_success_step_ids'] = [val] if val is not None else []
-            if 'on_error_step_id' in step and 'on_error_step_ids' not in step:
-                val = step['on_error_step_id']
-                step['on_error_step_ids'] = [val] if val is not None else []
-
     # Detect whether this payload uses branching/retry features (Story 16.2).
-    # Backward compatibility: older workflows may only have order/name/referenced_action_id.
-    # Story 67.1: detect on_success_step_ids / on_error_step_ids (plural); singular kept for retrocompat detection.
+    # Story 67.1: only on_success_step_ids / on_error_step_ids (plural) are supported.
     uses_branches_or_retry = any(
         (
             'on_success_step_ids' in (step or {})
             or 'on_error_step_ids' in (step or {})
-            or 'on_success_step_id' in (step or {})   # rétrocompat
-            or 'on_error_step_id' in (step or {})      # rétrocompat
             or (step or {}).get('retry_enabled') is True
             or 'retry_max_attempts' in (step or {})
             or 'retry_interval_seconds' in (step or {})

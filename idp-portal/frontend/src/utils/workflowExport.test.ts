@@ -23,8 +23,8 @@ const sampleSteps: WorkflowStep[] = [
     step_id: 'step-aaa',
     referenced_action_id: 42,
     name: 'Backup base',
-    on_success_step_id: 'step-bbb',
-    on_error_step_id: 'step-ccc',
+    on_success_step_ids: ['step-bbb'],
+    on_error_step_ids: ['step-ccc'],
     retry_enabled: true,
     retry_max_attempts: 3,
     retry_interval_seconds: 60,
@@ -35,8 +35,8 @@ const sampleSteps: WorkflowStep[] = [
     step_id: 'step-bbb',
     referenced_action_id: 43,
     name: 'Appliquer patch',
-    on_success_step_id: null,
-    on_error_step_id: 'step-ccc',
+    on_success_step_ids: [],
+    on_error_step_ids: ['step-ccc'],
     retry_enabled: false,
     retry_max_attempts: null,
     retry_interval_seconds: null,
@@ -47,8 +47,8 @@ const sampleSteps: WorkflowStep[] = [
     step_id: 'step-ccc',
     referenced_action_id: 44,
     name: 'Rollback',
-    on_success_step_id: null,
-    on_error_step_id: null,
+    on_success_step_ids: [],
+    on_error_step_ids: [],
     retry_enabled: false,
     retry_max_attempts: null,
     retry_interval_seconds: null,
@@ -394,8 +394,8 @@ describe('parseWorkflowFile (JSON)', () => {
     expect(result.valid).toBe(true);
     const step = result.data!.workflow.steps[0];
     expect(step.name).toBeNull();
-    expect(step.on_success_step_id).toBeNull();
-    expect(step.on_error_step_id).toBeNull();
+    expect(step.on_success_step_ids).toEqual([]);
+    expect(step.on_error_step_ids).toEqual([]);
     expect(step.retry_enabled).toBe(false);
     expect(step.retry_max_attempts).toBeNull();
   });
@@ -426,10 +426,10 @@ describe('buildWorkflowExport — on_success_step_ids, join_policy (Story 67.4)'
     expect(stepD.join_policy).toBe('one_success');
   });
 
-  it('fallback on_success_step_id → on_success_step_ids (rétrocompat)', () => {
+  it('exporte on_success_step_ids et on_error_step_ids (format pluriel)', () => {
     const steps: WorkflowStep[] = [
-      { order: 1, step_id: 'a', referenced_action_id: 1, name: 'A', on_success_step_id: 'b' },
-      { order: 2, step_id: 'b', referenced_action_id: 2, name: 'B' },
+      { order: 1, step_id: 'a', referenced_action_id: 1, name: 'A', on_success_step_ids: ['b'] },
+      { order: 2, step_id: 'b', referenced_action_id: 2, name: 'B', on_success_step_ids: [] },
     ];
     const result = buildWorkflowExport(steps, { name: 'Legacy', description: null, tags: [] });
     const stepA = result.workflow.steps[0] as unknown as Record<string, unknown>;

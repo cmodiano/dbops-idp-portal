@@ -202,11 +202,7 @@ class NotificationService:
         api_url: str | None = None,
     ) -> None:
         """Appelle l'API interne de page on-call (agnostique). Epic 56."""
-        effective_url = (
-            api_url
-            or getattr(settings, "PAGE_ONCALL_API_URL", "")
-            or getattr(settings, "PAGE_DBA_API_URL", "")
-        )
+        effective_url = api_url or getattr(settings, "PAGE_ONCALL_API_URL", "")
         if not effective_url:
             logger.warning(
                 "page_oncall_not_configured",
@@ -235,9 +231,6 @@ class NotificationService:
                 correlation_id=correlation_id,
             )
 
-    # Backward compatibility alias — Epic 56
-    send_page_dba = send_page_oncall
-
     def notify(self, destination_type: str, **kwargs: Any) -> None:
         """Dispatch vers la méthode de destination appropriée."""
         dispatch: dict[str, Any] = {
@@ -245,7 +238,6 @@ class NotificationService:
             "teams": self.send_teams,
             "page_individual": self.send_page_individual,
             "page_oncall": self.send_page_oncall,
-            "page_dba": self.send_page_oncall,  # Backward compat alias — Epic 56
         }
         handler = dispatch.get(destination_type)
         if handler is None:
@@ -415,7 +407,7 @@ class NotificationService:
                 self._dispatch_email_channel(channel, execution, action, env, event, event_label, correlation_id)
             elif ch_type == "teams":
                 self._dispatch_teams_channel(channel, execution, action, env, event, event_label, event_color, correlation_id)
-            elif ch_type in ("page_oncall", "page_dba"):
+            elif ch_type == "page_oncall":
                 self._dispatch_page_oncall_channel(channel, execution, action, env, event, level, can_page, correlation_id)
 
         # Page individuel — option à l'exécution

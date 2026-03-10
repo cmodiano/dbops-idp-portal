@@ -18,7 +18,7 @@ from catalog.models import Action, Tag
 from core.exceptions import BadRequestError
 from core.middleware import get_correlation_id
 from core.models import AuditLog, AuditActionType, AuditEntityType
-from core.permissions import IsDBAOrDBOPS, AdminProfilePermission
+from core.permissions import IsAdminUser, AdminProfilePermission
 from executions.models import Execution, ExecutionStatus, ExecutionStepType, ExecutionStepStatus, ScheduledExecution
 
 logger = structlog.get_logger(__name__)
@@ -42,12 +42,12 @@ def _parse_date(value: str | None, *, name: str) -> date | None:
         raise BadRequestError(code="BAD_REQUEST", message=f"{name} invalide (YYYY-MM-DD)", details={name: value})
 
 
-def _filter_queryset_by_ownership(qs: QuerySet, request, permission_class=IsDBAOrDBOPS) -> QuerySet:
+def _filter_queryset_by_ownership(qs: QuerySet, request, permission_class=IsAdminUser) -> QuerySet:
     """
     Filter queryset to user's own objects unless user has admin permission.
 
     Story 26.8 AC3: Extracted pattern from 6 dashboard views.
-    Uses permission_class (default: IsDBAOrDBOPS) to determine if user sees all executions.
+    Uses permission_class (default: IsAdminUser) to determine if user sees all executions.
     """
     permission = permission_class()
     if not permission.has_permission(request, None):

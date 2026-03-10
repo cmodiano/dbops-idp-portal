@@ -33,7 +33,7 @@ from executions.serializers import (
     RecurringPatternSerializer,
 )
 from core.environment import EnvironmentHelper
-from core.permissions import IsDBAOrDBOPS, is_admin_user
+from core.permissions import IsAdminUser, is_admin_user
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from executions.scheduling_service import SchedulingService
@@ -54,7 +54,7 @@ UTC = dt_timezone(timedelta(0))
 exec_logger = structlog.get_logger(__name__)
 
 # AC2: Story 26.12 — Instance shared across views for owner-or-admin object-level checks
-_dba_permission = IsDBAOrDBOPS()
+_dba_permission = IsAdminUser()
 
 
 class ScheduledExecutionsView(APIView):
@@ -516,7 +516,7 @@ class ScheduledExecutionRecurringPatternView(APIView):
                 details={"scheduled_execution_id": scheduled_execution_id},
             )
 
-        # AC2: Story 26.12 — owner-or-admin check via IsDBAOrDBOPS permission
+        # AC2: Story 26.12 — owner-or-admin check via IsAdminUser permission
         if not _dba_permission.has_object_permission(request, self, se):
             raise ForbiddenError(
                 code="PERMISSION_DENIED",

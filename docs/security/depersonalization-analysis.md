@@ -32,11 +32,11 @@
 | `core/permissions.py` | `IsDBAOrDBOPS` | Renommer en `IsAdminUser` ou `IsOperatorUser` |
 | `profile.models.Profile` | `is_admin` existe déjà | Utiliser ce flag plutôt que de comparer les noms |
 
-**Stratégie :**
+**Stratégie (complétée) :**
 - Le modèle `Profile` a déjà `is_admin` (INTEGER). Utiliser ce flag pour les permissions.
 - `DBOPSProfilePermission` → `AdminProfilePermission` : vérifier si l'utilisateur a un profil avec `is_admin=1`.
-- `IsDBAOrDBOPS` → `IsAdminUser` : garder la logique mais basée sur `is_admin` ou config.
-- Garder `DBOPSProfilePermission` et `IsDBAOrDBOPS` comme **alias** pour compatibilité (deprecation).
+- `IsDBAOrDBOPS` → `IsAdminUser` : logique basée sur `is_admin`.
+- **Aliases supprimés** — utiliser `AdminProfilePermission` et `IsAdminUser` exclusivement.
 
 **Fichiers concernés :**
 - `core/permissions.py`
@@ -68,13 +68,12 @@
 | Fichier | Couplage | Recommandation |
 |---------|----------|----------------|
 | `services/notification_service.py` | `send_page_dba`, `page_dba` | Renommer en `send_page_oncall` / `page_oncall` |
-| `idp_backend/settings.py` | `PAGE_DBA_API_URL` | `PAGE_ONCALL_API_URL` (with backward compat) |
+| `idp_backend/settings.py` | `PAGE_DBA_API_URL` | `PAGE_ONCALL_API_URL` (PAGE_DBA supprimé) |
 | `catalog/models.py` | Commentaire `page_dba` | `page_oncall` |
 
-**Stratégie :**
-- Renommer `page_dba` → `page_oncall` (ou `page_escalation`).
-- Garder `page_dba` comme alias dans le dispatch pour compatibilité avec les données existantes.
-- Migration : les actions existantes avec `page_dba` continueront de fonctionner via l'alias.
+**Stratégie (complétée) :**
+- `page_dba` → `page_oncall` : migration effectuée.
+- L'alias `page_dba` a été supprimé du dispatch. Utiliser `page_oncall` uniquement.
 
 ---
 
@@ -117,16 +116,16 @@
 
 1. **Refactoriser** `core/permissions.py` :
    - Utiliser `Profile.is_admin` pour `AdminProfilePermission`.
-   - Créer `AdminProfilePermission` (nouveau nom) et `IsAdminUser` (nouveau nom).
-   - Garder `DBOPSProfilePermission` et `IsDBAOrDBOPS` comme alias pointant vers les nouvelles classes.
-2. **Mettre à jour** les imports progressivement (ou garder les alias indéfiniment).
-3. **Tests** : Adapter les tests pour utiliser les nouveaux noms ; les fixtures `profile='DBOPS'` peuvent rester (ce sont des données de test).
+   - Créer `AdminProfilePermission` et `IsAdminUser` (noms canoniques).
+   - ~~Garder DBOPSProfilePermission et IsDBAOrDBOPS comme alias~~ — **aliases supprimés**.
+2. **Mettre à jour** les imports — migration complète effectuée.
+3. **Tests** : Adapter les tests pour utiliser les nouveaux noms — complété.
 
-### Phase 3 — Nettoyage (optionnel)
+### Phase 3 — Nettoyage ✅ Complète
 
-1. Renommer tous les usages de `DBOPSProfilePermission` → `AdminProfilePermission`.
-2. Renommer `page_dba` → `page_oncall` dans les données (migration).
-3. Mettre à jour la documentation.
+1. ~~Renommer tous les usages~~ — **complété** : AdminProfilePermission et IsAdminUser utilisés partout.
+2. ~~Renommer page_dba → page_oncall~~ — **complété** : alias supprimé.
+3. Mettre à jour la documentation — **complété**.
 
 ---
 
@@ -191,6 +190,4 @@ L'effort estimé est de **5–8 jours** pour les phases 1 et 2. La phase 3 (nett
 |-------|-------|--------|
 | 56.6 | Nettoyage documentation et renommage complet | ✅ done |
 
-**Résumé :** L'ensemble de l'epic 56 est terminé. Les profils `DBA` et `DBOPS` restent valides en base de données et les aliases Python (`DBOPSProfilePermission`, `IsDBAOrDBOPS`) sont maintenus dans `core/permissions.py` pour la rétrocompatibilité. Le code applicatif utilise désormais `AdminProfilePermission` et `IsAdminUser` comme noms canoniques.
-
-**Travail restant :** `executions/views/` (execution_views, scheduled_views, approval_views) continuent d'importer `IsDBAOrDBOPS` (alias vers `IsAdminUser`) ; une migration vers `IsAdminUser` pourrait être envisagée dans un sprint ultérieur de nettoyage.
+**Résumé :** L'ensemble de l'epic 56 est terminé. Les profils `DBA` et `DBOPS` restent valides en base de données. Les aliases Python (`DBOPSProfilePermission`, `IsDBAOrDBOPS`) ont été supprimés — utiliser `AdminProfilePermission` et `IsAdminUser` exclusivement.

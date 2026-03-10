@@ -14,47 +14,6 @@ import structlog
 
 logger = structlog.get_logger(__name__)
 
-# Legacy constant kept for backward compatibility (not used internally anymore).
-# Story 56.7: Déprécié — plus utilisé pour les permissions. Conservé pour compatibilité éventuelle.
-_ADMIN_PROFILES = {'dbops', 'dba', 'dba_applicatif', 'dba_infrastructure'}
-
-
-def _normalize_profile_names(raw: Any) -> set[str]:
-    """Normalise une valeur brute (str ou iterable) en set de noms de profils.
-
-    Si raw est une chaîne, la split sur virgules et trim. Sinon itère sur raw.
-    Retourne un set de chaînes normalisées (strip + lower).
-    """
-    if isinstance(raw, str):
-        raw_items = [s.strip() for s in raw.split(',') if s.strip()]
-    else:
-        raw_items = [str(item).strip() for item in raw if str(item).strip()]
-    return {item.lower() for item in raw_items}
-
-
-def _get_admin_profile_names() -> set[str]:
-    """Résout le set de noms de profils admin depuis settings (configurable).
-
-    Story 56.4: Utilise ADMIN_PROFILE_NAMES si défini, sinon fallback vers _ADMIN_PROFILES
-    pour la compatibilité.
-
-    Story 56.7: Déprécié — plus utilisé pour les permissions. Conservé pour compatibilité éventuelle.
-    """
-    raw = getattr(settings, 'ADMIN_PROFILE_NAMES', _ADMIN_PROFILES)
-    return _normalize_profile_names(raw)
-
-
-def _get_dbops_profile_names() -> set[str]:
-    """Résout le set de noms de profils DBOPS (admin endpoints only).
-
-    Story 15.2 AC2: DBA doit être refusé sur les endpoints admin.
-
-    Story 56.7: Déprécié — plus utilisé pour les permissions. Conservé pour compatibilité éventuelle.
-    """
-    raw = getattr(settings, 'DBOPS_PROFILE_NAMES', {'dbops'})
-    return _normalize_profile_names(raw)
-
-
 def _resolve_user_profiles(user: Any) -> list['Profile']:
     """Résout la liste des profils ORM d'un utilisateur.
 
@@ -237,9 +196,3 @@ class OptionalUserPermission(permissions.BasePermission):
     def has_permission(self, request: Any, view: Any) -> bool:
         """Allow all users (authenticated or anonymous)."""
         return True
-
-
-# Aliases backward-compatible (Story 56.4)
-# Les fichiers consommateurs existants continuent de fonctionner sans modification.
-DBOPSProfilePermission = AdminProfilePermission
-IsDBAOrDBOPS = IsAdminUser

@@ -114,7 +114,7 @@ export interface WorkflowStepNodeData {
   /** Story 65.4: Step suivant si au moins un sous-step échoue (fail-fast). */
   on_any_error_step_id?: string | null;
   /** Story 67.4: Join policy for convergence steps. */
-  join_policy?: 'all_success' | 'one_success' | 'all_done' | null;
+  join_policy?: 'all_success' | 'one_success' | 'all_done' | 'all_failed' | 'one_failed' | null;
 }
 
 const WorkflowStepNode: FC<NodeProps> = ({ data, selected }) => {

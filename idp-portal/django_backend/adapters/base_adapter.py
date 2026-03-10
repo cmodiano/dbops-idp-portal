@@ -115,7 +115,7 @@ class ICancellableAdapter(ABC):
 
 
 class BaseAdapter(ITriggerableAdapter, ICancellableAdapter):
-    """Combinaison des deux interfaces — compatibilité ascendante (Story 27.1-27.3).
+    """Combinaison des deux interfaces (Story 27.1-27.3).
 
     Les adapters existants (AAP, Tower, Azure DevOps, GitHub Actions, Terraform Cloud)
     héritent de BaseAdapter sans modification.

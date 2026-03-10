@@ -434,8 +434,7 @@ class AuditExportView(APIView):
         tags=['audit'],
         summary='Exporter les entrées d\'audit (CSV)',
         parameters=[
-            OpenApiParameter('fmt', str, description='Format: csv (ou export_format pour rétro-compatibilité)'),
-            OpenApiParameter('export_format', str, description='Alias pour fmt'),
+            OpenApiParameter('fmt', str, description='Format: csv'),
             OpenApiParameter('limit', int, description='Max 10000 lignes'),
             OpenApiParameter('offset', int, description='Décalage'),
             OpenApiParameter('entity_type', str, description='Filtre par type d\'entité'),
@@ -466,8 +465,7 @@ class AuditExportView(APIView):
             )
 
         # Use 'fmt' param (not 'format') to avoid DRF content negotiation conflict
-        # AUD-LOW-06: export_format is kept as a backward-compat alias for fmt.
-        fmt = (request.query_params.get("fmt") or request.query_params.get("export_format") or "").strip().lower()
+        fmt = (request.query_params.get("fmt") or "").strip().lower()
         # AUD-MED-02: only "csv" is valid; "pdf" was previously in the whitelist but immediately
         # rejected with a misleading 400/NOT_IMPLEMENTED. Removed to align validation with behaviour.
         if fmt not in ("csv",):

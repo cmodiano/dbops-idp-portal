@@ -20,7 +20,7 @@ from rest_framework.views import APIView
 
 from core.exceptions import BadRequestError
 from core.middleware import get_correlation_id
-from core.permissions import IsDBAOrDBOPS
+from core.permissions import IsAdminUser
 from dashboard.views import _parse_date  # DASH-MED-01: shared helper, removed local duplicate
 from executions.models import Execution, ExecutionStatus
 
@@ -95,7 +95,7 @@ def _build_export_queryset(request: Request) -> QuerySet:
 class DashboardExportCSVView(APIView):
     """GET /dashboard/export/csv — Export des statistiques dashboard en CSV."""
 
-    permission_classes = [IsAuthenticated, IsDBAOrDBOPS]
+    permission_classes = [IsAuthenticated, IsAdminUser]
 
     @extend_schema(
         tags=["dashboard"],
@@ -167,7 +167,7 @@ class DashboardExportCSVView(APIView):
 class DashboardExportPDFView(APIView):
     """GET /dashboard/export/pdf — Export des statistiques dashboard en PDF."""
 
-    permission_classes = [IsAuthenticated, IsDBAOrDBOPS]
+    permission_classes = [IsAuthenticated, IsAdminUser]
 
     @extend_schema(
         tags=["dashboard"],

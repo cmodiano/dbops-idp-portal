@@ -1,8 +1,8 @@
 """
 Tests unitaires pour la validation multi-cibles — Story 67.1 AC #7.
 
-Couvre : fan-out valide, rétrocompatibilité singulier→tableau, step_id inexistant,
-cycle via multi-cibles, exit point, absence d'exit point, séquentiel sans champs multi-cibles.
+Couvre : fan-out valide, step_id inexistant, cycle via multi-cibles,
+exit point, absence d'exit point, séquentiel sans champs multi-cibles.
 """
 import pytest
 from rest_framework.exceptions import ValidationError
@@ -74,47 +74,11 @@ class TestFanOutValid:
         assert result is not None
 
 
-class TestRetrocompatSingularToList:
-    """AC #2 — rétrocompatibilité : singulier normalisé en tableau."""
+class TestSequentialWorkflowNoBranchFields:
+    """AC #7 — workflow séquentiel sans champs multi-cibles."""
 
-    def test_singular_success_normalized(self):
-        """on_success_step_id singulier → on_success_step_ids=['b']."""
-        steps = [
-            make_platform_step('a', on_success_step_id='b'),
-            make_platform_step('b', on_success_step_id=None),
-        ]
-        result = validate_workflow_steps(steps)
-        assert result[0]['on_success_step_ids'] == ['b']
-
-    def test_singular_error_normalized(self):
-        """on_error_step_id singulier → on_error_step_ids=['rollback']."""
-        steps = [
-            make_platform_step('a', on_success_step_id=None, on_error_step_id='rollback'),
-            make_platform_step('rollback', on_success_step_id=None),
-        ]
-        result = validate_workflow_steps(steps)
-        assert result[0]['on_error_step_ids'] == ['rollback']
-
-    def test_singular_null_normalized_to_empty_list(self):
-        """on_success_step_id=None → on_success_step_ids=[]."""
-        steps = [
-            make_platform_step('a', on_success_step_id=None),
-        ]
-        result = validate_workflow_steps(steps)
-        assert result[0]['on_success_step_ids'] == []
-
-    def test_plural_not_overwritten_by_singular(self):
-        """Si on_success_step_ids déjà présent, on_success_step_id singulier ne l'écrase pas."""
-        steps = [
-            make_platform_step('a', on_success_step_ids=['b', 'c'], on_success_step_id='b'),
-            make_platform_step('b', on_success_step_ids=[]),
-            make_platform_step('c', on_success_step_ids=[]),
-        ]
-        result = validate_workflow_steps(steps)
-        assert result[0]['on_success_step_ids'] == ['b', 'c']
-
-    def test_backward_compat_sequential_workflow_still_valid(self):
-        """AC #7 — workflow séquentiel sans champs multi-cibles (backward compat)."""
+    def test_sequential_workflow_without_branch_fields_valid(self):
+        """Workflow séquentiel sans on_success_step_ids/on_error_step_ids reste valide."""
         steps = [
             {'order': 1, 'name': 'Step 1', 'referenced_action_id': 10, 'step_id': 's1'},
             {'order': 2, 'name': 'Step 2', 'referenced_action_id': 20, 'step_id': 's2'},

@@ -45,11 +45,11 @@ class TestCorrelationIdMiddleware(TestCase):
         uuid.UUID(correlation_id)  # Will raise if not valid UUID
 
     def test_preserves_correlation_id_from_header(self):
-        """Test that correlation ID from request header is preserved."""
+        """Test that correlation ID from X-Correlation-ID request header is preserved."""
         existing_id = 'test-correlation-id-12345'
         request = self.factory.get(
             '/api/v1/test',
-            HTTP_X_IDP_REQUEST_ID=existing_id
+            HTTP_X_CORRELATION_ID=existing_id
         )
 
         response = self.middleware(request)

@@ -102,11 +102,9 @@ Liste des environnements autorisés pour l'exécution:
 
 ### AdminProfilePermission
 
-> **Note :** `DBOPSProfilePermission` est un alias maintenu pour la rétrocompatibilité. Utiliser désormais `AdminProfilePermission` (nom canonique depuis story 56.4).
+`AdminProfilePermission` (dans `core/permissions.py`) restreint l'accès aux endpoints admin (profiles, integrations, actions, analytics) aux seuls profils avec `is_admin=1` en base de données. Tous les chemins d'authentification utilisent `Profile.is_admin_bool` — il n'y a plus de comparaison par nom de profil.
 
-`AdminProfilePermission` (dans `core/permissions.py`) restreint l'accès aux endpoints admin (profiles, integrations, actions, analytics) aux seuls profils avec `is_admin=1` en base de données. Tous les chemins d'authentification utilisent désormais `Profile.is_admin_bool` — il n'y a plus de comparaison par nom de profil.
-
-**Story 56.7** : Le chemin SAML string utilise désormais un DB lookup (`Profile.objects.filter(name__iexact=...)`) au lieu de `DBOPS_PROFILE_NAMES`. La distinction DBA/DBOPS provient maintenant exclusivement de la base de données (`is_admin=0` pour DBA, `is_admin=1` pour DBOPS).
+**Story 56.7** : Le chemin SAML string utilise un DB lookup (`Profile.objects.filter(name__iexact=...)`). La distinction DBA/DBOPS provient exclusivement de la base de données (`is_admin=0` pour DBA, `is_admin=1` pour DBOPS).
 
 **Ordre canonique de résolution (Story 56.7) :**
 1. `user.ad_groups` → `Profile.objects.find_by_ad_groups()` → `any(p.is_admin_bool)`
@@ -140,8 +138,6 @@ class AdminProfilePermission(permissions.BasePermission):
 
         return False
 ```
-
-> **Note :** `ADMIN_PROFILE_NAMES` et `DBOPS_PROFILE_NAMES` dans `settings.py` sont **dépréciés** (Story 56.7). Ils ne sont plus utilisés par `core/permissions.py`. Conservés pour compatibilité avec d'éventuels outils externes.
 
 **Utilisation dans ViewSet:**
 

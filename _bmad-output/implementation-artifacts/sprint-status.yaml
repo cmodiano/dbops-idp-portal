@@ -853,7 +853,7 @@ development_status:
     67-5-frontend-suppression-step-groupe-parallele: done
     67-6-migration-parallel-group-vers-multi-connexion: done
     67-7-vue-execution-cac-documentation-tests: done
-    67-8-join-policy-failed-all-failed-one-failed: backlog
+    67-8-join-policy-failed-all-failed-one-failed: done
     epic-67-retrospective: optional
     # === Epic 68: Authentification LDAP prioritaire (comptes à haut privilège) ===
     # Réf: implementation-artifacts/67-2-exigence-auth-ldap-comptes-privileges.md

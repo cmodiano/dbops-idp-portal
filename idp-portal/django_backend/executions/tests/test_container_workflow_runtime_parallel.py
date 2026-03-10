@@ -1128,6 +1128,21 @@ class TestJoinPolicyValidation:
         ]
         validate_workflow_steps(steps)
 
+    def test_valid_join_policy_all_failed(self):
+        """Story 67.8: join_policy=all_failed → pas d'erreur."""
+        validate_workflow_steps(self._make_steps('all_failed'))
+
+    def test_valid_join_policy_one_failed(self):
+        """Story 67.8: join_policy=one_failed → pas d'erreur."""
+        validate_workflow_steps(self._make_steps('one_failed'))
+
+    def test_invalid_join_policy_all_fail_typo_raises(self):
+        """Story 67.8: typo 'all_fail' → ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            validate_workflow_steps(self._make_steps('all_fail'))
+        assert 'join_policy' in str(exc_info.value)
+        assert 'all_fail' in str(exc_info.value)
+
 
 @pytest.mark.django_db
 class TestJoinPolicySerialization:
@@ -1199,3 +1214,300 @@ class TestJoinPolicySerialization:
 
         step_a = next(s for s in workflow_steps if s['step_id'] == 'step-a')
         assert 'join_policy' not in step_a, "join_policy ne doit PAS être présent si absent du step"
+
+    def test_join_policy_all_failed_present_in_output(self):
+        """Story 67.8 AC3: step avec join_policy=all_failed → champ présent dans get_workflow_steps()."""
+        from catalog.serializers import ActionSerializer
+
+        user = UserFactory(username="join_all_failed_serial_user")
+        action_a = ActionFactory(
+            name="Serial AF-A", status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.ACTION, created_by=user,
+        )
+        action_b = ActionFactory(
+            name="Serial AF-B", status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.ACTION, created_by=user,
+        )
+        workflow_action = ActionFactory(
+            name="join_policy all_failed Serial Workflow",
+            status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.WORKFLOW,
+            execution_steps=[
+                {
+                    "order": 1, "step_id": "step-a", "step_type": "platform",
+                    "name": "A", "referenced_action_id": action_a.id,
+                    "on_success_step_ids": ["step-b"],
+                },
+                {
+                    "order": 2, "step_id": "step-b", "step_type": "platform",
+                    "name": "B", "referenced_action_id": action_b.id,
+                    "join_policy": "all_failed",
+                    "on_success_step_ids": [],
+                },
+            ],
+            created_by=user,
+        )
+        serializer = ActionSerializer(workflow_action)
+        workflow_steps = serializer.data['workflow_steps']
+
+        step_b = next(s for s in workflow_steps if s['step_id'] == 'step-b')
+        assert 'join_policy' in step_b, "join_policy doit être présent dans le step sérialisé"
+        assert step_b['join_policy'] == 'all_failed'
+
+    def test_join_policy_one_failed_present_in_output(self):
+        """Story 67.8 AC3: step avec join_policy=one_failed → champ présent dans get_workflow_steps()."""
+        from catalog.serializers import ActionSerializer
+
+        user = UserFactory(username="join_one_failed_serial_user")
+        action_a = ActionFactory(
+            name="Serial OF-A", status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.ACTION, created_by=user,
+        )
+        action_b = ActionFactory(
+            name="Serial OF-B", status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.ACTION, created_by=user,
+        )
+        workflow_action = ActionFactory(
+            name="join_policy one_failed Serial Workflow",
+            status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.WORKFLOW,
+            execution_steps=[
+                {
+                    "order": 1, "step_id": "step-a", "step_type": "platform",
+                    "name": "A", "referenced_action_id": action_a.id,
+                    "on_success_step_ids": ["step-b"],
+                },
+                {
+                    "order": 2, "step_id": "step-b", "step_type": "platform",
+                    "name": "B", "referenced_action_id": action_b.id,
+                    "join_policy": "one_failed",
+                    "on_success_step_ids": [],
+                },
+            ],
+            created_by=user,
+        )
+        serializer = ActionSerializer(workflow_action)
+        workflow_steps = serializer.data['workflow_steps']
+
+        step_b = next(s for s in workflow_steps if s['step_id'] == 'step-b')
+        assert 'join_policy' in step_b, "join_policy doit être présent dans le step sérialisé"
+        assert step_b['join_policy'] == 'one_failed'
+
+
+# ─── Story 67.8: join_policy all_failed / one_failed tests ────────────────────
+
+
+def _make_diamond_for_failed_policy(
+    action_a_id, action_b_id, action_c_id, action_d_id,
+    join_policy: str,
+) -> list[dict]:
+    """
+    Workflow : A → [B, C] (fan-out)
+    B → on_success → [] ; on_error → [step-d]
+    C → on_success → [] ; on_error → [step-d]
+    D a join_policy configurée, on_success_step_ids=[]
+    """
+    return [
+        {
+            "order": 1, "step_id": "step-a", "step_type": "platform",
+            "name": "A", "referenced_action_id": action_a_id,
+            "on_success_step_ids": ["step-b", "step-c"],
+        },
+        {
+            "order": 2, "step_id": "step-b", "step_type": "platform",
+            "name": "B", "referenced_action_id": action_b_id,
+            "on_success_step_ids": [],
+            "on_error_step_ids": ["step-d"],
+        },
+        {
+            "order": 3, "step_id": "step-c", "step_type": "platform",
+            "name": "C", "referenced_action_id": action_c_id,
+            "on_success_step_ids": [],
+            "on_error_step_ids": ["step-d"],
+        },
+        {
+            "order": 4, "step_id": "step-d", "step_type": "platform",
+            "name": "D (join failed)", "referenced_action_id": action_d_id,
+            "join_policy": join_policy,
+            "on_success_step_ids": [],
+        },
+    ]
+
+
+@pytest.mark.django_db(transaction=True)
+class TestJoinPolicyAllFailed:
+    """Story 67.8 AC4: join_policy=all_failed — D exécuté seulement si TOUS les prédécesseurs ont échoué."""
+
+    def setup_method(self):
+        self.user = UserFactory(username="join_all_failed_user")
+        self.action_a = ActionFactory(
+            name="AF-A", status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.ACTION, created_by=self.user,
+        )
+        self.action_c = ActionFactory(
+            name="AF-C", status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.ACTION, created_by=self.user,
+        )
+        self.action_d = ActionFactory(
+            name="AF-D", status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.ACTION, created_by=self.user,
+        )
+
+    @patch('executions.container_workflow_runtime.AuditService')
+    def test_all_failed_both_fail_d_executed(self, mock_audit):
+        """Story 67.8 AC4: B FAILED + C FAILED → D exécuté (tous ont échoué)."""
+        workflow_action = ActionFactory(
+            name="all_failed both fail Workflow",
+            status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.WORKFLOW,
+            execution_steps=_make_diamond_for_failed_policy(
+                self.action_a.id,
+                999999,   # B → FAILED : ID inexistant → le step échoue au lancement
+                999998,   # C → FAILED : ID inexistant → le step échoue au lancement
+                self.action_d.id,
+                join_policy='all_failed',
+            ),
+            created_by=self.user,
+        )
+        execution = Execution.objects.create(
+            action=workflow_action, user=self.user,
+            environment=TEST_ENVIRONMENT, status=ExecutionStatus.SUBMITTED,
+        )
+        runtime = ContainerWorkflowRuntime(execution)
+        runtime.run_sync()
+
+        steps = ExecutionStep.objects.filter(execution=execution)
+        assert steps.filter(config_step_id='step-d').count() == 1, \
+            "D doit être exécuté (tous les prédécesseurs ont échoué)"
+
+    @patch('executions.container_workflow_runtime.AuditService')
+    def test_all_failed_one_success_d_not_executed(self, mock_audit):
+        """Story 67.8 AC4: B FAILED + C COMPLETED → D NON exécuté (pas tous en échec)."""
+        workflow_action = ActionFactory(
+            name="all_failed one success Workflow",
+            status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.WORKFLOW,
+            execution_steps=_make_diamond_for_failed_policy(
+                self.action_a.id,
+                999999,            # B → FAILED : ID inexistant → le step échoue au lancement
+                self.action_c.id,  # C → COMPLETED (action existante et publiée)
+                self.action_d.id,
+                join_policy='all_failed',
+            ),
+            created_by=self.user,
+        )
+        execution = Execution.objects.create(
+            action=workflow_action, user=self.user,
+            environment=TEST_ENVIRONMENT, status=ExecutionStatus.SUBMITTED,
+        )
+        runtime = ContainerWorkflowRuntime(execution)
+        runtime.run_sync()
+
+        steps = ExecutionStep.objects.filter(execution=execution)
+        assert steps.filter(config_step_id='step-d').count() == 0, \
+            "D ne doit PAS être exécuté (C a réussi — pas tous en échec)"
+
+
+@pytest.mark.django_db(transaction=True)
+class TestJoinPolicyOneFailed:
+    """Story 67.8 AC5: join_policy=one_failed — D exécuté dès qu'au moins un prédécesseur a échoué."""
+
+    def setup_method(self):
+        self.user = UserFactory(username="join_one_failed_user")
+        self.action_a = ActionFactory(
+            name="OF-A", status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.ACTION, created_by=self.user,
+        )
+        self.action_c = ActionFactory(
+            name="OF-C", status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.ACTION, created_by=self.user,
+        )
+        self.action_d = ActionFactory(
+            name="OF-D", status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.ACTION, created_by=self.user,
+        )
+
+    @patch('executions.container_workflow_runtime.AuditService')
+    def test_one_failed_b_fails_d_executed(self, mock_audit):
+        """Story 67.8 AC5: B FAILED + C COMPLETED → D exécuté (au moins un en échec)."""
+        workflow_action = ActionFactory(
+            name="one_failed b fails Workflow",
+            status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.WORKFLOW,
+            execution_steps=_make_diamond_for_failed_policy(
+                self.action_a.id,
+                999999,            # B → FAILED : ID inexistant → le step échoue au lancement
+                self.action_c.id,  # C → COMPLETED (action existante et publiée)
+                self.action_d.id,
+                join_policy='one_failed',
+            ),
+            created_by=self.user,
+        )
+        execution = Execution.objects.create(
+            action=workflow_action, user=self.user,
+            environment=TEST_ENVIRONMENT, status=ExecutionStatus.SUBMITTED,
+        )
+        runtime = ContainerWorkflowRuntime(execution)
+        runtime.run_sync()
+
+        steps = ExecutionStep.objects.filter(execution=execution)
+        assert steps.filter(config_step_id='step-d').count() == 1, \
+            "D doit être exécuté (B a échoué — au moins un en échec)"
+
+    @patch('executions.container_workflow_runtime.AuditService')
+    def test_one_failed_both_fail_d_executed(self, mock_audit):
+        """Story 67.8 AC5 (complément): B FAILED + C FAILED → D exécuté (au moins un en échec)."""
+        workflow_action = ActionFactory(
+            name="one_failed both fail Workflow",
+            status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.WORKFLOW,
+            execution_steps=_make_diamond_for_failed_policy(
+                self.action_a.id,
+                999999,   # B → FAILED : ID inexistant → le step échoue au lancement
+                999998,   # C → FAILED : ID inexistant → le step échoue au lancement
+                self.action_d.id,
+                join_policy='one_failed',
+            ),
+            created_by=self.user,
+        )
+        execution = Execution.objects.create(
+            action=workflow_action, user=self.user,
+            environment=TEST_ENVIRONMENT, status=ExecutionStatus.SUBMITTED,
+        )
+        runtime = ContainerWorkflowRuntime(execution)
+        runtime.run_sync()
+
+        steps = ExecutionStep.objects.filter(execution=execution)
+        assert steps.filter(config_step_id='step-d').count() == 1, \
+            "D doit être exécuté (B et C ont tous les deux échoué — au moins un en échec)"
+
+    @patch('executions.container_workflow_runtime.AuditService')
+    def test_one_failed_all_success_d_not_executed(self, mock_audit):
+        """Story 67.8 AC5: B COMPLETED + C COMPLETED → D NON exécuté (aucun en échec)."""
+        action_b = ActionFactory(
+            name="OF-B", status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.ACTION, created_by=self.user,
+        )
+        workflow_action = ActionFactory(
+            name="one_failed all success Workflow",
+            status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.WORKFLOW,
+            execution_steps=_make_diamond_for_failed_policy(
+                self.action_a.id,
+                action_b.id,       # B → COMPLETED (action existante)
+                self.action_c.id,  # C → COMPLETED (action existante)
+                self.action_d.id,
+                join_policy='one_failed',
+            ),
+            created_by=self.user,
+        )
+        execution = Execution.objects.create(
+            action=workflow_action, user=self.user,
+            environment=TEST_ENVIRONMENT, status=ExecutionStatus.SUBMITTED,
+        )
+        runtime = ContainerWorkflowRuntime(execution)
+        runtime.run_sync()
+
+        steps = ExecutionStep.objects.filter(execution=execution)
+        assert steps.filter(config_step_id='step-d').count() == 0, \
+            "D ne doit PAS être exécuté (tous les prédécesseurs ont réussi)"

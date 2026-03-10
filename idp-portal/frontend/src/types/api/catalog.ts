@@ -91,14 +91,14 @@ export interface ActionResponse {
 
 /** Story 31.8: Notification channel configuration. */
 export interface NotificationChannel {
-  type: 'email' | 'teams' | 'page_dba';
+  type: 'email' | 'teams' | 'page_oncall';
   enabled: boolean;
   conditions: ('on_failure' | 'on_success' | 'always' | 'on_approval_required')[];
   /** Email only: "requester" or direct email address. */
   recipient?: string;
   /** Teams only: webhook URL or Vault reference. */
   webhook_url_ref?: string;
-  /** Page DBA only: API URL (optional, falls back to settings). */
+  /** Page on-call only: API URL (optional, falls back to settings). */
   api_url?: string;
 }
 
@@ -147,16 +147,12 @@ export interface WorkflowStep {
   action_name?: string | null;
   /** Story 16.2: Stable ID for referencing in branches (optional for backward compatibility). */
   step_id?: string | null;
-  /** Story 16.2: Next step ID on success (nullable = exit or continue to next by order). */
-  on_success_step_id?: string | null;
-  /** Story 16.2: Next step ID on error (nullable = workflow fails). */
-  on_error_step_id?: string | null;
-  /** Story 67.4: Multiple next step IDs on success (fan-out). Priorité sur on_success_step_id. */
+  /** Story 67.4: Multiple next step IDs on success (fan-out). */
   on_success_step_ids?: string[] | null;
-  /** Story 67.4: Multiple next step IDs on error (fan-out). Priorité sur on_error_step_id. */
+  /** Story 67.4: Multiple next step IDs on error (fan-out). */
   on_error_step_ids?: string[] | null;
   /** Story 67.4: Join policy for convergence steps. */
-  join_policy?: 'all_success' | 'one_success' | 'all_done' | null;
+  join_policy?: 'all_success' | 'one_success' | 'all_done' | 'all_failed' | 'one_failed' | null;
   // === platform ===
   /** Story 57.13: Optional for backward compat — required if step_type='platform'. */
   referenced_action_id?: number | null;

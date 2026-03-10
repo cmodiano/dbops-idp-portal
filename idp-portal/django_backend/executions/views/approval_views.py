@@ -22,7 +22,7 @@ from core.exceptions import BadRequestError, NotFoundError
 from core.middleware import get_correlation_id
 from core.models import AuditActionType, AuditEntityType
 from core.pagination import paginate_queryset
-from core.permissions import IsDBAOrDBOPS, is_admin_user
+from core.permissions import IsAdminUser, is_admin_user
 from core.services import AuditService
 from profiles.models import Profile
 from executions.models import (
@@ -324,7 +324,7 @@ def _get_execution_audit_context(execution: Execution) -> dict:
 class PendingApprovalsView(APIView):
     """GET /executions/pending-approvals (DBA/DBOPS only)"""
 
-    permission_classes = [IsAuthenticated, IsDBAOrDBOPS]  # AC2: Story 26.8
+    permission_classes = [IsAuthenticated, IsAdminUser]  # AC2: Story 26.8
 
     @extend_schema(
         tags=["executions"],

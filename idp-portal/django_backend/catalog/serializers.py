@@ -435,7 +435,8 @@ class ActionSerializer(ActionFieldValidationMixin, serializers.ModelSerializer):
         'on_success_step_ids': {'type': 'array', 'items': {'type': 'string'}, 'nullable': True},
         'on_error_step_ids': {'type': 'array', 'items': {'type': 'string'}, 'nullable': True},
         # Story 67.3: join_policy for convergence steps (optional)
-        'join_policy': {'type': 'string', 'enum': ['all_success', 'one_success', 'all_done'], 'nullable': True},
+        # Story 67.8: all_failed | one_failed added
+        'join_policy': {'type': 'string', 'enum': ['all_success', 'one_success', 'all_done', 'all_failed', 'one_failed'], 'nullable': True},
         'retry_enabled': {'type': 'boolean'},
         'retry_max_attempts': {'type': 'integer'}, 'retry_interval_seconds': {'type': 'integer'},
         'retry_backoff_multiplier': {'type': 'number'},
@@ -544,6 +545,7 @@ class ActionSerializer(ActionFieldValidationMixin, serializers.ModelSerializer):
                 workflow_step['on_error_step_ids'] = error_ids if error_ids is not None else []
 
             # Story 67.3: join_policy (optional) — all_success | one_success | all_done
+            # Story 67.8: all_failed | one_failed
             join_policy = step.get('join_policy')
             if join_policy is not None:
                 workflow_step['join_policy'] = join_policy

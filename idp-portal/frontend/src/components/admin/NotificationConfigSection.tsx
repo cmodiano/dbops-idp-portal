@@ -1,6 +1,6 @@
 /**
  * Story 31.8: Section de configuration des notifications pour les actions.
- * Affiche 4 blocs activables : Email, Teams, Page individuel, Page DBA.
+ * Affiche 4 blocs activables : Email, Teams, Page individuel, Page on-call.
  * Chaque bloc a un toggle on/off + conditions (on_failure, on_success, always).
  */
 
@@ -13,7 +13,7 @@ const { Text } = Typography;
 const CHANNEL_LABELS: Record<string, string> = {
   email: 'Email',
   teams: 'Teams (webhook)',
-  page_dba: 'Page DBA on-call',
+  page_oncall: 'Page on-call',
 };
 
 const CONDITION_LABELS: Record<string, string> = {
@@ -26,7 +26,7 @@ const CONDITION_LABELS: Record<string, string> = {
 const DEFAULT_CHANNELS: NotificationChannel[] = [
   { type: 'email', enabled: false, conditions: [], recipient: 'requester' },
   { type: 'teams', enabled: false, conditions: [], webhook_url_ref: '' },
-  { type: 'page_dba', enabled: false, conditions: [], api_url: '' },
+  { type: 'page_oncall', enabled: false, conditions: [], api_url: '' },
 ];
 
 export interface NotificationConfigSectionProps {
@@ -195,36 +195,36 @@ export const NotificationConfigSection: FC<NotificationConfigSectionProps> = ({
         <Space>
           <Switch
             size="small"
-            checked={getChannel('page_dba').enabled}
-            onChange={(checked) => updateChannel('page_dba', { enabled: checked })}
-            aria-label="Activer le page DBA"
+            checked={getChannel('page_oncall').enabled}
+            onChange={(checked) => updateChannel('page_oncall', { enabled: checked })}
+            aria-label="Activer le page on-call"
           />
-          <Text strong>{CHANNEL_LABELS.page_dba}</Text>
+          <Text strong>{CHANNEL_LABELS.page_oncall}</Text>
           <Text type="secondary" style={{ fontSize: 12 }}>
             (production + critique uniquement)
           </Text>
         </Space>
       </div>
-      {getChannel('page_dba').enabled && (
+      {getChannel('page_oncall').enabled && (
         <div style={rowStyle}>
           <Space orientation="vertical" style={{ width: '100%' }} size="small">
             <div>
               <Text type="secondary">URL API (optionnel) :</Text>
               <Input
                 size="small"
-                value={getChannel('page_dba').api_url ?? ''}
-                onChange={(e) => updateChannel('page_dba', { api_url: e.target.value })}
+                value={getChannel('page_oncall').api_url ?? ''}
+                onChange={(e) => updateChannel('page_oncall', { api_url: e.target.value })}
                 placeholder="Si vide, utilise la configuration serveur"
                 style={{ marginLeft: 8, width: 400 }}
-                aria-label="URL API page DBA"
+                aria-label="URL API page on-call"
               />
             </div>
             <div>
               <Text type="secondary">Conditions :</Text>
               <Checkbox.Group
                 options={conditionOptions}
-                value={getChannel('page_dba').conditions}
-                onChange={(checked) => handleConditionsChange('page_dba', checked as string[])}
+                value={getChannel('page_oncall').conditions}
+                onChange={(checked) => handleConditionsChange('page_oncall', checked as string[])}
                 style={{ marginLeft: 8 }}
               />
             </div>
@@ -232,7 +232,7 @@ export const NotificationConfigSection: FC<NotificationConfigSectionProps> = ({
         </div>
       )}
 
-      {(getChannel('page_dba').enabled || config.page_individual_enabled) && (
+      {(getChannel('page_oncall').enabled || config.page_individual_enabled) && (
         <Alert
           type="info"
           title="Les pages (individuel et DBA) ne sont envoyés que si l'environnement est « prod » et le niveau d'impact est « critical »."
