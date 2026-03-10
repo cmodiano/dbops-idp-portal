@@ -779,9 +779,11 @@ def resume_container_workflow_from_gate(
             if step_id_key:
                 runtime._step_outputs[step_id_key] = step_output
         runtime.workflow_steps = remaining_steps
-        # Story 67.4: Vague initiale pour fan-out parallèle (2+ step_ids)
-        if len(step_ids) > 1:
-            runtime._initial_wave = [s for s in step_ids if isinstance(s, str) and s]
+        # Story 67.4: Vague initiale explicite pour reprendre exactement aux step_ids cibles.
+        # IMPORTANT: toujours défini (pas seulement fan-out 2+ step_ids) sinon
+        # _execute_workflow_steps recalcule les entry points du sous-graphe remaining_steps
+        # et peut ré-exécuter le gate step lui-même (boucle infinie d'approbation).
+        runtime._initial_wave = [s for s in step_ids if isinstance(s, str) and s]
         # Resume: _step_order_counter must continue from max existing step_order
         # to avoid UK_EXEC_STEPS_EXEC_ORDER violation (step_order already used by gate)
         from django.db.models import Max
