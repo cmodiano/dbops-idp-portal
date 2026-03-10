@@ -344,7 +344,6 @@ def _update_waiting_context(step: ExecutionStep, gate_status: dict, correlation_
     )
 
     output['gate_status'] = gate_status.get('gates', [])
-    output['last_evaluated_at'] = timezone.now().isoformat()
 
     # Compute next_possible_at from gate details
     next_possible_at = None
@@ -356,8 +355,18 @@ def _update_waiting_context(step: ExecutionStep, gate_status: dict, correlation_
     if next_possible_at:
         output['next_possible_at'] = next_possible_at
 
-    new_output_json = json.dumps(output, sort_keys=True)
-    output_changed = step.output is None or json.dumps(json.loads(step.output), sort_keys=True) != new_output_json
+    # Compare BEFORE setting last_evaluated_at — otherwise the timestamp always differs
+    # and output_changed would be True every time, defeating the skip-unnecessary-save optimization.
+    def _comparable_output(o: dict) -> dict:
+        return {k: o.get(k) for k in ('gate_status', 'next_possible_at')}
+
+    old_output = json.loads(step.output) if step.output else {}
+    output_changed = (
+        step.output is None
+        or _comparable_output(old_output) != _comparable_output(output)
+    )
+
+    output['last_evaluated_at'] = timezone.now().isoformat()
 
     if output_changed:
         step.set_output(output)
