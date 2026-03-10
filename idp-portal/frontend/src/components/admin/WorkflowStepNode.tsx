@@ -9,7 +9,8 @@
  * Story 57.16: Added schedule_execution step type with schedule_source badge display.
  */
 
-import React, { memo, useMemo } from 'react';
+import { memo, useMemo } from 'react';
+import type { FC } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Badge, Divider, Tag, Tooltip, theme } from 'antd';
 import { CheckCircleOutlined, CloseCircleOutlined, HourglassOutlined, LoadingOutlined, MinusCircleOutlined } from '@ant-design/icons';
@@ -23,6 +24,7 @@ const STEP_TYPE_COLORS: Record<WorkflowStepType, string> = {
   gate:               '#faad14',  // ambre/jaune
   http_request:       '#13c2c2',  // cyan
   schedule_execution: '#4f46e5',  // indigo (Story 57.16)
+  parallel_group:     '#52c41a',  // vert (deprecated, rétro-compat)
 };
 
 const STEP_TYPE_LABELS: Record<WorkflowStepType, string> = {
@@ -32,6 +34,7 @@ const STEP_TYPE_LABELS: Record<WorkflowStepType, string> = {
   gate:               'Attendre',
   http_request:       'HTTP',
   schedule_execution: 'Planifier', // Story 57.16
+  parallel_group:     'Parallèle', // deprecated, rétro-compat
 };
 
 const INTEGRATION_LABELS: Record<string, string> = {
@@ -103,9 +106,18 @@ export interface WorkflowStepNodeData {
   // === schedule_execution ===
   /** Story 57.16: Configuration du step de planification. */
   schedule_config?: ScheduleStepConfig | null;
+  // === parallel_group — TODO Story 67.7: supprimer ces champs après migration ===
+  /** Story 65.4: Liste des step_id à exécuter en parallèle (≥2 requis). */
+  parallel_steps?: string[] | null;
+  /** Story 65.4: Step suivant si tous les sous-steps réussissent. */
+  on_all_success_step_id?: string | null;
+  /** Story 65.4: Step suivant si au moins un sous-step échoue (fail-fast). */
+  on_any_error_step_id?: string | null;
+  /** Story 67.4: Join policy for convergence steps. */
+  join_policy?: 'all_success' | 'one_success' | 'all_done' | 'all_failed' | 'one_failed' | null;
 }
 
-const WorkflowStepNode: React.FC<NodeProps> = ({ data, selected }) => {
+const WorkflowStepNode: FC<NodeProps> = ({ data, selected }) => {
   const { token } = theme.useToken();
   const nodeData = data as unknown as WorkflowStepNodeData;
 
@@ -165,7 +177,7 @@ const WorkflowStepNode: React.FC<NodeProps> = ({ data, selected }) => {
           : token.colorBorderSecondary;
 
   // Subtle 2px border for all states, no heavy glow
-  const borderWidth = nodeData.executionStatus === 'RUNNING' ? 2 : 2;
+  const borderWidth = 2;
   const boxShadowNode = nodeData.executionStatus === 'RUNNING'
     ? '0 0 6px #fa8c1640'
     : selected

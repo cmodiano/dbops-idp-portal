@@ -105,6 +105,7 @@ export function CalendarPage() {
 
   const handleTodayClick = useCallback(() => {
     calendarRef.current?.getApi().today();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- calendarRef is a stable ref, no need to list as dep
   }, []);
 
   const handleToggleRecurrence = useCallback(
@@ -112,7 +113,7 @@ export function CalendarPage() {
       const result = await toggleRecurrence(id, newState);
       if (result.success) {
         notification.success({
-          message: newState ? 'Récurrence activée' : 'Récurrence désactivée',
+          title: newState ? 'Récurrence activée' : 'Récurrence désactivée',
           description: newState
             ? 'La récurrence a été activée avec succès'
             : 'La récurrence a été désactivée avec succès',
@@ -120,7 +121,7 @@ export function CalendarPage() {
         await doFetch();
       } else {
         notification.error({
-          message: 'Erreur',
+          title: 'Erreur',
           description: result.error || 'Une erreur est survenue',
         });
       }

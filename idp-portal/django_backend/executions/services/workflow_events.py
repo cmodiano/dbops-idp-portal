@@ -10,7 +10,7 @@ Usage:
 """
 from __future__ import annotations
 
-import logging
+import structlog
 from typing import Any
 
 from django.db import models
@@ -24,7 +24,7 @@ from executions.models import (
 if __name__ != "__main__":
     from executions.models import Execution, ExecutionStep
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class WorkflowEventService:
@@ -67,11 +67,9 @@ class WorkflowEventService:
         except Exception:  # noqa: BLE001
             logger.warning(
                 "workflow_event_emit_failed",
-                extra={
-                    "execution_id": execution_id,
-                    "event_type": event_type,
-                    "entity_id": entity_id,
-                },
+                execution_id=execution_id,
+                event_type=event_type,
+                entity_id=entity_id,
                 exc_info=True,
             )
             return None

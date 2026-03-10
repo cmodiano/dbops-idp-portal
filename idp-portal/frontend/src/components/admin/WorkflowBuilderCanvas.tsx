@@ -18,7 +18,8 @@
  * Refactored in Story 54.12: graph state and event handlers extracted to useWorkflowGraph.
  */
 
-import React, { useRef } from 'react';
+import { useRef, useMemo } from 'react';
+import type { FC } from 'react';
 import {
   ReactFlow,
   Controls,
@@ -82,6 +83,12 @@ function WorkflowBuilderCanvasInner({
   // Hook appelle useReactFlow() → doit être dans le provider
   const graph = useWorkflowGraph({ steps, onChange, disabled });
 
+  // Story 67.4: Calculer le nombre de connexions entrantes du node sélectionné
+  const selectedNodeIncomingEdgeCount = useMemo(
+    () => graph.selectedNode ? graph.edges.filter(e => e.target === graph.selectedNode!.id).length : 0,
+    [graph.edges, graph.selectedNode],
+  );
+
   const {
     exporting,
     handleImportFile,
@@ -122,6 +129,7 @@ function WorkflowBuilderCanvasInner({
             onNodesChange={disabled ? undefined : graph.onNodesChange}
             onEdgesChange={disabled ? undefined : graph.onEdgesChange}
             onConnect={graph.onConnect}
+            isValidConnection={disabled ? undefined : graph.isValidConnection}
             onDrop={graph.onDrop}
             onDragOver={graph.onDragOver}
             onNodeDoubleClick={graph.onNodeDoubleClick}
@@ -157,6 +165,7 @@ function WorkflowBuilderCanvasInner({
         availableStepIds={graph.workflowStepIds}
         availableStepOptions={graph.workflowStepOptions}
         workflowId={workflowId}
+        incomingEdgeCount={selectedNodeIncomingEdgeCount}
       />
 
       <ValidationReportPanel
@@ -180,7 +189,7 @@ function WorkflowBuilderCanvasInner({
 }
 
 /** WorkflowBuilderCanvas wrapped with ReactFlowProvider */
-export const WorkflowBuilderCanvas: React.FC<WorkflowBuilderCanvasProps> = (props) => {
+export const WorkflowBuilderCanvas: FC<WorkflowBuilderCanvasProps> = (props) => {
   return (
     <ReactFlowProvider>
       <WorkflowBuilderCanvasInner {...props} />

@@ -184,13 +184,17 @@ export function useWebSocket(executionId: number | null): UseWebSocketResult {
       };
 
       ws.onerror = () => {
-        setError('Erreur de connexion WebSocket');
+        if (isMountedRef.current) {
+          setError('Erreur de connexion WebSocket');
+        }
       };
     };
 
     queueMicrotask(() => {
       setLoading(true);
-      reSyncState(executionId).finally(() => setLoading(false));
+      reSyncState(executionId).finally(() => {
+        if (isMountedRef.current) setLoading(false);
+      });
       connect();
     });
 

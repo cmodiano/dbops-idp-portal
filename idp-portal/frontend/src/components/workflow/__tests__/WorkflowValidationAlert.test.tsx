@@ -39,4 +39,15 @@ describe('WorkflowValidationAlert', () => {
     render(<WorkflowValidationAlert validation={validation} />);
     expect(screen.getByText('1 erreur(s), 0 avertissement(s)')).toBeInTheDocument();
   });
+
+  it('renders success alert when validation.valid is true even with warnings', () => {
+    const validation = {
+      valid: true,
+      errors: [
+        { nodeId: 'a', type: 'warning' as const, message: 'warn1' },
+      ],
+    };
+    render(<WorkflowValidationAlert validation={validation} />);
+    expect(screen.getByText('Workflow valide')).toBeInTheDocument();
+  });
 });

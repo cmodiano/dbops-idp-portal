@@ -85,7 +85,7 @@ class CorrelationIdMiddleware:
     """
     Middleware that generates and propagates correlation ID header.
 
-    SEC-9: Reads X-Correlation-ID (preferred) or X-Idp-Request-Id (legacy fallback).
+    SEC-9: Reads X-Correlation-ID (or generates if absent).
     Responds with X-Correlation-ID header (unified with frontend).
 
     The correlation ID is:
@@ -99,13 +99,9 @@ class CorrelationIdMiddleware:
         self.get_response = get_response
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
-        # SEC-9: Read X-Correlation-ID (preferred) or X-Idp-Request-Id (legacy fallback)
-        correlation_id = (
-            request.META.get('HTTP_X_CORRELATION_ID')
-            or request.META.get('HTTP_X_IDP_REQUEST_ID')
-        )
-        if not correlation_id:
-            correlation_id = str(uuid.uuid4())
+        # SEC-9: Read X-Correlation-ID (or generate if absent)
+        correlation_id = request.META.get('HTTP_X_CORRELATION_ID')
+        correlation_id = correlation_id or str(uuid.uuid4())
 
         # Store in thread-local for access in views/services
         set_correlation_id(correlation_id)

@@ -6,21 +6,22 @@
  */
 
 import { useState } from 'react';
-import { App, Table, Button, Space, Modal, Input, Tag, Typography, Tooltip } from 'antd';
+import { App, Table, Button, Space, Modal, Input, Tag, Typography, Tooltip, theme } from 'antd';
 import type { TableProps } from 'antd';
 import {
   CheckCircleOutlined,
   CloseCircleOutlined,
   ClockCircleOutlined,
-  ExclamationCircleOutlined,
+  EyeOutlined,
 } from '@ant-design/icons';
 
 import type { ExecutionResponse } from '../../types/api';
 import { usePendingApprovals } from '../../hooks/usePendingApprovals';
-import { getEnvironmentBadgeColor } from '../../utils/executionRenderers';
+import { getEnvironmentBadgeColor, getEnvironmentTagDarkStyle } from '../../utils/executionRenderers';
 import { getEnvironmentLabel } from '../../utils/environmentHelpers';
 import { STYLE_TOKENS } from '../../theme/styleTokens';
 import { humanizeKey, formatParamValue, partitionParameters, ENV_CONFIG_LABELS, IMPACT_LEVEL_LABELS } from './approvalContextUtils';
+import { useThemeMode } from '../../hooks/useThemeMode';
 
 const { Text } = Typography;
 const { TextArea } = Input;
@@ -36,6 +37,7 @@ interface ApprovalContextProps {
 }
 
 function ApprovalContext({ parameters, targets, compact, isPendingApproval }: ApprovalContextProps) {
+  const { token } = theme.useToken();
   const { targets: paramTargets, envConfig, stepParams, businessParams } = partitionParameters(parameters);
 
   // Use targets prop (rich objects) first, fallback to _targets from parameters
@@ -52,7 +54,7 @@ function ApprovalContext({ parameters, targets, compact, isPendingApproval }: Ap
 
   const containerStyle = compact
     ? { fontSize: 12 }
-    : { padding: 8, background: '#f5f5f5', borderRadius: 4, fontSize: 12 };
+    : { padding: 8, background: token.colorFillQuaternary, borderRadius: 4, fontSize: 12 };
 
   const formatEnvConfigValue = (key: string, value: unknown): string => {
     if (key === 'impact_level' && typeof value === 'string') {
@@ -72,13 +74,13 @@ function ApprovalContext({ parameters, targets, compact, isPendingApproval }: Ap
     }
     if (hasStepParams) {
       const stepLines = Object.entries(stepParams!).map(([stepOrder, stepData]) => {
-        const params = stepData && typeof stepData === 'object' && 'parameters' in stepData
-          ? (stepData as { parameters: Record<string, unknown> }).parameters
-          : null;
+        const stepEntry = stepData && typeof stepData === 'object' ? stepData as { step_id?: string; step_name?: string; name?: string; parameters?: Record<string, unknown> } : null;
+        const stepLabel = stepEntry?.step_name ?? stepEntry?.name ?? stepEntry?.step_id ?? `Étape ${stepOrder}`;
+        const params = stepEntry?.parameters ?? null;
         const paramStr = params
           ? Object.entries(params).map(([pk, pv]) => `${humanizeKey(pk)}=${formatParamValue(pv)}`).join(', ')
           : '';
-        return paramStr ? `Étape ${stepOrder}: ${paramStr}` : '';
+        return paramStr ? `${stepLabel}: ${paramStr}` : '';
       }).filter(Boolean);
       if (stepLines.length) parts.push(stepLines.join(' | '));
     }
@@ -135,12 +137,12 @@ function ApprovalContext({ parameters, targets, compact, isPendingApproval }: Ap
         <div style={{ marginBottom: 4 }}>
           <Text strong style={{ fontSize: 12 }}>Paramètres par étape :</Text>
           {Object.entries(stepParams!).map(([stepOrder, stepData]) => {
-            const params = stepData && typeof stepData === 'object' && 'parameters' in stepData
-              ? (stepData as { parameters: Record<string, unknown> }).parameters
-              : null;
+            const stepEntry = stepData && typeof stepData === 'object' ? stepData as { step_id?: string; step_name?: string; name?: string; parameters?: Record<string, unknown> } : null;
+            const stepLabel = stepEntry?.step_name ?? stepEntry?.name ?? stepEntry?.step_id ?? `Étape ${stepOrder}`;
+            const params = stepEntry?.parameters ?? null;
             return (
             <div key={stepOrder} style={{ fontSize: 12, paddingLeft: 8 }}>
-              <Text type="secondary">Étape {stepOrder} :</Text>
+              <Text type="secondary">{stepLabel} :</Text>
               {params && Object.entries(params).map(([pk, pv]) => (
                 <div key={pk} style={{ paddingLeft: 16 }}>
                   {humanizeKey(pk)} : {formatParamValue(pv)}
@@ -180,45 +182,17 @@ export function PendingApprovalsList({
   onActionComplete,
 }: PendingApprovalsListProps) {
   const { message } = App.useApp();
+  const { effectiveMode } = useThemeMode();
   // Story 38.6: DIP — use hook instead of direct service imports
   const { approve, reject, approveLoading, rejectLoading } = usePendingApprovals(onActionComplete);
-  const [approveModalOpen, setApproveModalOpen] = useState(false);
-  const [rejectModalOpen, setRejectModalOpen] = useState(false);
+  const [viewModalOpen, setViewModalOpen] = useState(false);
   const [selectedExecution, setSelectedExecution] = useState<ExecutionResponse | null>(null);
   const [comment, setComment] = useState('');
 
-  const handleApproveClick = (execution: ExecutionResponse) => {
+  const handleViewClick = (execution: ExecutionResponse) => {
     setSelectedExecution(execution);
     setComment('');
-    setApproveModalOpen(true);
-  };
-
-  const handleRejectClick = (execution: ExecutionResponse) => {
-    setSelectedExecution(execution);
-    setComment('');
-    setRejectModalOpen(true);
-  };
-
-  const handleApproveConfirm = async () => {
-    if (!selectedExecution) return;
-    const result = await approve(selectedExecution.id, comment || undefined);
-    if (result.success) {
-      message.success(`Exécution #${selectedExecution.id} approuvée`);
-      setApproveModalOpen(false);
-    } else {
-      message.error(result.error);
-    }
-  };
-
-  const handleRejectConfirm = async () => {
-    if (!selectedExecution) return;
-    const result = await reject(selectedExecution.id, comment || undefined);
-    if (result.success) {
-      message.success(`Exécution #${selectedExecution.id} refusée`);
-      setRejectModalOpen(false);
-    } else {
-      message.error(result.error);
-    }
+    setViewModalOpen(true);
   };
 
   const columns: TableProps<ExecutionResponse>['columns'] = [
@@ -245,18 +219,12 @@ export function PendingApprovalsList({
       dataIndex: 'environment',
       key: 'environment',
       render: (env: string | null) => (
-        <Tag color={getEnvironmentBadgeColor(env)}>
+        <Tag
+          color={getEnvironmentBadgeColor(env)}
+          style={effectiveMode === 'dark' ? getEnvironmentTagDarkStyle(env) : undefined}
+        >
           {getEnvironmentLabel(env ?? '')}
         </Tag>
-      ),
-    },
-    {
-      title: 'Contexte',
-      key: 'context',
-      render: (_: unknown, record: ExecutionResponse) => (
-        <Space orientation="vertical" size={2} style={{ fontSize: 12 }}>
-          <ApprovalContext parameters={record.parameters} targets={record.targets} compact isPendingApproval />
-        </Space>
       ),
     },
     {
@@ -276,25 +244,14 @@ export function PendingApprovalsList({
       title: 'Actions',
       key: 'actions',
       render: (_: unknown, record: ExecutionResponse) => (
-        <Space>
-          <Button
-            type="primary"
-            icon={<CheckCircleOutlined />}
-            size="small"
-            onClick={() => handleApproveClick(record)}
-            style={{ backgroundColor: STYLE_TOKENS.impactColor.low, borderColor: STYLE_TOKENS.impactColor.low }}
-          >
-            Approuver
-          </Button>
-          <Button
-            danger
-            icon={<CloseCircleOutlined />}
-            size="small"
-            onClick={() => handleRejectClick(record)}
-          >
-            Refuser
-          </Button>
-        </Space>
+        <Button
+          type="default"
+          icon={<EyeOutlined />}
+          size="small"
+          onClick={() => handleViewClick(record)}
+        >
+          Voir
+        </Button>
       ),
     },
   ];
@@ -311,78 +268,97 @@ export function PendingApprovalsList({
         size="small"
       />
 
-      {/* Approve confirmation modal */}
+      {/* View modal — context + Approve/Reject actions */}
       <Modal
         title={
           <Space>
-            <CheckCircleOutlined style={{ color: STYLE_TOKENS.impactColor.low }} />
-            Confirmer l'approbation
+            <EyeOutlined />
+            Détails de l'approbation
           </Space>
         }
-        open={approveModalOpen}
-        onCancel={() => setApproveModalOpen(false)}
-        onOk={handleApproveConfirm}
-        confirmLoading={approveLoading}
-        okText="Approuver"
-        okButtonProps={{ style: { backgroundColor: STYLE_TOKENS.impactColor.low, borderColor: STYLE_TOKENS.impactColor.low } }}
-        cancelText="Annuler"
+        open={viewModalOpen}
+        onCancel={() => {
+          setViewModalOpen(false);
+          setSelectedExecution(null);
+          setComment('');
+        }}
+        footer={null}
+        width={520}
       >
         {selectedExecution && (
-          <div style={{ marginBottom: 16 }}>
-            <p>
-              Vous êtes sur le point d'approuver l'exécution de{' '}
-              <strong>{selectedExecution.action_name || `Action #${selectedExecution.action_id}`}</strong>{' '}
-              en environnement <Tag color={getEnvironmentBadgeColor(selectedExecution.environment)}>{getEnvironmentLabel(selectedExecution.environment ?? '')}</Tag>
-            </p>
-            <p style={{ color: '#666', fontSize: 13 }}>
-              L'exécution sera lancée immédiatement après approbation.
-            </p>
-            <ApprovalContext parameters={selectedExecution.parameters} targets={selectedExecution.targets} isPendingApproval />
+          <div>
+            <div style={{ marginBottom: 16 }}>
+              <p>
+                <strong>{selectedExecution.action_name || `Action #${selectedExecution.action_id}`}</strong>{' '}
+                — Demandeur : {selectedExecution.user_display_name || `Utilisateur #${selectedExecution.user_id}`}{' '}
+                — Environnement :{' '}
+                <Tag
+                  color={getEnvironmentBadgeColor(selectedExecution.environment)}
+                  style={effectiveMode === 'dark' ? getEnvironmentTagDarkStyle(selectedExecution.environment) : undefined}
+                >
+                  {getEnvironmentLabel(selectedExecution.environment ?? '')}
+                </Tag>
+              </p>
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <Text strong style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>Contexte</Text>
+              <ApprovalContext parameters={selectedExecution.parameters} targets={selectedExecution.targets} isPendingApproval />
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <Text strong style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>Commentaire (optionnel)</Text>
+              <TextArea
+                placeholder="Commentaire pour l'approbation ou motif du refus"
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                rows={3}
+              />
+            </div>
+            <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
+              <Button onClick={() => { setViewModalOpen(false); setSelectedExecution(null); setComment(''); }}>
+                Fermer
+              </Button>
+              <Button
+                danger
+                icon={<CloseCircleOutlined />}
+                loading={rejectLoading}
+                onClick={async () => {
+                  if (!selectedExecution) return;
+                  const result = await reject(selectedExecution.id, comment || undefined);
+                  if (result.success) {
+                    message.success(`Exécution #${selectedExecution.id} refusée`);
+                    setViewModalOpen(false);
+                    setSelectedExecution(null);
+                    setComment('');
+                  } else {
+                    message.error(result.error ?? 'Erreur lors du refus');
+                  }
+                }}
+              >
+                Refuser
+              </Button>
+              <Button
+                type="primary"
+                icon={<CheckCircleOutlined />}
+                loading={approveLoading}
+                onClick={async () => {
+                  if (!selectedExecution) return;
+                  const result = await approve(selectedExecution.id, comment || undefined);
+                  if (result.success) {
+                    message.success(`Exécution #${selectedExecution.id} approuvée`);
+                    setViewModalOpen(false);
+                    setSelectedExecution(null);
+                    setComment('');
+                  } else {
+                    message.error(result.error ?? 'Erreur lors de l\'approbation');
+                  }
+                }}
+                style={{ backgroundColor: STYLE_TOKENS.impactColor.low, borderColor: STYLE_TOKENS.impactColor.low }}
+              >
+                Approuver
+              </Button>
+            </Space>
           </div>
         )}
-        <TextArea
-          placeholder="Commentaire (optionnel)"
-          value={comment}
-          onChange={(e) => setComment(e.target.value)}
-          rows={3}
-        />
-      </Modal>
-
-      {/* Reject confirmation modal */}
-      <Modal
-        title={
-          <Space>
-            <ExclamationCircleOutlined style={{ color: '#EF4444' }} />
-            Confirmer le refus
-          </Space>
-        }
-        open={rejectModalOpen}
-        onCancel={() => setRejectModalOpen(false)}
-        onOk={handleRejectConfirm}
-        confirmLoading={rejectLoading}
-        okText="Refuser"
-        okButtonProps={{ danger: true }}
-        cancelText="Annuler"
-      >
-        {selectedExecution && (
-          <div style={{ marginBottom: 16 }}>
-            <p>
-              Vous êtes sur le point de refuser l'exécution de{' '}
-              <strong>{selectedExecution.action_name || `Action #${selectedExecution.action_id}`}</strong>{' '}
-              en environnement <Tag color={getEnvironmentBadgeColor(selectedExecution.environment)}>{getEnvironmentLabel(selectedExecution.environment ?? '')}</Tag>
-            </p>
-            <p style={{ color: '#666', fontSize: 13 }}>
-              Le demandeur sera notifié du refus.
-            </p>
-            <ApprovalContext parameters={selectedExecution.parameters} targets={selectedExecution.targets} isPendingApproval />
-          </div>
-        )}
-        <TextArea
-          placeholder="Motif du refus (optionnel)"
-          value={comment}
-          onChange={(e) => setComment(e.target.value)}
-          rows={3}
-        />
       </Modal>
     </>
   );

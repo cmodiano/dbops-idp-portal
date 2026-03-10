@@ -16,6 +16,9 @@ export interface ProfileUpdate {
   is_admin?: boolean | null;
   is_auditor?: boolean | null;
   is_approver?: boolean | null;  // Story 57.14
+  /** When provided with profile fields, updates profile + permissions in one call → single audit entry */
+  action_permissions?: ProfileActionPermissionsUpdate | null;
+  target_permissions?: ProfileTargetPermissionsUpdate | null;
 }
 
 export interface ProfileResponse {

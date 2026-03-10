@@ -7,10 +7,12 @@
  * - evaluation: EvaluationStepConfig
  * - gate: GateStepConfig
  * - http_request: HttpRequestStepConfig
+ * - schedule_execution: ScheduleStepConfig (Story 57.16)
  */
 
-import React, { useMemo } from 'react';
-import { Drawer, Input, Switch, InputNumber, Typography, Space, Button, Divider, Alert } from 'antd';
+import { useMemo } from 'react';
+import type { FC } from 'react';
+import { Drawer, Input, Switch, InputNumber, Typography, Space, Button, Divider, Alert, Select } from 'antd';
 import { DeleteOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import type { Node } from '@xyflow/react';
 import type { WorkflowStepNodeData } from './WorkflowStepNode';
@@ -38,9 +40,11 @@ export interface StepConfigPanelProps {
   availableStepOptions?: { value: string; label: string }[];
   /** Story 63.3: ID du workflow pour le VariablePicker. */
   workflowId?: number;
+  /** Story 67.4: Nombre de connexions entrantes — affiche le sélecteur join_policy si ≥ 2 */
+  incomingEdgeCount?: number;
 }
 
-export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({
+export const StepConfigPanel: FC<StepConfigPanelProps> = ({
   node,
   open,
   onClose,
@@ -50,6 +54,7 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({
   availableStepIds = [],
   availableStepOptions,
   workflowId,
+  incomingEdgeCount = 0,
 }) => {
   const data = node?.data as unknown as WorkflowStepNodeData | undefined;
 
@@ -100,6 +105,7 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({
     gate: 'Attente / Gate',
     http_request: 'Requête HTTP',
     schedule_execution: 'Planifier une exécution', // Story 57.16
+    parallel_group: 'Groupe parallèle (déprécié)', // rétro-compat
   };
 
   return (
@@ -323,6 +329,33 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({
             Les connexions de branchement (succès/erreur) se gèrent directement sur le canvas en reliant les ports des nœuds.
           </Text>
         </div>
+
+        {/* Join policy — Story 67.4: visible si 2+ connexions entrantes */}
+        {incomingEdgeCount >= 2 && (
+          <>
+            <Divider style={{ margin: '8px 0' }} />
+            <div>
+              <Text strong style={{ fontSize: 13, display: 'block', marginBottom: 8 }}>
+                Politique de convergence
+              </Text>
+              <Select
+                style={{ width: '100%' }}
+                value={data.join_policy ?? 'all_success'}
+                onChange={(value) => handleFieldChange('join_policy', value)}
+                disabled={disabled}
+                aria-label="Politique de convergence"
+                options={[
+                  { value: 'all_success', label: 'Tous réussis (all_success)' },
+                  { value: 'one_success', label: 'Au moins un réussi (one_success)' },
+                  { value: 'all_done', label: 'Tous terminés (all_done)' },
+                ]}
+              />
+              <Text type="secondary" style={{ fontSize: 11, marginTop: 4, display: 'block' }}>
+                Détermine quand cette étape démarre après les branches parallèles entrantes.
+              </Text>
+            </div>
+          </>
+        )}
 
         {/* Validation warning (platform only) */}
         {hasValidationErrors && (

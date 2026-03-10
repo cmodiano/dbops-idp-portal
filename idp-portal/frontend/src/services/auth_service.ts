@@ -46,6 +46,28 @@ export async function fetchCurrentUser(token: string): Promise<User | null> {
   }
 }
 
+export async function portalLogin(
+  username: string,
+  password: string,
+): Promise<{ access_token: string; token_type: string; expires_in: number }> {
+  const res = await fetch(`${API_BASE}/auth/portal-login/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include', // pour recevoir le cookie refresh_token
+    body: JSON.stringify({ username, password }),
+  });
+  if (!res.ok) {
+    const { message, body } = await parseErrorResponse(res, true);
+    const code = res.status === 429 ? 'RATE_LIMIT_EXCEEDED' : (body?.error?.code ?? 'UNKNOWN');
+    const error: Error & { code?: string; status?: number } = new Error(message);
+    error.code = code;
+    error.status = res.status;
+    throw error;
+  }
+  const responseBody = await res.json();
+  return responseBody.data;
+}
+
 export async function logoutApi(): Promise<void> {
   // Best effort logout - don't throw if network fails
   try {

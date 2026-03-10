@@ -6,13 +6,14 @@ Most complex CaC entity: FK refs (integration, policy), M2M tags, mutex rules, 5
 
 from __future__ import annotations
 
-import logging
+import structlog
 from typing import Any
 
 from django.db import transaction
 
 from catalog.models import Action, ActionMutex, ActionTag, BusinessRulePolicy, Tag
 from core.exceptions import InvalidStateError
+from core.middleware import get_correlation_id
 from core.models import AuditActionType, AuditEntityType
 from core.services import AuditService
 from core.services_cac_utils import (
@@ -24,7 +25,7 @@ from core.services_cac_utils import (
 )
 from integrations.models import Integration
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -324,12 +325,32 @@ def import_action_yaml(
     integration_id = _resolve_integration_ref(spec.get("integration_ref"))
     policy_id = _resolve_policy_ref(spec.get("business_rule_policy_ref"))
 
+    # Validate execution_steps for workflow items (Story 65.7 — AC #2, #3)
+    execution_steps_raw = spec.get("execution_steps")
+    normalized_item_type = (str(spec.get("item_type") or "action").strip().lower()) or "action"
+    if execution_steps_raw is not None and normalized_item_type == "workflow":
+        from catalog.validation import validate_workflow_steps  # local import to avoid circular deps
+        from rest_framework.exceptions import ValidationError as DRFValidationError
+        try:
+            validate_workflow_steps(execution_steps_raw, action_id=None)
+        except DRFValidationError as exc:
+            detail = exc.detail
+            msg = str(detail)
+            if isinstance(detail, list):
+                msg = "; ".join(str(e) for e in detail)
+            elif isinstance(detail, dict):
+                msg = "; ".join(f"{k}: {v}" for k, v in detail.items())
+            raise InvalidStateError(
+                code="INVALID_WORKFLOW_STEPS",
+                message=f"execution_steps invalides : {msg}",
+            ) from exc
+
     # Prepare Action scalar/JSON fields (excluding tags, mutex, runtime fields)
     action_fields: dict[str, Any] = {
         "engine": engine,
         "platform": platform,
         "status": spec.get("status", "draft"),
-        "item_type": spec.get("item_type", "action"),
+        "item_type": normalized_item_type,
         "requires_target": spec.get("requires_target", True),
         "description": spec.get("description") or None,
         "category": spec.get("category") or None,
@@ -407,6 +428,7 @@ def import_action_yaml(
             "unchanged": unchanged,
             "mode": mode,
         },
+        correlation_id=get_correlation_id(),
     )
 
     return (created, updated, unchanged)

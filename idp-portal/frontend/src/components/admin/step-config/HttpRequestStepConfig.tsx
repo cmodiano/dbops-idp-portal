@@ -5,7 +5,8 @@
  * input request_timeout, éditeur output_mapping, condition.
  */
 
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
+import type { FC } from 'react';
 import { Divider, Input, InputNumber, Select, Typography } from 'antd';
 import type { WorkflowStepNodeData } from '../WorkflowStepNode';
 import { KeyValueEditor } from './KeyValueEditor';
@@ -29,7 +30,7 @@ export interface HttpRequestStepConfigProps {
   workflowId?: number;
 }
 
-export const HttpRequestStepConfig: React.FC<HttpRequestStepConfigProps> = ({
+export const HttpRequestStepConfig: FC<HttpRequestStepConfigProps> = ({
   data,
   onUpdate,
   disabled = false,

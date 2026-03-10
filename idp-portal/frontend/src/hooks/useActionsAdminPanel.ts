@@ -43,8 +43,6 @@ export interface UseActionsAdminPanelReturn {
   submitError: string | null;
   editAction: ActionDetail | null;
   wizardInitialItemType: 'action' | 'workflow' | null;
-  includeDisabled: boolean;
-  setIncludeDisabled: (v: boolean) => void;
   cascadeModalOpen: boolean;
   cascadeAction: ActionListItem | null;
   cascadeWorkflows: { id: number; name: string; status: string }[];
@@ -76,7 +74,6 @@ export function useActionsAdminPanel({ notification, modal }: UseActionsAdminPan
   const [editAction, setEditAction] = useState<ActionDetail | null>(null);
   const [wizardInitialItemType, setWizardInitialItemType] = useState<'action' | 'workflow' | null>(null);
 
-  const [includeDisabled, setIncludeDisabled] = useState(false);
   const [cascadeModalOpen, setCascadeModalOpen] = useState(false);
   const [cascadeAction, setCascadeAction] = useState<ActionListItem | null>(null);
   const [cascadeWorkflows, setCascadeWorkflows] = useState<{ id: number; name: string; status: string }[]>([]);
@@ -90,8 +87,7 @@ export function useActionsAdminPanel({ notification, modal }: UseActionsAdminPan
   const fetchActions = useCallback(async (filters?: AdminActionsFilters) => {
     setLoading(true);
     try {
-      const mergedFilters: AdminActionsFilters = { ...filters };
-      if (includeDisabled) mergedFilters.include_disabled = true;
+      const mergedFilters: AdminActionsFilters = { ...filters, include_disabled: true };
       const response = await getAdminActions(mergedFilters);
       if (!cancelledRef.current) setActions(response.data ?? []);
     } catch (err) {
@@ -104,7 +100,7 @@ export function useActionsAdminPanel({ notification, modal }: UseActionsAdminPan
     } finally {
       if (!cancelledRef.current) setLoading(false);
     }
-  }, [notification, includeDisabled]);
+  }, [notification]);
 
   const handleCreate = async (action: ActionCreate): Promise<ActionResponse> => {
     setSubmitting(true);
@@ -296,8 +292,6 @@ export function useActionsAdminPanel({ notification, modal }: UseActionsAdminPan
     submitError,
     editAction,
     wizardInitialItemType,
-    includeDisabled,
-    setIncludeDisabled,
     cascadeModalOpen,
     cascadeAction,
     cascadeWorkflows,

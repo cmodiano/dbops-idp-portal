@@ -23,7 +23,17 @@ def _parse_help_file(path: Path) -> tuple[str, str]:
     content = path.read_text(encoding='utf-8')
     m = _FRONTMATTER_RE.match(content)
     if m:
-        meta = yaml.safe_load(m.group(1)) or {}
+        # HELP-MED-01: Protéger yaml.safe_load contre un frontmatter YAML malformé.
+        # Un bloc ---...--- détecté mais invalide lèverait yaml.YAMLError → 500 non intentionnel.
+        # Fallback sur meta={} (traitement comme Markdown pur) en cas d'erreur YAML.
+        try:
+            meta = yaml.safe_load(m.group(1)) or {}
+        except yaml.YAMLError:
+            logger.warning(
+                "help_frontmatter_yaml_error",
+                path=str(path),
+            )
+            meta = {}
         short: str = str(meta.get('short', ''))
         markdown: str = m.group(2).strip()
     else:

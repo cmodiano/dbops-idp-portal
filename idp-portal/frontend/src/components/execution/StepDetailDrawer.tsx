@@ -9,13 +9,15 @@
  */
 
 import { useMemo } from 'react';
-import { Drawer, Space, Typography, Badge, Alert, Card, Spin, theme } from 'antd';
-import { CloseOutlined, CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined, ClockCircleOutlined } from '@ant-design/icons';
+import { Drawer, Space, Typography, Badge, Alert, Card, Spin, List, theme } from 'antd';
+import { CloseOutlined, CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined, ClockCircleOutlined, BranchesOutlined } from '@ant-design/icons';
 import { StructuredErrorCard } from './StructuredErrorCard';
 import { ExecutionTimeline } from './ExecutionTimeline';
 import { useChildExecution } from '../../hooks/useChildExecution';
 import type { ExecutionStepResponse, WorkflowStep } from '../../types/api';
 import { STEP_STATUS_BADGE_CONFIG } from '../../utils/execution-status';
+import type { BadgeStatusType } from '../../utils/execution-status';
+import { findExecutionStepsForParallelGroup, computeParallelGroupStatus } from '../../utils/parallelGroupUtils';
 
 const { Title, Text } = Typography;
 
@@ -57,13 +59,32 @@ export function StepDetailDrawer({
     const workflowStep = workflowSteps.find((s) => s.step_id === stepId);
     if (!workflowStep) return null;
 
-    // Match ExecutionStep by step_order
-    const executionStep = executionSteps.find(
-      (es) => es.step_order === workflowStep.order,
-    ) ?? null;
+    // Match ExecutionStep by config_step_id (robust), fallback to step_order for legacy
+    const executionStep =
+      executionSteps.find((es) => es.config_step_id === workflowStep.step_id) ??
+      executionSteps.find((es) => es.step_order === workflowStep.order) ??
+      null;
 
     return { workflowStep, executionStep };
   }, [stepId, workflowSteps, executionSteps]);
+
+  // Story 65.6: Compute effective status — aggregated for parallel_group, direct otherwise.
+  // Uses config_step_id mapping with legacy fallback to step_name.
+  const effectiveStatus = useMemo(() => {
+    const wfStep = selectedStep?.workflowStep;
+    if (wfStep?.step_type === 'parallel_group') {
+      const subSteps =
+        wfStep.parallel_steps?.flatMap((stepId) => {
+          const byConfig = executionSteps.find((es) => es.config_step_id === stepId);
+          if (byConfig) return [byConfig];
+          const wf = workflowSteps.find((s) => s.step_id === stepId);
+          const byName = wf?.name ? executionSteps.find((es) => es.step_name === wf.name) : undefined;
+          return byName ? [byName] : [];
+        }) ?? [];
+      return computeParallelGroupStatus(subSteps);
+    }
+    return selectedStep?.executionStep?.status ?? 'PENDING';
+  }, [selectedStep, workflowSteps, executionSteps]);
 
   // AC3: Duration
   const duration = useMemo(() => {
@@ -76,22 +97,28 @@ export function StepDetailDrawer({
 
   // AC3: Status badge
   const statusCfg = useMemo(() => {
-    const status = selectedStep?.executionStep?.status ?? 'PENDING';
-    return STEP_STATUS_BADGE_CONFIG[status] ?? { color: 'default', label: status };
-  }, [selectedStep?.executionStep?.status]);
+    return STEP_STATUS_BADGE_CONFIG[effectiveStatus] ?? { color: 'default', label: effectiveStatus };
+  }, [effectiveStatus]);
 
   const workflowStep = selectedStep?.workflowStep ?? null;
   const executionStep = selectedStep?.executionStep ?? null;
   const stepTitle = workflowStep?.name || workflowStep?.action_name || (workflowStep ? `Étape ${workflowStep.order}` : '');
 
+  // Story 65.6: Detect parallel_group to show sub-steps panel
+  const isParallelGroup = workflowStep?.step_type === 'parallel_group';
+  const parallelSubSteps = useMemo(() => {
+    if (!isParallelGroup || !workflowStep) return [];
+    return findExecutionStepsForParallelGroup(workflowStep, workflowSteps, executionSteps);
+  }, [isParallelGroup, workflowStep, workflowSteps, executionSteps]);
+
   // Status icon helper — MUST be before any early return (React hooks rule)
+  // Story 65.6: uses effectiveStatus (aggregated for parallel_group) instead of executionStep?.status
   const statusIcon = useMemo(() => {
-    const status = executionStep?.status;
-    if (status === 'COMPLETED') return <CheckCircleOutlined style={{ color: token.colorSuccess, fontSize: 18 }} />;
-    if (status === 'FAILED') return <CloseCircleOutlined style={{ color: token.colorError, fontSize: 18 }} />;
-    if (status === 'RUNNING') return <LoadingOutlined spin style={{ color: token.colorWarning, fontSize: 18 }} />;
+    if (effectiveStatus === 'COMPLETED') return <CheckCircleOutlined style={{ color: token.colorSuccess, fontSize: 18 }} />;
+    if (effectiveStatus === 'FAILED') return <CloseCircleOutlined style={{ color: token.colorError, fontSize: 18 }} />;
+    if (effectiveStatus === 'RUNNING') return <LoadingOutlined spin style={{ color: token.colorWarning, fontSize: 18 }} />;
     return <ClockCircleOutlined style={{ color: token.colorTextQuaternary, fontSize: 18 }} />;
-  }, [executionStep?.status, token.colorSuccess, token.colorError, token.colorWarning, token.colorTextQuaternary]);
+  }, [effectiveStatus, token.colorSuccess, token.colorError, token.colorWarning, token.colorTextQuaternary]);
 
   // Parse step output (logs) — raw JSON for fallback or when no child execution
   const stepLogs = useMemo(() => {
@@ -196,7 +223,64 @@ export function StepDetailDrawer({
 
       {/* Main content */}
       <div style={{ padding: 24 }}>
-        {!executionStep ? (
+        {/* Story 65.6: parallel_group — panneau sous-steps */}
+        {isParallelGroup ? (
+          <Card
+            size="small"
+            title={
+              <Space size={8}>
+                <BranchesOutlined style={{ color: '#52c41a' }} />
+                <span>Étapes en parallèle</span>
+              </Space>
+            }
+            data-testid="parallel-group-substeps-panel"
+          >
+            <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
+              {parallelSubSteps.length} étape{parallelSubSteps.length !== 1 ? 's' : ''} en parallèle
+            </Typography.Text>
+            {parallelSubSteps.length === 0 ? (
+              <Typography.Text type="secondary">Aucune sous-étape en cours d'exécution</Typography.Text>
+            ) : (
+              <List
+                size="small"
+                dataSource={parallelSubSteps}
+                renderItem={(step) => {
+                  const cfg = STEP_STATUS_BADGE_CONFIG[step.status] ?? STEP_STATUS_BADGE_CONFIG['PENDING'];
+                  const subDuration = step.started_at
+                    ? calculateDuration(step.started_at, step.completed_at)
+                    : null;
+                  return (
+                    <List.Item style={{ padding: '8px 0' }}>
+                      <Space size={8} style={{ width: '100%' }} align="start">
+                        <Badge status={cfg.color as BadgeStatusType} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <Typography.Text strong style={{ display: 'block' }}>
+                            {step.step_name}
+                          </Typography.Text>
+                          <Space size={8}>
+                            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                              {step.status === 'RUNNING' ? 'En cours...' : cfg.label}
+                            </Typography.Text>
+                            {subDuration && (
+                              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                {subDuration}
+                              </Typography.Text>
+                            )}
+                          </Space>
+                          {step.error_message && step.status === 'FAILED' && (
+                            <Typography.Text type="danger" style={{ fontSize: 11, display: 'block' }}>
+                              {step.error_message}
+                            </Typography.Text>
+                          )}
+                        </div>
+                      </Space>
+                    </List.Item>
+                  );
+                }}
+              />
+            )}
+          </Card>
+        ) : !executionStep ? (
           // AC10: Step not yet executed
           <Alert
             type="info"

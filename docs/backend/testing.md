@@ -44,33 +44,36 @@ django_backend/
 
 ### Commandes de base
 
+> **Important :** Toujours exécuter depuis `idp-portal/django_backend/` avec le venv activé.
+> Le test runner officiel est `.venv/bin/python -m pytest` (configuré via `pytest.ini`, `DJANGO_SETTINGS_MODULE=idp_backend.test_settings`).
+
 ```bash
-# Tous les tests
-pytest
+# Tous les tests (depuis idp-portal/django_backend/)
+.venv/bin/python -m pytest
 
 # Avec couverture
-pytest --cov --cov-report=html
+.venv/bin/python -m pytest --cov --cov-report=html
 
 # Tests unitaires uniquement
-pytest -m unit
+.venv/bin/python -m pytest -m unit
 
 # Tests d'intégration
-pytest -m integration
+.venv/bin/python -m pytest -m integration
 
 # Tests de sécurité
-pytest -m security
+.venv/bin/python -m pytest -m security
 
 # Module spécifique
-pytest catalog/tests/
+.venv/bin/python -m pytest catalog/tests/
 
 # Test spécifique
-pytest catalog/tests/test_services.py::TestCatalogService::test_create_action
+.venv/bin/python -m pytest catalog/tests/test_services.py::TestCatalogService::test_create_action
 
 # Verbeux
-pytest -v
+.venv/bin/python -m pytest -v
 
 # Parallèle
-pytest -n auto
+.venv/bin/python -m pytest -n auto
 ```
 
 ### Markers

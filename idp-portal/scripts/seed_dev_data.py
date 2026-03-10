@@ -142,11 +142,6 @@ ACTIONS = [
             {"order": 2, "name": "Execution backup RMAN", "type": "execution", "connector_type": "aap", "connector_config": {"job_template_id": 42}, "conditional_environments": None},
             {"order": 3, "name": "Verification backup", "type": "verification", "connector_type": "none", "connector_config": None, "conditional_environments": None},
         ]),
-        "change_type_config": json.dumps({
-            "DEV": {"required": False},
-            "STAGING": {"required": True, "change_model_code": "1516B"},
-            "PROD": {"required": True, "change_model_code": "1516B"},
-        }),
         "documentation_md": "# Backup Oracle Database\n\nThis action performs a full RMAN backup.\n\n## Prerequisites\n- Database must be in ARCHIVELOG mode\n- Sufficient disk space for backup",
         "tags": ["oracle", "backup"],
     },
@@ -179,11 +174,6 @@ ACTIONS = [
             {"order": 4, "name": "Demarrage base de donnees", "type": "execution", "connector_type": "aap", "connector_config": {"job_template_id": 52}, "conditional_environments": None},
             {"order": 5, "name": "Fermeture changement ServiceNow", "type": "verification", "connector_type": "servicenow", "connector_config": None, "conditional_environments": ["STAGING", "PROD"]},
         ]),
-        "change_type_config": json.dumps({
-            "DEV": {"required": False},
-            "STAGING": {"required": True, "change_model_code": "PATCH01"},
-            "PROD": {"required": True, "change_model_code": "PATCH01"},
-        }),
         "documentation_md": "# Apply Oracle Patch\n\nQuarterly security patching procedure.",
         "tags": ["oracle", "patching", "urgente"],
     },
@@ -214,11 +204,6 @@ ACTIONS = [
             {"order": 1, "name": "Creation schema", "type": "execution", "connector_type": "aap", "connector_config": {"job_template_id": 60}, "conditional_environments": None},
             {"order": 2, "name": "Attribution grants", "type": "execution", "connector_type": "aap", "connector_config": {"job_template_id": 61}, "conditional_environments": None},
         ]),
-        "change_type_config": json.dumps({
-            "DEV": {"required": False},
-            "STAGING": {"required": False},
-            "PROD": {"required": True, "change_model_code": "PROV01"},
-        }),
         "documentation_md": "# Create Oracle Schema\n\nProvisions a new schema with standard security grants.",
         "tags": ["oracle", "provisioning", "dev"],
     },
@@ -246,7 +231,6 @@ ACTIONS = [
         "execution_steps": json.dumps([
             {"order": 1, "name": "Backup SQL Server", "type": "execution", "connector_type": "aap", "connector_config": {"job_template_id": 70}, "conditional_environments": None},
         ]),
-        "change_type_config": json.dumps({"DEV": {"required": False}, "PROD": {"required": False}}),
         "documentation_md": "# SQL Server Backup\n\nNative SQL Server backup with compression.",
         "tags": ["backup"],
     },
@@ -276,7 +260,6 @@ ACTIONS = [
             {"order": 1, "name": "Collecte metriques", "type": "execution", "connector_type": "aap", "connector_config": {"job_template_id": 80}, "conditional_environments": None},
             {"order": 2, "name": "Analyse alertes", "type": "verification", "connector_type": "none", "connector_config": None, "conditional_environments": None},
         ]),
-        "change_type_config": None,
         "documentation_md": "# Database Health Check\n\nComprehensive health monitoring for Oracle databases.",
         "tags": ["oracle", "monitoring"],
     },
@@ -306,7 +289,6 @@ ACTIONS = [
             {"order": 2, "name": "Import target", "type": "execution", "connector_type": "aap", "connector_config": {"job_template_id": 91}, "conditional_environments": None},
             {"order": 3, "name": "Data scrambling", "type": "execution", "connector_type": "aap", "connector_config": {"job_template_id": 92}, "conditional_environments": None},
         ]),
-        "change_type_config": json.dumps({"DEV": {"required": False}}),
         "documentation_md": "# Refresh Dev Database\n\nClone and anonymize production data for development.",
         "tags": ["oracle", "dev", "provisioning"],
     },
@@ -335,11 +317,6 @@ ACTIONS = [
         "execution_steps": json.dumps([
             {"order": 1, "name": "Arret immediat", "type": "execution", "connector_type": "aap", "connector_config": {"job_template_id": 100}, "conditional_environments": None},
         ]),
-        "change_type_config": json.dumps({
-            "DEV": {"required": False},
-            "STAGING": {"required": False},
-            "PROD": {"required": False},
-        }),
         "documentation_md": "# Emergency Stop Database\n\n**WARNING**: Use only in emergency situations.",
         "tags": ["oracle", "urgente"],
     },
@@ -369,7 +346,6 @@ ACTIONS = [
             {"order": 1, "name": "Identification archives", "type": "prerequisite", "connector_type": "none", "connector_config": None, "conditional_environments": None},
             {"order": 2, "name": "Suppression archives", "type": "execution", "connector_type": "aap", "connector_config": {"job_template_id": 110}, "conditional_environments": None},
         ]),
-        "change_type_config": None,
         "documentation_md": "# Archive Log Cleanup\n\nAutomated cleanup of Oracle archive logs.",
         "tags": ["oracle", "monitoring"],
     },
@@ -400,19 +376,27 @@ def has_seed_data(conn: oracledb.Connection) -> bool:
 
 
 def reset_data(conn: oracledb.Connection) -> None:
-    """Delete all seeded data in reverse FK order."""
+    """Delete all seeded data in reverse FK order (children before parents)."""
     print("Resetting existing data...")
     cursor = conn.cursor()
+    # Order: delete children first to satisfy FK constraints.
+    # RECURRING_PATTERNS → SCHEDULED_EXECUTIONS; EXECUTION_STEPS, EXECUTION_TARGETS → EXECUTIONS;
+    # SCHEDULED_EXECUTIONS → EXECUTIONS, USERS, ACTIONS_CATALOG; EXECUTIONS → USERS, ACTIONS_CATALOG;
+    # USER_FAVORITES → USERS, ACTIONS_CATALOG; ACTION_TAGS → ACTIONS_CATALOG, TAGS;
+    # ACTIONS_CATALOG → INTEGRATIONS, USERS; PROFILE_* → PROFILES
     tables = [
+        "RECURRING_PATTERNS",
         "EXECUTION_STEPS",
+        "EXECUTION_TARGETS",
+        "SCHEDULED_EXECUTIONS",
         "EXECUTIONS",
         "USER_FAVORITES",
         "PROFILE_TARGET_PERMISSIONS",
         "PROFILE_ACTION_PERMISSIONS",
         "ACTION_TAGS",
         "TAGS",
-        "INTEGRATIONS",
         "ACTIONS_CATALOG",
+        "INTEGRATIONS",
         "PROFILES",
         "USERS",
     ]
@@ -565,11 +549,11 @@ def seed_actions(conn: oracledb.Connection, user_ids: dict[str, int], tag_ids: d
             """
             INSERT INTO ACTIONS_CATALOG
             (NAME, DESCRIPTION, CATEGORY, ENGINE, PLATFORM, PARAMETERS_SCHEMA, IMPACT_RULES,
-             DEFAULT_IMPACT_LEVEL, STATUS, EXECUTION_STEPS, CHANGE_TYPE_CONFIG,
+             DEFAULT_IMPACT_LEVEL, STATUS, EXECUTION_STEPS,
              DOCUMENTATION_MD, CREATED_BY)
             VALUES
             (:name, :description, :category, :engine, :platform, :parameters_schema, :impact_rules,
-             :default_impact_level, :status, :execution_steps, :change_type_config,
+             :default_impact_level, :status, :execution_steps,
              :documentation_md, :created_by)
             RETURNING ID INTO :out_id
             """,
@@ -584,7 +568,6 @@ def seed_actions(conn: oracledb.Connection, user_ids: dict[str, int], tag_ids: d
                 "default_impact_level": action["default_impact_level"],
                 "status": action["status"],
                 "execution_steps": action["execution_steps"],
-                "change_type_config": action["change_type_config"],
                 "documentation_md": action["documentation_md"],
                 "created_by": creator_id,
                 "out_id": out_id_var,

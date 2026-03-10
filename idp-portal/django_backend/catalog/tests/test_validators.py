@@ -631,8 +631,7 @@ class TestValidateNotificationConfig:
             "channels": [
                 {"type": "email", "enabled": True, "conditions": ["on_failure", "on_success"]},
                 {"type": "teams", "enabled": False, "webhook_url_ref": "vault:secret/teams"},
-                {"type": "page_dba", "conditions": ["always"]},
-                {"type": "page_oncall", "conditions": ["on_failure"]},  # Epic 56 — nouveau type recommandé
+                {"type": "page_oncall", "conditions": ["always"]},
             ],
             "page_individual_enabled": False
         })
@@ -661,7 +660,3 @@ class TestValidateNotificationConfig:
     def test_page_oncall_channel_type_passes(self):
         """AC6 (Epic 56) : type page_oncall → validation passe sans erreur."""
         validate_notification_config({"channels": [{"type": "page_oncall", "conditions": ["on_failure"]}]})
-
-    def test_page_dba_channel_type_still_passes(self):
-        """AC7 (Epic 56) : type page_dba reste valide (backward compat)."""
-        validate_notification_config({"channels": [{"type": "page_dba", "conditions": ["on_failure"]}]})

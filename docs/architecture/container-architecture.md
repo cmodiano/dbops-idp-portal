@@ -5,6 +5,17 @@
 
 ---
 
+## Contexte : Production vs Dev/Staging
+
+| Environnement | Base de données Oracle |
+|---------------|------------------------|
+| **Dev / Staging** | Conteneur `oracle-db` (oracle.com/database/free:latest) |
+| **Production** | **Pas de conteneur** — Oracle DataGuard (4 instances : 2 Montréal + 2 Toronto) |
+
+Voir [§ 7. Architecture base de données production](#7-architecture-base-de-données-production) pour les détails de la configuration DataGuard.
+
+---
+
 ## 1. Vue d'ensemble — Diagramme C4 niveau Container
 
 ```mermaid
@@ -26,7 +37,7 @@ C4Container
 
         ContainerDb(redis, "Redis", "redis:7-alpine", "Broker Celery + Result backend.\nCache applicatif (feature flags, sessions).\nPort 6379")
 
-        ContainerDb(oracle, "Oracle Database", "oracle.com/database/free:latest (23ai)", "Base de données principale.\nPDB : FREEPDB1.\nUser applicatif : IDP_APP.\nPorts 1521 (SQL*Net), 5500 (EM Express)")
+        ContainerDb(oracle, "Oracle Database", "oracle.com/database/free:latest (23ai) — dev/staging uniquement", "Base de données principale (dev/staging).\nPDB : FREEPDB1.\nUser applicatif : IDP_APP.\nPorts 1521 (SQL*Net), 5500 (EM Express).\nProduction : DataGuard externe, voir § 7.")
     }
 
     System_Ext(vault, "HashiCorp Vault", "Gestion des secrets — credentials des intégrations")
@@ -62,6 +73,8 @@ C4Container
 
 ## 2. Diagramme des flux réseau (production)
 
+> **Production :** Oracle est externe (DataGuard). Le bloc `ORA` représente le primary DataGuard, non un conteneur.
+
 ```mermaid
 flowchart TD
     subgraph INTERNET["Zone Internet / Intranet entreprise"]
@@ -81,7 +94,7 @@ flowchart TD
 
     subgraph DATA["Zone données"]
         RD["redis:6379\nbroker + cache"]
-        ORA["oracle:1521\nPDB FREEPDB1"]
+        ORA["Oracle DataGuard\nprimary :1521\n(2×MTL FSFO + 2×YYZ)"]
     end
 
     subgraph EXTERNAL["Services externes"]
@@ -119,15 +132,17 @@ flowchart TD
 
 ## 3. Diagramme des volumes et persistance
 
+> **Production :** Pas de volume `oracle-data` — Oracle DataGuard est externe.
+
 ```mermaid
 flowchart LR
     subgraph VOLUMES["Volumes Docker nommés"]
-        VOL_ORA[("oracle-data\nOracle data files\n/opt/oracle/oradata")]
+        VOL_ORA[("oracle-data\nOracle data files\n(dev/staging uniquement)")]
         VOL_BEAT[("celery-beat-data\nBeat schedule\n/var/lib/celery")]
     end
 
     subgraph CONTAINERS["Conteneurs"]
-        ORA["oracle-db"]
+        ORA["oracle-db\n(dev/staging)"]
         CB["celery-beat"]
         BE["backend"]
         CW["celery-worker"]
@@ -235,3 +250,42 @@ sequenceDiagram
 | 8 | Feature flags Redis pub/sub | Invalidation cache cohérente multi-instance |
 | 9 | Flyway pour migrations | Gestion versionnée du schéma Oracle indépendante du framework |
 | 10 | Nginx SPA + proxy | Pas de CORS en production, routing unifié |
+| 11 | Oracle DataGuard (prod) | Pas de conteneur DB en prod — 2× Montréal (FSFO) + 2× Toronto (réplication intersite) |
+
+---
+
+## 7. Architecture base de données production
+
+En production, la base de données Oracle **n'est pas conteneurisée**. Elle repose sur une configuration **Oracle DataGuard** :
+
+```mermaid
+flowchart TB
+    subgraph MTL["Site Montréal"]
+        MTL_P["Primary\n(actif)"]
+        MTL_S["Standby\n(FSFO)"]
+        MTL_P <-->|"Fast-Start Failover"| MTL_S
+    end
+
+    subgraph YYZ["Site Toronto"]
+        YYZ_P["Standby\n(réplication)"]
+        YYZ_S["Standby\n(réplication)"]
+    end
+
+    subgraph APP["Application IDP Portal"]
+        BE["Backend / Celery"]
+    end
+
+    BE -->|"SQL*Net\n(primary actif)"| MTL_P
+    MTL_P -->|"Réplication intersite"| YYZ_P
+    MTL_P -->|"Réplication intersite"| YYZ_S
+```
+
+| Site | Nombre d'instances | Configuration | Rôle |
+|------|-------------------|---------------|------|
+| **Montréal** | 2 | FSFO (Fast-Start Failover) | Primary + Standby local — basculement automatique rapide |
+| **Toronto** | 2 | Réplication intersite | Standby distant — continuité d'activité (DR) |
+
+**Points clés :**
+- L'application se connecte au **primary actif** via `ORACLE_HOST` / `ORACLE_SERVICE_NAME` (résolu par le DBA ou TNS)
+- En cas de panne du primary à Montréal : FSFO bascule vers le standby local
+- En cas de perte du site Montréal : basculement DR vers Toronto (géré par DBA)

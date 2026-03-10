@@ -96,22 +96,22 @@ class TestWorkflowRuntimeResolveNextStep:
                 "step_id": "step-1",
                 "order": 1,
                 "name": "First Step",
-                "on_success_step_id": "step-2",
-                "on_error_step_id": "step-error",
+                "on_success_step_ids": ["step-2"],
+                "on_error_step_ids": ["step-error"],
             },
             {
                 "step_id": "step-2",
                 "order": 2,
                 "name": "Second Step",
-                "on_success_step_id": None,  # End workflow on success
-                "on_error_step_id": "step-error",
+                "on_success_step_ids": [],  # End workflow on success
+                "on_error_step_ids": ["step-error"],
             },
             {
                 "step_id": "step-error",
                 "order": 3,
                 "name": "Error Handler",
-                "on_success_step_id": None,  # End workflow
-                "on_error_step_id": None,
+                "on_success_step_ids": [],
+                "on_error_step_ids": [],
             },
         ]
         self.action.execution_steps = (workflow_steps)
@@ -154,8 +154,8 @@ class TestWorkflowRuntimeResolveNextStep:
             "step_id": "step-conv",
             "order": 10,
             "name": "Convergence Step",
-            "on_success_step_id": "step-common",
-            "on_error_step_id": "step-common",
+            "on_success_step_ids": ["step-common"],
+            "on_error_step_ids": ["step-common"],
         }
         self.runtime.steps_by_id["step-conv"] = convergence_step
 
@@ -166,8 +166,8 @@ class TestWorkflowRuntimeResolveNextStep:
         assert next_on_error == "step-common"
         assert next_on_success == next_on_error  # Convergence
 
-    def test_resolve_next_step_backward_compat_linear(self):
-        """Backward compat: Linear workflow without branches."""
+    def test_resolve_next_step_linear_without_branches(self):
+        """Linear workflow without branch fields uses order."""
         # Create linear workflow (no on_success_step_id/on_error_step_id)
         linear_action = ActionFactory(
             name="Linear Workflow",
@@ -210,10 +210,7 @@ class TestWorkflowRuntimeResolveNextStep:
 
     def test_resolve_next_step_partial_branches_falls_back_on_success(self):
         """
-        Regression: if only on_error_step_id exists, a SUCCESS outcome must NOT terminate.
-
-        This catches a subtle retro-compat bug where the presence of only one branch key
-        caused success-path resolution to incorrectly return None (AC1).
+        If only on_error_step_ids exists, a SUCCESS outcome must NOT terminate (linear fallback).
         """
         action = ActionFactory(
             name="Partial Branch Workflow",
@@ -225,7 +222,7 @@ class TestWorkflowRuntimeResolveNextStep:
         )
 
         steps = [
-            {"step_id": "step-1", "order": 1, "name": "Step 1", "on_error_step_id": "step-err"},
+            {"step_id": "step-1", "order": 1, "name": "Step 1", "on_error_step_ids": ["step-err"]},
             {"step_id": "step-2", "order": 2, "name": "Step 2"},  # linear continuation expected
             {"step_id": "step-err", "order": 99, "name": "Err"},
         ]
@@ -294,16 +291,16 @@ class TestWorkflowRuntimeExecution:
                 "order": 1,
                 "name": "First Step",
                 "referenced_action_id": ref_action_1.id,
-                "on_success_step_id": "step-2",
-                "on_error_step_id": None,
+                "on_success_step_ids": ["step-2"],
+                "on_error_step_ids": [],
             },
             {
                 "step_id": "step-2",
                 "order": 2,
                 "name": "Second Step",
                 "referenced_action_id": ref_action_2.id,
-                "on_success_step_id": None,  # End on success
-                "on_error_step_id": None,
+                "on_success_step_ids": [],
+                "on_error_step_ids": [],
             },
         ]
         action.execution_steps = (workflow_steps)
@@ -388,24 +385,24 @@ class TestWorkflowRuntimeExecution:
                 "order": 1,
                 "name": "Failing Step",
                 "referenced_action_id": ref_action_1.id,
-                "on_success_step_id": "step-2",
-                "on_error_step_id": "step-error",
+                "on_success_step_ids": ["step-2"],
+                "on_error_step_ids": ["step-error"],
             },
             {
                 "step_id": "step-2",
                 "order": 2,
                 "name": "Success Step (skipped)",
                 "referenced_action_id": ref_action_2.id,
-                "on_success_step_id": None,
-                "on_error_step_id": None,
+                "on_success_step_ids": [],
+                "on_error_step_ids": [],
             },
             {
                 "step_id": "step-error",
                 "order": 3,
                 "name": "Error Handler",
                 "referenced_action_id": ref_action_err.id,
-                "on_success_step_id": None,
-                "on_error_step_id": None,
+                "on_success_step_ids": [],
+                "on_error_step_ids": [],
             },
         ]
         action.execution_steps = (workflow_steps)
@@ -503,16 +500,16 @@ class TestWorkflowRuntimeExecution:
                 "order": 1,
                 "name": "Step 1",
                 "referenced_action_id": ref_action_1.id,
-                "on_success_step_id": "step-2",
-                "on_error_step_id": None,
+                "on_success_step_ids": ["step-2"],
+                "on_error_step_ids": [],
             },
             {
                 "step_id": "step-2",
                 "order": 2,
                 "name": "Step 2",
                 "referenced_action_id": ref_action_2.id,
-                "on_success_step_id": "step-1",  # Loop back
-                "on_error_step_id": None,
+                "on_success_step_ids": ["step-1"],  # Loop back
+                "on_error_step_ids": [],
             },
         ]
         action.execution_steps = (workflow_steps)
@@ -622,14 +619,14 @@ class TestWorkflowRuntimeStory412StepParameters:
                 "order": 1,
                 "name": "Step 1",
                 "referenced_action_id": self.ref_action_1.id,
-                "on_success_step_id": "s2",
+                "on_success_step_ids": ["s2"],
             },
             {
                 "step_id": "s2",
                 "order": 2,
                 "name": "Step 2",
                 "referenced_action_id": self.ref_action_2.id,
-                "on_success_step_id": None,
+                "on_success_step_ids": [],
             },
         ])
         self.action.save()
@@ -731,7 +728,7 @@ class TestWorkflowRuntimeStory412StepParameters:
                 "order": 1,
                 "name": "Run AAP Action",
                 "referenced_action_id": ref_action.id,
-                "on_success_step_id": None,
+                "on_success_step_ids": [],
             }
         ])
         workflow.save()
@@ -828,7 +825,7 @@ class TestCallPlatformAdapter:
         self.workflow.execution_steps = ([{
             "step_id": "s1", "order": 1, "name": "Step 1",
             "referenced_action_id": self.ref_action.id,
-            "on_success_step_id": None,
+            "on_success_step_ids": [],
         }])
         self.workflow.save()
         self.execution = Execution.objects.create(

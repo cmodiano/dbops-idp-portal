@@ -5,6 +5,7 @@ Code Review Fix Issue #9: Added structlog logging for operations.
 """
 
 import structlog
+from django.db.models import Prefetch
 from integrations.models import IntegrationTypeCatalogue, IntegrationAction
 
 logger = structlog.get_logger(__name__)
@@ -24,7 +25,7 @@ class IntegrationCatalogueService:
         queryset = (
             IntegrationTypeCatalogue.objects
             .filter(is_active=True)
-            .prefetch_related('actions')
+            .prefetch_related(Prefetch('actions', queryset=IntegrationAction.objects.filter(is_active=True)))
             .order_by('code')
         )
         if role in ('platform', 'service'):
@@ -39,7 +40,7 @@ class IntegrationCatalogueService:
         try:
             result = (
                 IntegrationTypeCatalogue.objects
-                .prefetch_related('actions')
+                .prefetch_related(Prefetch('actions', queryset=IntegrationAction.objects.filter(is_active=True)))
                 .get(code=code, is_active=True)
             )
             logger.info("catalogue.get_type_by_code.found", code=code)

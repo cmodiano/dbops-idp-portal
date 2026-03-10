@@ -13,7 +13,7 @@ import { FeatureToggle } from '../../components/FeatureToggle';
 import * as AuthContextModule from '../../contexts/AuthContext';
 
 // Mock the feature flag service
-vi.mock('../../services/featureFlagService', () => ({
+vi.mock('../../services/feature_flag_service', () => ({
   fetchFeatureFlagsStatus: vi.fn(),
   fetchFeatureFlags: vi.fn(),
   updateFeatureFlag: vi.fn(),
@@ -43,7 +43,7 @@ vi.mock('../../services/auth_service', () => ({
   logoutApi: vi.fn(),
 }));
 
-import { fetchFeatureFlagsStatus } from '../../services/featureFlagService';
+import { fetchFeatureFlagsStatus } from '../../services/feature_flag_service';
 
 /** Helper: mock useAuth to return authenticated state. */
 function mockAuthenticated() {
@@ -60,6 +60,7 @@ function mockAuthenticated() {
     isAuthenticated: true,
     isLoading: false,
     login: vi.fn(),
+    loginWithCredentials: vi.fn(),
     logout: vi.fn().mockResolvedValue(undefined),
     refreshToken: vi.fn().mockResolvedValue('integration-test-token'),
     hasTab: vi.fn().mockReturnValue(true),

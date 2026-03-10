@@ -41,23 +41,6 @@ class TestCorrelationIDMiddlewareUnified:
         response = self.middleware(request)
         assert response['X-Correlation-ID'] == custom_id
 
-    def test_reads_legacy_header_as_fallback(self):
-        """Middleware should fallback to X-Idp-Request-Id for backward compat."""
-        legacy_id = 'legacy-request-id-456'
-        request = self.factory.get('/api/v1/test', HTTP_X_IDP_REQUEST_ID=legacy_id)
-        response = self.middleware(request)
-        assert response['X-Correlation-ID'] == legacy_id
-
-    def test_prefers_x_correlation_id_over_legacy(self):
-        """When both headers present, X-Correlation-ID takes priority."""
-        request = self.factory.get(
-            '/api/v1/test',
-            HTTP_X_CORRELATION_ID='preferred-id',
-            HTTP_X_IDP_REQUEST_ID='legacy-id',
-        )
-        response = self.middleware(request)
-        assert response['X-Correlation-ID'] == 'preferred-id'
-
     def test_response_header_is_x_correlation_id(self):
         """Response must use X-Correlation-ID (not X-Idp-Request-Id)."""
         request = self.factory.get('/api/v1/test')

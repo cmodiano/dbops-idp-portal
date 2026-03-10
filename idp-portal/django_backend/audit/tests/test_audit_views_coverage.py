@@ -1,12 +1,12 @@
 """
-Story 55.3 — Couverture `audit/views.py` (AC #2)
+Story 66-19 — Couverture `audit/views.py` (AC #2, #8)
 
 Couvre les branches non couvertes par les tests existants :
 - _is_auditor : None, non-authentifié, ad_groups vide/non-list, profil is_auditor=1
 - _derive_status : chaque valeur status + chaque action_type fallback
 - _build_audit_queryset : entity_type invalide, non-execution, filtres exec, sort/order invalide
 - AuditExecutionsView.get : permissions, limites pagination, entrées non-EXECUTION, details None/non-None
-- AuditExportView.get : permissions, fmt invalide, pdf, total > 10000, non-EXECUTION dans CSV
+- AuditExportView.get : permissions, fmt invalide, pdf rejeté (AUD-MED-02), total > 10000, non-EXECUTION dans CSV
 """
 from __future__ import annotations
 
@@ -404,12 +404,14 @@ class TestAuditExportViewGet:
         response = _call_export_view(rf)
         assert response.status_code == 400
 
-    def test_pdf_fmt_raises_not_implemented(self, rf):
-        """fmt=pdf → 400 avec code NOT_IMPLEMENTED dans la réponse."""
+    def test_pdf_fmt_raises_bad_request(self, rf):
+        """fmt=pdf → 400 BAD_REQUEST (AUD-MED-02: pdf retiré du whitelist, message corrigé)."""
         response = _call_export_view(rf, "fmt=pdf")
         assert response.status_code == 400
         response_body = str(response.data)
-        assert "NOT_IMPLEMENTED" in response_body or "not_implemented" in response_body.lower()
+        # Must NOT return NOT_IMPLEMENTED anymore — pdf is simply invalid
+        assert "NOT_IMPLEMENTED" not in response_body
+        assert "BAD_REQUEST" in response_body or "format invalide" in response_body.lower()
 
     def test_total_over_10000_raises_export_limit_exceeded(self, rf):
         """total > 10000 → 400 avec code EXPORT_LIMIT_EXCEEDED dans la réponse."""
@@ -446,7 +448,47 @@ class TestAuditExportViewGet:
 
 
 # ---------------------------------------------------------------------------
-# Story 55.3 — Branches non couvertes supplémentaires (sous-tâches 2.8 à 2.15)
+# Story 66-19 — Tests warning logs sécurité (AUD-NEW-MED-02)
+# ---------------------------------------------------------------------------
+
+class TestUnauthorizedAccessLogging:
+    """Vérifie que logger.warning est émis sur accès non-autorisé (AUD-NEW-MED-02)."""
+
+    def test_audit_executions_view_logs_warning_on_forbidden(self, rf):
+        """Non-auditeur sur AuditExecutionsView → logger.warning appelé avec ip_address."""
+        with patch("audit.views.logger") as mock_logger:
+            _call_audit_view(rf, auditor=False)
+        mock_logger.warning.assert_called_once()
+        call_kwargs = mock_logger.warning.call_args
+        assert call_kwargs[0][0] == "audit.unauthorized_access"
+        assert call_kwargs[1].get("view") == "AuditExecutionsView"
+        assert "ip_address" in call_kwargs[1]
+
+    def test_audit_export_view_logs_warning_on_forbidden(self, rf):
+        """Non-auditeur sur AuditExportView → logger.warning appelé avec ip_address."""
+        with patch("audit.views.logger") as mock_logger:
+            _call_export_view(rf, auditor=False)
+        mock_logger.warning.assert_called_once()
+        call_kwargs = mock_logger.warning.call_args
+        assert call_kwargs[0][0] == "audit.unauthorized_access"
+        assert call_kwargs[1].get("view") == "AuditExportView"
+        assert "ip_address" in call_kwargs[1]
+
+    def test_authorized_access_does_not_log_warning(self, rf):
+        """Auditeur autorisé → logger.warning PAS appelé."""
+        with patch("audit.views.logger") as mock_logger:
+            with patch("audit.views._build_audit_queryset") as mock_qs:
+                mock_q = MagicMock()
+                mock_q.count.return_value = 0
+                mock_q.__getitem__ = MagicMock(return_value=iter([]))
+                mock_qs.return_value = mock_q
+                with patch("audit.views._resolve_user_names", return_value={}):
+                    _call_audit_view(rf, auditor=True)
+        mock_logger.warning.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Story 66-19 — Branches non couvertes supplémentaires (sous-tâches 2.8 à 2.15)
 # ---------------------------------------------------------------------------
 
 class TestParseIntBranches:

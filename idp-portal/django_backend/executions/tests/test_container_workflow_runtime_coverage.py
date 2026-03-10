@@ -742,6 +742,79 @@ class TestExecuteHandlerStepCoverage(TestCase):
         self.assertEqual(result, ExecutionStatus.FAILED)  # no status → fail-closed
 
 
+# ─── Tests _execute_step — unknown step_type ───────────────────────────────────
+
+@pytest.mark.django_db
+class TestExecuteStepUnknownStepType(TestCase):
+    """_execute_step — step_type inconnu → ValueError."""
+
+    def setUp(self):
+        self.user = UserFactory(username='unknown_step_user', profile='DBA')
+        self.wf = ActionFactory(
+            status=ActionStatus.PUBLISHED, item_type=ActionItemType.WORKFLOW,
+            execution_steps=[{
+                'order': 1, 'name': 'Unknown Step', 'step_id': 'u1',
+                'step_type': 'unknown_type_xyz',
+            }],
+            created_by=self.user,
+        )
+
+    @patch('executions.container_workflow_runtime.AuditService')
+    def test_unknown_step_type_raises_value_error(self, mock_audit):
+        """step_type inconnu → ValueError."""
+        execution = Execution.objects.create(
+            action=self.wf, user=self.user, environment=TEST_ENV, status=ExecutionStatus.RUNNING,
+        )
+        runtime = ContainerWorkflowRuntime(execution)
+        step = self.wf.execution_steps[0]
+
+        with self.assertRaises(ValueError) as cm:
+            runtime._execute_step(step)
+        self.assertIn('unknown_type_xyz', str(cm.exception))
+
+
+# ─── Tests _execute_platform_step — output_mapping not dict ────────────────────
+
+@pytest.mark.django_db
+class TestPlatformStepOutputMappingNotDict(TestCase):
+    """_execute_platform_step — output_mapping non-dict → warning + fallback {}."""
+
+    def setUp(self):
+        self.user = UserFactory(username='output_map_user', profile='DBA')
+        self.action_a = ActionFactory(
+            status=ActionStatus.PUBLISHED, item_type=ActionItemType.ACTION, created_by=self.user,
+        )
+        self.wf = ActionFactory(
+            status=ActionStatus.PUBLISHED, item_type=ActionItemType.WORKFLOW,
+            execution_steps=[{
+                'order': 1, 'name': 'Platform Step', 'step_id': 'ps1',
+                'referenced_action_id': self.action_a.id,
+                'output_mapping': ['invalid', 'list'],  # list, not dict
+            }],
+            created_by=self.user,
+        )
+
+    @patch('executions.container_workflow_runtime.logger')
+    @patch('executions.container_workflow_runtime.AuditService')
+    def test_output_mapping_not_dict_logs_warning_and_continues(self, mock_audit, mock_logger):
+        """output_mapping est une liste → warning loggé, fallback {}, step COMPLETED."""
+        execution = Execution.objects.create(
+            action=self.wf, user=self.user, environment=TEST_ENV, status=ExecutionStatus.RUNNING,
+        )
+        runtime = ContainerWorkflowRuntime(execution)
+
+        with patch('executions.container_workflow_runtime.SimulationService.is_enabled', return_value=False):
+            result = runtime.run_sync()
+
+        self.assertEqual(result, ExecutionStatus.COMPLETED)
+        self.assertEqual(runtime._step_outputs.get('ps1', {}), {})
+        mock_logger.warning.assert_called_once()
+        self.assertEqual(
+            mock_logger.warning.call_args[0][0],
+            "container_workflow_output_mapping_not_dict",
+        )
+
+
 # ─── Tests _execute_step — input_mapping non-dict ────────────────────────────
 
 @pytest.mark.django_db

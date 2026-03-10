@@ -176,12 +176,12 @@ export function IntegrationForm({
             config = { ...parsed };
           } catch { message.error('Config JSON invalide. Vérifiez la syntaxe.'); return; }
         }
-        if (!hasAdvanced) {
-          const schemaVal = (values.schema?.trim() || null) ?? null;
-          const tableVal = (values.table?.trim() || null) ?? null;
-          if (schemaVal != null && schemaVal !== '') config.schema = schemaVal;
-          if (tableVal != null && tableVal !== '') config.table = tableVal;
-        }
+        // Always merge schema and table from form fields when provided (backend uses config.schema
+        // for entities/flat_table; when hasAdvanced, parsed JSON may not include top-level schema).
+        const schemaVal = (values.schema?.trim() || null) ?? null;
+        const tableVal = (values.table?.trim() || null) ?? null;
+        if (schemaVal != null && schemaVal !== '') config.schema = schemaVal;
+        if (tableVal != null && tableVal !== '') config.table = tableVal;
         if (Object.keys(config).length > 0) (payload as IntegrationCreate).config = config;
       }
       const res = await onSubmit(payload);

@@ -9,7 +9,7 @@
  * - Same pattern as ParametersEditor (no drag-and-drop — order doesn't matter)
  */
 
-import React from 'react';
+import type { FC } from 'react';
 import {
   Button,
   Input,
@@ -50,7 +50,7 @@ interface RuleCardProps {
   onRemove: (index: number) => void;
 }
 
-const RuleCard: React.FC<RuleCardProps> = ({
+const RuleCard: FC<RuleCardProps> = ({
   rule,
   index,
   allRules,
@@ -143,7 +143,7 @@ const RuleCard: React.FC<RuleCardProps> = ({
   );
 };
 
-export const ImpactRulesEditor: React.FC<ImpactRulesEditorProps> = ({ value = EMPTY_RULES, onChange }) => {
+export const ImpactRulesEditor: FC<ImpactRulesEditorProps> = ({ value = EMPTY_RULES, onChange }) => {
   const { environmentOptions, loading: environmentsLoading } = useEnvironments();
 
   const handleAdd = () => {

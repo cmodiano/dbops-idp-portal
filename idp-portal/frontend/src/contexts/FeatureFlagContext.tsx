@@ -6,7 +6,7 @@
  */
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { fetchFeatureFlagsStatus, type FeatureFlagsStatus } from '../services/featureFlagService';
+import { fetchFeatureFlagsStatus, type FeatureFlagsStatus } from '../services/feature_flag_service';
 import { useAuth } from './AuthContext';
 import logger from '../services/logger';
 

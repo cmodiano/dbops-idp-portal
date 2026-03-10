@@ -4,14 +4,13 @@ Loads all integration types and their actions from the consolidated fixture.
 Usage: python manage.py seed_integration_types [--force]
 """
 
-import logging
-
+import structlog
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
 
 from integrations.models import IntegrationAction, IntegrationTypeCatalogue
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class Command(BaseCommand):
@@ -50,8 +49,8 @@ class Command(BaseCommand):
                 )
             )
             logger.info(
-                'seed_integration_types: skip (all types exist)',
-                extra={'type_count': type_count, 'action_count': action_count},
+                'seed_integration_types_skip',
+                type_count=type_count, action_count=action_count,
             )
             return
 
@@ -83,6 +82,6 @@ class Command(BaseCommand):
             )
         )
         logger.info(
-            'seed_integration_types: complete',
-            extra={'type_count': type_count, 'action_count': action_count},
+            'seed_integration_types_complete',
+            type_count=type_count, action_count=action_count,
         )

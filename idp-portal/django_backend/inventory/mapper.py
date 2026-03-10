@@ -163,7 +163,7 @@ class InventoryMapper:
             raise MapperValidationError(
                 f"Column concept '{concept}' not mapped for entity '{entity_name}'"
             )
-        _validate_column_name(col)
+        validate_column_name(col)
         return cast(str, col)
 
     def get_id_column(self, entity_name: str) -> str:
@@ -189,7 +189,7 @@ class InventoryMapper:
             raise MapperValidationError(
                 f"Entity '{entity_name}' missing 'id_column' in config"
             )
-        _validate_column_name(id_col)
+        validate_column_name(id_col)
         return cast(str, id_col)
 
     def refs_join_on_id(self, entity_name: str) -> bool:
@@ -241,12 +241,12 @@ class InventoryMapper:
 
         # Include id_column first if defined
         if id_col:
-            _validate_column_name(id_col)
+            validate_column_name(id_col)
             parts.append(f"{id_col} AS id")
 
         # Add mapped columns
         for concept, real_col in columns.items():
-            _validate_column_name(real_col)
+            validate_column_name(real_col)
             parts.append(f"{real_col} AS {concept}")
 
         return ", ".join(parts)
@@ -381,14 +381,14 @@ class InventoryMapper:
             else:
                 for concept, col_name in columns.items():
                     try:
-                        _validate_column_name(col_name)
+                        validate_column_name(col_name)
                     except MapperValidationError as e:
                         errors.append(f"Entity '{entity_name}', concept '{concept}': {e}")
 
             id_col = entity_config.get('id_column')
             if id_col:
                 try:
-                    _validate_column_name(id_col)
+                    validate_column_name(id_col)
                 except MapperValidationError as e:
                     errors.append(f"Entity '{entity_name}' id_column: {e}")
 
@@ -412,7 +412,7 @@ class InventoryMapper:
                 else:
                     for concept, col_name in columns.items():
                         try:
-                            _validate_column_name(col_name)
+                            validate_column_name(col_name)
                         except MapperValidationError as e:
                             errors.append(f"flat_table concept '{concept}': {e}")
 
@@ -459,9 +459,14 @@ def _validate_table_name(name: str) -> None:
             )
 
 
-def _validate_column_name(name: str) -> None:
+def validate_column_name(name: str) -> None:
     """
     Validate a SQL column name against safe pattern and Oracle length limits.
+
+    Public module-level function — use this instead of the private alias.
+    See INV-LOW-01: the private alias ``_validate_column_name`` is kept for backward
+    compatibility with tests that import it directly; new code should import
+    ``validate_column_name``.
 
     Args:
         name: Column name to validate
@@ -493,3 +498,7 @@ def _validate_column_name(name: str) -> None:
         raise MapperValidationError(
             f"Column name '{name}' exceeds Oracle 30 character limit (length: {len(name)})"
         )
+
+
+# Backward-compatible private alias — kept for existing tests (INV-LOW-01)
+_validate_column_name = validate_column_name

@@ -14,7 +14,7 @@ from inventory.mapper import (
     SAFE_COLUMN_NAME_PATTERN,
     InventoryMapper,
     MapperValidationError,
-    _validate_column_name,
+    validate_column_name,  # INV-LOW-01: use public name instead of private _validate_column_name
 )
 from inventory.mapping_validator import MappingValidator
 from inventory.result_paginator import ResultPaginator
@@ -38,7 +38,7 @@ class InventoryQueryBuilder:
         parts = []
         id_col = entity_cfg.get('id_column')
         if id_col:
-            _validate_column_name(id_col)
+            validate_column_name(id_col)
             parts.append(f"{table_alias}.{id_col} AS id")
         for concept, col in entity_cfg.get('columns', {}).items():
             if not SAFE_COLUMN_NAME_PATTERN.match(concept):
@@ -46,7 +46,7 @@ class InventoryQueryBuilder:
                     f"Invalid concept name: '{concept}'. "
                     "Must match pattern: [A-Za-z_][A-Za-z0-9_]*"
                 )
-            _validate_column_name(col)
+            validate_column_name(col)
             parts.append(f"{table_alias}.{col} AS {concept}")
         return ", ".join(parts)
 

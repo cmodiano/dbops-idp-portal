@@ -127,7 +127,6 @@ admin/
 ├── IntegrationsTable.tsx      # Table des intégrations
 ├── ParametersEditor.tsx       # Éditeur paramètres JSON Schema
 ├── ProfileForm.tsx            # Formulaire profil utilisateur
-├── ProfileImportModal.tsx     # Modal import YAML profils
 ├── ProfileWizard.tsx          # Wizard création profil
 ├── ProfilesTable.tsx          # Table des profils
 ├── RemediationRulesEditor.tsx # Éditeur actions correctives

@@ -132,6 +132,7 @@ class RetryHandler:
                 execution=self.execution,
                 step_order=step_order,
                 step_name=step.get('name', f"Step {step.get('order', 0)}"),
+                config_step_id=step_id,
                 step_type='platform',
                 status=ExecutionStepStatus.FAILED,
                 started_at=timezone.now(),

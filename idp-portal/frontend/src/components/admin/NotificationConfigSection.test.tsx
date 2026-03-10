@@ -11,7 +11,7 @@ const emptyConfig: NotificationConfig = {
   channels: [
     { type: 'email', enabled: false, conditions: [], recipient: 'requester' },
     { type: 'teams', enabled: false, conditions: [], webhook_url_ref: '' },
-    { type: 'page_dba', enabled: false, conditions: [], api_url: '' },
+    { type: 'page_oncall', enabled: false, conditions: [], api_url: '' },
   ],
   page_individual_enabled: false,
 };
@@ -22,7 +22,7 @@ describe('NotificationConfigSection', () => {
     expect(screen.getByText('Email')).toBeInTheDocument();
     expect(screen.getByText('Teams (webhook)')).toBeInTheDocument();
     expect(screen.getByText('Page individuel')).toBeInTheDocument();
-    expect(screen.getByText('Page DBA on-call')).toBeInTheDocument();
+    expect(screen.getByText('Page on-call')).toBeInTheDocument();
   });
 
   it('does not show email details when email is disabled', () => {
@@ -84,15 +84,15 @@ describe('NotificationConfigSection', () => {
     expect(newConfig.page_individual_enabled).toBe(true);
   });
 
-  it('calls onChange when toggling page_dba', () => {
+  it('calls onChange when toggling page_oncall', () => {
     const onChange = vi.fn();
     render(<NotificationConfigSection value={emptyConfig} onChange={onChange} />);
-    const dbaSwitch = screen.getByLabelText('Activer le page DBA');
-    fireEvent.click(dbaSwitch);
+    const oncallSwitch = screen.getByLabelText('Activer le page on-call');
+    fireEvent.click(oncallSwitch);
     expect(onChange).toHaveBeenCalledTimes(1);
     const newConfig = onChange.mock.calls[0][0] as NotificationConfig;
-    const dbaChannel = newConfig.channels.find((ch) => ch.type === 'page_dba');
-    expect(dbaChannel?.enabled).toBe(true);
+    const oncallChannel = newConfig.channels.find((ch) => ch.type === 'page_oncall');
+    expect(oncallChannel?.enabled).toBe(true);
   });
 
   it('shows info alert when page_individual is enabled', () => {
@@ -104,11 +104,11 @@ describe('NotificationConfigSection', () => {
     expect(screen.getByText(/prod.*critical/i)).toBeInTheDocument();
   });
 
-  it('shows info alert when page_dba is enabled', () => {
+  it('shows info alert when page_oncall is enabled', () => {
     const config: NotificationConfig = {
       ...emptyConfig,
       channels: emptyConfig.channels.map((ch) =>
-        ch.type === 'page_dba' ? { ...ch, enabled: true } : ch,
+        ch.type === 'page_oncall' ? { ...ch, enabled: true } : ch,
       ),
     };
     render(<NotificationConfigSection value={config} onChange={vi.fn()} />);
@@ -129,15 +129,15 @@ describe('NotificationConfigSection', () => {
     expect(screen.getByLabelText('Activer le page DBA')).not.toBeChecked();
   });
 
-  it('shows DBA API URL input when page_dba is enabled', () => {
+  it('shows on-call API URL input when page_oncall is enabled', () => {
     const config: NotificationConfig = {
       ...emptyConfig,
       channels: emptyConfig.channels.map((ch) =>
-        ch.type === 'page_dba' ? { ...ch, enabled: true } : ch,
+        ch.type === 'page_oncall' ? { ...ch, enabled: true } : ch,
       ),
     };
     render(<NotificationConfigSection value={config} onChange={vi.fn()} />);
-    expect(screen.getByLabelText('URL API page DBA')).toBeInTheDocument();
+    expect(screen.getByLabelText('URL API page on-call')).toBeInTheDocument();
   });
 });
 
@@ -146,7 +146,7 @@ describe('NotificationConfigSection — coverage extension', () => {
     channels: [
       { type: 'email', enabled: false, conditions: [], recipient: 'requester' },
       { type: 'teams', enabled: false, conditions: [], webhook_url_ref: '' },
-      { type: 'page_dba', enabled: false, conditions: [], api_url: '' },
+      { type: 'page_oncall', enabled: false, conditions: [], api_url: '' },
     ],
     page_individual_enabled: false,
   };
@@ -185,21 +185,21 @@ describe('NotificationConfigSection — coverage extension', () => {
     expect(teamsChannel?.webhook_url_ref).toBe('https://webhook.office.com/test');
   });
 
-  it('calls onChange when page_dba api_url changes', () => {
+  it('calls onChange when page_oncall api_url changes', () => {
     const onChange = vi.fn();
     const config: NotificationConfig = {
       ...emptyConfig,
       channels: emptyConfig.channels.map((ch) =>
-        ch.type === 'page_dba' ? { ...ch, enabled: true } : ch,
+        ch.type === 'page_oncall' ? { ...ch, enabled: true } : ch,
       ),
     };
     render(<NotificationConfigSection value={config} onChange={onChange} />);
-    const apiInput = screen.getByLabelText('URL API page DBA');
+    const apiInput = screen.getByLabelText('URL API page on-call');
     fireEvent.change(apiInput, { target: { value: 'https://pagerduty.com/api' } });
     expect(onChange).toHaveBeenCalledTimes(1);
     const newConfig = onChange.mock.calls[0][0] as NotificationConfig;
-    const dbaChannel = newConfig.channels.find((ch) => ch.type === 'page_dba');
-    expect(dbaChannel?.api_url).toBe('https://pagerduty.com/api');
+    const oncallChannel = newConfig.channels.find((ch) => ch.type === 'page_oncall');
+    expect(oncallChannel?.api_url).toBe('https://pagerduty.com/api');
   });
 
   it('handles config with empty channels array (uses defaults)', () => {
@@ -215,7 +215,7 @@ describe('NotificationConfigSection — coverage extension', () => {
 
   it('updateChannel adds missing default channels when updating', () => {
     const onChange = vi.fn();
-    // Config with only email channel (missing teams and page_dba)
+    // Config with only email channel (missing teams and page_oncall)
     const configPartial: NotificationConfig = {
       channels: [{ type: 'email', enabled: false, conditions: [], recipient: 'requester' }],
       page_individual_enabled: false,
@@ -266,12 +266,12 @@ describe('NotificationConfigSection — coverage extension', () => {
     }
   });
 
-  it('calls onChange with conditions when page_dba conditions checkbox changes (line 226)', () => {
+  it('calls onChange with conditions when page_oncall conditions checkbox changes', () => {
     const onChange = vi.fn();
     const config: NotificationConfig = {
       ...emptyConfig,
       channels: emptyConfig.channels.map((ch) =>
-        ch.type === 'page_dba' ? { ...ch, enabled: true } : ch,
+        ch.type === 'page_oncall' ? { ...ch, enabled: true } : ch,
       ),
     };
     render(<NotificationConfigSection value={config} onChange={onChange} />);

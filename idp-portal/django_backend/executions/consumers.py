@@ -139,7 +139,7 @@ class ExecutionConsumer(AuthenticatedWebSocketConsumer):
         except Exception:  # noqa: BLE001
             pass
 
-        # Full state replay (legacy path, always sent on connect)
+        # Full state replay (snapshot on connect)
         def _fetch_state() -> tuple:
             from executions.models import Execution, ExecutionStep
 

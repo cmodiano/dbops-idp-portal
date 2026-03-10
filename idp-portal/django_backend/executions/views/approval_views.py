@@ -22,7 +22,7 @@ from core.exceptions import BadRequestError, NotFoundError
 from core.middleware import get_correlation_id
 from core.models import AuditActionType, AuditEntityType
 from core.pagination import paginate_queryset
-from core.permissions import IsDBAOrDBOPS, is_admin_user
+from core.permissions import IsAdminUser, is_admin_user
 from core.services import AuditService
 from profiles.models import Profile
 from executions.models import (
@@ -148,20 +148,92 @@ def _validate_approval_gate_step(step: ExecutionStep) -> None:
 
 
 def _get_step_config(step: ExecutionStep) -> dict:
-    """Retourne la définition du step depuis action.execution_steps."""
+    """Retourne la définition du step depuis action.execution_steps.
+
+    Uses config_step_id (robust ID-based matching) with fallback to step_name
+    for backward compatibility with older ExecutionStep records.
+    """
     action = step.execution.action
     execution_steps = action.execution_steps or []
     for s in execution_steps:
         if isinstance(s, dict):
-            if s.get("step_id") == step.step_name or s.get("name") == step.step_name:
+            # Primary: match by config_step_id (robust, always a UUID)
+            if step.config_step_id and s.get("step_id") == step.config_step_id:
+                return s
+            # Fallback for old records without config_step_id
+            if not step.config_step_id and (
+                s.get("step_id") == step.step_name or s.get("name") == step.step_name
+            ):
                 return s
     logger.warning(
         "step_config_not_found",
         step_name=step.step_name,
+        config_step_id=step.config_step_id,
         execution_id=step.execution_id,
         step_id=step.id,
     )
     return {}
+
+
+def _get_on_success_step_ids(step_config: dict, execution_steps: list) -> list[str]:
+    """Story 67.4: Retourne la liste des step_ids à reprendre après approbation.
+    Priorité: on_success_step_ids (pluriel) > on_success_step_id (singulier) > _get_next_step_id_by_order.
+    """
+    ids = step_config.get("on_success_step_ids")
+    if isinstance(ids, list) and len(ids) > 0:
+        return [s for s in ids if isinstance(s, str) and s]
+    sid = step_config.get("on_success_step_id")
+    if sid and isinstance(sid, str):
+        return [sid]
+    next_id = _get_next_step_id_by_order(execution_steps, step_config)
+    return [next_id] if next_id else []
+
+
+def _get_next_step_id_by_order(execution_steps: list, current_step_config: dict) -> str | None:
+    """Retourne le step_id du step suivant par ordre (fallback quand on_success_step_id absent).
+    Exclut les members de parallel_group (non routables directement, comme dans le runtime).
+    Utilise un fallback par identité (step_id/name) quand la comparaison par order échoue.
+    """
+    # Collect member step_ids from parallel_group steps
+    member_step_ids: set[str] = set()
+    for s in execution_steps:
+        if isinstance(s, dict) and s.get("step_type") == "parallel_group":
+            parallel_steps = s.get("parallel_steps")
+            if isinstance(parallel_steps, list):
+                for ps_id in parallel_steps:
+                    if isinstance(ps_id, str) and ps_id:
+                        member_step_ids.add(ps_id)
+    # Filter to non-member steps only (same sequence the runtime uses for direct routing)
+    candidate_steps = [
+        s
+        for s in execution_steps
+        if isinstance(s, dict)
+        and s.get("step_id")
+        and s.get("step_id") not in member_step_ids
+    ]
+    sorted_steps = sorted(
+        enumerate(candidate_steps),
+        key=lambda ix: (ix[1].get("order", 0), ix[0]),
+    )
+    current_order = current_step_config.get("order", 0)
+    current_sid = current_step_config.get("step_id")
+    current_name = current_step_config.get("name")
+
+    # Try identity-based match first: find current step in sorted list, return next
+    if current_sid or current_name:
+        for i, (_orig_idx, s) in enumerate(sorted_steps):
+            if (current_sid and s.get("step_id") == current_sid) or (
+                current_name and s.get("name") == current_name
+            ):
+                if i + 1 < len(sorted_steps):
+                    return sorted_steps[i + 1][1].get("step_id")
+                return None  # current step is last
+
+    # Fallback: first step with strictly greater order
+    for _orig_idx, s in sorted_steps:
+        if s.get("order", 0) > current_order:
+            return s.get("step_id")
+    return None
 
 
 def _find_first_waiting_approval_step(execution_id: int) -> ExecutionStep | None:
@@ -252,7 +324,7 @@ def _get_execution_audit_context(execution: Execution) -> dict:
 class PendingApprovalsView(APIView):
     """GET /executions/pending-approvals (DBA/DBOPS only)"""
 
-    permission_classes = [IsAuthenticated, IsDBAOrDBOPS]  # AC2: Story 26.8
+    permission_classes = [IsAuthenticated, IsAdminUser]  # AC2: Story 26.8
 
     @extend_schema(
         tags=["executions"],
@@ -378,17 +450,29 @@ class ApproveExecutionView(APIView):
                 step.approval_comment = ""
                 step.status = ExecutionStepStatus.COMPLETED
                 step.completed_at = timezone.now()
+                # Update output so gate_status reflects approval (UI shows correct state)
+                output = step.get_output() or {}
+                gate_status = output.get("gate_status", [])
+                for gs in gate_status:
+                    if isinstance(gs, dict) and gs.get("type") == "approval_granted":
+                        gs["satisfied"] = True
+                        gs["reason"] = f"Approuvé par utilisateur {user_id}"
+                        break
+                output["gate_status"] = gate_status
+                step.set_output(output)
                 step.save()
                 # V113: Durable approval event + dequeue runnable step
                 from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
                 from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
                 WorkflowEventService.emit_approval_granted(execution_id, step, approved_by=user_id)
                 RunnableStepService.delete(step.id)
-                on_success_step_id = step_config.get("on_success_step_id")
-                if on_success_step_id:
+                execution_steps = step.execution.action.execution_steps or []
+                on_success_step_ids = _get_on_success_step_ids(step_config, execution_steps)
+                if on_success_step_ids:
+                    _eid, _sids = execution_id, on_success_step_ids
                     transaction.on_commit(
                         lambda: resume_container_workflow_from_gate.apply_async(
-                            args=[execution_id, on_success_step_id]
+                            args=[_eid, _sids], queue="default"
                         )
                     )
                 else:
@@ -405,7 +489,7 @@ class ApproveExecutionView(APIView):
                     details={
                         "step_id": step.id,
                         "step_name": step.step_name,
-                        "on_success_step_id": on_success_step_id,
+                        "on_success_step_ids": on_success_step_ids,
                         "via_legacy_endpoint": True,
                         "action_name": step.execution.action.name if step.execution.action else None,
                         **_get_execution_audit_context(step.execution),
@@ -563,9 +647,10 @@ class RejectExecutionView(APIView):
                 RunnableStepService.delete(step.id)
                 on_error_step_id = step_config.get("on_error_step_id")
                 if on_error_step_id:
+                    _eid, _eid_err = execution_id, on_error_step_id
                     transaction.on_commit(
-                        lambda: resume_container_workflow_from_gate.apply_async(
-                            args=[execution_id, on_error_step_id]
+                        lambda eid=_eid, sid=_eid_err: resume_container_workflow_from_gate.apply_async(  # type: ignore[misc]
+                            args=[eid, sid], queue="default"
                         )
                     )
                 else:
@@ -705,6 +790,18 @@ class ApproveStepView(APIView):
         step.approval_comment = request.data.get("comment", "") or ""
         step.status = ExecutionStepStatus.COMPLETED
         step.completed_at = timezone.now()
+
+        # Update output so gate_status reflects approval (UI shows correct state)
+        output = step.get_output() or {}
+        gate_status = output.get("gate_status", [])
+        for gs in gate_status:
+            if isinstance(gs, dict) and gs.get("type") == "approval_granted":
+                gs["satisfied"] = True
+                gs["reason"] = f"Approuvé par utilisateur {user_id}"
+                break
+        output["gate_status"] = gate_status
+        step.set_output(output)
+
         step.save()
 
         # V113: Durable approval event + dequeue runnable step
@@ -713,12 +810,13 @@ class ApproveStepView(APIView):
         WorkflowEventService.emit_approval_granted(execution_id, step, approved_by=user_id)
         RunnableStepService.delete(step.id)
 
-        on_success_step_id = step_config.get("on_success_step_id")
-
-        if on_success_step_id:
+        execution_steps = step.execution.action.execution_steps or []
+        on_success_step_ids = _get_on_success_step_ids(step_config, execution_steps)
+        if on_success_step_ids:
+            _eid, _sids = execution_id, on_success_step_ids
             transaction.on_commit(
                 lambda: resume_container_workflow_from_gate.apply_async(
-                    args=[execution_id, on_success_step_id]
+                    args=[_eid, _sids], queue="default"
                 )
             )
         else:
@@ -736,7 +834,7 @@ class ApproveStepView(APIView):
             details={
                 "step_id": step.id,
                 "step_name": step.step_name,
-                "on_success_step_id": on_success_step_id,
+                "on_success_step_ids": on_success_step_ids,
                 "action_name": step.execution.action.name if step.execution.action else None,
                 **_get_execution_audit_context(step.execution),
             },
@@ -749,7 +847,7 @@ class ApproveStepView(APIView):
             step_name=step.step_name,
             execution_id=execution_id,
             user_id=user_id,
-            on_success_step_id=on_success_step_id,
+            on_success_step_ids=on_success_step_ids,
             correlation_id=correlation_id,
         )
 
@@ -807,9 +905,10 @@ class RejectStepView(APIView):
         on_error_step_id = step_config.get("on_error_step_id")
 
         if on_error_step_id:
+            _eid, _eid_err = execution_id, on_error_step_id
             transaction.on_commit(
-                lambda: resume_container_workflow_from_gate.apply_async(
-                    args=[execution_id, on_error_step_id]
+                lambda eid=_eid, sid=_eid_err: resume_container_workflow_from_gate.apply_async(  # type: ignore[misc]
+                    args=[eid, sid], queue="default"
                 )
             )
         else:

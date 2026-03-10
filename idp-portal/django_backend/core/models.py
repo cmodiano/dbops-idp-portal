@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import json
-import logging
+import structlog
 from typing import Any
 from django.db import models
 from django.db import IntegrityError
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class AuditActionType(models.TextChoices):
@@ -49,6 +49,8 @@ class AuditActionType(models.TextChoices):
     SCHEDULED_EXECUTION_EXECUTED = 'SCHEDULED_EXECUTION_EXECUTED', 'Scheduled Execution Executed'
     SCHEDULED_EXECUTION_CANCELLED = 'SCHEDULED_EXECUTION_CANCELLED', 'Scheduled Execution Cancelled'
     SCHEDULED_EXECUTION_RECURRING_DISABLED = 'SCHEDULED_EXECUTION_RECURRING_DISABLED', 'Scheduled Execution Recurring Disabled'
+    # story 66-16 review: ENABLED for toggle re-activation (distinct from CREATED which is for new pattern insert)
+    SCHEDULED_EXECUTION_RECURRING_ENABLED = 'SCHEDULED_EXECUTION_RECURRING_ENABLED', 'Scheduled Execution Recurring Enabled'
     # Story 42.1: Celery Beat triggered a scheduled execution
     SCHEDULED_EXECUTION_CELERY_TRIGGERED = 'SCHEDULED_EXECUTION_CELERY_TRIGGERED', 'Scheduled Execution Celery Triggered'
     # User types (added for AuthService)
@@ -58,6 +60,9 @@ class AuditActionType(models.TextChoices):
     USER_LOGOUT = 'USER_LOGOUT', 'User Logout'
     USER_REFRESH = 'USER_REFRESH', 'User Refresh Token'
     API_KEY_TOKEN_EXCHANGE = 'API_KEY_TOKEN_EXCHANGE', 'API Key Token Exchange'  # pragma: allowlist secret
+    # Story 66-17 review: audit trail for API key lifecycle (SOC1 compliance)
+    API_KEY_CREATED = 'API_KEY_CREATED', 'API Key Created'  # pragma: allowlist secret
+    API_KEY_REVOKED = 'API_KEY_REVOKED', 'API Key Revoked'  # pragma: allowlist secret
     # Story 49.3: Service account LDAP login
     SERVICE_LOGIN = 'SERVICE_LOGIN', 'Service Account Login'
     # Story 59.6 SEC-6: Dev bypass authentication audit type

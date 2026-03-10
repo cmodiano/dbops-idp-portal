@@ -4,7 +4,7 @@
  * Extracted from WorkflowBuilderCanvas.tsx.
  * Shows success/error alert after workflow validation.
  */
-import React from 'react';
+import type { FC } from 'react';
 import { Alert } from 'antd';
 import { WarningOutlined } from '@ant-design/icons';
 import type { ValidationResult } from '../../utils/workflowValidation';
@@ -13,7 +13,7 @@ export interface WorkflowValidationAlertProps {
   validation: ValidationResult | null;
 }
 
-export const WorkflowValidationAlert: React.FC<WorkflowValidationAlertProps> = ({ validation }) => {
+export const WorkflowValidationAlert: FC<WorkflowValidationAlertProps> = ({ validation }) => {
   if (!validation) return null;
 
   return (

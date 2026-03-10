@@ -120,5 +120,8 @@ class TestStory412WorkflowStepParameters(TestCase):
         created = Execution.objects.order_by("-id").first()
         assert created is not None
         params = created.get_parameters() or {}
-        assert (params.get("workflow_step_parameters") or {}).get("1") == {"parameters": {"foo": "bar"}}
+        wsp = (params.get("workflow_step_parameters") or {}).get("1") or {}
+        assert wsp.get("parameters") == {"foo": "bar"}
+        assert "step_id" in wsp
+        assert "step_name" in wsp
 

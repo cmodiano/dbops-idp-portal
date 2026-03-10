@@ -161,4 +161,5 @@ describe('ActionPalette', () => {
     fireEvent.click(btn);
     expect(onAddSpecialStep).toHaveBeenCalledWith('schedule_execution');
   });
+
 });

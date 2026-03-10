@@ -1,0 +1,883 @@
+# generated: 2026-01-27
+# project: test
+# project_key: test
+# tracking_system: file-system
+# story_location: implementation-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog → in-progress: Automatically when first story is created (via create-story)
+#   - in-progress → done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Implementation complete, ready for review
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - SM typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+
+generated: 2026-01-27
+project: test
+project_key: test
+tracking_system: file-system
+story_location: implementation-artifacts
+development_status:
+    # === Epic 1: Bootstrap Projet & Authentification (MVP) ===
+    epic-1: done
+    1-1-initialisation-monorepo-et-environnement-de-developpement: done
+    1-2-authentification-saml-2-0-et-session-jwt: done
+    1-3-profil-rbac-et-navigation-du-portail: done
+    1-4-observabilite-health-check-et-ci-cd: done
+    epic-1-retrospective: optional
+    # === Epic 2: Administration du Catalogue - Karim (MVP) ===
+    epic-2: in-progress
+    2-1-creer-une-action-avec-ses-metadonnees: done
+    2-2-definir-les-etapes-execution-et-changement-servicenow: done
+    2-3-configurer-le-rbac-par-action: done # OBSOLETE - remplace par 2-9 a 2-14
+    2-4-publier-et-gerer-le-cycle-de-vie: done
+    2-5-preview-temps-reel-de-laction: done
+    2-6-systeme-de-tags-flexibles-pour-les-actions: done
+    2-7-refactorisation-des-connecteurs-generiques: done # code-review 2026-01-28
+    2-8-suppression-du-rail-cab-et-simplification-servicenow: done # code-review 2026-01-28
+    2-9-gestion-des-profiles-dynamiques: done # code-review 2026-01-28
+    2-10-permissions-actions-par-profile: done # code-review 2026-01-28
+    2-11-permissions-targets-par-profile: done # code-review 2026-01-28
+    2-12-cumul-des-permissions-multi-profiles: done # code-review 2026-01-28
+    2-13-import-export-profiles-as-code-yaml: done # code-review 2026-01-28
+    2-14-refactoring-supprimer-ancien-rbac-par-action: done # 2026-01-29
+    2-15-dark-mode-toggle: done # Quick win UX - stakeholder request; code-review 2026-01-28
+    2-16-branding-portail-dbops: done # Quick win - logo + naming
+    2-17-editeur-visuel-de-parametres-daction: done # FR1 - Remplace input JSON par editeur visuel (code-review 2026-01-29)
+    2-18-editeur-visuel-des-regles-dimpact: done # FR1 - Regles d'impact par environnement; adversarial review approved 2026-01-29
+    2-19-setup-environnement-oracle-dev-avec-docker: done # Tech debt - Docker Compose Oracle pour dev (code-review 2026-01-29)
+    2-20-refactoring-migrations-flyway-et-identity-columns: done # Tech debt - Flyway natif + identity columns (code-review 2026-01-29)
+    2-21-code-modele-de-changement-preapprouve: done # Change model code ServiceNow par action (code-review 2026-01-29)
+    2-22-wizard-de-creation-et-edition-daction: done # UX - Wizard 3 etapes pour creation/edition action (code-review 2026-01-29)
+    2-23-suppression-de-la-categorie-tags-only: done # Simplification - tags only (2026-01-29)  # Simplification - utiliser uniquement les tags
+    2-24-changement-servicenow-conditionnel-par-environnement: done # Config changement requis + code modele par env (code-review 2026-01-29)
+    2-25-wizard-de-creation-et-edition-de-profil-avec-permissions: done # Wizard 3 etapes pour profils + permissions (code-review 2026-01-29)
+    2-26-visualisation-format-yaml-import-profils: done # UX - Exemple YAML + template telecharger (code-review 2026-01-29)
+    2-27-backend-integrations-plateformes-distantes: done # Config plateformes distantes (AAP, Terraform, etc.) — type, URL, credential_ref, icon (code-review 2026-01-29)
+    2-28-frontend-admin-integrations-liste-formulaire-icone: done # Onglet Admin Integrations + liste, formulaire, icone (code-review 2026-01-29)
+    2-29-separation-boutons-creation-action-et-workflow-admin: done # 2026-02-06: Code review — 1 HIGH + 3 MEDIUM + 3 LOW fixes applied, tests 21/26 ActionWizard + 5/5 AdminPage pass
+    2-30-categories-definir-sur-action-et-gerer-admin: done # 1) Définir catégorie sur une action (form + API) 2) Gérer catégories (CRUD admin, onglets catalogue dynamiques) — 26 backend + 13 frontend tests pass
+    2-31-spec-validation-cumul-permissions-dba-multi-technologies: done # Code review 2026-02-26: 6 fixes (H1 intégration tests, H2 doc formats, M2-M4, L1)
+    epic-2-retrospective: optional
+    # === Epic 3: Decouverte du Catalogue - Marc (MVP) ===
+    epic-3: in-progress
+    3-1-catalogue-actions-avec-modes-affichage-et-favoris: done # code-review fixes 2026-01-29
+    3-2-fiche-descriptive-en-drawer-lateral: done # Code review + tests passed 2026-01-29
+    3-3-recherche-et-filtrage-du-catalogue-par-tags: done # Code review approved + fixes 2026-01-29
+    3-4-documentation-contextuelle-dune-action: done # All tasks completed 2026-01-29
+    3-5-nuage-tags-et-clarte-favoris: done # Nuage de tags multi-select + tooltip/aria-label favori (code-review 2026-01-29)
+    3-6-toasts-liquid-glass: done # UX — Toasts (message/notification) alignés sur design system liquid glass (transparence, blur, coins lisses)
+    3-7-light-theme-contraste-et-ombres: done # UX — Light theme : contraste fond/éléments + ombres plus prononcées (code-review fixes 2026-01-29)
+    epic-3-retrospective: optional
+    # === Epic 4: Execution & Suivi Temps Reel (MVP) ===
+    epic-4: in-progress
+    4-1-wizard-execution-en-3-etapes: done # Code review fixes applied 2026-01-29
+    4-2-donnees-inventaire-pour-formulaires-dynamiques: done # Code review: 7 issues fixed, 24/24 tests pass (2026-01-29)
+    4-2bis-connecteur-hashicorp-vault: done # Code review: 5 HIGH + 4 MEDIUM issues fixed, 11/11 tests pass (2026-01-29)
+    4-9-integrations-type-libre-flow-upload-icone: done # Code review: ALL 10 issues fixed (3 CRITICAL + 4 MEDIUM + 3 LOW) - 100% complete (2026-01-29)
+    4-3-moteur-execution-et-facade-api: done # Code review: 10 issues fixed (3 HIGH, 5 MEDIUM, 2 LOW) — RBAC implemented, correlation_id propagated, NFR2 tested (2026-01-29)
+    4-4-adapter-plateforme-aap: done # Code review 2026-01-29: 3 MEDIUM fixes, 33/33 tests pass
+    4-5-integration-servicenow-ouverture-automatique-changement: done # 2026-01-30: Code review fixes applied, 32/32 execution+servicenow tests pass
+    4-6-timeline-execution-temps-reel: done # Code review 2026-01-30: 3 HIGH + 4 MEDIUM fixes applied
+    4-7-resultat-execution-logs-et-gestion-erreur: done # Code review 2026-01-30: 4 MEDIUM fixes applied
+    4-8-historique-des-executions: done # Code review 2026-01-30: 2 HIGH + 4 MEDIUM fixes, 18/18 frontend + list backend tests pass
+    4-10-adapter-aap-workflow-job-et-job-template: done # resource_type (job_template | workflow_job) par action; code-review 2026-01-30
+    4-11-validation-rbac-execution-workflows-actions-referencees: done # Code review 2026-02-06: 5 fixes (2 HIGH + 3 MEDIUM) appliqués
+    4-12-parametres-par-etape-execution-workflows: done # Code review 2026-02-06: AC5 COMPLÉTÉ - action référencée chargée, payload adapter préparé avec step_parameters injectés, tests validés ✅
+    epic-4-retrospective: optional
+    # === Epic 5: Dashboard & Activite (Phase 2) ===
+    epic-5: in-progress
+    5-1-dashboard-avec-statistiques-et-activite-recente: done # Code review 2026-01-30: 2 HIGH + 2 MEDIUM + 3 LOW fixes applied, 12 backend + 30 frontend tests pass
+    5-2-statuts-temps-reel-et-notifications-sur-le-dashboard: done # 2026-01-30: Code review fixes applied (2 HIGH + 4 MEDIUM + 2 LOW)
+    5-3-token-url-et-structure-flow-integrations: done # Code review 2026-01-30: 2 HIGH + 4 MEDIUM fixes — explicit error handling, config validation, test coverage
+    5-4-json-schema-flow-integrations-validation: done # JSON Schema du config, validation create/update ; code-review 2026-01-30
+    5-5-alignement-react-ant-design-6-2-bonnes-pratiques: done # Audit + alignement React & Ant 6.2; code-review 2026-01-30: 7 fixes appliqués
+    5-6-script-seed-donnees-bd-tests-frontend: done # Seed reproductible couvrant tous les cas pour tests frontend; code-review 2026-01-30
+    5-7-workflow-conteneur-actions-icone-catalogue: done # Code review 2026-01-30: 10 issues fixed (4 HIGH + 3 MEDIUM + 3 LOW); Tasks 1,2,5 done, Tasks 3,4,6 pending (execution engine, admin UI, tests)
+    epic-5-retrospective: optional
+    # === Epic 6: Audit & Conformite SOC1 - Nadia (Phase 2) ===
+    epic-6: in-progress
+    6-1-traces-audit-immutables-pour-chaque-execution: done # Code review 2026-01-30: 2 HIGH + 4 MEDIUM + 2 LOW fixes, 69/69 tests pass
+    6-2-evidence-specifique-patching-et-comptes-a-privileges: done # Code review 2026-01-31: 10 fixes (1 CRITICAL + 5 MEDIUM + 4 LOW), 33/33 tests pass
+    6-3-consultation-historique-audit-filtre: done # Code review fixes applied 2026-01-31: CRITICAL-1 + 4 HIGH fixes
+    6-4-export-rapports-audit: done # Code review 2026-01-31: 10 fixes (3 HIGH + 4 MEDIUM + 3 LOW) - action_name et servicenow_change_id ajoutés CSV/PDF, enrichissement cohérent avec /executions
+    6-5-restaurer-visibilite-menu-audit-pour-auditeurs: done # Menu Audit restauré : navigation_tabs inclut 'audit' si is_auditor (backend + frontend fallback), 3 backend + 4 frontend tests — Code review 2026-02-08: 9 fixes appliqués
+    epic-6-retrospective: optional
+    # === Epic 7: Self-Service Business & RBAC Granulaire - Fatima (Phase 2) ===
+    epic-7: in-progress
+    7-1-vue-catalogue-simplifiee-pour-client-business: done
+    7-2-golden-path-guide-pour-client-business: done # Code review 2026-02-01: 3 MEDIUM fixes (act() warnings, comment cleanup), 51/51 tests pass
+    7-3-rbac-granulaire-par-action-profil-et-environnement: done # Code review 2026-02-01: 1 MEDIUM fix (invalidate_permissions_cache), 3 edge case tests added, 23/23 tests pass
+    7-4-workflow-approbation-pour-la-production: done # Code review 2026-02-01: 3 fixes (1 HIGH: ApprovalRequest body, 2 MEDIUM: user_display_name, Oracle index syntax)
+    epic-7-retrospective: optional
+    # === Epic 8: Analytics & Scorecards (Phase 2) ===
+    epic-8: in-progress
+    8-1-scorecards-par-action: done # Code review 2026-02-01: 8 fixes (2 HIGH + 4 MEDIUM + 2 LOW), all tests pass
+    8-2-dashboards-globaux-dbops: done # Code review 2026-02-01: 4 fixes (MEDIUM-2 deprecated props, LOW-1 dead code, LOW-2 magic numbers), 15/15 frontend tests pass
+    8-3-dashboard-reporting-statistiques-par-technologie-et-environnement: done # Code review 2026-02-01: 6 fixes (1 HIGH + 3 MEDIUM + 2 LOW) - duplicate models removed, Ant Design props fixed
+    8-4-filtres-avances-dashboard-reporting: done # Code review 2026-02-01: 11 issues fixed (6 HIGH + 3 MEDIUM + 2 LOW) - status filter clarified, /timeseries param removed, test coverage improved
+    8-5-export-rapports-analytics: done # Code review 2026-02-01: 9 fixes (4 HIGH + 3 MEDIUM + 2 LOW) - asyncio import, test assertions, PDF timeseries section added
+    8-6-comparaisons-et-analyses-avancees: done # Code review 2026-02-01: 12 issues fixed (5 HIGH + 5 MEDIUM + 2 LOW) - File List populated, PeriodComparisonChart changed to BarChart, validation added
+    8-7-navigation-par-categories-avec-tabs-et-filtres-integres: done # Code review 2026-02-01: 10 fixes (1 HIGH cache bug + 5 MEDIUM + 2 LOW) - French labels, cache key includes category, test coverage complete
+    8-8-deplacement-approbations-vers-page-executions-et-notification-top-bar: done # Code review 2026-02-01: 8 fixes (design tokens, error handling, polling tests, scroll tests) - 66/66 tests pass
+    8-9-tabs-toutes-les-executions-et-mes-executions: done # Code review 2026-02-01: 7 issues fixed (3 HIGH + 4 MEDIUM) - regex validation, logging, type consolidation
+    8-10-vue-liste-en-tableau-avec-colonnes: done # Code review 2026-02-01: 10 issues fixed (5 HIGH + 3 MEDIUM + 2 LOW) - design tokens, useMemo deps, double skeleton, pluralization, tooltip limits - 66/66 tests pass
+    epic-8-retrospective: optional
+    # === Epic 9: Autoremediation (Phase 2) ===
+    epic-9: in-progress
+    9-1-detection-echec-et-proposition-actions-correctives: done # 2026-02-02: All 19 tasks completed - migration V031, remediation models, repository, service, API endpoint, admin UI editor, frontend hook/types/service, StructuredErrorCard suggestions, ExecutionTimeline integration, 60 frontend tests pass
+    9-2-declenchement-manuel-action-corrective-par-dba: done # Code review 2026-02-02: 10 HIGH + 4 MEDIUM + 2 LOW fixes applied
+    9-3-execution-automatique-corrective-pour-faible-risque: done # 2026-02-02: Code review fixes applied (6 fixes: 2 HIGH + 3 MEDIUM + 1 LOW) - All 24 tasks completed - RemediationService (evaluate, trigger, monitor), NotificationService (DBA alert logging), AuditActionTypes (AUTO_REMEDIATION_*), API validation (risk_level + prod constraints), ExecutionTimeline (auto-remediation Card + fallback Alert), RemediationRulesEditor (auto_trigger constraints + warning), 20 backend tests + 48 frontend tests pass
+    9-4-deplacement-statistiques-executions-vers-page-executions: done # 2026-02-02: All 10 tasks completed - API /stats endpoint with scope, repository optimized CASE WHEN query, StatCards moved to ExecutionsPage, removed from ReportingDashboard - 43+12 frontend tests, 4+6 backend tests pass
+    9-5-interface-admin-creation-workflows: done # Code review 2026-02-02: 11 issues fixed (4 CRITICAL + 5 MEDIUM + 2 LOW) - Alert props, AutoComplete value type, Space deprecated props, validation duplication, loading states, type safety, console logging - 35/35 tests pass
+    9-6-fix-filtre-mes-actions: done # Code review 2026-02-02: 5 fixes (3 MEDIUM + 2 LOW), 38/38 tests pass. Bug fix: "Mes actions" favoris uniquement, section récentes supprimée, fetchRecentActions deprecated
+    9-7-fix-oracle-bind-variable-comment: done # Code review 2026-02-02: 10 issues fixed (4 CRITICAL + 4 MEDIUM + 2 LOW) - cursor.close() AsyncMock warnings, scan report generated, strict query validation, Oracle 19c version added, regex detection, documentation formatting - 16/16 tests pass, 0 warnings
+    9-8-fix-audit-log-approval-action-types: done # Code review 2026-02-02: 5 issues fixed (2 HIGH + 1 MEDIUM + 2 LOW) - duplicate docs file deleted, FastAPI regex->pattern deprecated param fixed (0 warnings), doc paths corrected, misleading comment updated - Verification story: V032-V035 migrations correctes, 29/29 tests pass, 6 integration tests created
+    9-9-amelioration-table-executions: done # Code review 2026-02-02: 7 issues fixed (3 backend tests added, error logging improved, File List completed, docstrings enhanced, skeleton fixed, frontend tests added). UX : (1) Colonne statut à gauche avec point plus gros pour actions en cours, points fixes colorés pour terminées (2) Ajouter colonnes Technologie et Plateforme avec icônes (3) Récupérer engine/platform depuis action_id si nécessaire — Implémentation complète : 82 tests frontend + 49 tests backend passent, AC1-10 validés
+    9-10-refonte-dashboard-vers-executions: done # 2026-02-02: Implementation complete - (1) Dashboard renamed to Analytics + RBAC DBOPS only (2) TrendLineChart moved to ExecutionsPage (3) AdvancedFiltersPanel created with date range, action, technology, tags, status, environment (4) API endpoints enriched with filter params (5) URL persistence via query params (6) Badge active filter count - 58/58 ExecutionsPage tests + 23/23 TopNav tests + 6/6 DashboardPage tests pass
+    9-11-fix-action-execution-config-table: done # Bug fix : ORA-00942 ACTION_EXECUTION_CONFIG n'existe pas - (1) Supprimé JOINs vers table inexistante dans get_by_id, list_by_user, list_all (2) Migration V036 ajoute INTEGRATION_ID à ACTIONS_CATALOG si nécessaire (3) Utiliser directement A.INTEGRATION_ID pour joindre INTEGRATIONS - code-review 2026-02-02: 7 issues fixed (2 HIGH, 3 MEDIUM, 2 LOW)
+    epic-9-retrospective: optional
+    # === Epic 11: Scheduling & Maintenance Planifiée (Phase 2) ===
+    # APPROCHE: Modèle de données + UI/API complètes, mais pas de scheduler intégré (Celery).
+    # Les schedules sont récupérés et exécutés par un scheduler externe (Control-M ou Django scheduler).
+    # Pas de seconde base de données, pas de charge backend supplémentaire pour le polling.
+    epic-11: in-progress
+    11-1-modele-donnees-scheduled-executions-et-recurrence: done # Table scheduled_executions + recurring_patterns (one-time vs recurring) - next_execution_date pour scheduler externe; code-review 2026-02-02: 7 issues fixed (2 HIGH + 4 MEDIUM + 1 LOW) - index composite optimisé, commentaires enrichis
+    11-3-api-creer-execution-planifiee-one-time: done # Code review 2026-02-02: 10 issues fixed (3 HIGH + 4 MEDIUM + 3 LOW) - Schema mutation bug, correlation_id leak, timezone validation enforced, nested object validation, DB error handling, validation logging, timezone handling documented - 19/19 tests pass
+    11-5-ui-scheduler-dans-wizard-execution: done # Code review 2026-02-02: 10 issues fixed (3 HIGH + 5 MEDIUM + 2 LOW) - date validation, UTC display, onSuccess, accessibility, console logs - 45/45 tests pass
+    11-6-liste-executions-planifiees-et-annulation: done # Code review complete - 5 issues fixed (4 HIGH, 1 MEDIUM) - AC10 correlation_id & execution_id added
+    11-7-patterns-recurrence-simples-daily-weekly: done # Code review 2026-02-02: All 14 tasks completed - Backend: RecurringPatternRequest/Response models, recurrence.py (calculate/increment next_execution_date), POST recurring patterns, PATCH toggle is_active, audit SCHEDULED_EXECUTION_RECURRING_* - Frontend: ExecutionWizard Radio.Group daily/weekly, ScheduledExecutionsPage recurring display + toggle - Tests: 22 unit tests (recurrence.py) + 14 integration tests (API) + 9 service tests (frontend)
+    11-8-cron-expressions-pour-recurrence-avancee: done # Support expressions cron complètes pour power users - Bibliothèque croniter 3.0+ pour parsing et calcul, validation temps réel, presets UI, helper modal
+    11-10-api-integration-scheduler-externe: done # GET /api/v1/scheduled-executions/pending - endpoint pour scheduler externe (Control-M/Django) récupérer schedules à exécuter + PATCH status=executed avec recalcul next_execution_date; 19/19 tests pass
+    11-11-restrictions-modification-executions-planifiees-et-recurrence-admin: done # Code review 2026-03-06: 1 HIGH + 2 MEDIUM corrigés — notification title→message, FIELD_NOT_APPLICABLE validation, tests consolidés
+    epic-11-retrospective: optional
+    # === Epic M: Migration FastAPI vers Django REST (Arrimage plateforme) ===
+    epic-m: in-progress # m-11 nettoyage en backlog
+    m-1-bootstrap-projet-django-et-drf: done # Code review 2026-02-03: 1 CRITICAL + 4 HIGH + 4 MEDIUM fixes applied - format réponse FastAPI corrigé, fichiers manquants créés, tests améliorés
+    m-2-modeles-django-et-migrations-schema-oracle: done # Code review 2026-02-03: 10 issues fixed (3 HIGH + 5 MEDIUM + 2 LOW) - imports json optimisés, logging ajouté, migrations générées
+    m-3-couche-donnees-repositories-vers-orm-django: done # Code review 2026-02-03 (adversarial): 10 fixes applied (1 CRITICAL + 3 HIGH + 4 MEDIUM + 2 LOW) - correlation_id ajouté, types audit PROFILE_*/INTEGRATION_* corrigés avec enum, prefetch_related pour OneToOneField, validation user_id, export CSV JSON formaté, tests README créé, tous types hardcodés remplacés par enum. Code review 2026-02-03 (fourth): 10 additional fixes (2 CRITICAL + 4 HIGH + 4 MEDIUM) - tous types audit hardcodés remplacés par enums, correlation_id ajouté aux méthodes execution, entity_type corrigés, types manquants ajoutés aux enums
+    m-4-api-rest-catalogue-et-admin-actions-tags: done # Code review 2026-02-04: 9 issues fixed (5 HIGH + 4 MEDIUM) - remediation-rules endpoint, list_catalog_tags, environment filter, pagination, cache invalidation, N+1 fix, permissions improved. Action items à traiter dans environnement adéquat.
+    m-5-api-rest-profils-et-permissions: done # Code review 2026-02-04: 10 issues fixed (2 CRITICAL + 3 HIGH + 4 MEDIUM + 1 LOW) - 403/401 tests added, cache invalidation tested, user parameter fixed, code duplication removed
+    m-6-api-rest-auth-health-integrations: done # Code review 2026-02-04: 8 fixes applied (2 CRITICAL + 5 HIGH + 1 MEDIUM) - URL routing fixed, enum validation added, error handling improved, tests corrected
+    m-7-authentification-saml-et-securite: done # Code review 2026-02-04: 8 issues fixed (3 CRITICAL + 5 MEDIUM) - decode_token_unsafe security fix, audit entity_id validation, CORS array safety, profile logic simplified, cert file logging, error handling improved - All 10 tasks + code review fixes complete
+    m-8-middleware-logging-observabilite: done # 2026-02-05: Logging structuré JSON (structlog), RequestResponseLoggingMiddleware, health check étendu (DB+Vault+ServiceNow), CORS, propagation correlation_id - Implementation complete
+    m-9-tests-unitaires-et-integration-parite: done # 2026-02-05: All 13 tasks completed - fixtures, factories, integration tests, RBAC security tests, performance benchmarks, CI configuration, documentation
+    m-10-strategie-bascule-et-decommissionnement-fastapi: done # 2026-02-05: All 10 tasks + code review completed - 10 issues found (2 CRITICAL, 1 HIGH, 4 MEDIUM, 3 LOW), 3 auto-fixed (gunicorn, .env template, plan bascule), 4 documented for follow-up - Backend Django PRODUCTION-READY
+    m-11-nettoyage-code-fastapi-suppression-references: done # Ménage : doc à jour, références FastAPI supprimées ; code-review 2026-02-05
+    epic-m-retrospective: done # 2026-02-05
+    # === Epic 12: Documentation technique (post-Django) ===
+    # À réaliser après le passage à Django pour documenter la cible finale.
+    # ⚠️ ATTENTION: Cet epic ne doit être démarré qu'après la complétion de l'Epic M (Migration Django)
+    epic-12: in-progress
+    12-1-documentation-backend-implementation: done # Code review 2026-02-05: 7 fixes (3 HIGH + 4 MEDIUM) - Documentation alignée sur l'implémentation réelle
+    12-2-documentation-frontend-implementation: done # Documentation détaillée de l'implémentation frontend (2026-02-05); code-review 2026-02-05
+    12-3-schema-base-donnees-et-relations-tables: done # Schéma de base de données et relations entre les tables (2026-02-05); code-review 2026-02-05
+    epic-12-retrospective: optional
+    # === Epic 13: Sélection de targets à l'exécution et permissions par environnement (inventaire) ===
+    # Réf: regles-metier-permissions-par-target-et-environnement.md — Une action, choix de target(s) autorisés, env = propriété du target
+    epic-13: in-progress
+    13-1-inventaire-association-target-environnement-api-targets-filtres: done # Code review 2026-02-05: 9 issues fixed (2 CRIT + 3 HIGH + 3 MED + 1 LOW) - SQL injection, admin permission, env normalization
+    13-2-wizard-execution-selection-targets-autorises: done # Code review 2026-02-05: fixes applied (audit trail V047, TargetSelector server-side search, backend test target_names success)
+    13-3-rbac-environnement-du-target-filtre-targets-par-profil: done # 2026-02-05: Code review + auto-fixes (normalisation env certif→staging, audit EXECUTION/0, inventory_truncated 403, tests rbac_truncated/certif)
+    13-4-refactoring-une-action-unique-validation-backend: done # 2026-02-05: target_names REQUIRED, env from targets, _env_config added; code-review fixes: warning assert, dedup tests, 8 tests
+    13-5-api-standalone-execution-sans-frontend-visibilite-portail: done # 2026-02-05: Code review fixes appliqués (401 UNAUTHORIZED, tests 415/MIXED_ENVIRONMENTS, audit source, doc)
+    13-6-menu-calendrier-vue-calendrier-executions-planifiees-dba: done # Vue calendrier réelle + filtres action/env/plateforme/techno (alignés Exécutions); code-review 2026-02-06: 2 HIGH + 3 MEDIUM corrigés
+    13-7-ref-environnements-et-technologies-via-tables: done # 2026-02-05: REF_ENGINES/REF_PLATFORMS tables créées, APIs GET /api/v1/reference/engines|platforms, GET /api/v1/inventory/environments, validation applicative, hooks useEngines/usePlatforms/useEnvironments, tests créés - Documentation API optionnelle reste
+    13-8-amelioration-calendrier-details-enrichis-annulation-decommission-admin: done # 2026-02-06: AC4 + code-review adversarial (6 fixes: 400 details, RBAC _targets, target_names=[], tests)
+    epic-13-retrospective: optional
+    # === Epic 15: Audit de Sécurité et Conformité SOC1 (première release) ===
+    epic-15: in-progress
+    15-1-audit-securite-code-sast-dependances-secrets: done # Code review 2026-02-05: 11 issues fixed (2 HIGH + 5 MEDIUM + 4 LOW) - garbage files deleted, pre-commit config added, nosec B608 annotations, severity estimation improved, CI documentation
+    15-2-tests-securite-fonctionnels-auth-authz-rbac: done # 2026-02-06: 154 tests sécurité fonctionnels (auth JWT, RBAC, granular access, sensitive endpoints, security headers, middleware) — 100% passing, CI intégré
+    15-3-validation-conformite-soc1-audit-trail-immutabilite-chiffrement: done # 2026-02-06: AC1-AC6 validés, 22 tests SOC1, rapport conformité, trigger V054; code-review fixes appliqués
+    15-4-documentation-securite-plan-remediation: done # 2026-02-06: Docs créés (5 fichiers), code review AI: 15 issues → 14 RESOLVED, VULN-001 RESOLVED (9 deps upgradés, 0 HIGH vulns, 310 tests ✅), pytest.ini fixed, GO for release ✅
+    epic-15-retrospective: optional
+    # === Epic 16: Builder de Workflow Visuel avec Branches Conditionnelles et Retry (Phase 2) ===
+    epic-16: in-progress
+    16-2-modele-donnees-workflows-branches-et-retry: done # 2026-02-06: Code review fixes applied (validation + UI + tests) ✅
+    16-3-moteur-execution-branches-conditionnelles: done # 2026-02-06: Code review fixes applied + 15 tests ✅
+    16-4-moteur-retry-backoff-exponentiel: done # 2026-02-06: Code review — 8 HIGH + 3 MEDIUM + 2 LOW issues found, 6 auto-fixes applied (H2, H3, H6, H8, M2, L2), 4 documented as Known Limitations (H4 time.sleep DoS, H5 test mocking, H7 doc ambiguity, M1 DB performance, M3 edge cases). Critical remaining: H4 requires Celery migration (out of scope, high tech debt).
+    16-5-interface-builder-visuel-workflow: done # 2026-02-06: Code review — 8 CRITICAL + 7 MEDIUM fixes auto-applied + commit created, 28/28 tests pass ✅
+    16-6-configuration-options-retry-builder-visuel: done # Code review 2026-02-06: 9 issues (3 HIGH + 4 MEDIUM + 2 LOW) auto-corrigés — Ant Design props, null-safety tooltip, tests sync bidirectionnelle, badge FR, validation bloquante — 45 tests ✅
+    16-7-visualisation-validation-chemins-builder-visuel: done # 2026-02-06: Code review — 9 issues (6 HIGH + 3 MEDIUM) auto-corrigés — Tooltip noms d'étapes, Modal.error validation, filtrage edges complet, notification self-connection, footer ValidationReportPanel, ARIA labels — 67/67 tests pass ✅
+    16-8-export-import-workflows-builder-visuel: done # 2026-02-06: Code review — 10 fixes (6 HIGH + 4 MEDIUM), 85 tests ✅
+    16-9-notification-type-service-call-step-workflow: done # 2026-03-06: Code review — 1 HIGH (merge order vuln ctx_kwargs) + 2 MEDIUM (security boundary test, silent failure doc) auto-corrigés. 20 tests backend ✅
+    epic-16-retrospective: optional
+    # === Epic 17: Reduction de la dette technique & amelioration qualite (audit 06/02/2026) ===
+    epic-17: in-progress
+    17-1-finaliser-migration-backend-decommissionner-fastapi: done # 2026-02-06: Code review terminé — 10 issues fixées (3 HIGH + 4 MEDIUM + 3 LOW), décommissionnement FastAPI 100% validé ✅
+    17-2-refactoriser-composants-frontend-volumineux: done # 2026-02-06: Refactoring Phases 1-3 complétées — ExecutionWizard 2035→536 lignes (-73%), 5 hooks + 4 composants créés, 85 tests passent ✅
+    17-3-eliminer-duplication-api-client: done # 2026-02-06: Code review — 10 issues fixés (3 HIGH + 4 MEDIUM + 3 LOW), 81/81 tests passent ✅
+    17-4-oracle-json-field-modele-action: done # 2026-02-07: Code review completed — 7 HIGH + 4 MEDIUM fixes applied. OracleJSONField enhanced (validation, logging), serializers simplified (-5 methods), 45/45 OracleJSONField tests pass. KNOWN ISSUES: 40+ catalog tests fail (pre-existing User fixtures, NOT caused by refactor)
+    17-5-securiser-gestion-secrets: done # 2026-02-07: Code review completed — 1 CRITICAL + 4 MEDIUM + 3 LOW fixes applied, 21/21 tests pass, secrets vides en dev loggent warnings, .env.production.template enrichi, fail-fast validé production
+    17-6-restreindre-exception-catches: done # 2026-02-07: Code review completed — 7 HIGH + 3 MEDIUM fixes applied, dashboard silent exception fixed, test coverage improved 9→13 tests (all pass)
+    17-7-remplacer-console-log-logging-frontend: done # 2026-02-07: Code review complete — 12 issues found (4 HIGH + 5 MEDIUM + 3 LOW), 9 auto-fixed, 11/11 tests pass, 0 ESLint violations ✅
+    17-8-pyproject-toml-lockfile-django-backend: done # 2026-02-06: Code review completed — 13 issues fixed (4 CRITICAL + 6 MEDIUM + 3 LOW), lockfile verification CI added, rollback doc, build-backend fixed, 512 tests pass ✅
+    17-9-mypy-bloquant-progressivement: done # 2026-02-07: Code review completed — 8 HIGH + 4 MEDIUM + 2 LOW fixes applied, pre-commit hook added, README created, progress tracking doc added, baseline validation robuste, 89 erreurs tolérées
+    17-10-dockerfile-backend-frontend: done # 2026-02-07: Code review adversarial — 11 fixes appliqués (5 HIGH + 6 MEDIUM) — healthcheck URL, secrets protection, CI/CD paths, LOG_LEVEL, collectstatic, build validation, volume cleanup, X-XSS-Protection deprecated
+    17-11-rate-limiting-endpoints-publics: done # 2026-02-07: Code review completed — 10 issues fixed (7 MEDIUM + 3 LOW), 37 tests pass (29 unit + 8 security), scope collision doc added, XFF spoofing detection, RATELIMIT_ENABLED validation, ExecutionThrottle test added, documentation enhanced ✅
+    17-12-systeme-feature-flags: done # 2026-02-07: Code review adversarial — 10 issues (3 HIGH + 5 MEDIUM + 2 LOW), 6 auto-fixed (audit/cache race, rollout security, model validation, context refresh, MD5 doc), 4 follow-up actions documented (non-blocking) — 53 backend + 17 frontend tests pass ✅
+    17-13-densite-tableau-executions: done # UX - reduire hauteur lignes vue Executions
+    17-14-annuler-operation-par-initiateur: done # Annuler Soumise/En cours : initiateur ou admin (RBAC) — Code review: 5 HIGH + 3 MEDIUM + 2 LOW fixes, 16 backend + 6 frontend tests pass (2026-02-07)
+    17-15-relancer-operation-memes-parametres: done # Relancer : wizard pre rempli (parametres modifiables avant reexecution)
+    17-16-verification-conformite-frontend-standards: done # Plugin ESLint custom 3 regles, 10 violations corrigees, template PR, 34 tests regles - Code review: 3 CRITICAL found
+    17-17-optimisation-requetes-bd-page-catalogue: done # Audit + optimisation requetes BD page Catalogue — 4 index Django, cache tags, 12 tests perf, code review 7 fixes applied ✅
+    epic-17-retrospective: optional
+    # === Epic 18: Ameliorations UX et corrections issues du feedback utilisateurs ===
+    epic-18: in-progress
+    18-1-admin-actions-suppression-desactivation-filtres: done # Story 18.1 complete — AC1-AC6 all implemented, 28 backend + 22 frontend tests pass
+    18-2-identification-visuelle-workflow-vs-action: done # Code review 2026-02-07: 4 MEDIUM + 3 LOW fixes applied, 18 tests pass (10 AdminPage + 8 iconHelpers)
+    18-3-mode-visuel-builder-taille-blocs-lien-libelle: done # Fenêtre plus grande, blocs Départ/Fin déplaçables, lien auto sans erreur, nom action affiché
+    18-4-catalogue-retirer-adapter-filtre-environnement: done # Code review 2026-02-07: 11 issues (3 HIGH + 5 MEDIUM + 3 LOW) auto-corrigés, 20/20 tests pass (8 HorizontalFilters + 12 ActiveFiltersChips), diagramme Excalidraw créé, documentation enrichie
+    18-5-favoris-correction-affichage-compteur: done # Fix: .exclude(action__status=ActionStatus.DISABLED) dans list_favorites() + is_favorite(), code review adversarial 9 issues auto-corrigés, 13 tests backend passent ✅
+    18-6-erreur-integration-afficher-statut-erreur: done # Intégration erreur → statut erreur visible (pas "soumis") — 10 tests (8 backend + 2 frontend), AC1-AC10 validés
+    18-7-correction-tests-en-echec: done # 934/1135 tests pass (82.4%) — AC8 95% not met, 200 failures documented in KNOWN_ISSUES.md Story file created — labels/tooltips, docs change-type-config
+    18-8-approbations-en-haut-page-execution-mise-en-valeur: done # Code review 2026-03-06: 1 MEDIUM (test guard if vacueux) + 1 LOW (boxShadow colorWarningBorder) auto-corrigés, 70/71 tests passent ✅
+    epic-18-retrospective: optional
+    # === Epic 19: UX — Vue d'exécution temps réel (Phase 2) ===
+    # Remplacer popup "action démarrée" par vue immersive : action simple = timeline + logs ; workflow = graphe visuel + étape active + clic = détail
+    epic-19: in-progress
+    19-0-simulation-execution-dev-mode: done # Code review 2026-02-08: 10 issues (4 HIGH + 4 MEDIUM + 2 LOW), 6 auto-fixes, 27 backend + 42 frontend tests pass ✅
+    19-1-vue-execution-action-simple-timeline-logs: done # 2026-02-08: ExecutionView drawer + timeline visuels améliorés, 113 tests pass
+    19-2-vue-execution-workflow-apercu-visuel-etape-active: done # 2026-02-08: WorkflowExecutionGraph read-only, tooltips, real-time, 154 tests pass
+    19-3-detail-etape-workflow-timeline-logs-au-clic: done # 2026-02-08: Code review — 8 issues fixed (Ant Design API, missing tests AC6/AC7, unused import), 20/20 tests pass
+    19-4-integration-remplacement-popup-ouverture-vue-execution: done # 2026-02-08: Code review — 14 issues (8 HIGH + 4 MEDIUM + 2 LOW) tous fixés, 19/19 ExecutionView tests pass, 4 integration tests créés ✅
+    19-5-differenciation-action-vs-workflow-page-execution: done # Badge/icône type (workflow vs action) dans header ExecutionView — réutilise getItemTypeIcon() Story 18.2
+    19-6-logs-etape-workflow-drawer-analyse-correction: done # Code review adversarial 2026-02-15: 7 issues fixées (3 HIGH validation types/race/tests + 3 MEDIUM logging/coverage + 1 LOW File List), 6/6 backend + 13/13 frontend tests pass ✅
+    epic-19-retrospective: optional
+    # === Epic 20: Action items et suivi — Restant des stories "done" ===
+    # Consolidation des follow-ups, known issues et action items documentés dans les stories marquées done
+    epic-20: in-progress
+    20-1-corriger-fixtures-user-tests-catalog-workflow: done # 37 catalog + 3 workflow tests corrigés, 1007/1189 (84.8%), KNOWN_ISSUES + README enrichis — Code review 2026-02-08: 2 CRITICAL + 5 HIGH fixes appliqués (UserFactory/ActionFactory utilisés partout, AC3 NOT MET honnêtement documenté) — Auto-fixes appliqués: UserFactory dans 7+ catalog files, ActionFactory dans test_workflow_runtime_retry.py, create_user() corrigé — Story marked done: AC1/AC2/AC4/AC5 MET, AC3 NOT MET (181 failures pré-existants hors scope catalog/workflow)
+    20-2-m4-validation-parite-contractuelle-environnement-tests: done # Code review 2026-02-08: 7 fixes appliqués (avg_execution_time_ms implémenté, validation action_id, optimisation requêtes, tests cas limites)
+    20-3-migrer-retry-vers-celery-asynchrone: done # 2026-02-08: Celery + Redis retry async, cache annulation, 42/42 tests, docs/workflow-retry-celery.md — AC1-AC5 validés — Code review: 6 MEDIUM + 3 LOW fixes (CACHES→Redis, doc workflow, test slow AC3, systemd)
+    20-4-executionwizard-phase4-optimisations-metriques: done # Code review 2026-02-08: 10 issues (3 HIGH + 4 MEDIUM + 3 LOW), 6 auto-fixes, 99/99 tests pass — BLOCKER: HIGH-2 backend files investigation required
+    20-5-epic-m-checklist-adrs-couverture-tests: done # Rétro Epic M — checklist endpoints, ADRs, couverture 85%+ (profiles 89%, idp_auth 88%, integrations 88%), onboarding docs, PR template, CONTRIBUTING.md — Code review 2026-02-08: 7 issues auto-corrigés (File List ajouté, dates ADRs, chemins PR template, tests skipped documentés, completion notes)
+    20-6-finaliser-workflow-conteneur-tasks-3-4-6: done # 5-7 — execution engine, admin UI, tests
+    20-7-m10-et-17-12-followups-non-bloquants: done # WebSocket test, CI/CD, Redis pub/sub feature flags (code review: 8 fixes applied)
+    20-8-documentation-conformite-15-4-17-16: done # Signatures rapports, 3 CRITICAL 17-16
+    epic-20-retrospective: optional
+    # === Epic 21: Inventaire — source unique des environnements ===
+    # Supprimer normalisation envs, utiliser inventaire comme source unique. Éliminer récursion Oracle, accepter lab/dev/staging/prod.
+    # ⚠️ Stories 21.1 et 21.2 forment un changement ATOMIQUE - doivent être déployées ensemble
+    epic-21: in-progress
+    21-1-backend-supprimer-normalisation-inventaire-valeurs-brutes: done # Code review 2026-02-08: 5 fixes appliqués (doc, commentaires, File List, deployment warning)
+    21-2-backend-ajuster-profile-env-matching-executions: done # Code review 2026-02-09: 10 fixes (5 HIGH + 3 MEDIUM + 2 LOW) - sécurité SOC1, audit trail, performance, tests corrigés
+    21-3-tests-backend-inventaire-executions-profils: done # Tests inventory, executions, profils avec valeurs brutes (lab, etc.) — 50 new tests, 101 total pass — Code review adversarial 2026-02-09: AUCUN PROBLÈME trouvé, qualité exemplaire ✅
+    21-4-frontend-editeurs-admin-environnements-dynamiques: done # Code review 2026-02-09: 8 fixes (2 HIGH + 4 MEDIUM + 2 LOW) - constantes deprecated, direction→orientation, error UX, cache invalidation, tests error state - 76/76 tests pass ✅
+    21-5-frontend-targetselection-labels-type-executionenvironment: done # Code review 2026-02-09: 2 fixes (2 MEDIUM) - EnvironmentBarChart JSDoc, isEnvironmentAllowed() helper — 113/113 tests pass ✅
+    21-6-validation-environnements-profil-sauvegarde: done # Validation envs backend/frontend à sauvegarde profil — 37 tests (29 backend + 8 frontend) — Code review adversarial 2026-02-09: 5 MEDIUM + 3 LOW fixes, Ant Design API updated, 0 deprecation warnings ✅
+    epic-21-retrospective: optional
+    # === Epic 22: Amélioration Qualité du Code — Points d'amélioration restants (assessment 08/02/2026) ===
+    # Réf: epic-22-amelioration-qualite-code.md — CRIT-1/2/3, HIGH-2 à 7, MED-1 à 9, refactoring fichiers volumineux, Error Boundary, mypy, drf-spectacular
+    epic-22: in-progress
+    22-1-corriger-crit-1-methode-get-profiles-by-ad-groups: done # Code review adversarial 2026-02-09: 9 HIGH + 5 MEDIUM fixes appliqués, 18 tests (14 unit + 4 integration) passent ✅
+    22-2-corriger-crit-2-fallback-superuser-permissions: done # Code review adversarial 2026-02-09: 10 issues (5 HIGH + 3 MEDIUM + 2 LOW) auto-fixés, event renommé security_rbac_bypass_superuser_fallback, 40/40 tests pass ✅
+    22-3-corriger-crit-3-race-condition-token-refresh: done # 2026-02-09: Promise-based mutex + correlation_id + 8 tests (6 unit + 2 integration), code review fixes appliqués, 17/17 tests pass ✅
+    22-4-corriger-high-3-gestion-http-429-throttling-frontend: done # Code review adversarial 2026-02-09: 8 issues (2 HIGH + 3 MEDIUM + 3 LOW) auto-fixés, ApiError throw, correlation_id unifié, grammaire FR, 34/38 tests pass (4 échecs pré-existants)
+    22-5-corriger-high-5-protection-double-submit-executionwizard: done # Code review adversarial 2026-02-09: 2 CRIT + 5 MED + 4 LOW issues found, ALL fixed — JSDoc complet, test AC#6 corrigé, logger mock fixed, typo FR, file code-quality staged, 48/48 tests pass ✅
+    22-6-corriger-high-6-standardiser-pagination-total: done
+    22-7-refactoriser-executions-views-extraction-helpers: done # 2026-02-09: 15 helpers extraits views.py→utils.py, 1914→1292 LOC (-32.5%), 55 tests, 0 régression
+    22-8-decouper-types-api-ts-par-domaine: done # 2026-02-09: Code review adversarial — 8 HIGH + 4 MEDIUM fixes auto-appliqués, 1023→1048 LOC (10 fichiers), build 0 erreurs types, 19 mocks corrigés ✅
+    22-9-decouper-adminpage-tsx-sous-composants: done # 2026-02-09: AdminPage 845→75 LOC, 6 panels créés, 36/36 tests pass, 0 régression; code-review fixes: 6 HIGH + 3 MEDIUM (Ant Design imports, Input component, accents FR, notification API) ✅
+    22-10-ajouter-error-boundary-react: done # 2026-02-09: Code review adversarial — 12 issues (2 HIGH + 5 MEDIUM + 5 LOW), 9 auto-fixés (safe navigation, error prop, try-catch fallback, soft refresh, correlation_id, aria, tests intégration AppLayout), 15 tests total (9 ErrorBoundary + 6 AppLayout) ✅
+    22-11-reduire-broad-exception-catches: done # 2026-02-09: Code review adversarial — 10 issues (2 CRIT + 5 HIGH + 3 MED) auto-fixés, correlation_id added, Celery retry fixed, 8/8 tests pass ✅
+    22-12-corriger-high-2-transition-pending-approval-submitted: done # Code review: 11 fixes (8 HIGH + 3 MEDIUM), 14/14 tests pass, action items created for follow-up
+    22-13-corriger-high-4-token-websocket-hors-url: done # 2026-02-09: Token WebSocket URL→message-based auth, Django Channels, 18 tests (10 FE + 8 BE), 0 régression
+    22-14-corriger-high-7-stale-closure-executionspage: done # Code review adversarial 2026-02-09: 4 MEDIUM issues auto-fixed, 67/67 tests pass, 0 ESLint warnings, follow-up story 22-14b created
+    22-15-corriger-med-1-serialisation-date-timezone: done # 2026-02-09: Code review — 6 HIGH + 2 MEDIUM + 1 LOW fixes, 29 backend tests + 11 frontend tests pass
+    22-16-corriger-med-3-med-4-cache-feature-flags: done # Code review adversarial: 10 issues (3 HIGH + 4 MEDIUM + 3 LOW), 7 auto-fixed (lock token race, reduced timeout, production validation, observability, config documented), 71/71 tests pass ✅
+    22-17-corriger-med-5-cache-inventaire-sessionstorage: done # 2026-02-09: localStorage→sessionStorage + validation JSON + tests robustesse, code review adversarial: 10 issues (5 CRIT + 3 MED) auto-fixés, 53/53 tests pass ✅
+    22-18-corriger-med-6-champ-requires-target-types-frontend: done # 2026-02-09: MED-6 fix — requires_target ajouté dans ActionResponse/ActionListItem/ActionPreviewData, code review 6 issues corrigés (3 HIGH + 3 MEDIUM), 53 tests pass
+    22-19-rendre-mypy-bloquant-progressivement: done # Code review adversarial 2026-02-09: 15 issues (3 CRITICAL + 7 MEDIUM + 5 LOW), AC3 strict mode reporté Phase 3, 29 erreurs mypy (objectif -50% dépassé -67%)
+    22-20-integrer-drf-spectacular-documentation-api: done # drf-spectacular intégré, 15/15 tests, Swagger UI + ReDoc + schema export, 11 serializers + 16 viewsets annotés
+    epic-22-retrospective: optional
+    # === Epic 23: Inventaire multi-tables (SERVER, INSTANCE, DB) et UX cibles ===
+    # Réf: docs/inventaire-multi-tables-ux-cibles.md, epics.md — Mapping config, API /servers /databases /instances, RBAC par attributs, listes instance/DB filtrées par serveur choisi
+    epic-23: in-progress
+    23-1-backend-config-mapping-colonnes-lecture-entites: done # Code review adversarial 2026-02-09: 6 HIGH + 4 MEDIUM + 3 LOW issues, ALL auto-fixed — Python 3.9+ compatibility, type hints complets, validation sécurité renforcée (concept keys, Oracle length limits 30 char), limites résultats ROWNUM ≤ 10000 (DoS prevention) — 69/69 tests pass ✅
+    23-2-backend-inventory-service-multi-tables: done # Code review adversarial 2026-02-09: 10 issues (3 CRITICAL + 4 MEDIUM + 3 LOW) ALL auto-fixed — Optimized IN clause for server_names (fixes N+1), empty list validation, all-envs-fail error handling, enhanced docstrings Performance Note, improved RBAC docs with 3-step example — 43/43 tests pass ✅
+    23-3-backend-api-servers-databases-instances: done # 2026-02-09: Code review — 11 issues auto-fixés (8 HIGH + 3 MEDIUM) — RBAC security, OpenAPI docs, error handling, test refactoring — 55/55 tests pass ✅
+    23-4-backend-rbac-profils-filtres-par-attribut: done # 53 tests, AC1-AC8 done, docs/rbac-filter-by-attribute.md
+    23-5-frontend-admin-source-inventaire-table-par-parametre: done # Code review 2026-02-09: 7 auto-fixes (FR accents, types, comments), 4 action items (validation, selectedServerNames, race condition, UI warning), 94/94 tests pass
+    23-6-frontend-use-target-inventory-contexte-serveur: done # Code review 2026-02-09: 10 issues (4 HIGH + 4 MEDIUM + 2 LOW) auto-fixed
+    23-7-frontend-profile-form-options-tous-oracle-sql: done # Code review 2026-02-09: 6 HIGH + 4 MEDIUM + 2 LOW issues fixed — Alert API deprecated→title, AC10 comments complete, edge cases covered (empty {}, 'sql' engine, undefined), 48/48 tests pass (15 detectTargetsMode + 33 ProfileForm)
+    epic-23-retrospective: done # 2026-02-10
+    # === Epic 24: Intégrations Admin alignées sur le backend ===
+    epic-24: in-progress
+    24-1-backend-catalogue-types-dintegration: done # Code review 2026-02-10: 11 issues fixed (8 HIGH, 2 MEDIUM, 1 LOW) — audit trail correlation_id, JSON Schema validation, structlog, documentation versionnement — 76/76 tests pass
+    24-2-frontend-admin-restriction-types-actions: done # 2026-02-10: Code review — 10 issues (5 MEDIUM + 5 LOW) auto-fixés, 43/43 tests pass ✅
+    24-3-backend-frontend-validation-etat-integrations: done # Code review 2026-02-10: AC8 incomplete (WorkflowBuilder filtering), 78 tests pass
+    24-4-migration-config-integrations-existantes: done # Code review 2026-02-10: 5 issues (3 MEDIUM + 2 LOW) auto-fixed, 23/23 tests pass
+    epic-24-retrospective: optional
+    # === Epic 25: Convergence DBOps → IDP Portal ===
+    # Réf: implementation-artifacts/convergence-dbops-idp-portal.md
+    epic-25: in-progress
+    25-1-modele-execution-target-table-execution-targets-api: done # 2026-02-10: Modèle ExecutionTarget, migration V066, API targets[], 19 tests — AC1-AC5 validés
+    25-2-condition-gates-statut-waiting-gate-conditions-execution-steps: done # 2026-02-10: Code review completed — 9 fixes applied (1 CRIT + 3 HIGH + 4 MED), 36/36 tests pass, audit trail EXECUTION_STEP_WAITING added
+    25-3-tache-celery-beat-evaluate-waiting-gates-gate-maintenance-window: done # Code review 2026-02-10: 11 fixes appliqués (4 HIGH + 4 MEDIUM + 3 LOW), 22/22 tests pass
+    25-4-overrides-par-environnement-change-type-config-enrichi: done # Code review 2026-02-10: fixes applied (validation stricte + UI change_type/template_id + gates env_config + tests 21/21)
+    25-5-mutex-inter-actions-table-action-mutex-validation-soumission: done # Code review 2026-02-10: 6 fixes (3 CRITICAL + 3 HIGH) — validated_targets init, symmetric rules deletion robust, requires_target=False tests, disabled action validation, NULL description allowed — 23/23 tests
+    25-6-deny-explicite-rbac-exclusion-patterns-profile-target-permission: done # Code review 2026-02-10: 7 issues fixed (3 HIGH + 4 MEDIUM) — max 100 patterns validation (backend + frontend), traceability for unused patterns, API behavior documented (null/omitted/[]), multi-profile union clarified — 30/30 backend tests + 9/9 frontend tests pass
+    epic-25-retrospective: optional
+    # === Epic 26: Qualité du Code — Correctifs Assessment 6 février 2026 ===
+    # Réf: planning-artifacts/epic-26-qualite-code-assessment-fev-2026.md — inventory/services.py, executions/views.py, catalog RBAC, frontend volumineux, EnvironmentNormalizer, IsDBAOrDBOPS, format réponse API
+    epic-26: in-progress
+    26-1-split-inventory-services-3-classes: done # Code review adversarial 2026-02-13: 12 issues (4 HIGH + 5 MEDIUM + 3 LOW), 9 auto-fixed (H2-H4, M1-M5, L1), H1 AC2 LOC deviation documented (911 vs <700), 280/280 tests pass, 0 regression
+    26-2-split-executions-views-4-modules: done # Code review adversarial 2026-02-13: 10 CRIT issues found, 2 auto-fixed (CRIT-1 env validation blocking tests + CRIT-6 dict mutation), 374/453 tests pass (+10 vs baseline 364), 79 failures pre-existing. AC1-AC7 met (AC5 partial: scheduled_views.py 586 LOC vs <400 target, 5 cohesive views acceptable). Report: 26-2-code-review-report.md
+    26-3-extraire-rbac-catalog-service: done # 2026-02-13: CatalogRBACService extrait (214 LOC), views.py réduit -178 LOC, 29 tests (96.10% coverage), 253/253 catalog tests pass, 0 régression — Code review adversarial: 8 issues (3 HIGH + 3 MEDIUM + 2 LOW), 6 auto-fixed, story marked done
+    26-4-refactoriser-executionspage-tsx: done # 2026-02-13: ExecutionsPage 1023→298 LOC (-70.9%), 7 fichiers extraits (colonnes+3 hooks+2 composants), 61 tests, 0 régression
+    26-5-refactoriser-workflowbuildercanvas-tsx: done # 2026-02-13: WorkflowBuilderCanvas 995→487 LOC (-51%), 5 modules extraits (2 utils+1 hook+2 composants), 50 tests, code-review 9 fixes (Ant Design API, validation BFS, magic numbers, type safety), 107/107 tests pass ✅
+    26-6-refactoriser-calendarpage-tsx: done # 2026-02-13: CalendarPage 896→269 LOC (-70%), 8 fichiers extraits (1 utils+3 hooks+4 composants), 62 tests, 0 régression
+    26-7-creer-environment-normalizer: done # Story 26.7 — EnvironmentHelper centralizing case-insensitive logic, 26 tests, 100% coverage, 7 files migrated
+    26-8-creer-permission-isdbaordbops: done # Story 26.8 — IsDBAOrDBOPS DRF permission, remplace _is_dba_or_dbops() fragile (13 occurrences), liste exhaustive ADMIN_PROFILES, has_permission + has_object_permission
+    26-9-standardiser-format-reponse-api: done # 2026-02-13: data.data supprimé, serializer PATCH, apiFetchRaw frontend, 9 backend + 9 frontend tests
+    26-10-renommer-fonctions-underscore-exportees: done # 2026-02-13: 14 fonctions renommées (retrait _), 15 fichiers modifiés, 48/48 test_utils pass, 0 régression — Code review: 4 HIGH/MEDIUM issues auto-fixed (docstrings Story 26.10, patch path, commentaire AC2, headers tests)
+    26-11-standardiser-pagination-utilitaire: done
+    26-12-unifier-checks-rbac-permission-mixin: done # 2026-02-13: Code review adversarial — 8 HIGH + 4 MEDIUM issues auto-fixés, refactoring has_object_permission() (owner-first optimization), parametrize tests, edge case added, commentaires clarifiés, 46 backend + 9 frontend tests = 55/55 ✅
+    26-13-corriger-tous-tests-frontend-echec: done # Code review 2026-02-13: 8 issues found (3 HIGH + 3 MEDIUM + 2 LOW), ALL auto-fixed — File List completed (27 files), TESTING.md typos corrected, Change Log reformatted, skip verification documented — 2018/2018 tests pass (100%), 76.22% coverage baseline
+    26-14-corriger-tous-tests-backend-echec: done
+    26-15-corriger-deprecations-warnings-linters: done # Code review 2026-02-13: 10 issues found (3 CRIT + 4 HIGH + 3 MED), ALL auto-fixed — CRIT-1: 3 `except Exception:` → `as e` (test PASSES), CRIT-3: 19 Alert `message=` → `title=` (Ant Design 6.2), HIGH-1: mypy 29→80 documented as Epic 26 pre-existing — Ruff 0, ESLint 0, mypy baseline stable, 2247 backend + 2018 frontend tests ✅
+    26-16-enforcer-mypy-codebase-pre-commit-hook: done # Code review 2026-02-13: 6 issues found (1 HIGH + 3 MEDIUM + 2 LOW), HIGH/MEDIUM auto-fixed — 0 mypy errors, strict mode on 7 modules, baseline removed, 2249 tests pass, CI/pre-commit blocking — Story COMPLETE ✅
+    epic-26-retrospective: optional
+    # === Epic 27: Adapters d'intégration backend ===
+    # AAP en premier : analyse doc, appels workflows/job templates, monitoring jobs (logs + statut via websocket). Consommation API ou frontend.
+    epic-27: in-progress
+    27-1-adapter-aap-doc-workflows-jobs-monitoring-websocket: done # Adapter AAP — analyse doc, workflows, job templates, monitoring logs + statut via websocket — 41/41 tests pass — Code review: 7 CRITICAL + MEDIUM fixes applied
+    27-2-adapter-ansible-tower-doc-workflows-jobs-monitoring-websocket: done # TowerAdapter séparé, poll_tower_job_status, 85/85 tests (33 adapter + 11 monitoring + 41 AAP non-régression)
+    27-3-adapter-azure-devops-pipelines-runs-monitoring: done # Adapter Azure DevOps — pipelines, runs, logs, statut temps réel (polling 5s) — 41 tests Azure DevOps + 85 non-régression = 126 tests pass — CODE REVIEW: 11 issues fixed (3 HIGH BaseAdapter héritage + 5 MEDIUM perf/docs + 3 LOW), BaseAdapter.py créé (manquait Stories 27.1-27.2)
+    27-4-adapter-github-actions-workflow-runs-monitoring: done # Adapter GitHub Actions — workflow runs, logs, statut temps réel (webhooks/polling) — 62 tests GitHub Actions + 88 non-régression = 150 tests pass
+    27-5-adapter-terraform-cloud-runs-monitoring: done # Adapter Terraform Cloud — runs (plan/apply), logs, statut temps réel (webhooks/polling) — 71 tests (56 adapter + 15 webhook), 222/222 total pass — Code review adversarial: 9 issues (3 CRITICAL + 4 MEDIUM + 2 LOW) TOUS auto-fixés, robustesse/sécurité/performance optimisées
+    27-6-vault-service-hashicorp-vault-enterprise: done # VaultService — résolution credential_ref, retry, circuit breaker, cache, Vault Enterprise — 46 tests, 91.64% coverage, 207 adapter non-regression tests pass — Code review adversarial: 10 issues (2 CRIT + 4 HIGH + 3 MED + 1 LOW), 7 auto-fixés, 3 documentés
+    27-7-admin-frontend-menu-integrations-adapters: done # 7 types (AAP, Tower, Azure DevOps, GitHub, Terraform, Vault, ServiceNow) + 27 actions, seed command, 49 backend + 19 frontend tests, docs enrichies
+    27-8-integration-splunk-logs-correlation-id: done # Code review 2026-02-14: 10 issues (2 CRITICAL + 3 HIGH + 3 MEDIUM + 2 LOW) ALL auto-fixed — Splunk HEC adapter, SplunkLoggingHandler, correlation_id audit filter, 39 backend + 8 frontend tests pass, docs complètes
+    27-9-refactoring-separer-adapters-plateformes-services: done # Code review 2026-02-14: 8 issues fixed (2 HIGH + 4 MEDIUM + 2 LOW) - except Exception: → as exc, execution_views fallback validation, ServiceNow TODO doc, services/README examples, 487/487 tests pass
+    27-10-adapter-jira-service-fixture-jiraservice: done # Jira comme service : fixture, JiraService (create_issue, update_issue, get_issue, add_comment), Admin Intégrations
+    27-11-bootstrap-vault-secret-zero-et-clarte-role-vault-secrets: done # Bootstrap Vault (secret 0) — œuf/poule, secret_service_id multi-instance, doc vault-bootstrap-guide — 24 BE + 46 vault + 36 FE tests pass
+    epic-27-retrospective: optional
+    # === Epic 28: Règles métier et politiques d'approbation sur les actions ===
+    epic-28: in-progress
+    28-1-modele-schema-regles-metier-business-rule-policies: done # Code review 2026-02-15: 7 issues (2 HIGH + 3 MEDIUM + 2 LOW), 6 auto-fixed (endpoint non-conforme AC3 corrigé, docs aligned, Ant Design API) — PATCH /actions/{id}/ validation complète, 37 tests pass ✅
+    28-2-policy-evaluator-terraform-plan-review-if-modified: done # Code review adversarial 2026-02-15: 12/14 fixes auto-applied (CRIT-1, CRIT-2, MED-1/2/3/4/6/7, LOW-2/3/4), 37 tests (30 unit + 7 integration), 0 régression, rapport 28-2-code-review-report.md, CRIT-3 & MED-5 documentés Story 28.3 ✅
+    28-3-moteur-regles-metier-intelligent-multi-plateforme: done # Code review adversarial 2026-02-15: 30 issues (5 CRITICAL + 7 HIGH + 18 MEDIUM), TOUS auto-fixés — DoS protection (JSON 1MB limit, criteria 100 max), type safety, race condition fix, 56 tests pass ✅
+    28-4-catalogue-regles-metier-admin-association-action: done # Code review 2026-02-15: 10 issues (3 HIGH + 5 MEDIUM + 2 LOW), 7 auto-fixed, 30 BE + 40 FE tests pass — Onglet Admin Règles métier (CRUD), association action ↔ règle prédéfinie, fallback inline
+    epic-28-retrospective: optional
+    # === Epic 29: Clarification modèle Plateformes / Moteurs / Services ===
+    epic-29: in-progress
+    29-1-integration-role-platform-service-catalogue: done # integration_role (platform|service) dans IntegrationTypeCatalogue + fixtures + API — 21 BE + 6 FE tests, 0 régression — Code review adversarial 2026-02-15: 8 fixes (5 MEDIUM + 3 LOW), 32 tests pass (21 BE + 11 FE), documentation enrichie
+    29-2-glossaire-plateforme-moteur-service: done # Glossaire produit et documentation — Code review 2026-02-15: 14 issues (4 CRITICAL + 7 MEDIUM + 3 LOW) auto-fixés, Task 6.1 validation équipe PENDING
+    29-3-alignement-ref-engines-engine-type-inventaire: done # REF_ENGINES ↔ engine_type inventaire, référentiel unique — Code review 2026-02-15: 12 issues found (7 HIGH + 5 MEDIUM + 3 LOW), ALL auto-fixed — normalized_code serializer added, E2E tests added, JSON doc validation, fixtures corrected, documentation enhanced — 10 alignment + 2 E2E + 3 JSON validation tests pass
+    29-4-lien-ref-platforms-integration-type-catalogue: done # Lien explicite REF_PLATFORMS ↔ IntegrationTypeCatalogue — V073 migration idempotente, validation backend DRY helper, 19 tests (16 unit + 3 E2E), documentation mapping, code review adversarial 8 issues ALL fixed
+    epic-29-retrospective: optional
+    # === Epic 30: Corrections exhaustives — Codebase Review IDP Portal (16 février 2026) ===
+    # Réf: idp-portal/CODEBASE-REVIEW.md, planning-artifacts/epic-30-codebase-review-corrections-fev-2026.md — 65 findings (5 CRIT, 16 HIGH, 23 MED, 21 LOW)
+    epic-30: in-progress
+    30-1-endpoints-approve-reject-bug-filtres-catalogue-config-securite: done # CRITICAL: API-MISS-1/2, BUG-BE-1, SEC-1/2/3 — Implémentation + code review (6 fixes: 1 HIGH, 3 MED, 2 LOW) — 26 tests (24 pass + 2 skipped), 0 régression
+    30-2-endpoints-remediation-export-dashboard: done # API-MISS-3 à 6 — 4 endpoints, 34 tests pass, code review 9 fixes (4 HIGH + 4 MEDIUM + 1 LOW)
+    30-3-bugs-logiques-backend: done # BUG-BE-2 à BUG-BE-7 — 6 bugs logiques backend (secret_service_id, structlog user_id, recurrence, cache pagination, code mort, ligne dupliquée)
+    30-4-bugs-logiques-frontend-notifications-alert-rowkey-hooks: done # BUG-FE-1 à BUG-FE-5 — notifications title→message (20+), Alert props (20+), rowKey Math.random, useEffect dependencies (2 hooks) — Code review: 5 additional fixes applied
+    30-5-securite-auth-uploads-dev-bypass-cors-celery-token: done # SEC-4 à SEC-11 — auth frontend, uploads validation (extension+magic bytes+SVG sanitization), dev bypass guard, CORS, Celery credentials, token fragment
+    30-6-incoherences-api-format-reponse: done # APIFMT-1 à 4 corrigés + code review (6 issues: 1 CRIT + 3 MED + 2 LOW), 130 BE + 6 FE tests pass
+    30-7-race-conditions-celery-polling-caches-partages: done # 2026-02-16: Code review: 7 issues (2 HIGH, 3 MEDIUM, 2 LOW) auto-fixed, 22/22 tests pass, all ACs implemented # RACE-1/2/3, CELERY-3/4/5 — Story 30.7 complétée
+    30-8-gestion-erreurs-frontend-backend: done # ERR-1 à ERR-5 — 13 tests, IntegrationVaultValidationMixin, Option A audit strict, CODEBASE-REVIEW.md updated — Code review: 10 issues (7 HIGH, 3 MEDIUM) auto-fixed
+    30-9-performance-n-plus-1-regex-styles-inline: done # PERF-1 à PERF-4 — N+1 queries audit batch, workflows DB-side filter, regex pré-compilées, styles inline backlog — Code review 2026-02-16: 9 issues (3 HIGH + 4 MEDIUM + 2 LOW), 7 auto-fixed
+    30-10-code-mort-deprecations: done # DEAD-BE-1 à 5, DEAD-FE-1 à 6 — code mort supprimé, dépréciations retirées/migrées, factorisation stepDescriptions
+    30-11-accessibilite-theme-couleurs-hardcodees: done # A11Y-1 à A11Y-3 — tokens thème Ant Design, 144 tests pass, guide accessibilité créé
+    30-12-incoherences-modeles-serializers-tags-audit: done # INCON-1 à 5 corrigés, 30 tests, code review: 7 issues fixés (3 HIGH + 3 MEDIUM + 1 LOW), 122 tests passent
+    30-13-restant-bug-fe-1-fe-2-notifications-alert: done # Code review adversarial — découverte 73 bugs dépréciation introduits par Story 30-4 (message→title), tous fixés automatiquement, CODEBASE-REVIEW.md mis à jour ✅
+    30-14-catalog-viewset-get-queryset-cache-rbac: done # Code review adversarial — 5 MEDIUM fixes (race condition cache get_or_set, import time top-level, couplage profiles.cache.py, docstrings) — 42/42 tests ✅
+    30-15-todo-stubs-except-trop-larges: done # MEDIUM — NEW-2 TODO ServiceNow/platform adapter, NEW-4 except trop larges
+    30-16-restant-doublon-styles-inline-incon-4: done # LOW — BUG-BE-7 doublon supprimé, PERF-4 documenté backlog, INCON-4 commentaire enrichi + tests (code review: 12/15 auto-fixes)
+    epic-30-retrospective: optional
+    # === Epic 31: Admin catalogue — Intégrations alignées et icônes moteurs (février 2026) ===
+    # Réf: planning-artifacts/epic-31-admin-catalogue-integrations-et-icones-moteurs.md
+    epic-31: in-progress
+    31-1-formulaire-action-liste-integrations-label-integration: done # 2026-02-19: code-review — 7 issues corrigées (AC6 ActionForm, Alert.title→message, tests AC6, Tower type)
+    31-2-suppression-integration-desactiver-actions: done # 2026-02-19: code-review — 1 HIGH + 2 MEDIUM fixes (updated_at action, code mort view, assertion test)
+    31-3-icones-moteurs-ref-engines: done # 2026-02-19: code-review — 7 issues (1H + 2M + 4L) auto-fixées (race condition SAML prefetch, EngineIconCell moteurs inconnus, APITestCase, test null, docs)
+    31-4-refonte-ux-panneau-changement-servicenow-gates: done # 2026-02-19: Code review adversarial — 4 issues auto-fixés (H1: regex ^[A-Za-z0-9_-]+$, H2: validation template_id, M4: messages erreur, M5: tests Gates switches) — 16/16 tests ✅
+    31-5-aap-selection-template-liste-ou-nom: done # 2026-02-19: code-review — 7 fixes (H1 service erreur, H2 race condition, H3 search AC3, M1 test search, M2 auth tests, M3 WizardAAP tests) — 18 BE + 14 FE tests pass
+    31-6-config-gates-choix-service-creation-changement-servicenow: done # 2026-02-19: code-review — 6 fixes (H1 validation bloquante AC#3, H2 ActionListSerializer gate_config, H3 test 10.4, M1 filtre API type, M2 ActionCreateSerializer, M3 File List + Alert)
+    31-7-aide-contextuelle-tooltip-popover-markdown-backend: done # 2026-02-19: App help Django, 3 topics MD, SectionHelp composant, intégration ActionForm/ActionWizard — 6 BE + 16 FE tests pass. Code review: 0H + 4M + 3L fixes appliqués
+    31-8-service-notification-multi-destinations-email-teams-page: done # 2026-02-19: Code review adversarial — 6 issues corrigées (H1: on_commit, H2: File List, M1: get_parameters(), M2: PII email, M3: URL SSRF, L1: Teams title) — 140 BE tests pass
+    31-9-suppression-doublon-ref-platforms: done # 2026-02-21: RefPlatform supprimé, validate_platform → IntegrationTypeCatalogue, API /reference/platforms → catalogue, bug workflow_runtime fixé, 158 tests pass — Code review: 3 fixes (M1 docs stales, M2 _PLATFORM_ALIAS DRY, L1 docstring)
+    31-10-admin-ui-moteurs-et-reproductibilite-icones: done # code-review 2026-02-21: 7 issues (1H+5M+1L), 6 auto-fixés (doc seed inexistante, Avatar fallback, URL validation, 2 tests ajoutés, doc PK corrigée) — 19 FE tests pass
+    31-11-champ-token-url-formulaire-integrations: done # code-review 2026-02-24: 3 fixes (H1 test pat manquant AC6, M1 JSDoc Story 31.11, M2 assertion token_url:null) — 45/45 FE tests pass
+    31-12-formulaire-dynamique-auth-types-integrations: done # code-review 2026-02-24: 5 fixes (CRIT migration V087→V088 conflit 40-5, M1 selectAuthFlow dupliqué, M2 test header_name absent, L1 import requests module, L2 test oauth2 sans colon) — 59 FE tests + 53 backend tests pass
+    epic-31-retrospective: optional
+    # === Epic 32: Résilience Data Guard (failover / switchover) ===
+    # Réf: planning-artifacts/epic-32-resilience-dataguard.md — Backend détecte coupure DB, reconnexion, retry transaction, portail + API
+    epic-32: in-progress
+    32-1-detection-reconnexion-base-donnees-failover: done # 2026-02-21: middleware résilience DB, CONN_HEALTH_CHECKS, 37 tests pass — code review: 7 issues fixées (3H+3M+1L)
+    32-2-retry-rejeu-transaction-apres-reconnexion: done # 2026-02-21: retry borné, backoff, idempotence, 503, 69 tests pass — code review: 5 fixes (1H+4M)
+    32-3-resilience-portail-et-api-consommateurs: done # 2026-02-21: 13 backend + 50 frontend tests pass, docs NFR/runbook ajoutée — code review: 6 fixes (H2+M1+M2+M3+M4)
+    32-4-bornes-retry-observabilite-codes-erreur: done # 2026-02-21: code review — 4 MEDIUM + 1 LOW fixes (message hardcode, log order, task 4.1/4.2 status, doc example, test assertion) — 103/103 tests pass
+    epic-32-retrospective: optional
+    # === Epic 33: Conformité SOLID — Corrections des écarts ===
+    # Réf: planning-artifacts/epic-33-conformite-solid.md, solid-audit-report.md
+    epic-33: in-progress
+    33-1-ocp-registry-pattern-adapters-services: done # code-review 2026-02-21: 5 fixes (M1 unregister, M2 SERVICE_TYPES assert, B1 overwrite warning, B2 __all__ exports, B3 list_types doc) — 50/50 tests pass
+    33-2-srp-decouper-executions-tasks: done
+    33-3-srp-decouper-catalog-views: done # code-review 2026-02-21: 1 HIGH + 3 MEDIUM + 3 LOW fixes — partial default, dict constant, double subquery, duplicate read, comment cleanup — 369/374 tests pass
+    33-4-dip-injection-dependances-services: done # code-review 2026-02-21: H1 ADR ref, H2 CatalogActionViewSet attr, M2 svc var action_views, M3 6 tests execution views DI — 26/26 tests pass
+    33-5-srp-reduire-actionform-actionwizard: done # code-review 2026-02-21: M1 validateWorkflowSteps champ mort, M2 snIntegrationOptions prop morte, M3 setTimeout cleanup, L1 TODO prod, L2 accent Créer, L3 test symétrique — 112/118 tests pass (6 pré-existants Story 2.24+31.5)
+    33-6-documentation-checklist-solid: done
+    epic-33-retrospective: optional
+    # === Epic 34: Codebase Review restant (mise à jour 2026-02-21) ===
+    # Réf: idp-portal/CODEBASE-REVIEW.md §13–16, planning-artifacts/epic-34-codebase-review-restant-fev-2026.md
+    epic-34: in-progress
+    34-1-quick-wins-backend-di-queryset-validation: done # SOLID-BE-8, NEW-1, SOLID-BE-11 — code-review 2026-02-22: 3 MEDIUM fixes (test request factory, response code assertions, File List)
+    34-2-quick-wins-frontend-notification-status-antd: done # SOLID-FE-5, SOLID-FE-10, BUG-FE-1b/2b — code-review 2026-02-22: 2 MEDIUM fixes (AppLayout cleanup, File List), 5 LOW action items
+    34-3-backend-cache-rbac-split-services-lsp-serializers: done # NEW-3, SOLID-BE-4, SOLID-BE-6 — code-review 2026-02-22: 3M+2L auto-fixés
+    34-4-backend-runtime-registry-webhooks-di: done # SOLID-BE-7, SOLID-BE-9 — code-review 2026-02-22: 2M+3L auto-fixés (threading.Lock, test assertion, logger.debug, test SIMULATE_EXECUTION_DEV, task 2.4 doc) — 42/42 tests pass
+    34-5-backend-poller-generique-unifie: done # SOLID-BE-3 — code-review 2026-02-22: 3M+1L auto-fixés (platform_logs, log events génériques, tests shims GitHub/Terraform, patch mort), 71/71 tests pass
+    34-6-backend-eclater-executions-utils: done # SOLID-BE-1
+    34-7-backend-decomposer-workflow-runtime: done # SOLID-BE-2 — code-review 2026-02-22: H2 tasks cochées, M1 dataclasses.asdict top-level, M2 commentaire corrigé, M3 call_platform_adapter public — 24/24 tests pass
+    34-8-backend-decomposer-inventory-services: done # SOLID-BE-5 — code-review 2026-02-22: 2H+3M+1L auto-fixés (import mort, DRY extraction, type guard, mixed-admin test, naming, encapsulation)
+    34-9-frontend-variant-context-workflow-steps-editor: done # SOLID-FE-6, SOLID-FE-8 — code-review 2026-02-22: H1 variant prop retained (fixed), H2 SortableStepCard tests incomplets (fixed: retry defaults + disabled complet), M1 File List vide (fixed), M2 WorkflowStepsRenderer hors scope (documenté), L1 JSDoc (fixed)
+    34-10-frontend-use-catalog-state-catalog-page: done # SOLID-FE-2 — code-review 2026-02-22: 2H+1M+1L auto-fixés (useCallback x4, useMemo hasActiveFilters, act() warnings, contentMaxWidth) — 41/41 tests pass, 0 erreur TypeScript
+    34-11-frontend-use-audit-filters-composants-audit-page: done # SOLID-FE-3 — code-review 2026-02-22: 2H+3M auto-fixés (handleExport sort/order, sorter null reset, tag Correlation, Drawer width, DRY formatDate) — 22/22 tests pass, 0 TS error
+    34-12-frontend-decouper-execution-timeline: done # SOLID-FE-1 CRITICAL — code-review 2026-02-23: 2M+3L auto-fixés (formatDuration utils.ts, <style> pulse déplacé, type steps, renommage failedStep, commentaire) — 34/34 tests pass, 0 TS error
+    34-13-frontend-dip-services-props-execution-wizard: done # SOLID-FE-4, FE-7, FE-9 — code-review 2026-02-23: 2H+2M+1L fixes (dead useAuth, firstFieldRef mort, onBackToCatalog inutile, interface bloat, doc AC2) — 77/77 tests, 0 TS error
+    34-14-frontend-tests-composants-critiques: done # SOLID-FE-11 — 82 tests (15+25+17+25), code review: 3H+3M fixes (disabled={saving}, cronValidating, cronError, workflowValidationSummary), 0 régression, 0 TS error
+    34-15-backend-isp-base-adapter-optionnel: done # SOLID-BE-10 LOW — code review 2026-02-23: 1H+2M+3L fixes (ITriggerableAdapter return types, test assertions, régression adapters) — 8/8 + 16/16 tests ✅
+    epic-34-retrospective: optional
+    # === Epic 35: Codebase Review — points restants post-refactoring (2026-02-23) ===
+    # Réf: idp-portal/CODEBASE-REVIEW.md §16–17, planning-artifacts/epic-35-codebase-review-points-restants-post-refactoring.md
+    epic-35: in-progress
+    35-1-consolidation-status-config-residuel: done # code-review 2026-02-23: 1H+3M+2L fixes (tests créés 22/22, File List complétée, JSDoc CANCELLED+PENDING_APPROVAL, casts redondants supprimés, STATUS_COLORS.RUNNING dans légende) — 75/75 tests pass
+    35-2-audit-except-exception-et-catch-residuels: done # code-review 2026-02-23: tableaux audit complets produits (AC#2+AC#4), commentaire engineIconCache.ts:31 ajouté (M2), ruff 0 BLE001 confirmé, story done
+    35-3-migration-dip-services-phase-1: done # code-review 2026-02-23: 1H+3M+2L findings, 5 auto-fixés (loadingData création, useCallback, test erreur édition, mock redondant, setSaving), 1 action item M3
+    35-4-revue-fichiers-backend-volumineux: done # 2026-02-23: commentaires Responsabilité ajoutés aux 6 fichiers justifiés, propositions découpage documentées, CODEBASE-REVIEW §16.1 → DOCUMENTED — code-review: 2 MEDIUM + 2 LOW fixes (compteurs §17, classes principales, scope, File List)
+    35-5-corriger-ou-supprimer-tests-en-echec: done # 2026-02-23: 93 backend + 113 frontend → 0 failures. Backend 3488 passed, frontend 2440 passed (180 files). KNOWN_ISSUES.md updated. code-review: 1H+2M+2L auto-corrigés (File List factories.py, KNOWN_ISSUES.md 3e skip documenté, catégorisation views/__init__.py)
+    epic-35-retrospective: optional
+    # === Epic 36: Vue Exécutions partagée et mise à jour du statut ===
+    # Réf: planning-artifacts/epic-36-vue-executions-partagee-mise-a-jour-statut.md, spec-vue-executions-partagee-mise-a-jour-statut.md
+    epic-36: in-progress
+    36-1-vue-partagee-liste-et-droits-rbac: done
+    36-2-mise-a-jour-immediate-pour-acteur: done # code-review 2026-02-23: 2 HIGH fixes (ws.close() → fallback polling bug, sync cleanup), 2 MEDIUM fixes (test 4.7 étendu + tests 4.3b/4.4b, File List 5 fichiers manquants), 88 frontend tests pass
+    36-3-polling-pour-observateurs: done # code-review 2026-02-23: M1 BACKGROUND 10k→30k (linter revert fixé), M2 test 3.3 .find() robustesse, M3 JSDoc tests mis à jour
+    epic-36-retrospective: optional
+    # === Epic 37: Inventaire — Environnement par serveur, colonne paramètre, filtre engine_type ===
+    # Réf: planning-artifacts/epic-37-inventaire-environnement-serveur-colonne-engine.md, spec-inventaire-environnement-serveur-colonne-engine.md
+    epic-37: in-progress
+    37-1-deriver-environnement-depuis-table-servers: done # code-review 2026-02-23: 1 CRITICAL + 2 HIGH + 2 MEDIUM fixes (double-prefix bug SELECT, aliasing helper, dead code removed, error re-wrap), 33/33 tests pass
+    37-2-filtre-engine-type-instances-databases-backend: done # code-review 2026-02-23: 2 MEDIUM + 2 LOW fixes (env conditionnel multi-server, tests serializer engine_type, db_select supprimé, help_text), 104/104 tests pass
+    37-3-frontend-passer-engine-type-appels-inventaire: done # code-review 2026-02-23: 2 MEDIUM fixes (DEV-log previous value bug x2, coverage databases engine_type AC2+AC3), 24/24 tests pass
+    37-4-parametre-inventory-value-column-backend: done # code-review 2026-02-23: 2 MEDIUM + 3 LOW fixes (invariant test VALID_INVENTORY_VALUE_COLUMNS↔VALID_INVENTORY_TYPES, multi-param test, docstring, assertion L4, empty string edge case), 36/36 tests pass
+    37-5-parametre-inventory-value-column-frontend: done # code-review 2026-02-23: 2 HIGH + 2 MEDIUM + 1 LOW fixes (double onParamChange React batching bug, no-op tests replaced, empty string fallback), 100/100 tests pass
+    epic-37-retrospective: optional
+    # === Epic 38: Codebase Review Audit #3 — Corrections des issues ouvertes ===
+    # Réf: idp-portal/CODEBASE-REVIEW.md §17–18, planning-artifacts/epic-38-codebase-review-audit-3-corrections.md
+    epic-38: done
+    38-1-quick-wins-backend-n1-double-update-todo-log: done # NEW-BE-1, NEW-BE-2, NEW-BE-3, NEW-BE-5 — code-review 2026-02-23: 1M fixé (double ligne commentaire), 2L action items
+    38-2-consolidation-status-config-residuel-frontend: done # SOLID-FE-10, 16.4 — consolidation EXECUTION_STATUS_TAG_COLORS, migration ComparisonExecutionsDrawer, commentaires SOLID-FE-10; code-review 2026-02-23: 1M fixé (tests manquants), 2L fixés
+    38-3-frontend-nested-key-props-topnav: done # NEW-FE-1 — code-review 2026-02-23: 0H 1M 2L, L1 fixé (doc AC3), M1+L2 notés
+    38-4-backend-asyncio-run-to-async-to-sync-polling: done # NEW-BE-4 — code-review 2026-02-23: 0H 1M 2L, M1 fixé (docstring test), L1 fixé (completion notes), L2 noté
+    38-5-audit-except-exception-residuels-documentation: done # 16.2 — code-review 2026-02-23: 1H 2M 1L, tous fixés (décomptes corrigés, 11 noqa standardisés)
+    38-6-migration-dip-services-composants-hooks: done # SOLID-FE-4 — code-review 2026-02-23: 1H 3M 3L, 4 fixés (dep manquante, cast unsafe, error state, Promise.all)
+    epic-38-retrospective: optional
+    # === Epic 39: Code coverage backend et frontend — viser 80 % minimum ===
+    # Réf: planning-artifacts/epic-39-code-coverage-backend-frontend-80.md
+    epic-39: in-progress
+    39-1-analyse-tests-existants-pertinence: done
+    39-2-tests-core-auth-utils-logging-services: done
+    39-3-tests-catalog-validators-tags-views-commande: done
+    39-4-tests-executions-services-scheduling-consumers-rbac-workflow: done
+    39-5-tests-executions-views-list-scheduled-approval-webhooks: done
+    39-6-tests-idp-auth-integrations: done
+    39-7-coverage-frontend-fichiers-80-ajouter-tests: done
+    epic-39-retrospective: optional
+    # === Epic 40: Partitionnement et rétention des tables — performance exécutions et audit ===
+    # Réf: planning-artifacts/epic-40-partitionnement-retention-tables-performance.md, docs/performance/partitioning-retention-executions-audit.md
+    epic-40: in-progress
+    40-1-analyse-validation-dba-contraintes-fk-index-requetes: done
+    40-2-migration-flyway-partitionnement-executions: done
+    40-3-migration-flyway-partitionnement-execution-steps: done
+    40-4-migration-flyway-partitionnement-audit-log: done
+    40-5-procedure-purge-politique-retention: done # 2026-02-24: V087 PKG_IDP_MAINTENANCE + IDP_MAINTENANCE_LOG + guide opérationnel + 9 tests intégration — code review: 6 issues fixées (2H/2M/2L)
+    epic-40-retrospective: optional
+    # === Epic 41: Consolidation des migrations BD après longues itérations ===
+    # 84 scripts Flyway (V000–V083) — consolider en scripts logiques pour faciliter maintenance et déploiement
+    epic-41: in-progress
+    41-1-audit-migrations-existantes-strategie-consolidation: done # 2026-02-24: Audit complet 89 migrations, doc docs/migration-audit-epic41.md — stratégie Baseline V000-V083 recommandée; code-review 2026-02-24 (5 fixes: nommage Flyway, V062/V057 classifications, V084 idempotence, AUDIT_LOG note)
+    41-2-consolider-scripts-migrations-flyway: done # 2026-02-24: baseline_schema_v083.sql (24 tables, TRG_AUDIT_LOG_IMMUTABLE, 12 INSERTs ref-data) + README.md déploiement créés; code-review 2026-02-24 (5 fixes: noms rollback README, déviation AC3 documentée, commentaire ACTIONS_CATALOG, index SCHEDULED_AT, libellé checklist)
+    epic-41-retrospective: optional
+    # === Epic 42: Celery Beat pour exécutions planifiées ===
+    # Réf: planning-artifacts/epic-42-celery-beat-scheduled-executions.md
+    epic-42: in-progress
+    42-1-celery-beat-process-pending-scheduled-executions: done # code-review 2026-02-24 (3 fixes: transaction.atomic select_for_update, audit atomique, assertion T5.8) — 9/9 tests OK
+    epic-42-retrospective: optional
+    # === Epic 43: Page d'audit globale — Filtres et couverture étendue ===
+    # Réf: planning-artifacts/epic-43-audit-page-globale-filtres.md — Inspiration Port.io
+    epic-43: in-progress
+    43-1-backend-api-audit-globale-filtres-entity-action-user: done
+    43-2-backend-stockage-parametres-execution-audit-details: done
+    43-3-frontend-filtres-entity-action-recherche-utilisateur: done
+    43-4-frontend-colonnes-type-operation-entite: done
+    43-5-frontend-affichage-approuve-par-execution-approved: done
+    43-6-export-csv-support-filtres-globaux: done
+    43-7-drawer-affichage-adapte-entrees-non-execution: done
+    epic-43-retrospective: optional
+    # === Epic 44: API inventaire privée et token pour consommation API externe ===
+    # Réf: planning-artifacts/epic-44-api-inventaire-privee-token-externe.md
+    epic-44: in-progress
+    44-1-backend-modele-stockage-api-keys: done
+    44-2-backend-endpoint-post-auth-token-api-key: done # 2026-02-25: Code review passé — fixes: select_related N+1, CORS x-api-key, test AC9. 11/11 tests passent.
+    44-3-backend-marquer-api-inventaire-privee: done # 2026-02-25: Code review passé — fixes: chemins tests corrigés (SCHEMA_PATH_PREFIX), setUpClass perf, 3 tests spécifiques ajoutés. 7/7 tests passent.
+    44-4-documentation-api-self-service-reference: done # 2026-02-25: Code review passé — fixes: auth globale incorrect, headers X-API-Key, codes erreur MISSING/INVALID_API_KEY, redondance section, emojis script, cross-link, curl -s. 7 issues corrigées.
+    44-5-admin-ui-commande-gerer-api-keys: done # 2026-02-25: Code review: 5 correctifs appliqués, 20/20 tests passent. Status → done.    
+    44-7-self-service-ui-portail-creer-gerer-api-keys: done # Story file created — self-service UI API keys # Utilisateur connecté peut créer/gérer ses clés API depuis le portail # Code review 2026-02-26
+    44-8-supprimer-admin-django-api-keys: done # Code review 2026-02-26: 4 fixes appliqués (H1, M1, M2, L1)
+    44-9-swagger-documentation-flux-api-key-auth: done # Code review 2026-02-26: 4 HIGH + 2 MEDIUM fixes (security scheme, required=True test, doc Bearer correction, 3 nouveaux tests)
+    epic-44-retrospective: optional
+    # === Epic 45: UX Admin Django — Navigation et lisibilité ===
+    # Réf: planning-artifacts/epic-45-ux-admin-django.md
+    epic-45: in-progress
+    45-1-corriger-icones-manquantes: done
+    45-2-installer-configurer-theme-admin: done
+    45-3-personnaliser-modeladmin-users-groups-api-keys: done
+    45-4-regrouper-modeles-par-domaine: done
+    epic-45-retrospective: optional
+    # === Epic 46: Audit UX/UI Complet — Remédiation des constats critiques ===
+    # Réf: planning-artifacts/epic-46-audit-ux-ui-complet.md — Source: DBOPS_Audit_UX_UI.pages (fév. 2026)
+    epic-46: in-progress
+    46-1-catalogue-affordance-cartes: done
+    46-2-zones-cliquables-taille-minimale-44px: done
+    46-3-badges-standardisation-couleurs: done
+    46-4-accessibilite-contraste-wcag-aa: done
+    46-5-dashboard-statistiques-legendes-libelles: done
+    46-6-administration-densite-sous-navigation: done
+    46-7-harmonisation-patterns-filtres: done
+    epic-46-retrospective: optional
+    # === Epic 47: Isolation des adaptateurs — Fondations solides ===
+    # Réf: planning-artifacts/epic-47-isolation-adaptateurs-fondations.md — Queues Celery par plateforme, trigger async, fail fast (supprimer succès simulé)
+    epic-47: in-progress
+    47-1-queues-celery-par-plateforme-isolation-workers: done
+    47-2-trigger-asynchrone-tache-celery-au-lieu-bloquer-requete-http: done
+    47-3-supprimer-succes-simule-fail-fast-alerte-explicite: done
+    47-4-resolution-automatique-queues-celery-demarrage-django: done # Code review 2026-02-26: H1+M1+M2 fixes, 55 tests
+    epic-47-retrospective: optional
+    # === Epic 48: Codebase Review Audit #4 — Corrections des issues ouvertes ===
+    # Réf: idp-portal/CODEBASE-REVIEW.md §18-19, planning-artifacts/epic-48-codebase-review-audit-4-corrections.md
+    epic-48: in-progress
+    48-1-securite-validation-url-integrations: done
+    48-2-backend-n1-double-saves-integration-catalog: done
+    48-3-frontend-quick-wins-topnav-catch-prop-morte: done
+    48-4-securite-tls-path-traversal: done
+    48-5-frontend-consolidation-status-config: done
+    48-6-backend-migration-structlog: done # Code review 2026-02-26: 1 HIGH (positional args registry) + 1 MEDIUM (extra={} structlog) corrigés. 2 action items LOW ouverts (tests contexte, f-strings models)
+    48-7-frontend-cache-usecategories-invalidation: done # Code review 2026-02-26: M1 CategoriesAdminTable.test.tsx (6 tests AC2), L2 comment header, L3 arg assertion. 0 HIGH/MEDIUM résiduels
+    48-8-frontend-migration-dip-services-hooks-pilote: done # Code review 2026-02-26: 5 fixes (CRIT-1/2, HIGH-1/2/3)
+    48-9-backend-audit-except-exception-residuels: done
+    epic-48-retrospective: optional
+    # === Epic 49: Authentification LDAP pour comptes de service ===
+    # Réf: planning-artifacts/epic-49-authentification-ldap-comptes-service.md
+    epic-49: in-progress
+    49-1-backend-service-ldap-bind-fetch-groups-configuration: done
+    49-2-backend-endpoint-post-auth-service-login: done
+    49-3-backend-throttling-audit-rate-limiting: done # code-review 2026-02-26: 4 issues auto-fixed (1 HIGH API_KEY_TOKEN_EXCHANGE in V094, 1 MEDIUM test assertion, 2 LOW)
+    49-4-documentation-api-self-service-ldap-configuration: done # code-review 2026-02-26: 7 issues auto-fixed (2 CRITIQUE: wrapper data + HTTP 503, 1 HIGH: DN_TEMPLATE default, 3 MEDIUM, 1 LOW)
+    49-5-tests-unitaires-integration-mock-ldap: done # code-review 2026-02-26: 5 issues auto-fixed (3 HIGH: double-formatage DN, except trop large, AC2a MOCK_SYNC manquant; 2 MEDIUM: assertion échappement, doc mock_server_cls)
+    epic-49-retrospective: optional
+    # === Epic 50: Email utilisateur depuis Active Directory pour les notifications ===
+    # Réf: planning-artifacts/epic-50-notifications-email-active-directory.md — Modèle User + email, SAML claims, NotificationService
+    epic-50: in-progress
+    50-1-email-utilisateur-depuis-ad-modele-migration-saml-callback-notifications: done
+    epic-50-retrospective: optional
+    # === Epic 51: Indicateur de santé des intégrations (vert/rouge) ===
+    # Réf: planning-artifacts/epic-51-health-check-integrations.md — Ping + auth, test à la sauvegarde, bouton, périodique
+    epic-51: in-progress
+    51-1-backend-modele-health-check-par-type-test-sauvegarde: done
+    51-2-backend-api-endpoint-post-integrations-test-connection: done
+    51-3-backend-tache-celery-beat-periodique-health-check: done # 2026-02-27: code review — 7 fixes (MEDIUM×4, LOW×3), 11/11 tests passent
+    51-4-frontend-indicateur-vert-rouge-liste-detail-bouton-tester-connexion: done # 2026-02-27: code review — 4 fixes (H×2, M×2): tests tooltip+loading+onHealthChecked, HEALTH_CONFIG extrait en utils partagé, 99/99 tests passent
+    epic-51-retrospective: optional
+    # === Epic 52: Conteneur Celery Beat dans Docker Compose ===
+    # Réf: planning-artifacts/epic-52-conteneur-celery-beat-docker.md — Service Docker qui lance celery beat pour tâches périodiques
+    epic-52: in-progress
+    52-1-service-docker-compose-celery-beat: done
+    epic-52-retrospective: optional
+    # === Epic 53: Normalisation environnements et inventaire source de vérité ===
+    # Réf: planning-artifacts/epic-53-normalisation-environnements-inventaire.md — Inventaire = seule source pour environnements (developpement, certification, production)
+    epic-53: in-progress
+    53-1-backend-inventaire-source-verite: done
+    53-2-backend-profils-executions-valeurs-brutes: done
+    53-3-backend-supprimer-targetenvironment-code-dur: done
+    53-4-frontend-useenvironments-sans-fallback-incorrect: done
+    53-5-tests-mise-a-jour-coherence-inventaire: done
+    epic-53-retrospective: optional
+    # === Epic 54: Codebase Review Audit #5 — Maintenabilité & structure ===
+    # Réf: planning-artifacts/epic-54-codebase-review-audit-5-maintenabilite.md — 28 issues ouvertes (6 HIGH, 10 MEDIUM, 11 LOW)
+    epic-54: in-progress
+    54-1-securite-validation-url-integrations: done
+    54-2-backend-n1-double-saves-integration-catalog: done
+    54-3-frontend-quick-wins-topnav-catch-prop-morte: done
+    54-4-securite-tls-path-traversal: done
+    54-5-backend-profils-config-driven: done
+    54-6-backend-refactoring-update-status: done
+    54-7-backend-eclater-idp-auth-views: done
+    54-8-frontend-hook-use-integration-form-state: done
+    54-9-backend-dto-execution-request: done
+    54-10-backend-find-workflows-json-faux-positifs: done
+    54-11-backend-status-mapping-centralise-adapters: done # refactor(adapters): status_mappers.py centralisé — 302 tests pass, MAINT-BE-7 résolu, review OK (2026-02-28)
+    54-12-frontend-extraction-use-workflow-graph: done # code-review 2026-02-28: 1 CRITIQUE + 2 MEDIUM corrigés (try/catch onDrop, onNodesChange guard, onEdgesDelete cleanup), test assertion renforcé
+    54-13-frontend-refactoring-execution-renderers: done # code-review 2026-02-28: 6 issues corrigés (table consommateurs, test direct, File List, style, docs) ; 52 tests passent
+    54-14-backend-decomposer-inventory-query-executor: done
+    54-15-frontend-migration-dip-services-hooks-suite: done # code-review 2026-02-28: 5 issues corrigés — useEngineForm.test.ts créé, bugs notification title→message (IntegrationsTable+ProfileImportModal), deps useCallback, useEngineForm saving/error state
+    54-16-backend-frontend-quick-wins-low: done # code-review 2026-02-28: 3 issues corrigés — formatLocalDateTime rendu déterministe (manuel HH:mm), formatLocalDate options explicites, tests dateFormat renforcés (toBe exact + regex format)
+    epic-54-retrospective: optional
+    # === Epic 55: Couverture tests 90 % — Backend et frontend ===
+    # Réf: planning-artifacts/epic-55-coverage-90-backend-frontend.md — Objectif 90 % coverage, focus fichiers < 80 %
+    epic-55: in-progress
+    55-1-raffraichir-analyse-couverture-etat-actuel-post-epic-39: done # code-review 2026-02-28: 4 issues médium corrigés — File List complétée (terraform_cloud_adapter.py), section 11 Story 55.2 comptage (5) + titre "0-80%", status done, référence baseline corrigée
+    55-2-backend-fichiers-0-60-pourcent-vers-90: done # code-review 2026-02-28: 4 issues corrigés — tests durée négative/valide ajoutés (task 1.12 complétée), days<=0 pour DashboardCompareView testé, adoption_trend assertion inconditionnelle, commentaire trompeur test_query_builder corrigé
+    55-3-backend-fichiers-60-80-pourcent-vers-90: done # code-review 2026-02-28: 2 HIGH + 3 MEDIUM corrigés — patch isinstance builtin invalide, patch dataclasses.asdict trompeur, contamination cache try/finally, test log entity_id via capture_logs, vérification codes erreur NOT_IMPLEMENTED/EXPORT_LIMIT_EXCEEDED
+    55-4-backend-fichiers-80-90-pourcent-vers-90: done # code-review 2026-03-01: 2 MEDIUM corrigés — test_remediation_views_coverage.py retiré section M (nouveau fichier), test_tasks_coverage.py ajouté Fichiers étendus ; 1 LOW: import importlib inutilisé supprimé
+    55-5-frontend-hooks-composants-0-60-pourcent-vers-90: done # code-review 2026-03-01: 9 issues corrigés (M: assertions Slider FeatureFlagsPanel, guards if SchedulingPanel, sélecteur bouton BusinessRulesPolicyPanel ; L: loading state CategoryForm+EditExecutionModal, shouldUpdate tests, date ProfilesTable)
+    55-6-frontend-hooks-composants-60-80-pourcent-vers-90: done # code-review 2026-03-02: 2 MEDIUM corrigés (File List incomplet: ParametersEditor.dnd + ReportingDashboard.dnd ajoutés ; refs Story 55.7 → 55.6) + 2 MEDIUM (assertions faibles ParametersEditor.dnd renforcées ; expect(true).toBe(true) remplacé) + 1 LOW (vi.restoreAllMocks ajouté IntegrationForm.upload)
+    55-7-frontend-fichiers-80-90-pourcent-vers-90: done # code-review 2026-03-02: 3 issues corrigés (H: extra.test.ts supprimé — doublon complet de extra6 ; M: 4 tests dupliqués supprimés de extra2.test.ts ; C: File List vide rempli + exception AC #7 documentée pour v8 ignore sur code défensif inatteignable en JSDOM)
+    55-8-mise-a-jour-ci-seuils-90-pourcent: done # code-review 2026-03-02: 2 HIGH corrigés (AC #3 amendé branches:80% exception documentée, tâches 3.2/3.3 rectifiées) + 2 MEDIUM (README CI/CD corrigé develop exclu, gap CI develop documenté) + 1 LOW (commentaire vite.config.ts enrichi)
+    epic-55-retrospective: optional
+    # === Epic 56: Décorrélation DBOPS/DBA — Solution agnostique pour autres équipes d'automatisation ===
+    # Réf: planning-artifacts/epic-56-decorrelation-dbops-dba-solution-agnostique.md, idp-portal/docs/depersonalization-analysis.md
+    epic-56: in-progress
+    56-1-inventaire-config-fallback-schema: done
+    56-2-notifications-page-oncall-alias-page-dba: done
+    56-3-frontend-hastab-analytics-au-lieu-isdbops: done
+    56-4-permissions-admin-profile-permission-is-admin-user: done
+    56-5-tests-adapter-permissions-depersonalisation: done
+    56-6-nettoyage-documentation-renommage-complet: done
+    56-7-rbac-admin-via-profile-flag-multi-profiles: done
+    epic-56-retrospective: optional
+    # === Epic 57: ADR-007 Workflow Step-Based Change Management ===
+    # Réf: planning-artifacts/epic-57-adr-007-workflow-step-based-change-management.md, idp-portal/django_backend/docs/decisions/adr-007-workflow-step-based-change-management.md
+    epic-57: in-progress
+    57-1-modele-executionstep-nouveaux-champs-et-types: done
+    57-2-output-context-template-resolver-output-extractor: done
+    57-3-condition-evaluator-step-dispatcher: done
+    57-4-service-call-handler-service-registry: done
+    57-5-http-request-handler-validation-ssrf: done
+    57-6-evaluation-handler-rule-engine-wrapper: done
+    57-7-gate-handler-gate-evaluator-wrapper: done
+    57-8-endpoint-approbation-par-step: done
+    57-9-servicenow-service-close-change-cancel-change: done
+    57-10-migration-pre-hook-servicenow: done
+    57-11-wrapper-automatique-backward-compatibility: done
+    57-12-deprecation-migration-workflows-existants: done
+    57-13-workflow-builder-support-nouveaux-types-steps-classement-actions: done
+    57-14-champ-is-approver-sur-profile: done
+    # Réf: idp-portal/docs/workflow-schedule-step-implementation.md
+    57-15-schedule-execution-step-backend-core: done
+    57-16-schedule-execution-step-frontend-workflow-builder: done
+    57-17-schedule-execution-step-traceabilite-ui: done
+    57-18-supprimer-gates-changements-definitions-actions: done
+    57-19-etapes-references-par-id-clarte-utilisateur: done
+    57-20-clarifier-jsonpath-input-output-usage: done
+    epic-57-retrospective: optional
+    # === Epic 58: Bugs workflow approbation — nouveaux types d'étapes ===
+    # Réf: planning-artifacts/epic-58-bugs-workflow-approbation-nouveaux-steps.md
+    # Suite à l'introduction des nouveaux types de steps (approval, gate, etc.), plusieurs bugs bloquants.
+    # 1) Approve/Reject → erreur "action running cannot be modified" — validation backend incorrecte
+    # 2) Notification approbation : manque paramètres et targets — approbateur sans contexte
+    # 3) Vue exécution : étape initiale approbation ne passe pas à "En cours", header/drawer ne s'actualisent pas
+    epic-58: in-progress
+    58-1-fix-erreur-action-running-approve-reject: done # 2026-03-03
+    58-2-enrichir-notification-approbation-parametres-targets: done # 2026-03-03
+    58-3-mise-a-jour-temps-reel-vue-execution-etape-approbation-initiale: done # 2026-03-03
+    58-4-selection-profils-approbateurs-par-etape-approver-profile-ids: done # 2026-03-03
+    58-5-investigation-propagation-approbations-entre-fenetres: done # 2026-03-06
+    58-6-formater-contexte-approbations-lisibilite-environnement: done # 2026-03-06
+    epic-58-retrospective: optional
+    # === Epic 59: Corrections Deep Code Review 2026-03-06 ===
+    # Source: docs/code-review-deep-2026-03-06.md — 8 issues (SEC-1 à SEC-7, DEP-1)
+    epic-59: in-progress
+    59-1-fallback-approver-permissif-fail-secure: done # SEC-1
+    59-2-websocket-execution-consumer-verification-acces: done # SEC-2
+    59-3-api-key-token-profils-m2m-ad-groups: done # SEC-3
+    59-4-cors-validation-config-production: done # SEC-4
+    59-5-superuser-fallback-interdiction-production: done # SEC-5
+    59-6-dev-bypass-auth-blocage-prod-audit: done # SEC-6
+    59-7-ip-spoofing-x-forwarded-for: done # SEC-7 — X-Real-IP priorité, Nginx $remote_addr, NUM_PROXIES, 6 tests
+    59-8-dependances-python-19-vulnerabilites-high: done # DEP-1
+    epic-59-retrospective: optional
+    # === Epic 60: Enrichissement statistiques — Admin (plateforme) vs Opérations (actions) ===
+    # Réf: planning-artifacts/epic-60-enrichissement-statistiques-admin-et-operations.md
+    epic-60: in-progress
+    60-1-backend-api-stats-catalogue-admin: done # Admin — actions/workflows par statut, techno, catégorie
+    60-2-backend-api-stats-adoption-par-profil: done # Admin — exécutions par profil initiateur
+    60-3-frontend-section-stats-admin-page-statistiques: done # Admin — bloc "Utilisation de la plateforme" — code-review 2026-03-06: 1 HIGH + 2 MEDIUM fixes
+    60-4-frontend-graphiques-admin-catalogue-adoption: done # Admin — graphiques catalogue, adoption (code-review 2026-03-07: 6 fixes — indentation, tests data assertions, MIN_CHART_HEIGHT/YAxis cohérence)
+    60-5-backend-api-stats-operations-enrichies: done # Opérations — durée moyenne, top actions, plateformes
+    60-6-backend-api-stats-approbations: done # Opérations — volume, délai, taux approbation/rejet (code-review 2026-03-07: 2 fixes — déduplication gate steps avg_delay, nettoyage created_at morts dans tests)
+    60-7-backend-api-stats-planifiees-vs-manuelles: done # Opérations — scheduled vs manuel (code-review 2026-03-07: 1 HIGH + 2 MEDIUM + 1 LOW fixes — Profile fixtures RBAC, scheduled_ids period-filter, dead code, negative days test)
+    60-8-backend-api-stats-retries: done # Opérations — taux retries (code-review 2026-03-07: 1 MEDIUM fix — qs.count() redondant supprimé (len(period_ids)) ; 3 tests ajoutés — entity_type filter, top_n=1, top_n=100 ; 37/37 tests passent)
+    60-9-frontend-section-stats-operations-page-statistiques: done # Opérations — bloc "Activité opérationnelle" (code-review 2026-03-07: 1 CRITIQUE + 1 HIGH + 4 MEDIUM fixes — test loading state ajouté, tooltip AC2 corrigé, assertions renforcées, mocks beforeEach complétés)
+    60-10-frontend-statcards-graphiques-operations: done # Opérations — StatCards, graphiques (2026-03-07: 3 charts + 19 tests ✅ ; code-review 2026-03-07: 1 HIGH + 2 MEDIUM fixes — Alert.message, Bar.name, indentation)
+    60-11-frontend-enrichissement-executions-stat-section: done # Opérations — enrichir ExecutionsStatSection (code-review 2026-03-07: 1 MEDIUM fix — test loading state avgExecutionTimeLoading ajouté ; 1 MEDIUM fix — type mock StatCard value: number|string ; 1 LOW fix — assertion texte lien analytics)
+    epic-60-retrospective: optional
+    # === Epic 61: Enrichissement audit — Modifications visibles et contexte exécution ===
+    # Réf: planning-artifacts/epic-61-audit-enrichissement-modifications-et-contexte.md
+    epic-61: in-progress
+    61-1-backend-audit-integration-avec-changements: done # INTEGRATION_UPDATED : changes { field: { old, new } }
+    61-2-backend-audit-action-avec-changements: done # ACTION_UPDATED : changes { field: { old, new } }, execution_steps counts
+    61-3-backend-audit-profile-avec-changements: done # PROFILE_UPDATED : changes
+    61-4-backend-audit-integration-type-catalogue-avec-changements: done # Code review 2026-03-07: 2 MEDIUM fixes (assert changes=={}, tests version+description) — 19/19 tests pass
+    61-5-masquage-champs-sensibles-audit: done # Code review 2026-03-07: 3 fixes (dashboard/views.py dans File List, test apikey, _NON_SENSITIVE_AUDIT_FIELDS dans Dev Notes) — 16/16 tests pass
+    61-6-verification-execution-submitted-contexte: done # EXECUTION_SUBMITTED : action, targets, parameters
+    61-7-enrichissement-audit-approbation-rejet: done # Code review 2026-03-07: 3 fixes (AC3/AC4 tests, type annotation, rejection_reason RejectStepView) — 12/12 tests pass
+    61-8-enrichissement-audit-steps-execution: done # Code review 2026-03-07: 4 fixes (max_attempts hardcodé, RETRY_ABORTED missing field, tests RETRY_ABORTED+GATE_TIMEOUT) — 9/9 tests pass
+    61-9-frontend-affichage-changements-audit-entry-drawer: done # Section Modifications — code-review 2026-03-07
+    61-10-frontend-affichage-contexte-execution-audit-drawer: done # Code review 2026-03-07: action_name typé dans details, test step-only, assertion label Paramètres — 37/37 tests pass
+    epic-61-retrospective: optional
+    # === Epic 62: Workflow — Paramètres inventaire dédupliqués et colonnes dynamiques ===
+    # Réf: planning-artifacts/epic-62-workflow-parametres-inventaire-dedup-dynamique.md
+    # 1) Paramètres communs : saisir une seule fois les paramètres partagés entre étapes (surtout inventaire)
+    # 2) Colonnes dynamiques : colonnes inventaire depuis config (ex. nouvelle colonne servers → disponible sans déploiement)
+    epic-62: in-progress
+    62-1-parametres-communs-workflow-identification-ui: done # Section Paramètres communs en haut du wizard
+    62-2-parametres-communs-workflow-propagation-validation: done # Injection dans workflow_step_parameters
+    62-3-api-schema-inventaire-colonnes-par-type: done # Endpoint colonnes depuis config inventaire
+    62-4-validation-inventory-value-column-dynamique-backend: done # Remplacer liste fixe par config
+    62-5-colonnes-dynamiques-editeur-formulaire-frontend: done # ParametersEditor + formulaire exécution
+    epic-62-retrospective: optional
+    # === Epic 63: Workflow Output Schemas & Variable Picker ===
+    epic-63: in-progress
+    63-1-infrastructure-schemas-output-backend: done
+    63-2-registre-schemas-resolution: done # 2026-03-07: OutputSchemaRegistry (cache thread-safe, héritage), invalidation cache, convention AAP polling (output_fields), endpoints discovery, 29 tests (79/79 output_schemas). Review: 4 MEDIUM + 1 LOW corrigés.
+    63-3-variable-picker-ui-frontend: done # 2026-03-07: VariablePicker (Popover+Search), output_schema_service, useOutputSchemas hook, KeyValueEditor cursor insertion, workflowId threading (ActionWizard→Canvas→Panel→StepConfigs), 49 tests. Review: 5 MEDIUM + 3 LOW corrigés.
+    63-4-templates-notification-variables: done # 2026-03-07: NotificationTemplateEditor (send_email/send_teams), truncate filter, execution_context (action_name, environment, execution_id), 4 tests backend, 16+2 tests frontend. Intégration ServiceCallStepConfig rendu conditionnel. Review: 2 MEDIUM + 3 LOW corrigés.
+    63-5-schemas-output-defaut-seed-data: done # 2026-03-07: 8 YAML seed, seed_output_schemas (--force/--mode), 8 tests. Review: 2 HIGH + 3 MEDIUM corrigés (README, bug --mode=full, test mode=full, logger.debug, dead code). 88/88 tests.
+    63-6-documentation-validation: done # 2026-03-07: docs/workflow-output-schemas.md, test_roundtrip_with_inheritance, scripts/audit_workflow_schemas.py. Review: 1 HIGH + 3 MEDIUM + 2 LOW corrigés (N+1 query, extra COUNT, doc header, step_type filtering, test assertion, fichiers non commités).
+    63-7-fallback-aap-convention-steps-plateforme: done # Fallback get_platform_convention('aap') quand get_action_schema retourne None → VariablePicker affiche variables AAP pour steps plateforme sans schéma action dédié. Review: 2 MEDIUM + 2 LOW corrigés (tests AC1-cond3, DoesNotExist, sans ref_action_id ; docstring registry). 36/36 tests.
+    63-8-aap-artifacts-job-adapter-polling: done # AAP : récupérer les artifacts du job (adapter + polling) et les exposer dans l'output du step (set_stats, variables custom). Review: 3 MEDIUM + 3 LOW corrigés (AsyncClient unique, docstring, test page_size=200, assertions nouveaux champs, garde host_name vide). 7/7 + 5/5 tests verts.
+    63-9-declarer-outputs-par-action: done # Déclarer les outputs par action : schémas OutputSchema par action (ou champ output_schema sur Action). Review: 2 HIGH + 3 MEDIUM + 1 LOW corrigés (output_schema_id ignoré PATCH multi-champs, Space direction, ActionListItem TS, test introspection, test PATCH multi-champs, test 7.4).
+    63-10-github-actions-outputs-artifacts: done # GitHub Actions : récupérer outputs/artifacts du run et les exposer dans l'output du step. Review: 3 MEDIUM corrigés (assertions outputs/artifacts/job_conclusion dans queued+in_progress, docstring get_status(), assertion job_conclusion test artifacts). 63/63 tests verts.
+    63-11-doc-syntaxe-steps-variables: done # Documenter la syntaxe {{ steps.<step_id>.<field> }} et le flux output_mapping → input_mapping. Review: 2 HIGH + 3 MEDIUM + 2 LOW corrigés (noms variables exécution, contenu orphelin, step_type incomplet, JSONPath comportement, condition formats, précisions mineures).
+    epic-63-retrospective: optional
+    # === Epic 64: Infrastructure as Code — Git comme source de vérité ===
+    # Réf: docs/architecture/infrastructure-as-code-strategy.md, docs/architecture/infrastructure-as-code-implementation-guide.md
+    # Planning: _bmad-output/planning-artifacts/epic-64-infrastructure-as-code.md
+    epic-64: in-progress
+    64-1-utilitaires-iac-reference-data: done
+    64-2-tags-feature-flags-export-import: done
+    64-3-integration-type-catalogue-export-import: done
+    64-4-integrations-export-import: done
+    64-5-business-rule-policies-export-import: done
+    64-6-actions-workflows-export-import: done
+    64-7-profiles-export-import-upgrade-envelope-action-names: done
+    64-8-endpoints-api-sync-export-post: done
+    64-9-commande-management-sync-config: done
+    64-10-commande-management-detect-drift: done
+    64-11-migration-bd-tracking-sync: done
+    64-12-script-apply-idp-config-pipeline-cicd: done
+    64-13-frontend-drift-badge-export-single-entity: done
+    64-14-frontend-config-sync-dashboard: done
+    64-15-tests-documentation: done
+    64-16-supprimer-module-admin-sync: done # Simplification CaC — garder uniquement import/export API, supprimer dashboard sync + drift
+    64-17-renommer-iac-en-cac: done # IaC → CaC (Configuration as Code) — code, BD, docs
+    epic-64-retrospective: optional
+    # === Epic 65: Workflow — Parallel Group (Phase 1 MVP) ===
+    # Réf: idp-portal/docs/PARALLEL-WORKFLOW-ACTIONS-ANALYSIS.md, planning-artifacts/epic-65-workflow-parallel-group-phase-1.md
+    # Option A "Parallel Group" : step_type parallel_group, parallel_steps[], ThreadPoolExecutor, on_all_success/on_any_error
+    epic-65: in-progress
+    65-1-schema-json-validation-backend-parallel-group: done
+    65-2-runtime-backend-execution-parallele-container-workflow: done
+    65-3-workflow-runtime-legacy-support-parallel-group: done
+    65-4-frontend-conversion-export-import-parallel-group: done
+    65-5-frontend-workflow-builder-ui-parallel-group: done
+    65-6-vue-execution-observabilite-steps-paralleles: done
+    65-7-cac-documentation-tests-finaux-parallel-group: done
+    epic-65-retrospective: optional
+    # === Epic 66: Revue complète pré-release — Code, documentation et standards ===
+    # Réf: planning-artifacts/epic-66-revue-complete-pre-release.md
+    # Revue exhaustive module par module : bugs, logique, duplication, code mort, consolidation, SOLID, doc, FRONTEND-STANDARDS
+    epic-66: done
+    66-1-revue-frontend-components-common-shared: done
+    66-2-revue-frontend-components-layout-auth: done
+    66-3-revue-frontend-components-catalog: done
+    66-4-revue-frontend-components-admin: done
+    66-5-revue-frontend-components-execution-executions: done
+    66-6-revue-frontend-components-workflow: done
+    66-7-revue-frontend-components-dashboard-audit: done
+    66-8-revue-frontend-components-calendar-icons: done
+    66-9-revue-frontend-pages: done
+    66-10-revue-frontend-services: done
+    66-11-revue-frontend-hooks: done
+    66-12-revue-frontend-contexts-utils-theme-types: done
+    66-13-revue-frontend-app-main-routing: done
+    66-14-revue-backend-core: done
+    66-15-revue-backend-catalog: done
+    66-16-revue-backend-executions: done
+    66-17-revue-backend-idp-auth: done
+    66-18-revue-backend-integrations: done
+    66-19-revue-backend-audit: done
+    66-20-revue-backend-profiles: done
+    66-21-revue-backend-inventory: done
+    66-22-revue-backend-adapters: done
+    66-23-revue-backend-dashboard-admin-analytics: done
+    66-24-revue-backend-output-schemas-reference-help: done
+    66-25-revue-backend-services-utils: done
+    66-26-revue-documentation-docs-readme: done
+    66-27-consolidation-synthese-findings-plan-correction: done
+    epic-66-retrospective: optional
+    # === Epic 67: Workflow — Parallélisme via multi-connexion (remplacement Groupe parallèle) ===
+    # Réf: planning-artifacts/epic-67-workflow-parallel-multi-connexion.md
+    # Supprimer step parallel_group ; permettre plusieurs connexions depuis un port succès/échec → exécution parallèle
+    epic-67: in-progress
+    67-1-schema-json-validation-backend-multi-cibles: done
+    67-2-runtime-backend-execution-parallele-multi-cibles: done
+    67-3-runtime-backend-routing-par-branche-join-policy: done
+    67-4-frontend-workflow-builder-multi-connexions: done
+    67-5-frontend-suppression-step-groupe-parallele: done
+    67-6-migration-parallel-group-vers-multi-connexion: done
+    67-7-vue-execution-cac-documentation-tests: done
+    67-8-join-policy-failed-all-failed-one-failed: done
+    epic-67-retrospective: optional
+    # === Epic 68: Authentification LDAP prioritaire (comptes à haut privilège) ===
+    # Réf: implementation-artifacts/67-2-exigence-auth-ldap-comptes-privileges.md
+    # Requis sécurité : LDAP prioritaire, accès portail réservé aux comptes à haut privilège (séparation laptop / privilégié)
+    epic-68: in-progress
+    68-1-configuration-ldap-methode-prioritaire: done
+    68-2-restriction-acces-comptes-haut-privilege: done
+    68-3-authentification-explicite-sans-sso-transparent: done
+    68-4-validation-non-regression-saml: done
+    epic-68-retrospective: optional
+    # === Epic 69: Représentation enrichie des workflows dans le catalogue ===
+    # Réf: planning-artifacts/epic-69-representation-workflows-catalogue.md
+    # Icônes technologies, indicateur workflow (bas gauche, couleur thème), extrait enrichi, drawer actions+paramètres
+    epic-69: in-progress
+    69-1-backend-exposition-technologies-actions-workflow: done
+    69-2-cartes-catalogue-icones-technologies-indicateur-workflow: done # Code review adversariale 2026-03-09: 7 issues (1H+3M+3L), 6 auto-fixées — paddingBottom workflow, overflow color adaptive, double filtrage supprimé, test boundary 3 techs, aria-label overflow, getEngineIcon refactoré — 45/45 tests pass ✅
+    69-3-cartes-catalogue-extrait-enrichi-technologies-actions: done # Code review adversariale 2026-03-09: 4 issues (1H+2M+1L), 3 auto-fixées — double opacité WCAG supprimée, test label "Actions :" ajouté, assertion boundary maxVisible ajoutée — 53/53 tests pass
+    69-4-drawer-detail-liste-actions-parametres: done # Code review adversariale 2026-03-09: 7 issues (0H+4M+3L), 4 auto-fixées — role="group" ajouté pour aria-label, code mort ?? null supprimé, afterEach mock reset, test aria-label renforcé — 66/66 tests pass, 450/450 catalogue ✅
+    epic-69-retrospective: optional
+    # === Epic 70: CaC — Simplification Import/Export (API unique, pas de sync plateforme) ===
+    # Réf: planning-artifacts/epic-70-cac-simplification-import-api-unique.md
+    # Import uniquement via API (CI/CD) ; suppression sync_config et features UI import YAML
+    epic-70: in-progress
+    70-1-supprimer-commande-sync-config: done
+    70-2-supprimer-features-ui-import-yaml: done
+    70-3-mise-a-jour-documentation-cac: done
+    epic-70-retrospective: optional

@@ -22,7 +22,7 @@
  * AC1-AC3: Status column with Badge indicators (pulsing for running, fixed for terminal).
  * AC4: Technologie column with engine icons.
  * AC5: Plateforme column with execution platform icons (action.platform).
- * AC7: Column order: Statut, Action, Technologie, Plateforme, [Utilisateur], Environnement, Date, Durée.
+ * AC7: Column order: Statut, Action, Technologie, Plateforme, [Utilisateur], Environnement, Début, Fin, Durée.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -283,7 +283,8 @@ describe('ExecutionsPage', () => {
       expect(headerTexts).toContain('Action');
       expect(headerTexts).toContain('Environnement');
       expect(headerTexts).toContain('Statut');
-      expect(headerTexts).toContain('Date');
+      expect(headerTexts).toContain('Début');
+      expect(headerTexts).toContain('Fin');
       expect(headerTexts).toContain('Durée');
     });
 
@@ -582,9 +583,9 @@ describe('ExecutionsPage', () => {
       const table = screen.getByRole('table');
       const actionHeader = within(table).getByText('Action').closest('th');
       const statusHeader = within(table).getByText('Statut').closest('th');
-      const dateHeader = within(table).getByText('Date').closest('th');
+      const dateHeader = within(table).getByText('Début').closest('th');
 
-      // Story 9.9 AC7: Action and Date are sortable
+      // Story 9.9 AC7: Action and Début (date) are sortable
       expect(actionHeader).toHaveAttribute('aria-description', 'sortable');
       expect(dateHeader).toHaveAttribute('aria-description', 'sortable');
 
@@ -1172,7 +1173,7 @@ describe('ExecutionsPage', () => {
       const headers = within(table).getAllByRole('columnheader');
 
       // Story 9.9 AC7 / Story 36.1: scope=all is default → Utilisateur column is visible
-      // Order: Statut, Action, Technologie, Plateforme, Utilisateur, Environnement, Date, Durée
+      // Order: Statut, Action, Technologie, Plateforme, Utilisateur, Environnement, Début, Fin, Durée, Actions
       // First column is expand icon (empty header)
       const dataHeaders = headers.filter(h => h.textContent?.trim());
       expect(dataHeaders[0]).toHaveTextContent('Statut');
@@ -1181,8 +1182,9 @@ describe('ExecutionsPage', () => {
       expect(dataHeaders[3]).toHaveTextContent('Plateforme');
       expect(dataHeaders[4]).toHaveTextContent('Utilisateur');
       expect(dataHeaders[5]).toHaveTextContent('Environnement');
-      expect(dataHeaders[6]).toHaveTextContent('Date');
-      expect(dataHeaders[7]).toHaveTextContent('Durée');
+      expect(dataHeaders[6]).toHaveTextContent('Début');
+      expect(dataHeaders[7]).toHaveTextContent('Fin');
+      expect(dataHeaders[8]).toHaveTextContent('Durée');
     });
 
     it('renders Technologie column with engine icons (AC4)', async () => {
@@ -1326,10 +1328,10 @@ describe('ExecutionsPage', () => {
       const table = screen.getByRole('table');
       const headers = within(table).getAllByRole('columnheader');
 
-      // Should have 10 columns (expand + 9 data columns including Utilisateur and Actions)
+      // Should have 11 columns (expand + 10 data columns: Utilisateur, Début, Fin, Durée, Actions)
       // Filter to data columns (exclude expand column with empty header)
       const dataHeaders = headers.filter(h => h.textContent?.trim());
-      expect(dataHeaders.length).toBe(9);
+      expect(dataHeaders.length).toBe(10);
     });
   });
 
@@ -1461,7 +1463,7 @@ describe('ExecutionsPage', () => {
       const headers = within(table).getAllByRole('columnheader');
 
       // Story 9.9 AC7 / Story 36.1: scope=all is default → Utilisateur column is visible
-      // Order: Statut, Action, Technologie, Plateforme, Utilisateur, Environnement, Date, Durée
+      // Order: Statut, Action, Technologie, Plateforme, Utilisateur, Environnement, Début, Fin, Durée, Actions
       // First column is expand icon (empty header)
       const dataHeaders = headers.filter(h => h.textContent?.trim());
       expect(dataHeaders[0]).toHaveTextContent('Statut');
@@ -1470,8 +1472,9 @@ describe('ExecutionsPage', () => {
       expect(dataHeaders[3]).toHaveTextContent('Plateforme');
       expect(dataHeaders[4]).toHaveTextContent('Utilisateur');
       expect(dataHeaders[5]).toHaveTextContent('Environnement');
-      expect(dataHeaders[6]).toHaveTextContent('Date');
-      expect(dataHeaders[7]).toHaveTextContent('Durée');
+      expect(dataHeaders[6]).toHaveTextContent('Début');
+      expect(dataHeaders[7]).toHaveTextContent('Fin');
+      expect(dataHeaders[8]).toHaveTextContent('Durée');
     });
 
     it('status, technologie, plateforme columns are not sortable (AC7)', async () => {

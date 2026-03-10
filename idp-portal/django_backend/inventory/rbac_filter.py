@@ -41,7 +41,18 @@ class InventoryRBACFilter:
         Apply attribute-based filtering to servers list.
 
         Filters are cumulative (AND): server must match ALL criteria.
-        If an attribute is absent from server data, that criterion is ignored (WARNING logged).
+
+        ⚠️  FAIL-OPEN BEHAVIOR (INV-MED-03): If `attr_key` is absent from ALL servers in the
+        dataset, that filter criterion is SILENTLY SKIPPED — a warning is logged but the full
+        server list passes through unfiltered.
+
+        Implication for RBAC security: A typo in a profile's `filter_by_attribute` key
+        (e.g. "engine_tpe" instead of "engine_type") will result in NO filtering being applied,
+        potentially granting broader access than intended.
+
+        This fail-open behavior is intentional to avoid breaking deployments where attribute
+        keys may vary across inventory sources. Operators MUST monitor the
+        "rbac_filter_attribute_not_found" log warning as a signal of misconfiguration.
 
         Args:
             servers: List of server dicts

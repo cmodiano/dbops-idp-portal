@@ -3,7 +3,8 @@
 **Date :** 2026-02-26  
 **Projet :** test (idp-portal – frontend + django_backend)
 
-> **Migration (2026-03) :** La documentation a été consolidée dans `docs/` avec MkDocs Material. Les anciens répertoires `idp-portal/docs/`, `idp-portal/django_backend/docs/` et `idp-portal/frontend/docs/` ont été supprimés. L'inventaire ci-dessous reflète l'état précédent à titre historique.
+> **Migration (2026-03) :** La documentation a été consolidée dans `docs/` (racine projet, ~187 fichiers). Les anciens répertoires `idp-portal/docs/architecture/` (vide) et `idp-portal/frontend/docs/` ont été supprimés. **Exception :** `idp-portal/django_backend/docs/` conserve 2 fichiers spécifiques : `parallel-group.md` et `workflow-output-schemas.md` (voir [docs/architecture/parallel-workflow-actions-analysis.md](../architecture/parallel-workflow-actions-analysis.md)).
+> **Note (2026-03-09, Story 66-26) :** L'inventaire ci-dessous reflète l'état **antérieur à la migration** et est conservé à titre **historique uniquement**. De nombreux chemins listés (`idp-portal/django_backend/docs/README.md`, `decisions/`, etc.) ne correspondent plus à des fichiers existants — ils ont été consolidés dans `docs/backend/`. Pour l'état actuel de la documentation, consulter [docs/index.md](../index.md).
 
 ---
 

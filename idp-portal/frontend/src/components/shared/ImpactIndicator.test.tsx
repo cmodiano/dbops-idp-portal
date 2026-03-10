@@ -46,6 +46,14 @@ describe('ImpactIndicator', () => {
     expect(screen.getByText('Faible')).toBeInTheDocument();
     expect(screen.getByRole('status')).toBeInTheDocument();
   });
+
+  it('falls back to medium when level is invalid', () => {
+    render(<ImpactIndicator level={'invalid' as any} />);
+
+    // Fallback: config ?? IMPACT_CONFIG.medium → label "Moyen"
+    expect(screen.getByText('Moyen')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveAttribute('aria-label', 'Impact: Moyen');
+  });
 });
 
 describe('Story 46.3 — Standardisation des couleurs de badges', () => {

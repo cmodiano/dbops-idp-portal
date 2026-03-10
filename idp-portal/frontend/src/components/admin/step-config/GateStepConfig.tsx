@@ -6,7 +6,7 @@
  * multi-select approver_profile_ids (profils approbateurs, si gate_type=approval — Story 58.4 AC2).
  */
 
-import React from 'react';
+import type { FC } from 'react';
 import { Input, Select, Typography } from 'antd';
 import type { WorkflowStepNodeData } from '../WorkflowStepNode';
 import { useApproverProfiles } from '../../../hooks/useApproverProfiles';
@@ -33,7 +33,7 @@ const ON_TIMEOUT_OPTIONS = [
   { value: 'SKIP', label: 'Ignorer (continuer)' },
 ];
 
-export const GateStepConfig: React.FC<GateStepConfigProps> = ({
+export const GateStepConfig: FC<GateStepConfigProps> = ({
   data,
   onUpdate,
   disabled = false,

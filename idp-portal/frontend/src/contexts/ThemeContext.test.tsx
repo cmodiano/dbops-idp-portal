@@ -86,11 +86,11 @@ describe('ThemeProvider', () => {
 
     await user.click(screen.getByTestId('setDark'));
 
-    expect(localStorage.getItem('idp-portal-theme')).toBe('dark');
+    expect(localStorage.getItem('idp-portal-theme-v1')).toBe('dark');
   });
 
   it('restores preference from localStorage (AC #2)', () => {
-    localStorage.setItem('idp-portal-theme', 'dark');
+    localStorage.setItem('idp-portal-theme-v1', 'dark');
 
     render(
       <ThemeProvider>
@@ -99,6 +99,25 @@ describe('ThemeProvider', () => {
     );
 
     expect(screen.getByTestId('mode').textContent).toBe('dark');
+    expect(screen.getByTestId('effectiveMode').textContent).toBe('dark');
+  });
+
+  it('resolves effectiveMode to dark when system prefers dark', () => {
+    // Override matchMedia to return dark preference
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query.includes('dark') ? true : false,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })) as unknown as typeof window.matchMedia;
+
+    render(
+      <ThemeProvider>
+        <ThemeDisplay />
+      </ThemeProvider>
+    );
+
+    expect(screen.getByTestId('mode').textContent).toBe('system');
     expect(screen.getByTestId('effectiveMode').textContent).toBe('dark');
   });
 

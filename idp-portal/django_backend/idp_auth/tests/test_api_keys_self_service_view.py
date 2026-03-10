@@ -10,6 +10,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from core.models import AuditLog, AuditActionType
 from idp_auth.models import APIKey, APIKeyScope, User
 
 
@@ -168,3 +169,85 @@ class TestAPIKeysSelfServiceView(TestCase):
         response = self.client.delete('/api/v1/auth/api-keys/999999/')
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    # AUTH-HIGH-01: audit trail for API key creation (SOC1 compliance)
+    def test_post_create_api_key_creates_audit_log_entry(self):
+        """API key creation must produce an API_KEY_CREATED audit entry (SOC1).
+        NEW-FIND-02: entity_id=user.id (entity_type=USER implies entity_id is the user).
+        api_key_id is stored in details for traceability.
+        """
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.post(
+            '/api/v1/auth/api-keys/',
+            {'name': 'Audit Trail Key', 'scope': APIKeyScope.EXECUTIONS},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        key_id = response.json()['data']['id']
+
+        audit_entry = AuditLog.objects.filter(
+            action_type=AuditActionType.API_KEY_CREATED,
+            entity_id=self.user.id,
+        ).first()
+        self.assertIsNotNone(audit_entry, "API_KEY_CREATED audit entry must exist")
+        self.assertEqual(audit_entry.user_id, str(self.user.id))
+        details = audit_entry.get_details()
+        self.assertEqual(details.get('key_name'), 'Audit Trail Key')
+        self.assertEqual(details.get('scope'), APIKeyScope.EXECUTIONS)
+        self.assertEqual(details.get('api_key_id'), key_id)
+
+    # AUTH-HIGH-02: audit trail for API key revocation (SOC1 compliance)
+    def test_delete_api_key_creates_audit_log_entry(self):
+        """API key revocation must produce an API_KEY_REVOKED audit entry (SOC1).
+        NEW-FIND-02: entity_id=user.id (entity_type=USER implies entity_id is the user).
+        NEW-FIND-05: scope must be present in audit details.
+        api_key_id is stored in details for traceability.
+        """
+        self.client.force_authenticate(user=self.user)
+        api_key, _ = APIKey.objects.create_key(
+            self.user,
+            name='Key To Audit',
+            scope=APIKeyScope.FULL,
+        )
+
+        response = self.client.delete(f'/api/v1/auth/api-keys/{api_key.id}/')
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+        audit_entry = AuditLog.objects.filter(
+            action_type=AuditActionType.API_KEY_REVOKED,
+            entity_id=self.user.id,
+        ).first()
+        self.assertIsNotNone(audit_entry, "API_KEY_REVOKED audit entry must exist")
+        self.assertEqual(audit_entry.user_id, str(self.user.id))
+        details = audit_entry.get_details()
+        self.assertEqual(details.get('key_name'), 'Key To Audit')
+        self.assertEqual(details.get('scope'), APIKeyScope.FULL)
+        self.assertEqual(details.get('api_key_id'), api_key.id)
+
+    # NEW-FIND-06: cas idempotent — révocation d'une clé déjà inactive
+    def test_delete_already_inactive_api_key_creates_audit_log_entry(self):
+        """Revoking an already-inactive key must still produce an API_KEY_REVOKED audit entry.
+        Idempotent revoke is documented behavior — ensure audit trace exists.
+        """
+        self.client.force_authenticate(user=self.user)
+        api_key, _ = APIKey.objects.create_key(
+            self.user,
+            name='Already Inactive Key',
+            scope=APIKeyScope.EXECUTIONS,
+        )
+        api_key.is_active = False
+        api_key.save(update_fields=['is_active', 'updated_at'])
+
+        response = self.client.delete(f'/api/v1/auth/api-keys/{api_key.id}/')
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        audit_entry = AuditLog.objects.filter(
+            action_type=AuditActionType.API_KEY_REVOKED,
+            entity_id=self.user.id,
+        ).first()
+        self.assertIsNotNone(audit_entry, "API_KEY_REVOKED audit entry must exist even for idempotent revoke")
+        details = audit_entry.get_details()
+        self.assertEqual(details.get('key_name'), 'Already Inactive Key')

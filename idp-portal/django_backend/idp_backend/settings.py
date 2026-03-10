@@ -330,6 +330,7 @@ REST_FRAMEWORK = {
         'public': os.getenv('THROTTLE_PUBLIC_RATE', '50/minute'),
         'api_key_token': os.getenv('THROTTLE_API_KEY_TOKEN_RATE', '10/minute'),
         'service_login': os.getenv('THROTTLE_SERVICE_LOGIN_RATE', '5/minute'),
+        'portal_login': os.getenv('THROTTLE_PORTAL_LOGIN_RATE', '5/minute'),
     },
     'DEFAULT_PAGINATION_CLASS': 'core.pagination.CustomPageNumberPagination',
     'PAGE_SIZE': 25,
@@ -527,6 +528,27 @@ def _parse_ldap_timeout(name: str, default: str) -> int:
 LDAP_CONNECT_TIMEOUT = _parse_ldap_timeout("LDAP_CONNECT_TIMEOUT", "10")
 LDAP_RECEIVE_TIMEOUT = _parse_ldap_timeout("LDAP_RECEIVE_TIMEOUT", "10")
 
+# Portal authentication method order (Story 68.1)
+# Controls which auth methods are available for portal login, in priority order.
+# Values: comma-separated list of "ldap" and/or "saml"
+# Default: "ldap,saml" — LDAP is tried first (high-privilege accounts)
+PORTAL_AUTH_METHODS = [
+    m.strip()
+    for m in os.getenv("PORTAL_AUTH_METHODS", "ldap,saml").split(",")
+    if m.strip()
+]
+
+# High-privilege group restriction for portal access (Story 68.2)
+# Comma-separated list of AD group names (partial or full DN) that a user must belong
+# to at least ONE of, in order to access the portal via /auth/portal-login.
+# Empty string (default) = no group restriction (backward-compatible).
+# Example: "GRP-IDP-ADMIN,GRP-IDP-DBA-PRIVILEGED"
+PORTAL_REQUIRED_GROUPS = [
+    g.strip()
+    for g in os.getenv("PORTAL_REQUIRED_GROUPS", "").split(",")
+    if g.strip()
+]
+
 # ============================================================================
 # SAML Configuration (Story M.7)
 # ============================================================================
@@ -698,6 +720,8 @@ CELERY_TASK_ROUTES.update({
     'executions.tasks.retry_workflow_step': {'queue': 'default'},
     # Story 47.2 — Trigger async ; la queue spécifique est passée via apply_async(queue=...) au runtime.
     'executions.tasks.trigger_platform_job': {'queue': 'default'},
+    # Story 57.7 — Reprise workflow après gate (approbation) — doit être sur default (worker écoute cette queue)
+    'executions.tasks.resume_container_workflow_from_gate': {'queue': 'default'},
 })
 
 del _adapters_pkg, _adapter_registry, _SHIM_PLATFORM_MAP  # nettoyer le namespace settings
@@ -738,7 +762,6 @@ DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'idp-portal@example.com')
 PAGE_INDIVIDUAL_API_URL = os.getenv('PAGE_INDIVIDUAL_API_URL', '')
 # Epic 56 — Décorrélation : canal page on-call (agnostique)
 PAGE_ONCALL_API_URL = os.getenv('PAGE_ONCALL_API_URL', '')
-PAGE_DBA_API_URL = os.getenv('PAGE_DBA_API_URL', '')  # Backward compat — alias page_oncall
 
 # Story 57.5 — ADR-007 http_request SSRF allowlist
 # Comma-separated list of allowed hostnames for http_request workflow steps.
@@ -752,3 +775,7 @@ del _allowed_http_hosts_env
 
 # Epic 56 — Décorrélation : schéma/synonyme Oracle fallback pour l'inventaire
 INVENTORY_FALLBACK_SCHEMA = os.getenv('INVENTORY_FALLBACK_SCHEMA', 'DBOPS_INVENTORY')
+
+# Story 65.2 — fan-out ThreadPoolExecutor max workers
+# Utilisé par ContainerWorkflowRuntime._execute_fan_out() (Story 67.2).
+PARALLEL_GROUP_MAX_WORKERS = int(os.environ.get('PARALLEL_GROUP_MAX_WORKERS', '5'))

@@ -6,6 +6,7 @@ Ce document rassemble les bonnes pratiques et patterns identifiés lors du déve
 
 1. [Gestion des contraintes CHECK Oracle dans les migrations](#gestion-des-contraintes-check-oracle-dans-les-migrations)
 2. [Bind Variables Oracle - Mots réservés](#bind-variables-oracle---mots-réservés)
+3. [RBAC Inventaire — Comportement Fail-Open de `filter_by_attribute`](#rbac-inventaire--comportement-fail-open-de-filter_by_attribute)
 
 ---
 
@@ -153,8 +154,57 @@ Ces tests vérifient que les requêtes SQL n'utilisent pas de mots réservés Or
 
 ---
 
+---
+
+## RBAC Inventaire — Comportement Fail-Open de `filter_by_attribute`
+
+### Contexte
+
+Le filtre `filter_by_attribute` dans `InventoryRBACFilter._apply_attribute_filter()` (module `inventory/rbac_filter.py`) est utilisé pour restreindre l'accès aux serveurs selon un attribut de leur fiche inventaire (ex: `engine_type`, `os_type`).
+
+### ⚠️ Comportement Fail-Open (Story 66.21 — INV-MED-03)
+
+**Règle :** Si la clé d'attribut configurée dans un profil (`filter_by_attribute`) est **absente de tous les serveurs** du résultat, le filtre est **silencieusement ignoré** — tous les serveurs passent à travers.
+
+**Conséquence sécuritaire :** Un typo dans la clé (ex: `"engine_tpe"` au lieu de `"engine_type"`) accorde un accès **plus large que prévu** plutôt que de bloquer l'accès.
+
+```python
+# Exemple : profil configuré avec filter_by_attribute = {"engine_tpe": ["oracle"]}
+# engine_tpe n'existe dans aucun serveur → filtre ignoré → TOUS les serveurs retournés
+# Comportement intentionnel pour éviter de casser les déploiements lors d'une migration de schéma d'inventaire
+```
+
+### Monitoring obligatoire
+
+Surveiller le log warning `rbac_filter_attribute_not_found` — ce warning indique une **misconfiguration probable** d'un profil :
+
+```python
+logger.warning(
+    "rbac_filter_attribute_not_found",
+    attribute=attr_key,
+    allowed_values=allowed_values,
+    correlation_id=correlation_id,
+)
+```
+
+### Pattern recommandé
+
+1. Valider les clés `filter_by_attribute` lors de la création/modification d'un profil
+2. Surveiller le log `rbac_filter_attribute_not_found` via alerting en production
+3. Tester les profils RBAC après tout changement de schéma d'inventaire
+4. Documenter les clés disponibles dans la configuration d'intégration
+
+### Références
+
+- `inventory/rbac_filter.py::InventoryRBACFilter._apply_attribute_filter()` — implémentation
+- `inventory/tests/test_rbac_filter_by_attribute.py::test_fail_open_behavior_typo_in_attribute_key_grants_full_access` — test de régression explicite
+- Story 66.21 — INV-MED-03
+
+---
+
 ## Références
 
 - [Oracle Reserved Words](https://docs.oracle.com/en/database/oracle/oracle-database/19/sqlrf/Oracle-SQL-Reserved-Words.html)
 - Story 9.7: Fix Oracle bind variable comment (voir `_bmad-output/implementation-artifacts/` dans le dépôt)
 - Story 9.8: Fix audit log approval action types (voir `_bmad-output/implementation-artifacts/` dans le dépôt)
+- Story 66.21: RBAC fail-open behavior `filter_by_attribute` (voir `_bmad-output/implementation-artifacts/` dans le dépôt)

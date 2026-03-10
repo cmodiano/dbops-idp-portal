@@ -24,7 +24,7 @@
 ### Admin
 - `ActionForm`, `ActionWizard`, `StepsEditor`, `WorkflowStepsEditor`, `WorkflowBuilderCanvas` – Édition d’actions et de workflows (XYFlow).
 - `WorkflowStepNode`, `CustomEdge`, `WorkflowValidationAlert`, `WorkflowStepsRenderer` – Noeuds, arêtes, validation, rendu.
-- `ProfileForm`, `ProfileWizard`, `ProfileImportModal` – Profils.
+- `ProfileForm`, `ProfileWizard` – Profils.
 - `IntegrationForm`, `IntegrationsTable` – Intégrations.
 - `BusinessRulePolicySelector`, `BusinessRulesPolicyPanel`, `ImpactRulesEditor`, `RemediationRulesEditor` – Règles métier.
 - `ChangeTypeConfig`, `NotificationConfigSection`, `StepConfigPanel`, `ValidationReportPanel` – Config et rapports.

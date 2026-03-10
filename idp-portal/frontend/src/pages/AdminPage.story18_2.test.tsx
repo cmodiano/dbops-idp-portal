@@ -33,9 +33,6 @@ vi.mock('../components/admin/ActionWizard', () => ({
 vi.mock('../components/admin/ProfileWizard', () => ({
   ProfileWizard: () => null,
 }));
-vi.mock('../components/admin/ProfileImportModal', () => ({
-  ProfileImportModal: () => null,
-}));
 vi.mock('../components/admin/IntegrationForm', () => ({
   IntegrationForm: () => null,
 }));

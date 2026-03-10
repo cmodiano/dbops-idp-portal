@@ -6,7 +6,7 @@
  * and associated form controls.
  */
 
-import { memo, useCallback } from 'react';
+import { memo, useCallback, useEffect } from 'react';
 import {
   Form,
   Select,
@@ -65,6 +65,17 @@ export const SchedulingPanel = memo(function SchedulingPanel({
     cronValidating,
     showCronHelper,
   } = scheduling;
+
+  // F7 fix: Cancel pending debounced validation on unmount to avoid state updates on unmounted component.
+  // cancelValidation is stable (created once via useCallback+debounce with [] deps in useSchedulingValidation).
+  // Using cancelValidation directly (not the whole validation object) avoids triggering cleanup on every
+  // re-render — since useSchedulingValidation() returns a new object literal each render.
+  const { cancelValidation } = validation;
+  useEffect(() => {
+    return () => {
+      cancelValidation();
+    };
+  }, [cancelValidation]);
 
   const handleCronChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {

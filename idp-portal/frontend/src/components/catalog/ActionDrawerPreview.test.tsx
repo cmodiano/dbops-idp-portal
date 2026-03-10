@@ -15,6 +15,7 @@ vi.mock('../../contexts/AuthContext', () => ({
     user: null,
     accessToken: null,
     login: vi.fn(),
+    loginWithCredentials: vi.fn(),
     logout: vi.fn(),
     refreshToken: vi.fn(),
     hasTab: vi.fn().mockReturnValue(true),
@@ -310,6 +311,7 @@ describe('ActionDrawerPreview', () => {
         user: null,
         accessToken: null,
         login: vi.fn(),
+        loginWithCredentials: vi.fn(),
         logout: vi.fn(),
         refreshToken: vi.fn().mockResolvedValue(null),
         hasTab: vi.fn().mockReturnValue(true),
@@ -324,6 +326,7 @@ describe('ActionDrawerPreview', () => {
         user: null,
         accessToken: null,
         login: vi.fn(),
+        loginWithCredentials: vi.fn(),
         logout: vi.fn(),
         refreshToken: vi.fn().mockResolvedValue(null),
         hasTab: vi.fn().mockReturnValue(true),
@@ -358,7 +361,7 @@ describe('ActionDrawerPreview', () => {
     });
 
     it('displays original description for default variant', () => {
-      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: false, isLoading: false, user: null, accessToken: null, login: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
+      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: false, isLoading: false, user: null, accessToken: null, login: vi.fn(), loginWithCredentials: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
       renderWithTheme(
         <ActionDrawerPreview action={actionWithTechnicalTerms} />
       );
@@ -376,7 +379,7 @@ describe('ActionDrawerPreview', () => {
     });
 
     it('does not show impact Alert for default variant', () => {
-      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: false, isLoading: false, user: null, accessToken: null, login: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
+      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: false, isLoading: false, user: null, accessToken: null, login: vi.fn(), loginWithCredentials: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
       renderWithTheme(
         <ActionDrawerPreview action={actionWithTechnicalTerms} />
       );
@@ -397,7 +400,7 @@ describe('ActionDrawerPreview', () => {
     });
 
     it('shows engine and platform for default variant', () => {
-      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: false, isLoading: false, user: null, accessToken: null, login: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
+      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: false, isLoading: false, user: null, accessToken: null, login: vi.fn(), loginWithCredentials: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
       renderWithTheme(
         <ActionDrawerPreview action={actionWithTechnicalTerms} />
       );
@@ -435,7 +438,7 @@ describe('ActionDrawerPreview', () => {
     });
 
     it('renders normal Execute button for default variant', () => {
-      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: false, isLoading: false, user: null, accessToken: null, login: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
+      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: false, isLoading: false, user: null, accessToken: null, login: vi.fn(), loginWithCredentials: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
       renderWithTheme(
         <ActionDrawerPreview action={actionWithTechnicalTerms} />
       );
@@ -699,6 +702,7 @@ describe('ActionDrawerPreview', () => {
         user: null,
         accessToken: null,
         login: vi.fn(),
+        loginWithCredentials: vi.fn(),
         logout: vi.fn(),
         refreshToken: vi.fn().mockResolvedValue(null),
         hasTab: vi.fn().mockReturnValue(true),
@@ -721,6 +725,7 @@ describe('ActionDrawerPreview', () => {
         user: null,
         accessToken: null,
         login: vi.fn(),
+        loginWithCredentials: vi.fn(),
         logout: vi.fn(),
         refreshToken: vi.fn().mockResolvedValue(null),
         hasTab: vi.fn().mockReturnValue(true),
@@ -735,6 +740,7 @@ describe('ActionDrawerPreview', () => {
         user: null,
         accessToken: null,
         login: vi.fn(),
+        loginWithCredentials: vi.fn(),
         logout: vi.fn(),
         refreshToken: vi.fn().mockResolvedValue(null),
         hasTab: vi.fn().mockReturnValue(true),
@@ -756,10 +762,146 @@ describe('ActionDrawerPreview', () => {
         user: null,
         accessToken: null,
         login: vi.fn(),
+        loginWithCredentials: vi.fn(),
         logout: vi.fn(),
         refreshToken: vi.fn().mockResolvedValue(null),
         hasTab: vi.fn().mockReturnValue(true),
       });
+    });
+  });
+
+  // === Story 69.4: Workflow included actions ===
+  describe('Story 69.4: Workflow included actions', () => {
+    afterEach(() => {
+      vi.mocked(useAuth).mockReturnValue({
+        isAuthenticated: true,
+        isBusinessProfile: false,
+        isLoading: false,
+        user: null,
+        accessToken: null,
+        login: vi.fn(),
+        loginWithCredentials: vi.fn(),
+        logout: vi.fn(),
+        refreshToken: vi.fn().mockResolvedValue(null),
+        hasTab: vi.fn().mockReturnValue(true),
+      });
+    });
+
+    const workflowWithIncludedActions: ActionPreviewData = {
+      ...mockAction,
+      item_type: 'workflow',
+      included_actions: [
+        {
+          id: 10,
+          name: 'Backup Oracle',
+          engine: 'oracle',
+          parameters_schema: {
+            type: 'object',
+            properties: {
+              backup_type: { type: 'string' },
+              retention_days: { type: 'number' },
+            },
+            required: ['backup_type'],
+          },
+        },
+        {
+          id: 11,
+          name: 'Deploy Schema',
+          engine: 'sqlserver',
+          parameters_schema: null,
+        },
+      ],
+    };
+
+    it('workflow shows "Actions incluses" section with Collapse panels (AC1, AC6)', () => {
+      renderWithTheme(<ActionDrawerPreview action={workflowWithIncludedActions} />);
+
+      expect(screen.getByTestId('workflow-included-actions')).toBeInTheDocument();
+      expect(screen.getByText('Actions incluses')).toBeInTheDocument();
+      // Both actions should appear as panel headers
+      expect(screen.getByText('Backup Oracle (oracle)')).toBeInTheDocument();
+      expect(screen.getByText('Deploy Schema (sqlserver)')).toBeInTheDocument();
+    });
+
+    it('workflow action parameters are displayed with name, type, required (AC2)', () => {
+      renderWithTheme(<ActionDrawerPreview action={workflowWithIncludedActions} />);
+
+      // First panel is open by default (defaultActiveKey=['0'])
+      const firstPanel = screen.getByTestId('included-action-params-0');
+      expect(within(firstPanel).getByText('backup_type')).toBeInTheDocument();
+      expect(within(firstPanel).getByText(': string')).toBeInTheDocument();
+      expect(within(firstPanel).getByText('retention_days')).toBeInTheDocument();
+      expect(within(firstPanel).getByText(': number')).toBeInTheDocument();
+      // backup_type is required → asterisk
+      expect(within(firstPanel).getByText('*')).toBeInTheDocument();
+    });
+
+    it('workflow action without parameters shows "Aucun parametre" (AC3)', async () => {
+      renderWithTheme(<ActionDrawerPreview action={workflowWithIncludedActions} />);
+
+      // Click the second panel header to open it
+      const secondHeader = screen.getByText('Deploy Schema (sqlserver)');
+      fireEvent.click(secondHeader);
+
+      await waitFor(() => {
+        const secondPanel = screen.getByTestId('included-action-params-1');
+        expect(within(secondPanel).getByText('Aucun parametre')).toBeInTheDocument();
+      });
+    });
+
+    it('simple action (non-workflow) shows classic parameters section, no Collapse (AC4)', () => {
+      const simpleAction: ActionPreviewData = {
+        ...mockAction,
+        item_type: 'action',
+      };
+      renderWithTheme(<ActionDrawerPreview action={simpleAction} />);
+
+      expect(screen.queryByTestId('workflow-included-actions')).not.toBeInTheDocument();
+      expect(screen.getByText('Parametres attendus')).toBeInTheDocument();
+      // Parameters from mockAction's parameters_schema
+      expect(screen.getByText('pdb_name')).toBeInTheDocument();
+    });
+
+    it('workflow with empty included_actions falls back to classic parameters (AC4)', () => {
+      const workflowNoActions: ActionPreviewData = {
+        ...mockAction,
+        item_type: 'workflow',
+        included_actions: [],
+      };
+      renderWithTheme(<ActionDrawerPreview action={workflowNoActions} />);
+
+      expect(screen.queryByTestId('workflow-included-actions')).not.toBeInTheDocument();
+      expect(screen.getByText('Parametres attendus')).toBeInTheDocument();
+    });
+
+    it('business variant shows "Options des actions" label (AC5)', () => {
+      vi.mocked(useAuth).mockReturnValue({
+        isAuthenticated: true,
+        isBusinessProfile: true,
+        isLoading: false,
+        user: null,
+        accessToken: null,
+        login: vi.fn(),
+        loginWithCredentials: vi.fn(),
+        logout: vi.fn(),
+        refreshToken: vi.fn().mockResolvedValue(null),
+        hasTab: vi.fn().mockReturnValue(true),
+      });
+
+      renderWithTheme(<ActionDrawerPreview action={workflowWithIncludedActions} />);
+
+      expect(screen.getByText('Options des actions')).toBeInTheDocument();
+      expect(screen.queryByText('Actions incluses')).not.toBeInTheDocument();
+    });
+
+    it('data-testid and aria attributes are present for accessibility (AC7)', () => {
+      renderWithTheme(<ActionDrawerPreview action={workflowWithIncludedActions} />);
+
+      const container = screen.getByTestId('workflow-included-actions');
+      expect(container).toBeInTheDocument();
+      expect(container).toHaveAttribute('role', 'group');
+      expect(container).toHaveAttribute('aria-label', 'Actions incluses dans le workflow');
+      expect(screen.getByTestId('included-action-params-0')).toBeInTheDocument();
     });
   });
 
@@ -815,7 +957,7 @@ describe('ActionDrawerPreview', () => {
     });
 
     it('hides metrics section for business variant (AC1 - business exclusion)', () => {
-      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: true, isLoading: false, user: null, accessToken: null, login: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
+      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: true, isLoading: false, user: null, accessToken: null, login: vi.fn(), loginWithCredentials: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
       renderWithTheme(<ActionDrawerPreview action={actionWithStats} />);
 
       expect(screen.queryByTestId('metrics-section')).not.toBeInTheDocument();

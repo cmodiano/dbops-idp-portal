@@ -38,10 +38,12 @@ class TowerAdapter(BaseAdapter, IHealthCheckable):
         base_url: str,
         auth_headers: dict[str, str],
         timeout: float = TOWER_DEFAULT_TIMEOUT,
+        ssl_verify: bool = False,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.auth_headers = auth_headers
         self.timeout = timeout
+        self._verify = ssl_verify  # ADP-MED-01: configurable SSL (default False for Tower/AWX on-prem)
 
     # ------------------------------------------------------------------
     # Trigger (launch) — job template or workflow job template
@@ -94,7 +96,7 @@ class TowerAdapter(BaseAdapter, IHealthCheckable):
             async with httpx.AsyncClient(
                 headers=self.auth_headers,
                 timeout=self.timeout,
-                verify=False,  # nosec B501  # noqa: S501 — corporate CAs handled externally
+                verify=self._verify,  # ADP-MED-01: configurable SSL (default False for Tower/AWX on-prem)
             ) as client:
                 response = await client.post(url, json=payload)
                 response.raise_for_status()
@@ -195,7 +197,7 @@ class TowerAdapter(BaseAdapter, IHealthCheckable):
             async with httpx.AsyncClient(
                 headers=self.auth_headers,
                 timeout=self.timeout,
-                verify=False,  # nosec B501  # noqa: S501
+                verify=self._verify,  # ADP-MED-01: configurable SSL
             ) as client:
                 response = await client.get(url)
                 response.raise_for_status()
@@ -269,7 +271,7 @@ class TowerAdapter(BaseAdapter, IHealthCheckable):
             async with httpx.AsyncClient(
                 headers=self.auth_headers,
                 timeout=TOWER_LOGS_TIMEOUT,
-                verify=False,  # nosec B501  # noqa: S501
+                verify=self._verify,  # ADP-MED-01: configurable SSL
             ) as client:
                 stdout_response = await client.get(
                     stdout_url,
@@ -390,7 +392,7 @@ class TowerAdapter(BaseAdapter, IHealthCheckable):
             async with httpx.AsyncClient(
                 headers=self.auth_headers,
                 timeout=self.timeout,
-                verify=False,  # nosec B501  # noqa: S501
+                verify=self._verify,  # ADP-MED-01: configurable SSL
             ) as client:
                 response = await client.post(url)
                 response.raise_for_status()
@@ -421,7 +423,7 @@ class TowerAdapter(BaseAdapter, IHealthCheckable):
             async with httpx.AsyncClient(
                 headers=self.auth_headers,
                 timeout=self.timeout,
-                verify=False,  # nosec B501  # noqa: S501 — corporate CAs handled externally (consistent with other TowerAdapter methods)
+                verify=self._verify,  # ADP-MED-01: configurable SSL (default False for Tower/AWX on-prem)
             ) as client:
                 response = await client.get(url)
                 response.raise_for_status()

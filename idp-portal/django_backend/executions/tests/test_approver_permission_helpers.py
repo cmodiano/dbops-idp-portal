@@ -1,7 +1,7 @@
 """Tests unitaires pour les helpers _check_approver_permission — Story 58.4 AC3."""
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
@@ -74,6 +74,30 @@ class TestGetUserProfileIds(TestCase):
         self.assertIn(42, result)
         self.assertIn(99, result)
 
+    def test_returns_ids_from_ad_groups(self):
+        """Chemin 3 : ad_groups → Profile.objects.find_by_ad_groups()."""
+        p_ad = MagicMock()
+        p_ad.id = 7
+        user = _make_user(profile_id=None, ad_groups=['CN=Approvers,OU=Groups'])
+
+        with patch('executions.views.approval_views.Profile') as mock_profile:
+            mock_profile.objects.find_by_ad_groups.return_value = [p_ad]
+            result = _get_user_profile_ids(user)
+
+        self.assertIn(7, result)
+        mock_profile.objects.find_by_ad_groups.assert_called_once_with(['CN=Approvers,OU=Groups'])
+
+    def test_ad_groups_none_uses_empty_list(self):
+        """ad_groups=None → find_by_ad_groups([])."""
+        user = _make_user(profile_id=None)
+        user.ad_groups = None  # hasattr True, ad_groups or [] = []
+
+        with patch('executions.views.approval_views.Profile') as mock_profile:
+            mock_profile.objects.find_by_ad_groups.return_value = []
+            result = _get_user_profile_ids(user)
+
+        self.assertEqual(result, set())
+        mock_profile.objects.find_by_ad_groups.assert_called_once_with([])
 
 
 class TestCheckApproverPermission(TestCase):

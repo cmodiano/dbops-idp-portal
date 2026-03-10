@@ -22,8 +22,6 @@ export { ProfileWizard } from './ProfileWizard';
 export type { ProfileWizardProps } from './ProfileWizard';
 export { ProfilesTable } from './ProfilesTable';
 export type { ProfilesTableProps } from './ProfilesTable';
-export { ProfileImportModal } from './ProfileImportModal';
-export type { ProfileImportModalProps } from './ProfileImportModal';
 export { IntegrationsTable } from './IntegrationsTable';
 export type { IntegrationsTableProps } from './IntegrationsTable';
 export { IntegrationForm } from './IntegrationForm';

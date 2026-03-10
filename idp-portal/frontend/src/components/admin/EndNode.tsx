@@ -5,11 +5,12 @@
  * Excluded from backend conversion (isEndNode flag).
  */
 
-import React, { memo } from 'react';
+import { memo } from 'react';
+import type { FC } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { CheckCircleOutlined } from '@ant-design/icons';
 
-const EndNode: React.FC<NodeProps> = () => {
+const EndNode: FC<NodeProps> = () => {
   return (
     <div
       style={{

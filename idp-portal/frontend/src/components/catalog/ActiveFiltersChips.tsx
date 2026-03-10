@@ -81,24 +81,24 @@ export function ActiveFiltersChips({
     return null;
   }
 
-  // Desjardins green styling for category chips
-  const categoryChipStyle = {
-    backgroundColor: '#ECFDF5',
-    color: STYLE_TOKENS.colorPrimary,
-    borderColor: STYLE_TOKENS.colorPrimary,
+  // F10 fix: Base style shared by both chip variants (DRY)
+  const baseChipStyle = {
     minHeight: 44,
     display: 'inline-flex' as const,
     alignItems: 'center',
     padding: '10px 12px',
   };
 
-  // Story 46.2 — zone tactile 44px pour tous les chips closables
-  const chipStyle = {
-    minHeight: 44,
-    display: 'inline-flex' as const,
-    alignItems: 'center',
-    padding: '10px 12px',
+  // Desjardins green styling for category chips
+  const categoryChipStyle = {
+    ...baseChipStyle,
+    backgroundColor: '#ECFDF5',
+    color: STYLE_TOKENS.colorPrimary,
+    borderColor: STYLE_TOKENS.colorPrimary,
   };
+
+  // Story 46.2 — zone tactile 44px pour tous les chips closables
+  const chipStyle = baseChipStyle;
 
   // Story 46.2 — zone touchable élargie pour l'icône de suppression (≥ 44px : icône 16px + padding 14px × 2 = 44px)
   const closeIconStyle = { padding: 14, margin: -14 };

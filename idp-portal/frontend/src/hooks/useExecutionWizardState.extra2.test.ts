@@ -69,7 +69,7 @@ describe('useExecutionWizardState — Part 3', () => {
     await act(async () => { result.current.setSelectedEnvironment('DEV' as never); });
     await act(async () => { await result.current.handleSubmitScheduled(); });
     expect(localOnCancel).toHaveBeenCalled();
-    expect(localOnSuccess).toHaveBeenCalledWith(5);
+    expect(localOnSuccess).toHaveBeenCalledWith(5, { isScheduled: true });
     unmount();
   });
 

@@ -19,6 +19,8 @@ export interface UseSchedulingValidationReturn {
   validateSchedule: (type: 'one-time' | 'daily' | 'weekly' | 'cron', data: ScheduleData) => ScheduleValidation;
   validateCronDebounced: (expression: string, onResult: CronValidationCallback) => void;
   handleCronPresetChange: (value: string, onResult: CronValidationCallback) => void;
+  /** F7 fix: Cancel any pending debounced validation (call on component unmount). */
+  cancelValidation: () => void;
 }
 
 export interface ScheduleData {
@@ -106,5 +108,6 @@ export function useSchedulingValidation(): UseSchedulingValidationReturn {
     validateSchedule,
     validateCronDebounced,
     handleCronPresetChange,
+    cancelValidation: validateCronDebounced.cancel,
   };
 }

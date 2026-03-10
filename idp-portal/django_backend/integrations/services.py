@@ -17,6 +17,7 @@ from integrations.validation_service import IntegrationValidationService
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.exceptions import InvalidStateError
+from core.middleware import get_correlation_id
 from core.utils import sanitize_audit_changes
 
 logger = structlog.get_logger(__name__)
@@ -175,7 +176,8 @@ class IntegrationService:
                     action_type=AuditActionType.INTEGRATION_CREATED,
                     entity_type=AuditEntityType.INTEGRATION,
                     entity_id=integration.id,
-                    details={'name': integration.name, 'type': integration.type}
+                    details={'name': integration.name, 'type': integration.type},
+                    correlation_id=get_correlation_id(),
                 )
 
             # Attach warnings for API response
@@ -196,7 +198,7 @@ class IntegrationService:
         Returns:
             QuerySet of integrations
         """
-        queryset = Integration.objects.all()
+        queryset = Integration.objects.select_related('secret_service').all()
         if integration_type:
             queryset = queryset.filter(type=integration_type)
         # Note: active filter not implemented (no active field in model)
@@ -323,6 +325,7 @@ class IntegrationService:
                     'new_status': integration.status,
                     'validation_reason': "Status recalculated on update",
                 },
+                correlation_id=get_correlation_id(),
             )
 
         if computed_status != IntegrationStatus.VALID:
@@ -351,7 +354,8 @@ class IntegrationService:
                 action_type=AuditActionType.INTEGRATION_UPDATED,
                 entity_type=AuditEntityType.INTEGRATION,
                 entity_id=integration.id,
-                details={'name': integration.name, 'changes': changes}
+                details={'name': integration.name, 'changes': changes},
+                correlation_id=get_correlation_id(),
             )
 
         integration._warnings = warnings  # type: ignore[attr-defined]
@@ -394,6 +398,7 @@ class IntegrationService:
         disabled_count = len(linked_actions)
 
         # Audit individuel par action (SOC1 — inchangé)
+        correlation_id = get_correlation_id()
         for action in linked_actions:
             if user:
                 AuditService.create_entry(
@@ -406,7 +411,8 @@ class IntegrationService:
                         'integration_id': integration_id,
                         'integration_name': integration_name,
                         'reason': 'integration_deleted',
-                    }
+                    },
+                    correlation_id=correlation_id,
                 )
 
         # Delete integration (SET_NULL sets integration_id=NULL on actions)
@@ -424,7 +430,8 @@ class IntegrationService:
                 details={
                     'name': integration_name,
                     'disabled_actions_count': disabled_count,
-                }
+                },
+                correlation_id=correlation_id,
             )
 
         return {'deleted': True, 'disabled_actions_count': disabled_count}

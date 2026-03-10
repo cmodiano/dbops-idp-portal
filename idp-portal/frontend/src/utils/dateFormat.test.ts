@@ -41,6 +41,15 @@ describe('formatUtcToLocal', () => {
     expect(withZ).toBe(withOffset);
   });
 
+  // ── datetimeWithSeconds format ─────────────────────────────────
+
+  it('formats datetime with seconds (HH:mm:ss)', () => {
+    const result = formatUtcToLocal('2026-02-09T14:30:45Z', 'datetimeWithSeconds');
+    expect(result).not.toBe('—');
+    expect(result).toMatch(/09\/02\/2026/);
+    expect(result).toMatch(/\d{2}:\d{2}:\d{2}/);
+  });
+
   // ── Date-only format ──────────────────────────────────────────
 
   it('formats date-only with Z suffix', () => {

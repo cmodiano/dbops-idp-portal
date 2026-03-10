@@ -160,12 +160,14 @@ class RefreshTokenView(APIView):
                 details={}
             )
 
+        # correlation_id included for traceability (AUTH-MED-04)
+        refresh_correlation_id = get_correlation_id()
         AuditService.create_entry(
             user_id=payload.sub,
             action_type=AuditActionType.USER_REFRESH,
             entity_type=AuditEntityType.USER,
             entity_id=entity_id,
-            details={"username": payload.username}
+            details={"username": payload.username, "correlation_id": refresh_correlation_id}
         )
 
         serializer = TokenRefreshResponseSerializer({
@@ -193,12 +195,14 @@ class LogoutView(APIView):
             if payload:
                 try:
                     entity_id = int(payload.sub)
+                    # correlation_id included for traceability (consistent with AUTH-MED-03/04 — NEW-FIND-03)
+                    logout_correlation_id = get_correlation_id()
                     AuditService.create_entry(
                         user_id=payload.sub,
                         action_type=AuditActionType.USER_LOGOUT,
                         entity_type=AuditEntityType.USER,
                         entity_id=entity_id,
-                        details={"username": payload.username}
+                        details={"username": payload.username, "correlation_id": logout_correlation_id}
                     )
                 except (ValueError, TypeError):
                     # Log warning but don't fail logout

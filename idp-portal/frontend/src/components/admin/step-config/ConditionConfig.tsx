@@ -3,7 +3,7 @@
  * Multi-select libre d'environnements (l'utilisateur saisit les noms).
  */
 
-import React from 'react';
+import type { FC } from 'react';
 import { Select, Typography } from 'antd';
 
 const { Text } = Typography;
@@ -14,7 +14,7 @@ export interface ConditionConfigProps {
   disabled?: boolean;
 }
 
-export const ConditionConfig: React.FC<ConditionConfigProps> = ({
+export const ConditionConfig: FC<ConditionConfigProps> = ({
   value,
   onChange,
   disabled = false,

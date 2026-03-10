@@ -9,7 +9,7 @@ import userEvent from '@testing-library/user-event';
 import { App } from 'antd';
 import { FeatureFlagsPanel } from './FeatureFlagsPanel';
 
-vi.mock('../../services/featureFlagService', () => ({
+vi.mock('../../services/feature_flag_service', () => ({
   fetchFeatureFlags: vi.fn(),
   updateFeatureFlag: vi.fn(),
 }));
@@ -25,7 +25,7 @@ vi.mock('../../services/logger', () => ({
 import {
   fetchFeatureFlags,
   updateFeatureFlag,
-} from '../../services/featureFlagService';
+} from '../../services/feature_flag_service';
 
 const mockFlags = [
   {

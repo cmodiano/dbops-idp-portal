@@ -18,7 +18,7 @@ from catalog.models import Action, Tag
 from core.exceptions import BadRequestError
 from core.middleware import get_correlation_id
 from core.models import AuditLog, AuditActionType, AuditEntityType
-from core.permissions import IsDBAOrDBOPS, AdminProfilePermission
+from core.permissions import IsAdminUser, AdminProfilePermission
 from executions.models import Execution, ExecutionStatus, ExecutionStepType, ExecutionStepStatus, ScheduledExecution
 
 logger = structlog.get_logger(__name__)
@@ -42,12 +42,12 @@ def _parse_date(value: str | None, *, name: str) -> date | None:
         raise BadRequestError(code="BAD_REQUEST", message=f"{name} invalide (YYYY-MM-DD)", details={name: value})
 
 
-def _filter_queryset_by_ownership(qs: QuerySet, request, permission_class=IsDBAOrDBOPS) -> QuerySet:
+def _filter_queryset_by_ownership(qs: QuerySet, request, permission_class=IsAdminUser) -> QuerySet:
     """
     Filter queryset to user's own objects unless user has admin permission.
 
     Story 26.8 AC3: Extracted pattern from 6 dashboard views.
-    Story 26.12 will replace this with IsOwnerOrDBA mixin.
+    Uses permission_class (default: IsAdminUser) to determine if user sees all executions.
     """
     permission = permission_class()
     if not permission.has_permission(request, None):
@@ -378,18 +378,14 @@ class DashboardFilterOptionsView(APIView):
         )
 
 
-def _stats_for_queryset(qs) -> dict:
+def _compute_avg_duration_s(qs) -> float | None:
     """
-    Compute ComparisonStats for a queryset of executions.
+    Compute average execution duration in seconds for completed executions.
+
+    DASH-MED-02: Extracted shared helper to avoid duplication between
+    _stats_for_queryset() and DashboardStatsOperationsView.get().
+    Pattern Python (compatibilité Oracle) — itération côté Python sur (started_at, completed_at).
     """
-    execution_count = qs.count()
-    incident_count = qs.filter(status=ExecutionStatus.FAILED).count()
-
-    finished = qs.filter(status__in=[ExecutionStatus.COMPLETED, ExecutionStatus.FAILED]).count()
-    completed = qs.filter(status=ExecutionStatus.COMPLETED).count()
-    success_rate = round((completed / finished) * 100, 2) if finished > 0 else None
-
-    # Average execution time in seconds for completed executions (only if timestamps are present)
     durations = []
     for started_at, completed_at in qs.filter(
         status=ExecutionStatus.COMPLETED,
@@ -401,7 +397,6 @@ def _stats_for_queryset(qs) -> dict:
             if delta >= 0:
                 durations.append(delta)
         except (TypeError, AttributeError) as e:
-            # Story 17.6: Specific catch for invalid timestamp data
             logger.debug(
                 "execution_duration_calculation_skipped",
                 started_at=started_at,
@@ -411,8 +406,21 @@ def _stats_for_queryset(qs) -> dict:
                 correlation_id=get_correlation_id(),
             )
             continue
+    return round(sum(durations) / len(durations), 2) if durations else None
 
-    avg_time = round(sum(durations) / len(durations), 2) if durations else None
+
+def _stats_for_queryset(qs) -> dict:
+    """
+    Compute ComparisonStats for a queryset of executions.
+    """
+    execution_count = qs.count()
+    incident_count = qs.filter(status=ExecutionStatus.FAILED).count()
+
+    finished = qs.filter(status__in=[ExecutionStatus.COMPLETED, ExecutionStatus.FAILED]).count()
+    completed = qs.filter(status=ExecutionStatus.COMPLETED).count()
+    success_rate = round((completed / finished) * 100, 2) if finished > 0 else None
+
+    avg_time = _compute_avg_duration_s(qs)  # DASH-MED-02: use shared helper
 
     return {
         "success_rate": success_rate,
@@ -743,30 +751,8 @@ class DashboardStatsOperationsView(APIView):
         qs = qs.filter(created_at__gte=period_start, created_at__lt=period_end).distinct()
 
         # 1. Durée moyenne d'exécution en secondes
-        # Pattern Python (compatibilité Oracle) — identique à _stats_for_queryset
-        durations = []
-        for started_at, completed_at in qs.filter(
-            status=ExecutionStatus.COMPLETED,
-            started_at__isnull=False,
-            completed_at__isnull=False,
-        ).values_list("started_at", "completed_at"):
-            try:
-                if started_at is None or completed_at is None:
-                    continue
-                delta = (completed_at - started_at).total_seconds()
-                if delta >= 0:
-                    durations.append(delta)
-            except (TypeError, AttributeError) as e:
-                logger.debug(
-                    "execution_duration_calculation_skipped",
-                    started_at=started_at,
-                    completed_at=completed_at,
-                    error=str(e),
-                    error_type=type(e).__name__,
-                    correlation_id=get_correlation_id(),
-                )
-                continue
-        avg_execution_time_s = round(sum(durations) / len(durations), 2) if durations else None
+        # DASH-MED-02: use shared helper _compute_avg_duration_s() instead of duplicated loop
+        avg_execution_time_s = _compute_avg_duration_s(qs)
 
         # 2. Top N actions les plus exécutées
         top_actions_rows = (
@@ -970,8 +956,15 @@ class DashboardStatsPlanifieesView(APIView):
         qs = qs.filter(created_at__gte=period_start, created_at__lt=period_end).distinct()
 
         # 1. IDs des exécutions déclenchées par une planification
-        #    Étape 1 : IDs des exécutions dans la période (Oracle-safe : pas de sous-requête enchaînée)
+        #    Oracle-safe: matérialiser les IDs en Python set évite les sous-requêtes imbriquées
+        #    instables sur Oracle. DASH-LOW-02: risque mémoire si volume très élevé (>50k exécutions).
         period_ids = set(qs.values_list('id', flat=True))
+        if len(period_ids) > 50_000:
+            logger.warning(
+                "dashboard_planifiees_large_period_ids",
+                period_ids_count=len(period_ids),
+                correlation_id=get_correlation_id(),
+            )
         #    Étape 2 : parmi les ScheduledExecution, celles dont execution_id est dans la période
         scheduled_ids = set(
             ScheduledExecution.objects.filter(
@@ -1064,9 +1057,16 @@ class DashboardStatsRetriesView(APIView):
         qs = _apply_common_filters(qs, request=request, include_status=False)
         qs = qs.filter(created_at__gte=period_start, created_at__lt=period_end).distinct()
 
-        # Oracle-safe: matérialiser les IDs en Python avant de filtrer AuditLog
+        # Oracle-safe: matérialiser les IDs en Python avant de filtrer AuditLog (pas de sous-requête
+        # imbriquée instable sur Oracle). DASH-LOW-02: risque mémoire si volume très élevé (>50k).
         # len(period_ids) == total_executions → pas besoin d'un qs.count() séparé
         period_ids = set(qs.values_list('id', flat=True))
+        if len(period_ids) > 50_000:
+            logger.warning(
+                "dashboard_retries_large_period_ids",
+                period_ids_count=len(period_ids),
+                correlation_id=get_correlation_id(),
+            )
         total_executions = len(period_ids)
 
         # Exécutions avec au moins un retry : chercher dans AuditLog

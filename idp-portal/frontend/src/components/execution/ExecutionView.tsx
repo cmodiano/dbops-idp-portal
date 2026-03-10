@@ -227,6 +227,7 @@ export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggest
             execution={execution}
             mode="realtime"
             onSuggestionClick={onSuggestionClick}
+            workflowSteps={actionDetail?.workflow_steps ?? undefined}
           />
         ) : null}
       </div>

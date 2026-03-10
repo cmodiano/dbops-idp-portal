@@ -86,9 +86,10 @@ class TestApproveStepView(TestCase):
         self.assertIn("approved_at", step_data)
         self.assertEqual(step_data["approval_comment"], "LGTM")
 
-        # Vérifie que la tâche Celery de resume est bien déclenchée
+        # Vérifie que la tâche Celery de resume est bien déclenchée (Story 67.4: liste)
         mock_resume.apply_async.assert_called_once_with(
-            args=[self.execution.id, "execute-action"]
+            args=[self.execution.id, ["execute-action"]],
+            queue="default",
         )
 
     @patch('executions.views.approval_views._check_approver_permission', return_value=True)
@@ -216,7 +217,8 @@ class TestRejectStepView(TestCase):
 
         # Vérifie que la tâche Celery de resume est déclenchée avec le chemin d'erreur
         mock_resume.apply_async.assert_called_once_with(
-            args=[self.execution.id, "notify-rejected"]
+            args=[self.execution.id, "notify-rejected"],
+            queue="default",
         )
 
     @patch('executions.views.approval_views._check_approver_permission', return_value=True)
@@ -416,7 +418,8 @@ class TestRejectExecutionBackwardCompat(TestCase):
 
         # Vérifie que la tâche Celery de resume est déclenchée avec le chemin d'erreur
         mock_resume.apply_async.assert_called_once_with(
-            args=[execution.id, "notify-rejected"]
+            args=[execution.id, "notify-rejected"],
+            queue="default",
         )
 
     @patch('executions.views.approval_views._check_approver_permission', return_value=True)

@@ -170,6 +170,13 @@ class SimulationService:
             close_old_connections()
 
             execution = Execution.objects.get(id=execution_id)
+            # Set started_at when not already set (e.g. child executions called via _run_simulation
+            # directly, without start_simulation). Required for duration display in executions list.
+            if not execution.started_at:
+                execution.status = ExecutionStatus.RUNNING
+                execution.started_at = timezone.now()
+                execution.save(update_fields=['status', 'started_at'])
+
             steps = list(
                 ExecutionStep.objects.filter(execution_id=execution_id).order_by('step_order')
             )

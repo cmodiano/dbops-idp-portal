@@ -170,7 +170,7 @@ Table des utilisateurs authentifiés via SAML.
 | ID | NUMBER | PK, IDENTITY | Identifiant unique auto-généré |
 | USERNAME | VARCHAR2(255) | UNIQUE, NOT NULL | Nom d'utilisateur (email) |
 | DISPLAY_NAME | VARCHAR2(255) | NULL | Nom affiché |
-| PROFILE | VARCHAR2(50) | NOT NULL | Profil legacy (deprecated, utiliser PROFILES) |
+| PROFILE | VARCHAR2(50) | NOT NULL | Profil legacy — deprecated, utiliser table PROFILES |
 | SAML_SUBJECT | VARCHAR2(512) | NULL | Identifiant SAML |
 | CREATED_AT | TIMESTAMP | DEFAULT SYSTIMESTAMP | Date de création |
 | UPDATED_AT | TIMESTAMP | NULL | Date de mise à jour |

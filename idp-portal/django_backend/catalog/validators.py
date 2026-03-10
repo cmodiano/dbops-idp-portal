@@ -91,7 +91,7 @@ def validate_gate_conditions(gate_conditions: list) -> None:
 
 # Story 31.8: Valid notification channel types and conditions
 # Story 57.8: on_approval_required — when a workflow step is waiting for approval
-VALID_CHANNEL_TYPES = ('email', 'teams', 'page_dba', 'page_oncall')  # page_dba conservé — backward compat (Epic 56)
+VALID_CHANNEL_TYPES = ('email', 'teams', 'page_oncall')
 VALID_CONDITIONS = ('on_failure', 'on_success', 'always', 'on_approval_required')
 
 
@@ -101,7 +101,7 @@ def validate_notification_config(notification_config: dict | None) -> None:
 
     Structure:
         {
-            "channels": [{"type": "email"|"teams"|"page_oncall"|"page_dba", "enabled": bool, "conditions": [...], ...}],
+            "channels": [{"type": "email"|"teams"|"page_oncall", "enabled": bool, "conditions": [...], ...}],
             "page_individual_enabled": bool
         }
 
@@ -278,8 +278,8 @@ def validate_business_rule_policies(value: dict | None) -> None:
             _validate_review_if_modified_policy(policy, idx)
 
     logger.debug(
-        "business_rule_policies validation passed",
-        extra={"num_rules": len(on_step_output)},
+        "business_rule_policies_validation_passed",
+        num_rules=len(on_step_output),
     )
 
 

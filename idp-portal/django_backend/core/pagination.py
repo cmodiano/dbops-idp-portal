@@ -113,7 +113,7 @@ class CustomPageNumberPagination(PageNumberPagination):
             "data": data,
             "pagination": {
                 "page": self.page.number,
-                "page_size": self.page_size,
+                "page_size": self.page.paginator.per_page,  # MEDIUM-2: actual page size, not class default
                 "total": self.page.paginator.count,
                 "total_pages": self.page.paginator.num_pages
             }

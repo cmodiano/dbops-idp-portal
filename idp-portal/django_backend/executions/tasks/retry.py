@@ -16,6 +16,9 @@ from core.models import AuditActionType, AuditEntityType
 
 logger = structlog.get_logger(__name__)
 
+# story 66-16 review: module-level constant (was incorrectly defined inside the function)
+_MAX_RETRY_DELAY_SECONDS = 86400  # 24h max, prevents overflow on high attempt counts
+
 
 @shared_task(bind=True, max_retries=0, name="executions.tasks.retry_workflow_step")
 def retry_workflow_step(self: Any, execution_id: int, step: dict, attempt: int) -> dict:
@@ -150,10 +153,13 @@ def retry_workflow_step(self: Any, execution_id: int, step: dict, attempt: int) 
                 'error_message': result.error_message,
             }
 
-        # Schedule next retry with exponential backoff
+        # Schedule next retry with exponential backoff — capped at 24h (story 66-16 finding MEDIUM)
         interval_seconds = step.get('retry_interval_seconds', 60)
         backoff_multiplier = step.get('retry_backoff_multiplier', 2.0)
-        delay_seconds = interval_seconds * (backoff_multiplier ** (attempt - 1))
+        delay_seconds = min(
+            interval_seconds * (backoff_multiplier ** (attempt - 1)),
+            _MAX_RETRY_DELAY_SECONDS,
+        )
 
         logger.info(
             "celery_retry_workflow_step_rescheduling",

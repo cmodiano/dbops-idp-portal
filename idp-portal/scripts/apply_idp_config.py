@@ -24,7 +24,7 @@ import requests
 import yaml
 
 # ---------------------------------------------------------------------------
-# Ordre de synchronisation — doit correspondre exactement à sync_config.py
+# Ordre canonique de synchronisation CaC
 # Tuple: (path_pattern, entity_label, endpoint_path, per_file)
 # per_file=True  → répertoire : itère tous les *.yaml/*.yml
 # per_file=False → fichier unique

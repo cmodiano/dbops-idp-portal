@@ -5,7 +5,7 @@
  * and summary statistics.
  */
 
-import React from 'react';
+import type { FC } from 'react';
 import { Button, Drawer, Flex, Space, Statistic, Divider } from 'antd';
 import {
   CloseCircleOutlined,
@@ -29,7 +29,7 @@ interface ValidationErrorItem {
   message: string;
 }
 
-const ErrorItem: React.FC<{ item: ValidationErrorItem; onGoToNode: (nodeId: string) => void }> = ({ item, onGoToNode }) => (
+const ErrorItem: FC<{ item: ValidationErrorItem; onGoToNode: (nodeId: string) => void }> = ({ item, onGoToNode }) => (
   <Flex justify="space-between" align="center" style={{ padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
     <Flex gap={8} align="start">
       {item.type === 'error' ? (
@@ -57,7 +57,7 @@ const ErrorItem: React.FC<{ item: ValidationErrorItem; onGoToNode: (nodeId: stri
   </Flex>
 );
 
-const ValidationReportPanel: React.FC<ValidationReportPanelProps> = ({
+const ValidationReportPanel: FC<ValidationReportPanelProps> = ({
   validation,
   open,
   onClose,

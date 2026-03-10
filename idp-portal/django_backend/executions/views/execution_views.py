@@ -24,7 +24,7 @@ from executions.models import Execution, ExecutionStep, ExecutionStatus
 from executions.serializers import ExecutionSerializer, ExecutionStepSerializer
 from executions.dtos import ExecutionRequest
 from executions.services import ExecutionService
-from core.permissions import IsDBAOrDBOPS
+from core.permissions import IsAdminUser
 from executions.utils import (
     detect_request_source,
 )
@@ -44,7 +44,7 @@ from adapters.base_adapter import ICancellableAdapter
 exec_logger = structlog.get_logger(__name__)
 
 # AC2: Story 26.8 — Instance shared across views for owner-or-admin object-level checks
-_dba_permission = IsDBAOrDBOPS()
+_dba_permission = IsAdminUser()
 
 
 def _fetch_splunk_logs_for_execution(
@@ -354,7 +354,7 @@ class ExecutionDetailView(APIView):
         except Execution.DoesNotExist:
             raise NotFoundError(code="NOT_FOUND", message="Execution non trouvée", details={"execution_id": execution_id})
 
-        # AC2: Story 26.8 — owner-or-admin check via IsDBAOrDBOPS permission
+        # AC2: Story 26.8 — owner-or-admin check via IsAdminUser permission
         if not _dba_permission.has_object_permission(request, self, execution):
             raise ForbiddenError(code="FORBIDDEN", message="Accès interdit", details={"execution_id": execution_id})
 
@@ -384,7 +384,7 @@ class ExecutionCancelView(APIView):
         except Execution.DoesNotExist:
             raise NotFoundError(code="NOT_FOUND", message="Execution non trouvée", details={"execution_id": execution_id})
 
-        # AC2: Story 26.8 — owner-or-admin check via IsDBAOrDBOPS permission
+        # AC2: Story 26.8 — owner-or-admin check via IsAdminUser permission
         if not _dba_permission.has_object_permission(request, self, execution):
             raise ForbiddenError(code="FORBIDDEN", message="Accès interdit", details={"execution_id": execution_id})
 
@@ -536,7 +536,7 @@ class ExecutionStepsView(APIView):
         except Execution.DoesNotExist:
             raise NotFoundError(code="NOT_FOUND", message="Execution non trouvée", details={"execution_id": execution_id})
 
-        # AC2: Story 26.8 — owner-or-admin check via IsDBAOrDBOPS permission
+        # AC2: Story 26.8 — owner-or-admin check via IsAdminUser permission
         if not _dba_permission.has_object_permission(request, self, execution):
             raise ForbiddenError(code="FORBIDDEN", message="Accès interdit", details={"execution_id": execution_id})
 
@@ -561,7 +561,7 @@ class ExecutionStepLogsView(APIView):
             )
 
         execution = step.execution
-        # AC2: Story 26.8 — owner-or-admin check via IsDBAOrDBOPS permission
+        # AC2: Story 26.8 — owner-or-admin check via IsAdminUser permission
         if not _dba_permission.has_object_permission(request, self, execution):
             raise ForbiddenError(code="FORBIDDEN", message="Accès interdit", details={"execution_id": execution_id})
 

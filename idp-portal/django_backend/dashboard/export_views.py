@@ -7,7 +7,6 @@ from __future__ import annotations
 import csv
 import io
 from datetime import datetime, timedelta
-from typing import Any
 
 import structlog
 from django.db.models import Q, Count, QuerySet
@@ -21,7 +20,8 @@ from rest_framework.views import APIView
 
 from core.exceptions import BadRequestError
 from core.middleware import get_correlation_id
-from core.permissions import IsDBAOrDBOPS
+from core.permissions import IsAdminUser
+from dashboard.views import _parse_date  # DASH-MED-01: shared helper, removed local duplicate
 from executions.models import Execution, ExecutionStatus
 
 logger = structlog.get_logger(__name__)
@@ -29,24 +29,12 @@ logger = structlog.get_logger(__name__)
 MAX_EXPORT_ROWS = 10_000
 
 
-def _parse_date(value: str | None, *, name: str) -> Any:
-    """Parse date string YYYY-MM-DD to date object."""
-    if not value:
-        return None
-    try:
-        return datetime.strptime(value, "%Y-%m-%d").date()
-    except ValueError:
-        raise BadRequestError(
-            code="BAD_REQUEST",
-            message=f"{name} invalide (YYYY-MM-DD attendu)",
-            details={name: value},
-        )
-
-
 def _build_export_queryset(request: Request) -> QuerySet:
     """Build filtered and aggregated queryset for dashboard export.
 
     HIGH-4 fix: Apply scope filter to respect RBAC permissions.
+    DASH-LOW-03: apply_scope_filter importé inline pour éviter un import circulaire potentiel
+    (executions.utils → dashboard.views → executions.models). Import inline intentionnel.
     """
     from executions.utils import apply_scope_filter
 
@@ -74,10 +62,10 @@ def _build_export_queryset(request: Request) -> QuerySet:
     if engine:
         qs = qs.filter(action__engine=engine)
 
-    # Environment filter
+    # Environment filter (iexact pour cohérence avec _apply_common_filters dans views.py)
     environment = request.query_params.get("environment")
     if environment:
-        qs = qs.filter(environment=environment)
+        qs = qs.filter(environment__iexact=environment)
 
     # Tags filter
     tags = request.query_params.getlist("tags")
@@ -107,7 +95,7 @@ def _build_export_queryset(request: Request) -> QuerySet:
 class DashboardExportCSVView(APIView):
     """GET /dashboard/export/csv — Export des statistiques dashboard en CSV."""
 
-    permission_classes = [IsAuthenticated, IsDBAOrDBOPS]
+    permission_classes = [IsAuthenticated, IsAdminUser]
 
     @extend_schema(
         tags=["dashboard"],
@@ -153,7 +141,9 @@ class DashboardExportCSVView(APIView):
                 success,
                 row["failed_executions"],
                 success_rate,
-                "",  # avg_execution_time_ms — TODO: implement with (completed_at - started_at) aggregation (MEDIUM-3)
+                "",  # DASH-LOW-04: avg_execution_time_ms — dette technique connue (Story 30.2).
+                     # L'agrégation Python via _compute_avg_duration_s() est disponible mais non appliquée ici
+                     # car _build_export_queryset() retourne des agrégats SQL sans timestamps individuels.
                 row["action__engine"] or "",
                 row["environment"] or "",
             ])
@@ -177,7 +167,7 @@ class DashboardExportCSVView(APIView):
 class DashboardExportPDFView(APIView):
     """GET /dashboard/export/pdf — Export des statistiques dashboard en PDF."""
 
-    permission_classes = [IsAuthenticated, IsDBAOrDBOPS]
+    permission_classes = [IsAuthenticated, IsAdminUser]
 
     @extend_schema(
         tags=["dashboard"],

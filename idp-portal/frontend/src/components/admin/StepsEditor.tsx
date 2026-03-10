@@ -8,7 +8,8 @@
  * - Accessibility support
  */
 
-import React, { useState } from 'react';
+import { useState } from 'react';
+import type { FC, CSSProperties } from 'react';
 import {
   Alert,
   Button,
@@ -93,7 +94,7 @@ interface AAPTemplateSectionProps {
   onStepChange: (index: number, field: keyof ExecutionStep, fieldValue: unknown) => void;
 }
 
-const AAPTemplateSection: React.FC<AAPTemplateSectionProps> = ({
+const AAPTemplateSection: FC<AAPTemplateSectionProps> = ({
   step,
   index,
   integrationId,
@@ -205,7 +206,7 @@ const AAPTemplateSection: React.FC<AAPTemplateSectionProps> = ({
 };
 
 /** Sortable step card component using @dnd-kit */
-const SortableStepCard: React.FC<SortableStepCardProps> = ({
+const SortableStepCard: FC<SortableStepCardProps> = ({
   step,
   index,
   environmentOptions,
@@ -225,7 +226,7 @@ const SortableStepCard: React.FC<SortableStepCardProps> = ({
     isDragging,
   } = useSortable({ id: step.order.toString() });
 
-  const style: React.CSSProperties = {
+  const style: CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
@@ -344,7 +345,7 @@ const SortableStepCard: React.FC<SortableStepCardProps> = ({
   );
 };
 
-export const StepsEditor: React.FC<StepsEditorProps> = ({ value = EMPTY_STEPS, onChange, integrationId }) => {
+export const StepsEditor: FC<StepsEditorProps> = ({ value = EMPTY_STEPS, onChange, integrationId }) => {
   const { environmentOptions, loading: environmentsLoading } = useEnvironments();
 
   // Configure dnd-kit sensors for pointer and keyboard interaction

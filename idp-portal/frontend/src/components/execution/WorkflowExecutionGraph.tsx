@@ -16,6 +16,8 @@
  */
 
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import type { CSSProperties, MouseEvent } from 'react';
+import './WorkflowExecutionGraph.css';
 import { useExecutionSteps } from '../../hooks/useExecutionSteps';
 import {
   ReactFlow,
@@ -44,6 +46,7 @@ import StartNode from '../admin/StartNode';
 import EndNode from '../admin/EndNode';
 import CustomEdge from '../admin/CustomEdge';
 import { StepDetailDrawer } from './StepDetailDrawer';
+import { buildParallelGroupMap, computeParallelGroupStatus } from '../../utils/parallelGroupUtils';
 
 const { Text } = Typography;
 
@@ -80,6 +83,8 @@ const edgeTypes = {
   customEdge: CustomEdge,
 };
 
+const TERMINAL_STATUSES = ['COMPLETED', 'FAILED', 'CANCELLED', 'REJECTED'] as const;
+
 /** Calculate human-readable duration between two timestamps. */
 function calculateStepDuration(step: ExecutionStepResponse): string | null {
   if (!step.started_at || !step.completed_at) return null;
@@ -93,7 +98,7 @@ function calculateStepDuration(step: ExecutionStepResponse): string | null {
 }
 
 /** Get subtle border style for the React Flow wrapper (AC3, AC4). */
-function getNodeStyle(status: ExecutionStepStatus | undefined): React.CSSProperties {
+function getNodeStyle(status: ExecutionStepStatus | undefined): CSSProperties {
   // The actual visible border is handled by WorkflowStepNode's inner div.
   // These wrapper styles provide minimal reinforcement.
   switch (status) {
@@ -134,7 +139,7 @@ function WorkflowExecutionGraphInner({
   }, []);
 
   // Story 19.3 AC1, AC8: Handle node click — open drawer for action nodes, ignore Start/End
-  const handleNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
+  const handleNodeClick = useCallback((_event: MouseEvent, node: Node) => {
     if (node.id === START_NODE_ID || node.id === END_NODE_ID) {
       return;
     }
@@ -143,8 +148,7 @@ function WorkflowExecutionGraphInner({
 
   // AC5: Real-time updates via WebSocket + polling fallback
   // Skip real-time for terminal executions (no need to poll/WS for completed/failed/cancelled)
-  const TERMINAL_STATUSES = ['COMPLETED', 'FAILED', 'CANCELLED', 'REJECTED'];
-  const isTerminal = execution ? TERMINAL_STATUSES.includes(execution.status) : false;
+  const isTerminal = execution ? (TERMINAL_STATUSES as readonly string[]).includes(execution.status) : false;
 
   // Story 38.6: DIP — use hook instead of direct service import for terminal steps
   const { steps: staticSteps, error: stepsError } = useExecutionSteps(executionId, isTerminal);
@@ -197,19 +201,58 @@ function WorkflowExecutionGraphInner({
   useEffect(() => {
     if (baseNodes.length === 0) return;
 
-    // Map execution steps by step_order to find corresponding workflow step
+    // Map execution steps to workflow nodes: config_step_id first, step_order fallback for legacy
     const stepStatusMap = new Map<string, ExecutionStepResponse>();
     executionSteps.forEach((execStep) => {
-      // Match by step_order (1-based) to workflowSteps index (0-based)
-      const wfStep = workflowSteps[execStep.step_order - 1];
+      const wfStep: WorkflowStep | undefined =
+        (execStep.config_step_id
+          ? workflowSteps.find((s) => s.step_id === execStep.config_step_id)
+          : undefined) ?? workflowSteps[execStep.step_order - 1];
       if (wfStep?.step_id) {
         stepStatusMap.set(wfStep.step_id, execStep);
       }
     });
 
+    // Story 65.6: Build parallel group map to compute aggregated status for parallel_group nodes
+    const parallelGroupMap = workflowSteps?.length
+      ? buildParallelGroupMap(workflowSteps, executionSteps)
+      : new Map();
+
     const enrichedNodes = baseNodes.map((node) => {
       if (node.id === START_NODE_ID || node.id === END_NODE_ID) {
         return node;
+      }
+
+      // Story 65.6: parallel_group node — compute aggregated status from sub-steps.
+      // POST-STORY 67.5 DEAD CODE: `step_type: 'parallel_group'` was removed from the
+      // workflow builder in Story 67.5 (replaced by fan-out via on_success_step_ids[]).
+      // No node will have this type in modern workflows, so this branch is never entered.
+      // Retained for backward compatibility with executions recorded before Story 67.5.
+      if (node.data?.step_type === 'parallel_group') {
+        const groupInfo = parallelGroupMap.get(node.id);
+        const aggregatedStatus = groupInfo
+          ? computeParallelGroupStatus(groupInfo.subSteps)
+          : 'PENDING';
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            executionStatus: aggregatedStatus,
+            executionDuration: null,
+          },
+          style: {
+            ...node.style,
+            ...getNodeStyle(aggregatedStatus),
+            ...(node.id === selectedStepId && {
+              borderColor: STATUS_COLORS.SELECTED,
+              borderWidth: 4,
+              boxShadow: `0 0 12px ${STATUS_COLORS.SELECTED}80`,
+              opacity: 1,
+            }),
+            transition: 'border-color 0.3s, opacity 0.3s, box-shadow 0.3s',
+          },
+          className: aggregatedStatus === 'RUNNING' && node.id !== selectedStepId ? 'workflow-node-running' : undefined,
+        };
       }
 
       const execStep = stepStatusMap.get(node.id);
@@ -251,16 +294,31 @@ function WorkflowExecutionGraphInner({
 
     const stepStatusMap = new Map<string, ExecutionStepResponse>();
     executionSteps.forEach((execStep) => {
-      const wfStep = workflowSteps[execStep.step_order - 1];
+      const wfStep: WorkflowStep | undefined =
+        (execStep.config_step_id
+          ? workflowSteps.find((s) => s.step_id === execStep.config_step_id)
+          : undefined) ?? workflowSteps[execStep.step_order - 1];
       if (wfStep?.step_id) {
         stepStatusMap.set(wfStep.step_id, execStep);
       }
     });
 
-    const enrichedEdges = baseEdges.map((edge) => {
-      const sourceStep = stepStatusMap.get(edge.source);
+    // Story 65.6: parallel_group nodes have no ExecutionStep — use aggregated status for edge coloring
+    const pgMapForEdges = workflowSteps?.length
+      ? buildParallelGroupMap(workflowSteps, executionSteps)
+      : new Map();
 
-      if (sourceStep && (sourceStep.status === 'COMPLETED' || sourceStep.status === 'FAILED')) {
+    const enrichedEdges = baseEdges.map((edge) => {
+      // Determine source status: aggregated for parallel_group, direct for regular steps
+      let sourceStatus: ExecutionStepStatus | undefined;
+      const pgInfo = pgMapForEdges.get(edge.source);
+      if (pgInfo) {
+        sourceStatus = computeParallelGroupStatus(pgInfo.subSteps);
+      } else {
+        sourceStatus = stepStatusMap.get(edge.source)?.status;
+      }
+
+      if (sourceStatus === 'COMPLETED' || sourceStatus === 'FAILED') {
         // AC8: Traversed path — thicker, fully opaque
         return {
           ...edge,
@@ -273,7 +331,7 @@ function WorkflowExecutionGraphInner({
         };
       }
 
-      if (sourceStep?.status === 'RUNNING') {
+      if (sourceStatus === 'RUNNING') {
         // Edge from running step — animated
         return {
           ...edge,
@@ -410,20 +468,7 @@ function WorkflowExecutionGraphInner({
         onClose={() => setSelectedStepId(null)}
       />
 
-      {/* AC3: Subtle pulse animation for active (RUNNING) step */}
-      <style>{`
-        @keyframes workflow-node-pulse {
-          0%, 100% {
-            box-shadow: 0 0 4px ${STATUS_COLORS.RUNNING}30;
-          }
-          50% {
-            box-shadow: 0 0 10px ${STATUS_COLORS.RUNNING}50;
-          }
-        }
-        .workflow-node-running > div {
-          animation: workflow-node-pulse 1.5s ease-in-out infinite;
-        }
-      `}</style>
+      {/* AC3: Subtle pulse animation for active (RUNNING) step — defined in WorkflowExecutionGraph.css */}
     </div>
   );
 }

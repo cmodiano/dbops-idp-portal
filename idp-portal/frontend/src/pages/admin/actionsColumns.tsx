@@ -62,13 +62,13 @@ export const getActionsColumns = (
     render: (status: ActionStatus) => <ActionStatusBadge status={status} />,
     filters: [
       { text: 'Brouillon', value: 'draft' },
-      { text: 'Publiee', value: 'published' },
-      { text: 'Desactivee', value: 'disabled' },
+      { text: 'Publiée', value: 'published' },
+      { text: 'Désactivée', value: 'disabled' },
     ],
     onFilter: (value, record) => record.status === value,
   },
   {
-    title: 'Executions',
+    title: 'Exécutions',
     dataIndex: 'execution_count',
     key: 'execution_count',
     sorter: (a, b) => a.execution_count - b.execution_count,
@@ -95,7 +95,7 @@ export const getActionsColumns = (
       )),
   },
   {
-    title: 'Date de creation',
+    title: 'Date de création',
     dataIndex: 'created_at',
     key: 'created_at',
     render: (date: string) => new Date(date).toLocaleDateString('fr-CA'),
@@ -157,7 +157,7 @@ export const getActionsColumns = (
               icon={<PauseCircleOutlined />}
               onClick={() => onDeactivate(record)}
             >
-              Desactiver
+              Désactiver
             </Button>
           </>
         )}
@@ -183,7 +183,7 @@ export const getActionsColumns = (
               icon={<PlayCircleOutlined />}
               onClick={() => onReactivate(record)}
             >
-              Reactiver
+              Réactiver
             </Button>
           </>
         )}

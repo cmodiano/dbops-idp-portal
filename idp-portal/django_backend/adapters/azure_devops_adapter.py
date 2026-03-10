@@ -21,8 +21,7 @@ import httpx
 import structlog
 
 from adapters.base_adapter import BaseAdapter
-from adapters.status_mappers import (  # noqa: F401 — re-exported for backward compat
-    AZURE_DEVOPS_STATUS_MAP,
+from adapters.status_mappers import (
     AZURE_DEVOPS_TERMINAL_RESULTS,
     map_azure_devops_status,
 )
@@ -30,8 +29,6 @@ from core.exceptions import ServiceUnavailableError
 from integrations.health_check import HealthCheckResult, HealthCheckStatus, IHealthCheckable
 
 logger = structlog.get_logger(__name__)
-
-_map_azure_devops_status = map_azure_devops_status  # backward compat alias for existing tests
 
 # Timeout for Azure DevOps API calls (seconds)
 AZURE_DEVOPS_DEFAULT_TIMEOUT = 30.0
@@ -55,7 +52,7 @@ class AzureDevOpsAdapter(BaseAdapter, IHealthCheckable):
         base_url: str,
         auth_headers: dict[str, str],
         timeout: float = AZURE_DEVOPS_DEFAULT_TIMEOUT,
-        verify_ssl: bool = False,
+        verify_ssl: bool = True,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.auth_headers = auth_headers

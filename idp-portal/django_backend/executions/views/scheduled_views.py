@@ -33,7 +33,9 @@ from executions.serializers import (
     RecurringPatternSerializer,
 )
 from core.environment import EnvironmentHelper
-from core.permissions import IsDBAOrDBOPS, is_admin_user
+from core.permissions import IsAdminUser, is_admin_user
+from core.services import AuditService
+from core.models import AuditActionType, AuditEntityType
 from executions.scheduling_service import SchedulingService
 from executions.utils import (
     parse_int,
@@ -52,7 +54,7 @@ UTC = dt_timezone(timedelta(0))
 exec_logger = structlog.get_logger(__name__)
 
 # AC2: Story 26.12 — Instance shared across views for owner-or-admin object-level checks
-_dba_permission = IsDBAOrDBOPS()
+_dba_permission = IsAdminUser()
 
 
 class ScheduledExecutionsView(APIView):
@@ -514,7 +516,7 @@ class ScheduledExecutionRecurringPatternView(APIView):
                 details={"scheduled_execution_id": scheduled_execution_id},
             )
 
-        # AC2: Story 26.12 — owner-or-admin check via IsDBAOrDBOPS permission
+        # AC2: Story 26.12 — owner-or-admin check via IsAdminUser permission
         if not _dba_permission.has_object_permission(request, self, se):
             raise ForbiddenError(
                 code="PERMISSION_DENIED",
@@ -544,6 +546,29 @@ class ScheduledExecutionRecurringPatternView(APIView):
 
         rp.updated_at = timezone.now()
         rp.save(update_fields=["is_active", "next_execution_date", "updated_at"])
+
+        # AC: audit trail sur toggle is_active (story 66-16 finding HIGH — SCHED-BE-002)
+        # story 66-16 review: CREATED est réservé à l'INSERT d'un nouveau pattern ;
+        # ENABLED est le type sémantiquement correct pour la réactivation d'un pattern existant
+        action_type = (
+            AuditActionType.SCHEDULED_EXECUTION_RECURRING_DISABLED
+            if not is_active
+            else AuditActionType.SCHEDULED_EXECUTION_RECURRING_ENABLED
+        )
+        # story 66-16 code-review fix NEW-HIGH-01: entity_type SCHEDULED_EXECUTION (pas EXECUTION)
+        # se est un ScheduledExecution — utiliser EXECUTION ici cassait list_by_entity('scheduled_execution', ...)
+        AuditService.create_entry(
+            user_id=str(request.user.id),
+            action_type=action_type,
+            entity_type=AuditEntityType.SCHEDULED_EXECUTION,
+            entity_id=se.id,
+            details={
+                'recurring_pattern_id': rp.id,
+                'is_active': is_active,
+                'next_execution_date': rp.next_execution_date.isoformat() if rp.next_execution_date else None,
+            },
+            correlation_id=get_correlation_id(),
+        )
 
         return Response({"data": RecurringPatternSerializer(rp).data})
 

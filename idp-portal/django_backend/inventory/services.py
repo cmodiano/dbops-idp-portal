@@ -176,12 +176,28 @@ class InventoryService:
     def _list_targets_from_api(self, integration: Any, environment: str | None = None,
                                 search: str | None = None, target_type: str | None = None,
                                 page: int = 1, page_size: int = 25) -> tuple[list[dict[str, Any]], int]:
-        """List targets from external API inventory (placeholder)."""
+        """
+        List targets from external API inventory.
+
+        ⚠️  PLACEHOLDER — Not yet implemented (INV-MED-02).
+        When an IntegrationType.INVENTORY integration is configured, this path is taken
+        but intentionally returns an empty result ([], 0) instead of raising an error.
+
+        Behavior: fail-silent — users with API inventory configured will see no targets.
+        A warning is logged to signal the misconfiguration.
+
+        TODO: Implement API-based inventory fetching when the integration is available.
+        """
         correlation_id = get_correlation_id()
         logger.warning(
             "api_inventory_not_yet_implemented",
             integration_id=integration.id,
             base_url=integration.base_url,
+            message=(
+                "IntegrationType.INVENTORY integration is configured but the API inventory "
+                "source is not yet implemented. Returning empty results. "
+                "Configure an INVENTORY_DB integration instead, or remove the INVENTORY integration."
+            ),
             correlation_id=correlation_id
         )
         return [], 0
@@ -616,7 +632,7 @@ class InventoryService:
             return [], 0, False
 
         # Step 1: Aggregate permissions
-        permissions = self.permission_aggregator.aggregate(profiles, environment, correlation_id or "")
+        permissions = self.permission_aggregator.aggregate(profiles, environment, correlation_id)
         if permissions is None:
             return [], 0, False
 

@@ -23,6 +23,9 @@ from idp_auth.views.favorites import (
 from idp_auth.views.service_login import (
     ServiceLoginView,
 )
+from idp_auth.views.portal_login import (
+    PortalLoginView,
+)
 from idp_auth.views.api_keys import (
     APIKeyTokenView,
     APIKeysView,
@@ -39,6 +42,7 @@ __all__ = [
     "UserFavoritesView",
     "UserFavoriteItemView",
     "ServiceLoginView",
+    "PortalLoginView",
     "APIKeyTokenView",
     "APIKeysView",
     "APIKeyDetailView",

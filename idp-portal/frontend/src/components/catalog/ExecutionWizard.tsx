@@ -51,7 +51,7 @@ export interface ExecutionWizardProps {
   allowedEnvironments: string[];
   activeExecutionId?: number | null;
   onCancel: () => void;
-  onSuccess?: (executionId: number) => void;
+  onSuccess?: (executionId: number, opts?: { isScheduled?: boolean }) => void;
   onBackToCatalog?: () => void;
   onSuggestionClick?: (suggestion: RemediationSuggestion) => void;
   parentExecutionId?: number | null;

@@ -48,14 +48,21 @@ export function workflowStepsToReactFlow(
       retry_max_attempts: step.retry_max_attempts ?? null,
       retry_interval_seconds: step.retry_interval_seconds ?? null,
       retry_backoff_multiplier: step.retry_backoff_multiplier ?? null,
-      on_success_step_id: step.on_success_step_id ?? null,
-      on_error_step_id: step.on_error_step_id ?? null,
-      on_success_step_name: step.on_success_step_id
-        ? steps.find((s) => s.step_id === step.on_success_step_id)?.name ?? null
-        : null,
-      on_error_step_name: step.on_error_step_id
-        ? steps.find((s) => s.step_id === step.on_error_step_id)?.name ?? null
-        : null,
+      on_success_step_id: step.on_success_step_ids?.[0] ?? null,
+      on_error_step_id: step.on_error_step_ids?.[0] ?? null,
+      // Story 67.4: résoudre le nom à partir des tableaux en priorité (fan-out multi-cibles)
+      on_success_step_name: (() => {
+        const ids = step.on_success_step_ids ?? [];
+        if (ids.length === 0) return null;
+        const firstName = steps.find((s) => s.step_id === ids[0])?.name ?? ids[0];
+        return ids.length > 1 ? `${firstName} (+${ids.length - 1})` : firstName;
+      })(),
+      on_error_step_name: (() => {
+        const ids = step.on_error_step_ids ?? [];
+        if (ids.length === 0) return null;
+        const firstName = steps.find((s) => s.step_id === ids[0])?.name ?? ids[0];
+        return ids.length > 1 ? `${firstName} (+${ids.length - 1})` : firstName;
+      })(),
       isStartNode: false,
       isEndNode: false,
       // Story 57.13: step type and type-specific fields
@@ -77,6 +84,8 @@ export function workflowStepsToReactFlow(
       output_mapping: step.output_mapping ?? null,
       // Story 57.16: schedule_execution
       schedule_config: step.schedule_config ?? null,
+      // Story 67.4: join_policy pour les steps de convergence
+      join_policy: step.join_policy ?? null,
     } satisfies WorkflowStepNodeData,
   }));
 
@@ -85,21 +94,27 @@ export function workflowStepsToReactFlow(
     const sourceId = step.step_id;
     if (!sourceId) return;
 
-    if (step.on_success_step_id) {
-      edges.push({
-        id: `${sourceId}_success_${step.on_success_step_id}`,
-        source: sourceId,
-        target: step.on_success_step_id,
-        sourceHandle: 'success',
-        targetHandle: 'input',
-        type: 'customEdge',
-        animated: false,
-        style: { stroke: STYLE_TOKENS.iconSuccess, strokeWidth: STYLE_TOKENS.edgeStrokeWidth },
-        label: 'succès',
-        labelStyle: { fontSize: STYLE_TOKENS.edgeLabelFontSize, fill: STYLE_TOKENS.textSuccess },
-      });
+    const successTargets: string[] = step.on_success_step_ids ?? [];
+    const errorTargets: string[] = step.on_error_step_ids ?? [];
+
+    // Créer une edge par target success
+    if (successTargets.length > 0) {
+      for (const target of successTargets) {
+        edges.push({
+          id: `${sourceId}_success_${target}`,
+          source: sourceId,
+          target,
+          sourceHandle: 'success',
+          targetHandle: 'input',
+          type: 'customEdge',
+          animated: false,
+          style: { stroke: STYLE_TOKENS.iconSuccess, strokeWidth: STYLE_TOKENS.edgeStrokeWidth },
+          label: 'succès',
+          labelStyle: { fontSize: STYLE_TOKENS.edgeLabelFontSize, fill: STYLE_TOKENS.textSuccess },
+        });
+      }
     } else {
-      // on_success_step_id=null means "end of workflow" — draw edge to End node for clarity
+      // Fin de workflow → edge vers End node
       edges.push({
         id: `${sourceId}_success_${END_NODE_ID}`,
         source: sourceId,
@@ -113,21 +128,25 @@ export function workflowStepsToReactFlow(
         labelStyle: { fontSize: STYLE_TOKENS.edgeLabelFontSize, fill: STYLE_TOKENS.textSuccess },
       });
     }
-    if (step.on_error_step_id) {
-      edges.push({
-        id: `${sourceId}_error_${step.on_error_step_id}`,
-        source: sourceId,
-        target: step.on_error_step_id,
-        sourceHandle: 'error',
-        targetHandle: 'input',
-        type: 'customEdge',
-        animated: false,
-        style: { stroke: STYLE_TOKENS.iconError, strokeWidth: STYLE_TOKENS.edgeStrokeWidth },
-        label: 'erreur',
-        labelStyle: { fontSize: STYLE_TOKENS.edgeLabelFontSize, fill: STYLE_TOKENS.textError },
-      });
+
+    // Créer une edge par target error
+    if (errorTargets.length > 0) {
+      for (const target of errorTargets) {
+        edges.push({
+          id: `${sourceId}_error_${target}`,
+          source: sourceId,
+          target,
+          sourceHandle: 'error',
+          targetHandle: 'input',
+          type: 'customEdge',
+          animated: false,
+          style: { stroke: STYLE_TOKENS.iconError, strokeWidth: STYLE_TOKENS.edgeStrokeWidth },
+          label: 'erreur',
+          labelStyle: { fontSize: STYLE_TOKENS.edgeLabelFontSize, fill: STYLE_TOKENS.textError },
+        });
+      }
     } else {
-      // on_error_step_id=null means "end/fail" — draw edge to End node for clarity
+      // Fin/erreur de workflow → edge vers End node
       edges.push({
         id: `${sourceId}_error_${END_NODE_ID}`,
         source: sourceId,
@@ -168,22 +187,33 @@ export function workflowStepsToReactFlow(
     deletable: false,
   };
 
-  // Auto-connect Start → first step and steps with null → End for correct display when loading
+  // Auto-connect Start → entry step(s). Entry = steps with no incoming edges from other steps.
+  // This ensures validation reachability matches the actual graph structure regardless of step array order.
   if (workflowNodes.length > 0) {
-    const firstStepId = steps[0]?.step_id ?? workflowNodes[0].id;
-    if (firstStepId) {
-      edges.push({
-        id: `${START_NODE_ID}_output_${firstStepId}`,
-        source: START_NODE_ID,
-        target: firstStepId,
-        sourceHandle: 'output',
-        targetHandle: 'input',
-        type: 'customEdge',
-        animated: false,
-        style: { stroke: STYLE_TOKENS.iconSuccess, strokeWidth: STYLE_TOKENS.edgeStrokeWidth },
-        label: 'succès',
-        labelStyle: { fontSize: STYLE_TOKENS.edgeLabelFontSize, fill: STYLE_TOKENS.textSuccess },
-      });
+    const allTargets = new Set<string>();
+    steps.forEach((s) => {
+      (s.on_success_step_ids ?? []).forEach((id) => allTargets.add(id));
+      (s.on_error_step_ids ?? []).forEach((id) => allTargets.add(id));
+    });
+    const entryStepIds = steps
+      .map((s) => s.step_id)
+      .filter((id): id is string => !!id && !allTargets.has(id));
+    const startTargets = entryStepIds.length > 0 ? entryStepIds : [steps[0]?.step_id ?? workflowNodes[0].id].filter(Boolean);
+    for (const targetId of startTargets) {
+      if (targetId && targetId !== END_NODE_ID) {
+        edges.push({
+          id: `${START_NODE_ID}_output_${targetId}`,
+          source: START_NODE_ID,
+          target: targetId,
+          sourceHandle: 'output',
+          targetHandle: 'input',
+          type: 'customEdge',
+          animated: false,
+          style: { stroke: STYLE_TOKENS.iconSuccess, strokeWidth: STYLE_TOKENS.edgeStrokeWidth },
+          label: 'succès',
+          labelStyle: { fontSize: STYLE_TOKENS.edgeLabelFontSize, fill: STYLE_TOKENS.textSuccess },
+        });
+      }
     }
   }
 
@@ -202,12 +232,13 @@ export function reactFlowToWorkflowSteps(
 
   return workflowNodes.map((node, index) => {
     const data = node.data as unknown as WorkflowStepNodeData;
-    const successEdge = edges.find(
-      (e) => e.source === node.id && e.sourceHandle === 'success' && e.target !== END_NODE_ID
-    );
-    const errorEdge = edges.find(
-      (e) => e.source === node.id && e.sourceHandle === 'error' && e.target !== END_NODE_ID
-    );
+    // Story 67.4: collecter toutes les edges par handle (fan-out) — exclure les edges vers END_NODE_ID
+    const successTargets = edges
+      .filter((e) => e.source === node.id && e.sourceHandle === 'success' && e.target !== END_NODE_ID)
+      .map((e) => e.target as string);
+    const errorTargets = edges
+      .filter((e) => e.source === node.id && e.sourceHandle === 'error' && e.target !== END_NODE_ID)
+      .map((e) => e.target as string);
 
     // Story 57.13: backward compat — default to 'platform' if step_type not set
     const stepType: WorkflowStepType = data.step_type ?? 'platform';
@@ -217,8 +248,11 @@ export function reactFlowToWorkflowSteps(
       step_id: node.id,
       step_type: stepType,
       name: data.name ?? null,
-      on_success_step_id: successEdge?.target ?? null,
-      on_error_step_id: errorEdge?.target ?? null,
+      // Story 67.4: tableaux ([] = fin de workflow, 1 élément = séquentiel, 2+ = parallèle)
+      on_success_step_ids: successTargets,
+      on_error_step_ids: errorTargets,
+      // Story 67.4: join_policy pour les steps de convergence (null si absent)
+      ...(data.join_policy ? { join_policy: data.join_policy } : {}),
       // shared
       condition: data.condition ?? null,
     };

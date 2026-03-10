@@ -129,7 +129,7 @@ class TestCorrelationIdPropagation:
         custom_id = str(uuid.uuid4())
         response = anon_client.get(
             '/api/v1/health',
-            HTTP_X_IDP_REQUEST_ID=custom_id,
+            HTTP_X_CORRELATION_ID=custom_id,
         )
         assert response.get('X-Correlation-ID') == custom_id
 

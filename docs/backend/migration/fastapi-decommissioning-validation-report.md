@@ -1,5 +1,7 @@
 # Rapport de Validation Finale — Décommissionnement FastAPI
 
+> 📚 **HISTORIQUE** — FastAPI décommissionné (Epic M, 2026-02). Ce document est conservé à titre de référence historique. L'application utilise exclusivement Django REST Framework.
+
 **Date :** 6 février 2026
 **Story :** 17.1 — Finaliser migration backend et décommissionner FastAPI
 **Auteur :** Équipe IDP Portal (validation automatisée + revue manuelle)

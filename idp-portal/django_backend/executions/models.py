@@ -343,6 +343,15 @@ class ExecutionStep(models.Model):
         db_column='PLATFORM_JOB_ID'
     )
     error_message = models.TextField(null=True, blank=True, db_column='ERROR_MESSAGE')
+    # config_step_id: stores the step_id from action.execution_steps config.
+    # Used as the reliable identifier to match an ExecutionStep back to its
+    # workflow step definition (replaces fragile name-based matching).
+    # TextField supports arbitrarily long step_ids (no truncation).
+    config_step_id = models.TextField(
+        null=True,
+        blank=True,
+        db_column='CONFIG_STEP_ID',
+    )
     created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
     # Approval fields (V099, ADR-007) — granular per-step approval
     approved_by = models.ForeignKey(

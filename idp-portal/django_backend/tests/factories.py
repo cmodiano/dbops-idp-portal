@@ -219,6 +219,7 @@ class ExecutionStepFactory(DjangoModelFactory):
     execution = factory.SubFactory(ExecutionFactory)
     step_order = factory.Sequence(lambda n: n + 1)
     step_name = factory.LazyAttribute(lambda o: f'Step {o.step_order}')
+    config_step_id = factory.LazyFunction(lambda: __import__('uuid').uuid4().hex)
     step_type = 'platform'
     status = 'PENDING'
     started_at = None

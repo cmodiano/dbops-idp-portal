@@ -77,6 +77,9 @@ function buildWorkflowStepParams(
       | undefined) ?? {};
     const out: Record<string, { parameters: Record<string, unknown> }> = {};
     for (const step of workflowSteps) {
+      // Backend only accepts workflow_step_parameters for steps with referenced_action_id
+      // (platform, schedule_execution). Gates, parallel_group, etc. are rejected.
+      if (step.referenced_action_id == null) continue;
       const orderKey = String(step.order);
       const stepEntry = raw[orderKey];
       const stepSpecific = (stepEntry?.parameters ?? {}) as Record<string, unknown>;
@@ -110,7 +113,7 @@ export interface UseExecutionWizardStateOptions {
   action: CatalogActionDetail | null;
   allowedEnvironments: string[];
   onCancel: () => void;
-  onSuccess?: (executionId: number) => void;
+  onSuccess?: (executionId: number, opts?: { isScheduled?: boolean }) => void;
   parentExecutionId?: number | null;
   initialParams?: WizardInitialParams;
 }
@@ -450,7 +453,9 @@ export function useExecutionWizardState({
         } else {
           notification.success({ title: 'Exécution planifiée', description: `Exécution planifiée pour le ${scheduledAt?.format('DD/MM/YYYY [à] HH:mm')} (heure locale)` });
         }
-        onCancel(); if (onSuccess) onSuccess(scheduledId);
+        onCancel();
+        // isScheduled: true → parent ne doit pas ouvrir ExecutionView (scheduledId ≠ execution_id, getExecution retournerait 404)
+        if (onSuccess) onSuccess(scheduledId, { isScheduled: true });
       }
     } finally { isSubmittingRef.current = false; }
   }, [action, derivedEnvironment, selectedTargets, parameters, notification, onCancel, onSuccess, isWorkflow, workflowSteps, execSubmit, pageMeEnabled]);

@@ -8,10 +8,10 @@ Internal Developer Platform pour les operations base de donnees.
 ## Stack
 
 - **Frontend** : React 19 + Vite + Ant Design 6 + TypeScript
-- **Backend** : Django 5.1+ / Django REST Framework 3.15+ (officiel depuis février 2026)
+- **Backend** : Django 5.2 / Django REST Framework 3.16 (officiel depuis février 2026)
 - **Base de donnees** : Oracle 19c+ (dev local via Docker)
 
-> **Note:** Migration FastAPI→Django terminée. Le code FastAPI est archivé dans la branche `legacy/fastapi-final` et le tag `v1.0.0-fastapi`. Voir [docs/MIGRATION_ARCHIVE.md](docs/MIGRATION_ARCHIVE.md) pour référence historique.
+> **Note:** Migration FastAPI→Django terminée. Le code FastAPI est archivé dans la branche `legacy/fastapi-final` et le tag `v1.0.0-fastapi`. Voir [docs/backend/migration/MIGRATION_ARCHIVE.md](../docs/backend/migration/MIGRATION_ARCHIVE.md) pour référence historique.
 
 ## Environnement de developpement
 
@@ -106,7 +106,7 @@ Pour lancer les tests d'integration contre le container Oracle (depuis la racine
 ```bash
 docker compose up -d oracle
 # Attendre ~1-2 min
-cd django_backend && ORACLE_DSN=localhost:1521/FREEPDB1 ORACLE_USER=idp_app ORACLE_PASSWORD=Oracle123! python3 -m pytest tests/ -v
+cd django_backend && ORACLE_DSN=localhost:1521/FREEPDB1 ORACLE_USER=idp_app ORACLE_PASSWORD=Oracle123! .venv/bin/python -m pytest tests/ -v
 ```
 
 Sans Oracle configure (ORACLE_DSN non defini), les tests d'integration sont ignores (skip).
@@ -240,11 +240,11 @@ En développement avec Docker Compose, les variables sont pré-configurées dans
 
 ### Documentation
 
-- [Plan de bascule FastAPI → Django](docs/migration-switchover-plan.md)
-- [Récapitulatif migration](docs/fastapi-to-django-migration.md)
-- [Parité schéma base de données](docs/schema-differences.md)
-- [Templates de communication](docs/communication-templates.md)
-- [Admin Intégrations — Restriction types via catalogue](docs/admin-integrations-type-restriction.md)
+- [Documentation principale](../docs/) — Architecture, backend, frontend, opérations (~187 fichiers)
+- [Plan de bascule FastAPI → Django](../docs/backend/migration/migration-switchover-plan.md) 📚 Historique
+- [Récapitulatif migration](../docs/backend/migration/fastapi-to-django-migration.md) 📚 Historique
+- [Architecture backend](../docs/architecture/backend.md)
+- [Guide de développement](../docs/reference/development-guide.md)
 
 ## API Integrations — champ config
 

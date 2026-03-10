@@ -217,6 +217,17 @@ class TestValidateRateLimitConfigInvalidEnabled:
             with pytest.raises(ImproperlyConfigured, match="RATE LIMIT"):
                 validate_rate_limit_config()
 
+    def test_invalid_api_key_token_throttle_rate_raises(self):
+        """MEDIUM-3: THROTTLE_API_KEY_TOKEN_RATE invalide → ImproperlyConfigured."""
+        env = {
+            'RATELIMIT_ENABLED': 'true',
+            'THROTTLE_API_KEY_TOKEN_RATE': 'bad-format',
+        }
+        with patch.dict('os.environ', env, clear=False):
+            from core.startup_checks import validate_rate_limit_config
+            with pytest.raises(ImproperlyConfigured, match="THROTTLE_API_KEY_TOKEN_RATE"):
+                validate_rate_limit_config()
+
 
 # ---------------------------------------------------------------------------
 # Line 225: validate_feature_flags_config — non-dict JSON in production

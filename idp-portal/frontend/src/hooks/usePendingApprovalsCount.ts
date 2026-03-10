@@ -17,6 +17,10 @@ import logger from '../services/logger';
  */
 const DEFAULT_POLLING_INTERVAL = 15_000; // 15 seconds
 
+// Story 8.8 AC9 / Story 66.2 F2: real DBA profiles — 'dba' kept for legacy/edge-case safety
+// Note: same constant exists in TopNav.tsx
+const DBA_PROFILES = ['dba', 'dba_applicatif', 'dba_infrastructure'];
+
 interface UsePendingApprovalsCountResult {
   count: number;
   loading: boolean;
@@ -27,7 +31,7 @@ interface UsePendingApprovalsCountResult {
 /**
  * Hook to fetch and poll pending approvals count.
  *
- * @param pollingInterval - Polling interval in ms (default 60000)
+ * @param pollingInterval - Polling interval in ms (default 15000)
  * @returns Object with count, loading, error, and refetch function
  */
 export function usePendingApprovalsCount(
@@ -41,7 +45,7 @@ export function usePendingApprovalsCount(
 
   // Only DBA/DBOPS can see approvals (AC9)
   const canApprove =
-    user?.profile?.toLowerCase() === 'dba' ||
+    DBA_PROFILES.includes(user?.profile?.toLowerCase() ?? '') ||
     user?.profile?.toLowerCase() === 'dbops';
 
   const fetchCount = useCallback(async () => {

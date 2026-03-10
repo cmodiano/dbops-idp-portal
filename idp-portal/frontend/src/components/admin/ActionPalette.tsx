@@ -8,7 +8,8 @@
  * Actions are loaded via useEligibleActions hook (DIP pattern, Story 48.8, AC1).
  */
 
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import type { FC, ReactNode } from 'react';
 import { Button, Collapse, Input, Spin, Alert, Tag, Typography, theme } from 'antd';
 import {
   SearchOutlined,
@@ -29,7 +30,7 @@ const SPECIAL_STEP_TYPES: {
   type: WorkflowStepType;
   label: string;
   color: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
 }[] = [
   { type: 'service_call', label: 'Appel service', color: '#fa8c16', icon: <ApiOutlined /> },
   { type: 'evaluation', label: 'Évaluer', color: '#722ed1', icon: <SafetyCertificateOutlined /> },
@@ -44,7 +45,7 @@ export interface ActionPaletteProps {
   onAddSpecialStep?: (stepType: WorkflowStepType) => void;
 }
 
-export const ActionPalette: React.FC<ActionPaletteProps> = ({
+export const ActionPalette: FC<ActionPaletteProps> = ({
   disabled = false,
   onAddSpecialStep,
 }) => {

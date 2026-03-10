@@ -22,6 +22,24 @@ _SENSITIVE_PARAM_KEYS = frozenset(
 )
 _MAX_PARAM_VALUE_LEN = 64
 
+# NOTIF-MED-01: Module-level constants extracted to eliminate triple duplication
+# in notify_execution_event(). Previously defined inline 3× (L267-272, L333-338, L353-357).
+_EVENT_LABELS: dict[str, str] = {
+    "on_success": "Succès",
+    "on_failure": "Échec",
+    "on_approval_required": "Approbation requise",
+}
+_EVENT_COLORS: dict[str, str] = {
+    "on_success": "00FF00",
+    "on_failure": "FF0000",
+    "on_approval_required": "FFA500",
+}
+_PAGE_EVENT_LABELS: dict[str, str] = {
+    "on_success": "a réussi",
+    "on_failure": "a échoué",
+    "on_approval_required": "attend une approbation",
+}
+
 
 def _format_params_for_notification(execution: Any) -> str:
     """Story 58.2: Formate parameters et targets pour inclusion dans notifications on_approval_required."""
@@ -184,11 +202,7 @@ class NotificationService:
         api_url: str | None = None,
     ) -> None:
         """Appelle l'API interne de page on-call (agnostique). Epic 56."""
-        effective_url = (
-            api_url
-            or getattr(settings, "PAGE_ONCALL_API_URL", "")
-            or getattr(settings, "PAGE_DBA_API_URL", "")
-        )
+        effective_url = api_url or getattr(settings, "PAGE_ONCALL_API_URL", "")
         if not effective_url:
             logger.warning(
                 "page_oncall_not_configured",
@@ -217,9 +231,6 @@ class NotificationService:
                 correlation_id=correlation_id,
             )
 
-    # Backward compatibility alias — Epic 56
-    send_page_dba = send_page_oncall
-
     def notify(self, destination_type: str, **kwargs: Any) -> None:
         """Dispatch vers la méthode de destination appropriée."""
         dispatch: dict[str, Any] = {
@@ -227,7 +238,6 @@ class NotificationService:
             "teams": self.send_teams,
             "page_individual": self.send_page_individual,
             "page_oncall": self.send_page_oncall,
-            "page_dba": self.send_page_oncall,  # Backward compat alias — Epic 56
         }
         handler = dispatch.get(destination_type)
         if handler is None:
@@ -237,6 +247,124 @@ class NotificationService:
             )
             return
         handler(**kwargs)
+
+    # ------------------------------------------------------------------
+    # NOTIF-MED-02: Helpers extraits de notify_execution_event() (Story 66.25)
+    # ------------------------------------------------------------------
+
+    def _get_event_label(self, event: str) -> tuple[str, str]:
+        """Retourne (label, color) pour un event donné.
+
+        Utilise les constantes module-level _EVENT_LABELS et _EVENT_COLORS.
+        """
+        label = _EVENT_LABELS.get(event, event.replace("_", " "))
+        color = _EVENT_COLORS.get(event, "808080")
+        return label, color
+
+    def _get_page_event_label(self, event: str) -> str:
+        """Retourne le libellé page (passé composé) pour un event donné.
+
+        Utilise la constante module-level _PAGE_EVENT_LABELS.
+        """
+        return _PAGE_EVENT_LABELS.get(event, event.replace("_", " "))
+
+    def _dispatch_email_channel(
+        self,
+        channel: dict,
+        execution: Any,
+        action: Any,
+        env: str,
+        event: str,
+        event_label: str,
+        correlation_id: str | None,
+    ) -> None:
+        """Dispatch le canal email vers send_email()."""
+        recipient = channel.get("recipient", "requester")
+        if recipient == "requester":
+            recipient = getattr(execution.user, "email", "") or ""
+        if not recipient:
+            return
+        if event == "on_approval_required":
+            context_str = _format_params_for_notification(execution)
+            body = (
+                f"Approbation requise pour l'action '{action.name}' "
+                f"dans l'environnement '{env}' (exécution {execution.id})."
+                + (f"\n{context_str}" if context_str else "")
+            )
+        else:
+            body = (
+                f"Exécution {execution.id} pour l'action '{action.name}' "
+                f"dans l'environnement '{env}' : {event.replace('_', ' ')}."
+            )
+        self.send_email(
+            recipient_email=recipient,
+            subject=f"[IDP Portal] {action.name} — {event_label}",
+            body=body,
+            correlation_id=correlation_id,
+        )
+
+    def _dispatch_teams_channel(
+        self,
+        channel: dict,
+        execution: Any,
+        action: Any,
+        env: str,
+        event: str,
+        event_label: str,
+        event_color: str,
+        correlation_id: str | None,
+    ) -> None:
+        """Dispatch le canal Teams vers send_teams()."""
+        webhook_url = channel.get("webhook_url_ref", "")
+        # Vault resolution hors scope (v1 : URLs directes uniquement)
+        if not webhook_url or webhook_url.startswith("vault:"):
+            return
+        if event == "on_approval_required":
+            context_str = _format_params_for_notification(execution)
+            message = (
+                f"Action '{action.name}' [{env}] : approbation requise (exécution {execution.id})"
+                + (f"\n{context_str}" if context_str else "")
+            )
+        else:
+            message = (
+                f"Action '{action.name}' [{env}] : "
+                f"{event.replace('_', ' ')} (exécution {execution.id})"
+            )
+        self.send_teams(
+            webhook_url=webhook_url,
+            title=f"[IDP Portal] {action.name} — {event_label}",
+            message=message,
+            color=event_color,
+            correlation_id=correlation_id,
+        )
+
+    def _dispatch_page_oncall_channel(
+        self,
+        channel: dict,
+        execution: Any,
+        action: Any,
+        env: str,
+        event: str,
+        level: str,
+        can_page: bool,
+        correlation_id: str | None,
+    ) -> None:
+        """Dispatch le canal page on-call vers send_page_oncall() si can_page."""
+        if not can_page:
+            return
+        api_url = channel.get("api_url", "")
+        page_event_label = self._get_page_event_label(event)
+        self.send_page_oncall(
+            api_url=api_url,
+            message=(
+                f"Action critique '{action.name}' [{env}] "
+                f"{page_event_label} (exécution {execution.id})"
+            ),
+            action_name=action.name,
+            execution_id=execution.id,
+            level=level,
+            correlation_id=correlation_id,
+        )
 
     def notify_execution_event(
         self,
@@ -248,7 +376,11 @@ class NotificationService:
         page_me_user_name: str | None = None,
         correlation_id: str | None = None,
     ) -> None:
-        """Point d'entrée principal — traite tous les canaux définis sur l'action."""
+        """Point d'entrée principal — traite tous les canaux définis sur l'action.
+
+        NOTIF-MED-02 (Story 66.25): Décomposé en helpers _dispatch_*_channel() et
+        _get_event_label() / _get_page_event_label() pour réduire la complexité cyclomatique.
+        """
         config = action.notification_config or {}
         channels = config.get("channels", [])
         page_individual_enabled = config.get("page_individual_enabled", False)
@@ -258,21 +390,11 @@ class NotificationService:
         impact_rules = action.impact_rules or {}
         env_rules = impact_rules.get(env, {})
         level = env_rules.get("level") or action.default_impact_level or "low"
+        can_page = (env == "prod") and (level == "critical")
 
-        is_prod = env == "prod"
-        is_critical = level == "critical"
-        can_page = is_prod and is_critical
+        event_label, event_color = self._get_event_label(event)
 
-        # Story 57.8: Labels pour on_approval_required
-        event_labels = {
-            "on_success": "Succès",
-            "on_failure": "Échec",
-            "on_approval_required": "Approbation requise",
-        }
-        event_colors = {"on_success": "00FF00", "on_failure": "FF0000", "on_approval_required": "FFA500"}
-        event_label = event_labels.get(event, event.replace("_", " "))
-        event_color = event_colors.get(event, "808080")
-
+        # Dispatch canaux configurés sur l'action
         for channel in channels:
             if not channel.get("enabled", False):
                 continue
@@ -282,80 +404,15 @@ class NotificationService:
 
             ch_type = channel.get("type")
             if ch_type == "email":
-                recipient = channel.get("recipient", "requester")
-                if recipient == "requester":
-                    recipient = getattr(execution.user, "email", "") or ""
-                if recipient:
-                    if event == "on_approval_required":
-                        context_str = _format_params_for_notification(execution)
-                        body = (
-                            f"Approbation requise pour l'action '{action.name}' "
-                            f"dans l'environnement '{env}' (exécution {execution.id})."
-                            + (f"\n{context_str}" if context_str else "")
-                        )
-                    else:
-                        body = (
-                            f"Exécution {execution.id} pour l'action '{action.name}' "
-                            f"dans l'environnement '{env}' : {event.replace('_', ' ')}."
-                        )
-                    self.send_email(
-                        recipient_email=recipient,
-                        subject=f"[IDP Portal] {action.name} — {event_label}",
-                        body=body,
-                        correlation_id=correlation_id,
-                    )
-
+                self._dispatch_email_channel(channel, execution, action, env, event, event_label, correlation_id)
             elif ch_type == "teams":
-                webhook_url = channel.get("webhook_url_ref", "")
-                # Vault resolution hors scope (v1 : URLs directes uniquement)
-                if webhook_url and not webhook_url.startswith("vault:"):
-                    if event == "on_approval_required":
-                        context_str = _format_params_for_notification(execution)
-                        message = (
-                            f"Action '{action.name}' [{env}] : approbation requise (exécution {execution.id})"
-                            + (f"\n{context_str}" if context_str else "")
-                        )
-                    else:
-                        message = (
-                            f"Action '{action.name}' [{env}] : "
-                            f"{event.replace('_', ' ')} (exécution {execution.id})"
-                        )
-                    self.send_teams(
-                        webhook_url=webhook_url,
-                        title=f"[IDP Portal] {action.name} — {event_label}",
-                        message=message,
-                        color=event_color,
-                        correlation_id=correlation_id,
-                    )
-
-            elif ch_type in ("page_oncall", "page_dba") and can_page:
-                api_url = channel.get("api_url", "")
-                page_event_labels = {
-                    "on_success": "a réussi",
-                    "on_failure": "a échoué",
-                    "on_approval_required": "attend une approbation",
-                }
-                page_event_label = page_event_labels.get(event, event.replace("_", " "))
-                self.send_page_oncall(
-                    api_url=api_url,
-                    message=(
-                        f"Action critique '{action.name}' [{env}] "
-                        f"{page_event_label} (exécution {execution.id})"
-                    ),
-                    action_name=action.name,
-                    execution_id=execution.id,
-                    level=level,
-                    correlation_id=correlation_id,
-                )
+                self._dispatch_teams_channel(channel, execution, action, env, event, event_label, event_color, correlation_id)
+            elif ch_type == "page_oncall":
+                self._dispatch_page_oncall_channel(channel, execution, action, env, event, level, can_page, correlation_id)
 
         # Page individuel — option à l'exécution
         if page_me and page_individual_enabled and can_page and page_me_user_id:
-            page_event_labels = {
-                "on_success": "a réussi",
-                "on_failure": "a échoué",
-                "on_approval_required": "attend une approbation",
-            }
-            page_me_event_label = page_event_labels.get(event, event.replace("_", " "))
+            page_me_event_label = self._get_page_event_label(event)
             self.send_page_individual(
                 user_id=page_me_user_id,
                 user_name=page_me_user_name or page_me_user_id,

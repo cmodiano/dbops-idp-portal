@@ -187,19 +187,20 @@ def list_all_targets(request: Request) -> Response:
     correlation_id = get_correlation_id()
     inventory_service = _inventory_service_factory()
 
-    # Parse and validate query params
-    try:
-        page = max(1, int(request.query_params.get('page', 1)))
-        page_size = min(max(1, int(request.query_params.get('page_size', 25))), 100)
-    except (ValueError, TypeError):
+    # Parse and validate query params via serializer (consistent with list_targets — INV-MED-01 fix)
+    params_serializer = TargetFilterParamsSerializer(data=request.query_params)
+    if not params_serializer.is_valid():
         return Response(
-            {'detail': 'Invalid page or page_size parameter'},
+            {'detail': params_serializer.errors},
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    environment = request.query_params.get('environment')
-    search = request.query_params.get('search')
-    target_type = request.query_params.get('target_type')
+    params = params_serializer.validated_data
+    environment = params.get('environment')
+    search = params.get('search')
+    target_type = params.get('target_type')
+    page = params.get('page', 1)
+    page_size = params.get('page_size', 25)
 
     # Story 13.7: Validate environment against inventory instead of hardcoded list
     if environment:

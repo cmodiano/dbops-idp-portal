@@ -1,6 +1,7 @@
 /**
  * Tests for EventDetailsPopover — Story 26.6 AC9
  */
+import type { ComponentProps } from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -34,7 +35,7 @@ function makeExec(overrides: Partial<ScheduledExecutionListItem> = {}): Schedule
 
 function renderPopover(
   exec: ScheduledExecutionListItem,
-  props: Partial<React.ComponentProps<typeof EventDetailsPopover>> = {},
+  props: Partial<ComponentProps<typeof EventDetailsPopover>> = {},
   userOverrides: Record<string, unknown> = {},
 ) {
   vi.mocked(useAuth).mockReturnValue({

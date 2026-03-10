@@ -5,7 +5,8 @@
  * éditeur input_mapping, condition.
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import type { FC } from 'react';
 import { Alert, Divider, Select, Spin, Typography } from 'antd';
 import type { WorkflowStepNodeData } from '../WorkflowStepNode';
 import type { BusinessRulePolicyListItem } from '../../../types/api';
@@ -26,7 +27,7 @@ export interface EvaluationStepConfigProps {
   availableStepOptions?: { value: string; label: string }[];
 }
 
-export const EvaluationStepConfig: React.FC<EvaluationStepConfigProps> = ({
+export const EvaluationStepConfig: FC<EvaluationStepConfigProps> = ({
   data,
   onUpdate,
   disabled = false,

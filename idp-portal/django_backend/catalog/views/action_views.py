@@ -16,8 +16,10 @@ from rest_framework.serializers import ValidationError as DRFValidationError, Se
 from rest_framework.request import Request
 from rest_framework import serializers
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter, inline_serializer
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.db.models import Q, QuerySet
+from core.services import AuditService
+from core.models import AuditActionType, AuditEntityType
 
 from catalog.models import Action, Tag, ActionStatus, ActionItemType
 from catalog.serializers import (
@@ -397,7 +399,13 @@ class ActionViewSet(viewsets.ModelViewSet):
         queryset = Action.objects.filter(
             status=ActionStatus.PUBLISHED,
             item_type=ActionItemType.ACTION
-        ).with_tags().with_creator()
+        ).with_tags().with_creator().order_by('name')
+
+        # BE-CAT-011: Use DRF pagination to avoid unbounded response for large catalogs.
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = ActionSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
 
         serializer = ActionSerializer(queryset, many=True)
         return Response({"data": serializer.data})
@@ -443,6 +451,16 @@ class ActionViewSet(viewsets.ModelViewSet):
         # Update remediation_rules
         action.remediation_rules = remediation_rules
         action.save()
+
+        # CAT-NEW-03: Audit remediation_rules update (consistent with other mutations)
+        AuditService.create_entry(
+            user_id=str(request.user.id),
+            action_type=AuditActionType.ACTION_UPDATED,
+            entity_type=AuditEntityType.ACTION,
+            entity_id=action.id,
+            details={'name': action.name, 'changes': {'remediation_rules': {'updated': True}}},
+            correlation_id=get_correlation_id(),
+        )
 
         # Invalidate cache
         _catalog_cache.clear()
@@ -621,36 +639,38 @@ class ActionViewSet(viewsets.ModelViewSet):
             )
             serializer.is_valid(raise_exception=True)
 
-            # Create the primary rule (A→B)
-            # Allow NULL description (no forced empty string)
-            mutex_rule = ActionMutex.objects.create(
-                action=action,
-                incompatible_with_id=serializer.validated_data['incompatible_with_id'],
-                same_target=serializer.validated_data['same_target'],
-                description=serializer.validated_data.get('description'),
-            )
-
-            # Story 25.5, Task 2.3 Option A: Create symmetric rule (B→A) automatically
-            # Check if symmetric rule already exists
-            symmetric_exists = ActionMutex.objects.filter(
-                action_id=serializer.validated_data['incompatible_with_id'],
-                incompatible_with=action
-            ).exists()
-
-            if not symmetric_exists:
-                ActionMutex.objects.create(
-                    action_id=serializer.validated_data['incompatible_with_id'],
-                    incompatible_with=action,
+            # CAT-NEW-02: Wrap both creates in atomic to prevent orphan primary rule
+            with transaction.atomic():
+                # Create the primary rule (A→B)
+                # Allow NULL description (no forced empty string)
+                mutex_rule = ActionMutex.objects.create(
+                    action=action,
+                    incompatible_with_id=serializer.validated_data['incompatible_with_id'],
                     same_target=serializer.validated_data['same_target'],
                     description=serializer.validated_data.get('description'),
                 )
-                logger.info(
-                    "mutex_symmetric_rule_created",
-                    action_id=action.id,
-                    incompatible_with_id=serializer.validated_data['incompatible_with_id'],
-                    same_target=serializer.validated_data['same_target'],
-                    correlation_id=get_correlation_id(),
-                )
+
+                # Story 25.5, Task 2.3 Option A: Create symmetric rule (B→A) automatically
+                # Check if symmetric rule already exists
+                symmetric_exists = ActionMutex.objects.filter(
+                    action_id=serializer.validated_data['incompatible_with_id'],
+                    incompatible_with=action
+                ).exists()
+
+                if not symmetric_exists:
+                    ActionMutex.objects.create(
+                        action_id=serializer.validated_data['incompatible_with_id'],
+                        incompatible_with=action,
+                        same_target=serializer.validated_data['same_target'],
+                        description=serializer.validated_data.get('description'),
+                    )
+                    logger.info(
+                        "mutex_symmetric_rule_created",
+                        action_id=action.id,
+                        incompatible_with_id=serializer.validated_data['incompatible_with_id'],
+                        same_target=serializer.validated_data['same_target'],
+                        correlation_id=get_correlation_id(),
+                    )
 
             response_serializer = ActionMutexSerializer(mutex_rule)
             return Response({"data": response_serializer.data}, status=status.HTTP_201_CREATED)

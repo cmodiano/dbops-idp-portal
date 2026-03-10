@@ -159,6 +159,32 @@ class TestActionSerializerCoverage(TestCase):
         result = s.validate_business_rule_policies(None)
         self.assertIsNone(result)
 
+    def test_validate_output_schema_id_none_returns_none(self):
+        """Story 63.9 — output_schema_id=None → return None (early exit)."""
+        s = ActionSerializer()
+        result = s.validate_output_schema_id(None)
+        self.assertIsNone(result)
+
+    def test_validate_output_schema_id_invalid_raises(self):
+        """Story 63.9 — output_schema_id inexistant → ValidationError."""
+        s = ActionSerializer()
+        with self.assertRaises(serializers.ValidationError) as cm:
+            s.validate_output_schema_id(999999)
+        self.assertIn('introuvable', str(cm.exception.detail))
+
+    def test_validate_output_schema_id_valid_returns_value(self):
+        """Story 63.9 — output_schema_id existant → return value."""
+        from output_schemas.models import OutputSchema, SchemaType
+
+        schema = OutputSchema.objects.create(
+            name='test-schema-valid',
+            schema_type=SchemaType.ACTION,
+            target_name='test-action',
+        )
+        s = ActionSerializer()
+        result = s.validate_output_schema_id(schema.id)
+        self.assertEqual(result, schema.id)
+
     def test_validate_xor_policy_fk_and_inline_raises(self):
         """Ligne 365 — policy FK et inline todos les deux fournis."""
         action = Action.objects.create(

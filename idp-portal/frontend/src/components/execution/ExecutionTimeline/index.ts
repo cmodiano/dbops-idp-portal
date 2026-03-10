@@ -7,3 +7,4 @@ export { TimelineList } from './TimelineList';
 export { TimelineStepItem } from './TimelineStepItem';
 export { StepLogsDrawer } from './StepLogsDrawer';
 export { formatDuration } from './utils';
+export { ParallelGroupTimelineSection } from './ParallelGroupTimelineSection';

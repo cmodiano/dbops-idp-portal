@@ -482,3 +482,26 @@ class TestAdapterFactory:
         )
         assert isinstance(adapter, TowerAdapter)
         assert adapter.timeout == 10.0
+
+    def test_factory_default_ssl_verify_false_for_backward_compat(self) -> None:
+        """ADP-MED-01: TowerAdapter factory default ssl_verify=False (Tower/AWX on-prem backward compat)."""
+        from adapters import get_platform_adapter
+        adapter = get_platform_adapter(
+            platform_type="tower",
+            base_url="https://tower.example.com",
+            auth_headers={"Authorization": "Bearer token"},
+        )
+        assert isinstance(adapter, TowerAdapter)
+        assert adapter._verify is False
+
+    def test_factory_can_override_ssl_verify_true(self) -> None:
+        """ADP-MED-01: TowerAdapter factory can set ssl_verify=True for environments with valid certs."""
+        from adapters import get_platform_adapter
+        adapter = get_platform_adapter(
+            platform_type="tower",
+            base_url="https://tower.example.com",
+            auth_headers={"Authorization": "Bearer token"},
+            ssl_verify=True,
+        )
+        assert isinstance(adapter, TowerAdapter)
+        assert adapter._verify is True

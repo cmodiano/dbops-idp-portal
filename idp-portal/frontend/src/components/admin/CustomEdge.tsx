@@ -5,7 +5,7 @@
  * at the midpoint with a "Supprimer la connexion" option.
  */
 
-import React from 'react';
+import type { FC, CSSProperties } from 'react';
 import {
   BaseEdge,
   EdgeLabelRenderer,
@@ -16,7 +16,7 @@ import {
 import { Button, Dropdown } from 'antd';
 import { DeleteOutlined, MoreOutlined } from '@ant-design/icons';
 
-const CustomEdge: React.FC<EdgeProps> = ({
+const CustomEdge: FC<EdgeProps> = ({
   id,
   sourceX,
   sourceY,
@@ -76,7 +76,7 @@ const CustomEdge: React.FC<EdgeProps> = ({
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY - 10}px)`,
               fontSize: 10,
               pointerEvents: 'none',
-              ...(labelStyle as React.CSSProperties),
+              ...(labelStyle as CSSProperties),
             }}
             className="nodrag nopan"
           >

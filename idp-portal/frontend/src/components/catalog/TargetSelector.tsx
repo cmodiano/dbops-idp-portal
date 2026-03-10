@@ -49,7 +49,8 @@ export interface TargetSelectorProps {
   /** Accessible label */
   ariaLabel?: string;
   /** Ref to focus element */
-  inputRef?: React.Ref<HTMLElement>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  inputRef?: React.Ref<any>;
 }
 
 /**
@@ -197,7 +198,7 @@ export function TargetSelector({
 
   return (
     <Select<string | string[]>
-      ref={inputRef as unknown as React.Ref<never>}
+      ref={inputRef}
       mode={multiple ? 'multiple' : undefined}
       value={multiple ? selectedValues : selectedValues[0]}
       onChange={handleChange}

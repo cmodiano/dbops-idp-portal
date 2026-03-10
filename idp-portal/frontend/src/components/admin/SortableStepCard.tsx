@@ -8,7 +8,8 @@
  * avec drag-and-drop via @dnd-kit.
  */
 
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
+import type { FC, CSSProperties } from 'react';
 import {
   Button,
   Input,
@@ -48,7 +49,7 @@ export interface SortableStepCardProps {
 }
 
 /** Sortable step card using @dnd-kit. */
-export const SortableStepCard: React.FC<SortableStepCardProps> = ({
+export const SortableStepCard: FC<SortableStepCardProps> = ({
   step,
   index,
   eligibleActions,
@@ -73,7 +74,7 @@ export const SortableStepCard: React.FC<SortableStepCardProps> = ({
     isDragging,
   } = useSortable({ id: stepId });
 
-  const style: React.CSSProperties = {
+  const style: CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
@@ -239,14 +240,14 @@ export const SortableStepCard: React.FC<SortableStepCardProps> = ({
               </Text>
               <Select
                 style={{ width: 260, marginTop: 4, display: 'block' }}
-                value={(step.on_success_step_id ?? EXIT_VALUE) as string}
-                onChange={(v) => onStepChange(index, 'on_success_step_id', v === EXIT_VALUE ? null : v)}
+                value={(step.on_success_step_ids?.[0] ?? EXIT_VALUE) as string}
+                onChange={(v) => onStepChange(index, 'on_success_step_ids', v === EXIT_VALUE ? [] : [v])}
                 options={[
                   { value: EXIT_VALUE, label: '(fin du workflow)' },
                   ...getBranchOptions(step.step_id),
                 ]}
                 placeholder="Sélectionner une étape..."
-                aria-label={`on_success_step_id de l'étape ${step.order}`}
+                aria-label={`on_success_step_ids de l'étape ${step.order}`}
                 disabled={disabled}
                 allowClear={false}
               />
@@ -258,14 +259,14 @@ export const SortableStepCard: React.FC<SortableStepCardProps> = ({
               </Text>
               <Select
                 style={{ width: 260, marginTop: 4, display: 'block' }}
-                value={(step.on_error_step_id ?? EXIT_VALUE) as string}
-                onChange={(v) => onStepChange(index, 'on_error_step_id', v === EXIT_VALUE ? null : v)}
+                value={(step.on_error_step_ids?.[0] ?? EXIT_VALUE) as string}
+                onChange={(v) => onStepChange(index, 'on_error_step_ids', v === EXIT_VALUE ? [] : [v])}
                 options={[
                   { value: EXIT_VALUE, label: '(fin du workflow)' },
                   ...getBranchOptions(step.step_id),
                 ]}
                 placeholder="Sélectionner une étape..."
-                aria-label={`on_error_step_id de l'étape ${step.order}`}
+                aria-label={`on_error_step_ids de l'étape ${step.order}`}
                 disabled={disabled}
                 allowClear={false}
               />

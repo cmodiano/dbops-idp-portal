@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { NavigationTabKey, User } from '../types/common';
 import { BUSINESS_PROFILES } from '../types/common';
 import { setAuthAccessors } from '../services/api_client';
-import { refreshAccessToken, fetchCurrentUser as fetchUser, logoutApi } from '../services/auth_service';
+import { refreshAccessToken, fetchCurrentUser as fetchUser, logoutApi, portalLogin } from '../services/auth_service';
 import logger from '../services/logger';
 
 // DEV MODE: Skip SAML authentication and use a mock DBOPS user
@@ -27,6 +27,7 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: () => void;
+  loginWithCredentials: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshToken: () => Promise<string | null>;
   hasTab: (tabKey: NavigationTabKey) => boolean;
@@ -40,6 +41,7 @@ const AuthContext = createContext<AuthContextValue>({
   isAuthenticated: false,
   isLoading: true,
   login: () => {},
+  loginWithCredentials: async () => {},
   logout: async () => {},
   refreshToken: async () => null,
   hasTab: () => false,
@@ -127,6 +129,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const fetchCurrentUserFn = useCallback(async (token: string): Promise<User | null> => {
     return fetchUser(token);
   }, []);
+
+  const loginWithCredentials = useCallback(async (username: string, password: string) => {
+    const data = await portalLogin(username, password);
+    setAccessToken(data.access_token);
+    const userData = await fetchCurrentUserFn(data.access_token);
+    if (!userData) {
+      setAccessToken(null);
+      throw new Error('Impossible de récupérer le profil utilisateur.');
+    }
+    setUser(userData);
+    // Navigation vers /catalog gérée par le composant appelant après succès
+  }, [fetchCurrentUserFn]);
 
   const logout = useCallback(async () => {
     try {
@@ -224,6 +238,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isAuthenticated: !!user && !!accessToken,
     isLoading,
     login,
+    loginWithCredentials,
     logout,
     refreshToken: refreshTokenFn,
     hasTab,

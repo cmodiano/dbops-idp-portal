@@ -11,7 +11,8 @@
  * Story 34-9 (SOLID-FE-8): SortableStepCard extracted to ./SortableStepCard.tsx (SRP).
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import type { FC } from 'react';
 import {
   Button,
   Space,
@@ -67,7 +68,7 @@ export interface WorkflowStepsEditorProps {
   disabled?: boolean;
 }
 
-export const WorkflowStepsEditor: React.FC<WorkflowStepsEditorProps> = ({
+export const WorkflowStepsEditor: FC<WorkflowStepsEditorProps> = ({
   steps,
   onChange,
   loading = false,
@@ -136,8 +137,8 @@ export const WorkflowStepsEditor: React.FC<WorkflowStepsEditorProps> = ({
       name: null,
       referenced_action_id: undefined,
       step_id: generateStepId(),
-      on_success_step_id: null,
-      on_error_step_id: null,
+      on_success_step_ids: [],
+      on_error_step_ids: [],
       retry_enabled: false,
       retry_max_attempts: null,
       retry_interval_seconds: null,
@@ -171,8 +172,8 @@ export const WorkflowStepsEditor: React.FC<WorkflowStepsEditorProps> = ({
 
     // Story 16.2: if the user touches branch/retry fields, ensure step_id exists.
     const branchOrRetryFields: Array<keyof WorkflowStepEditable> = [
-      'on_success_step_id',
-      'on_error_step_id',
+      'on_success_step_ids',
+      'on_error_step_ids',
       'retry_enabled',
       'retry_max_attempts',
       'retry_interval_seconds',

@@ -6,12 +6,13 @@ Story 64.4 - CaC Integration management.
 from __future__ import annotations
 
 import json
-import logging
 from typing import Any
 
+import structlog
 from django.db import transaction
 
 from core.exceptions import InvalidStateError
+from core.middleware import get_correlation_id
 from core.models import AuditActionType, AuditEntityType
 from core.services import AuditService
 from core.services_cac_utils import (
@@ -23,7 +24,7 @@ from core.services_cac_utils import (
 )
 from integrations.models import Integration, IntegrationTypeCatalogue
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def _mask_credential_ref(credential_ref: str | None) -> str | None:
@@ -77,10 +78,10 @@ def export_integration_yaml(name: str) -> bytes:
             spec["config"] = json.loads(obj.config)
         except (json.JSONDecodeError, ValueError) as e:
             logger.warning(
-                "Integration '%s' (id=%s) has malformed config JSON: %s",
-                obj.name,
-                obj.id,
-                e,
+                "integration_export_malformed_config",
+                integration_name=obj.name,
+                integration_id=obj.id,
+                error=str(e),
             )
             spec["config"] = None
 
@@ -199,16 +200,16 @@ def import_integration_yaml(
         if obj.secret_service_id != ref_integration.id:
             obj.secret_service_id = ref_integration.id
             obj.save(update_fields=["secret_service_id"])
+            update_sync_tracking(obj, content)
             if unchanged:
                 unchanged, updated = 0, 1
-                update_sync_tracking(obj, content)
     elif obj.secret_service_id is not None and not was_created:
         # Clear secret_service_ref if absent from YAML but set in DB
         obj.secret_service_id = None
         obj.save(update_fields=["secret_service_id"])
+        update_sync_tracking(obj, content)
         if unchanged:
             unchanged, updated = 0, 1
-            update_sync_tracking(obj, content)
 
     AuditService.create_entry(
         user_id=str(user.id) if user and hasattr(user, "id") else "",
@@ -224,6 +225,7 @@ def import_integration_yaml(
             "unchanged": unchanged,
             "mode": mode,
         },
+        correlation_id=get_correlation_id(),
     )
 
     return (created, updated, unchanged)

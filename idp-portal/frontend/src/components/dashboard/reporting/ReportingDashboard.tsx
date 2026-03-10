@@ -209,6 +209,7 @@ export function ReportingDashboard() {
     return () => {
       cancelled = true;
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- apiFilters is derived from filters/period/hasCustomDateRange already in deps
   }, [filters, hasCustomDateRange, period]);
 
   return (

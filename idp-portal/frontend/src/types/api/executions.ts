@@ -99,6 +99,8 @@ export interface ExecutionStepResponse {
   execution_id: number;
   step_order: number;
   step_name: string;
+  /** step_id from workflow config — reliable matching (Story 65.6). */
+  config_step_id?: string | null;
   step_type: ExecutionStepTypeApi;
   status: ExecutionStepStatus;
   started_at: string | null;

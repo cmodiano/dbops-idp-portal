@@ -38,8 +38,8 @@ def _make_approval_step(execution, step_name="request-approval", step_order=1):
     )
     step.set_output({
         "gate_conditions": [{"type": "approval_granted", "timeout_hours": 72}],
-        "on_success_step_id": "next-step",
-        "on_error_step_id": "error-step",
+        "on_success_step_ids": ["next-step"],
+        "on_error_step_ids": ["error-step"],
     })
     step.save()
     return step
@@ -242,8 +242,8 @@ class TestStepApproveAuditContext(TestCase):
                 "name": "request-approval",
                 "step_type": "gate",
                 "gate_type": "approval",
-                "on_success_step_id": "next-step",
-                "on_error_step_id": "error-step",
+                "on_success_step_ids": ["next-step"],
+                "on_error_step_ids": ["error-step"],
             }],
         )
 

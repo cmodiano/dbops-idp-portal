@@ -8,7 +8,7 @@
  * Story 62.1: Added "Paramètres communs" section for parameters shared across ≥2 steps.
  */
 
-import { memo, useRef } from 'react';
+import { memo } from 'react';
 import { Form, Alert, Typography } from 'antd';
 import type { FormRule as Rule } from 'antd';
 import { useAuth } from '../../contexts/AuthContext';
@@ -96,7 +96,6 @@ export const WorkflowStepsRenderer = memo(function WorkflowStepsRenderer({
   loadingInventory,
   selectedServerNames = [],
 }: WorkflowStepsRendererProps) {
-  const firstFieldRef = useRef<HTMLElement | null>(null);
   const { isBusinessProfile } = useAuth();
 
   // Story 62.1: compute common parameters only when actions are fully loaded
@@ -180,7 +179,7 @@ export const WorkflowStepsRenderer = memo(function WorkflowStepsRenderer({
       )}
 
       {/* Per-step parameter blocks */}
-      {workflowSteps.map((step, stepIndex) => {
+      {workflowSteps.map((step, _stepIndex) => {
         const refAction = step.referenced_action_id != null ? workflowStepActions[step.referenced_action_id] : undefined;
         const actionName = refAction?.name || `Action #${step.referenced_action_id}`;
         const schema = refAction?.parameters_schema ?? null;
@@ -214,25 +213,13 @@ export const WorkflowStepsRenderer = memo(function WorkflowStepsRenderer({
             ) : fields.length === 0 ? (
               <Alert type="info" showIcon description="Cette action n'a pas de paramètres" />
             ) : (
-              fields.map((field: ParameterField, index: number) => {
+              fields.map((field: ParameterField) => {
                 const rules = buildRules(field);
                 const displayDescription = isBusinessProfile && field.description
                   ? sanitizeDescription(field.description)
                   : field.description;
 
-                return (stepIndex === 0 && index === 0) ? (
-                  <div key={`${step.order}-${field.name}`} ref={(ref) => { firstFieldRef.current = ref?.querySelector('input, select, [role="combobox"]') as HTMLElement; }}>
-                    <Form.Item
-                      name={['workflow_step_parameters', stepKey, 'parameters', field.name]}
-                      label={field.label}
-                      rules={rules}
-                      tooltip={displayDescription ? { title: displayDescription, icon: <InfoCircleOutlined /> } : undefined}
-                      style={{ marginBottom: 12 }}
-                    >
-                      {renderFieldInput(field, inventoryData, inventoryWarnings, loadingInventory, selectedServerNames)}
-                    </Form.Item>
-                  </div>
-                ) : (
+                return (
                   <Form.Item
                     key={`${step.order}-${field.name}`}
                     name={['workflow_step_parameters', stepKey, 'parameters', field.name]}

@@ -42,8 +42,8 @@ const PAGE_SIZE = 25;
 const OBSERVER_POLL_INTERVAL_MS = 10_000;
 /** Slower interval when no running executions, so new executions from other users appear in the list. */
 const BACKGROUND_POLL_INTERVAL_MS = 30_000;
-/** Pending approvals list polling interval (Story 58.5 — AC1, AC3). */
-const APPROVAL_LIST_POLL_INTERVAL_MS = 30_000;
+/** Pending approvals list polling interval (Story 58.5 — AC1, AC3). 10s pour que User B voie rapidement quand User A approuve. */
+const APPROVAL_LIST_POLL_INTERVAL_MS = 10_000;
 
 export interface UseExecutionsDataReturn {
   // Executions

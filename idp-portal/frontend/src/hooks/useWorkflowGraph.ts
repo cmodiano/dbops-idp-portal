@@ -56,6 +56,8 @@ export interface UseWorkflowGraphReturn {
   onNodesChange: OnNodesChange;
   onEdgesChange: OnEdgesChange;
   onConnect: (params: Connection) => void;
+  /** Story 67.4: Autorise les multi-connexions (fan-out) depuis le même handle */
+  isValidConnection?: (params: Edge | Connection) => boolean;
   onDrop: (event: React.DragEvent) => void;
   onDragOver: (event: React.DragEvent) => void;
   onNodeDoubleClick: (event: React.MouseEvent, node: Node) => void;
@@ -155,8 +157,9 @@ export function useWorkflowGraph({
       const isSuccess = sourceHandle === 'success' || sourceHandle === 'output';
 
       setEdges((eds) => {
+        // Story 67.4: autoriser plusieurs edges par handle (fan-out). Bloquer seulement les doublons exacts.
         const filtered = eds.filter(
-          (e) => !(e.source === params.source && e.sourceHandle === sourceHandle)
+          (e) => !(e.source === params.source && e.sourceHandle === sourceHandle && e.target === params.target)
         );
         const newEdge: Edge = {
           ...params,
@@ -171,6 +174,13 @@ export function useWorkflowGraph({
       });
     },
     [disabled, notification, setEdges]
+  );
+
+  // Story 67.4: Autoriser explicitement les multi-connexions depuis le même handle (fan-out).
+  // Sans ce callback, React Flow peut bloquer la connexion avant d'appeler onConnect.
+  const isValidConnection = useCallback(
+    (params: Edge | Connection) => params.source !== params.target,
+    []
   );
 
   // Handle drop from palette
@@ -485,6 +495,7 @@ export function useWorkflowGraph({
     onNodesChange,
     onEdgesChange,
     onConnect,
+    isValidConnection,
     onDrop,
     onDragOver,
     onNodeDoubleClick,

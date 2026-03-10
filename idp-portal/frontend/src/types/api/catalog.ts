@@ -91,14 +91,14 @@ export interface ActionResponse {
 
 /** Story 31.8: Notification channel configuration. */
 export interface NotificationChannel {
-  type: 'email' | 'teams' | 'page_dba';
+  type: 'email' | 'teams' | 'page_oncall';
   enabled: boolean;
   conditions: ('on_failure' | 'on_success' | 'always' | 'on_approval_required')[];
   /** Email only: "requester" or direct email address. */
   recipient?: string;
   /** Teams only: webhook URL or Vault reference. */
   webhook_url_ref?: string;
-  /** Page DBA only: API URL (optional, falls back to settings). */
+  /** Page on-call only: API URL (optional, falls back to settings). */
   api_url?: string;
 }
 
@@ -134,7 +134,8 @@ export interface ScheduleStepConfig {
   parameter_mapping?: Record<string, string>;
 }
 
-export type WorkflowStepType = 'platform' | 'service_call' | 'http_request' | 'evaluation' | 'gate' | 'schedule_execution';
+/** @deprecated parallel_group: supprimé du builder (Story 67-5), conservé pour rétro-compat exécutions. Sera supprimé en Story 67.7. */
+export type WorkflowStepType = 'platform' | 'service_call' | 'http_request' | 'evaluation' | 'gate' | 'schedule_execution' | 'parallel_group';
 
 /** Workflow step - reference to an existing action or special step type (Story 5.7, AC2; Story 16.2 branches & retry; Story 57.13 step types). */
 export interface WorkflowStep {
@@ -146,10 +147,12 @@ export interface WorkflowStep {
   action_name?: string | null;
   /** Story 16.2: Stable ID for referencing in branches (optional for backward compatibility). */
   step_id?: string | null;
-  /** Story 16.2: Next step ID on success (nullable = exit or continue to next by order). */
-  on_success_step_id?: string | null;
-  /** Story 16.2: Next step ID on error (nullable = workflow fails). */
-  on_error_step_id?: string | null;
+  /** Story 67.4: Multiple next step IDs on success (fan-out). */
+  on_success_step_ids?: string[] | null;
+  /** Story 67.4: Multiple next step IDs on error (fan-out). */
+  on_error_step_ids?: string[] | null;
+  /** Story 67.4: Join policy for convergence steps. */
+  join_policy?: 'all_success' | 'one_success' | 'all_done' | 'all_failed' | 'one_failed' | null;
   // === platform ===
   /** Story 57.13: Optional for backward compat — required if step_type='platform'. */
   referenced_action_id?: number | null;
@@ -192,6 +195,13 @@ export interface WorkflowStep {
   // === schedule_execution ===
   /** Story 57.16: Configuration pour les steps de planification. */
   schedule_config?: ScheduleStepConfig | null;
+  // === parallel_group — TODO Story 67.7: supprimer ces champs après migration ===
+  /** Story 65.4: Liste des step_id à exécuter en parallèle (≥2 requis). */
+  parallel_steps?: string[] | null;
+  /** Story 65.4: Step suivant si tous les sous-steps réussissent. */
+  on_all_success_step_id?: string | null;
+  /** Story 65.4: Step suivant si au moins un sous-step échoue (fail-fast). */
+  on_any_error_step_id?: string | null;
   // === shared (service_call, evaluation, http_request) ===
   /** Story 57.13: Condition for environment filtering. */
   condition?: { environment_in?: string[] } | null;
@@ -390,6 +400,14 @@ export interface ParameterDefinition {
  * Contains all fields needed to render ActionCard and ActionDrawerPreview.
  * Story 2.23: category removed — use tags for categorization.
  */
+/** Story 69.2: Included action summary for workflow cards. */
+export interface IncludedAction {
+  id: number;
+  name: string;
+  engine: ActionEngine | null;
+  parameters_schema?: Record<string, unknown> | null;
+}
+
 export interface ActionPreviewData {
   name: string;
   description: string | null;
@@ -408,6 +426,10 @@ export interface ActionPreviewData {
   stats?: ActionStats | null;
   /** Story 22.18: MED-6 fix — Whether action requires target selection (default true). */
   requires_target?: boolean;
+  /** Story 69.2: List of technology engine codes for workflow cards. */
+  technologies?: string[];
+  /** Story 69.2: Included actions summary for workflow cards (prep for 69.3/69.4). */
+  included_actions?: IncludedAction[];
 }
 
 /**

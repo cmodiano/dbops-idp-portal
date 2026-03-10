@@ -35,9 +35,6 @@ vi.mock('../components/admin/ActionWizard', () => ({
 vi.mock('../components/admin/ProfileWizard', () => ({
   ProfileWizard: () => null,
 }));
-vi.mock('../components/admin/ProfileImportModal', () => ({
-  ProfileImportModal: () => null,
-}));
 vi.mock('../components/admin/IntegrationForm', () => ({
   IntegrationForm: () => null,
 }));
@@ -86,7 +83,6 @@ const disabledNoExec: ActionListItem = {
 };
 
 const allActions = [draftNoExec, publishedNoExec, publishedWithExec, disabledAction, disabledNoExec];
-const activeActions = [draftNoExec, publishedNoExec, publishedWithExec];
 
 function makeResponse(data: ActionListItem[]): ActionListResponse {
   return { data, pagination: null };
@@ -107,79 +103,22 @@ function renderPage() {
 describe('Story 18.1 — AdminPage Actions', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mockGetAdminActions.mockResolvedValue(makeResponse(activeActions));
+    mockGetAdminActions.mockResolvedValue(makeResponse(allActions));
   });
 
-  // ── AC4: Default filter excludes disabled ──
+  // ── AC4/AC5: Toutes les actions affichées par défaut (y compris désactivées) ──
 
-  describe('AC4: Default filter excludes disabled', () => {
-    it('loads actions without include_disabled by default', async () => {
+  describe('AC4/AC5: All actions shown by default including disabled', () => {
+    it('loads actions with include_disabled=true by default', async () => {
       renderPage();
 
       await waitFor(() => {
-        expect(mockGetAdminActions).toHaveBeenCalledWith(expect.not.objectContaining({ include_disabled: true }));
+        expect(mockGetAdminActions).toHaveBeenCalledWith(expect.objectContaining({ include_disabled: true }));
       });
 
       expect(screen.getByText('Action Draft Zero')).toBeInTheDocument();
       expect(screen.getByText('Action Published Zero')).toBeInTheDocument();
-      expect(screen.queryByText('Action Disabled')).not.toBeInTheDocument();
-    });
-
-    it('shows the include disabled checkbox unchecked by default', async () => {
-      renderPage();
-
-      await waitFor(() => {
-        expect(screen.getByText('Action Draft Zero')).toBeInTheDocument();
-      });
-
-      const checkbox = screen.getByLabelText('Inclure les actions desactivees');
-      expect(checkbox).not.toBeChecked();
-    });
-  });
-
-  // ── AC5: Toggle to include disabled actions ──
-
-  describe('AC5: Include disabled toggle', () => {
-    it('fetches with include_disabled=true when checkbox is checked', async () => {
-      const user = userEvent.setup();
-      mockGetAdminActions
-        .mockResolvedValueOnce(makeResponse(activeActions))
-        .mockResolvedValueOnce(makeResponse(allActions));
-
-      renderPage();
-
-      await waitFor(() => {
-        expect(screen.getByText('Action Draft Zero')).toBeInTheDocument();
-      });
-
-      const checkbox = screen.getByLabelText('Inclure les actions desactivees');
-      await user.click(checkbox);
-
-      await waitFor(() => {
-        expect(mockGetAdminActions).toHaveBeenCalledWith(
-          expect.objectContaining({ include_disabled: true }),
-        );
-      });
-    });
-
-    it('shows disabled actions with opacity when include_disabled is checked', async () => {
-      const user = userEvent.setup();
-      mockGetAdminActions
-        .mockResolvedValueOnce(makeResponse(activeActions))
-        .mockResolvedValueOnce(makeResponse(allActions));
-
-      renderPage();
-
-      await waitFor(() => {
-        expect(screen.getByText('Action Draft Zero')).toBeInTheDocument();
-      });
-
-      const checkbox = screen.getByLabelText('Inclure les actions desactivees');
-      await user.click(checkbox);
-
-      await waitFor(() => {
-        expect(screen.getByText('Action Disabled')).toBeInTheDocument();
-      });
+      expect(screen.getByText('Action Disabled')).toBeInTheDocument();
     });
   });
 
@@ -219,7 +158,7 @@ describe('Story 18.1 — AdminPage Actions', () => {
       expect(within(row).queryByText('Supprimer')).not.toBeInTheDocument();
     });
 
-    it('shows Desactiver for published action with executions', async () => {
+    it('shows Désactiver for published action with executions', async () => {
       renderPage();
 
       await waitFor(() => {
@@ -227,7 +166,7 @@ describe('Story 18.1 — AdminPage Actions', () => {
       });
 
       const row = screen.getByText('Action Published Exec').closest('tr')!;
-      expect(within(row).getByText('Desactiver')).toBeInTheDocument();
+      expect(within(row).getByText('Désactiver')).toBeInTheDocument();
     });
   });
 
@@ -280,7 +219,7 @@ describe('Story 18.1 — AdminPage Actions', () => {
       });
 
       const row = screen.getByText('Action Published Exec').closest('tr')!;
-      const deactivateBtn = within(row).getByText('Desactiver');
+      const deactivateBtn = within(row).getByText('Désactiver');
       await user.click(deactivateBtn);
 
       await waitFor(() => {
@@ -309,7 +248,7 @@ describe('Story 18.1 — AdminPage Actions', () => {
       });
 
       const row = screen.getByText('Action Published Exec').closest('tr')!;
-      const deactivateBtn = within(row).getByText('Desactiver');
+      const deactivateBtn = within(row).getByText('Désactiver');
       await user.click(deactivateBtn);
 
       await waitFor(() => {
@@ -342,7 +281,7 @@ describe('Story 18.1 — AdminPage Actions', () => {
 
       // Click deactivate
       const row = screen.getByText('Action Published Exec').closest('tr')!;
-      await user.click(within(row).getByText('Desactiver'));
+      await user.click(within(row).getByText('Désactiver'));
 
       await waitFor(() => {
         expect(screen.getByText('Confirmation de désactivation en cascade')).toBeInTheDocument();
@@ -373,7 +312,7 @@ describe('Story 18.1 — AdminPage Actions', () => {
       });
 
       const row = screen.getByText('Action Published Exec').closest('tr')!;
-      await user.click(within(row).getByText('Desactiver'));
+      await user.click(within(row).getByText('Désactiver'));
 
       await waitFor(() => {
         expect(screen.getByText('Confirmation de désactivation en cascade')).toBeInTheDocument();
@@ -393,51 +332,31 @@ describe('Story 18.1 — AdminPage Actions', () => {
 
   describe('AC5: Reactivate disabled action', () => {
     it('shows Reactiver button for disabled actions', async () => {
-      const user = userEvent.setup();
-      mockGetAdminActions
-        .mockResolvedValueOnce(makeResponse(activeActions))
-        .mockResolvedValueOnce(makeResponse(allActions));
+      mockGetAdminActions.mockResolvedValue(makeResponse(allActions));
 
       renderPage();
-
-      await waitFor(() => {
-        expect(screen.getByText('Action Draft Zero')).toBeInTheDocument();
-      });
-
-      // Toggle include disabled
-      const checkbox = screen.getByLabelText('Inclure les actions desactivees');
-      await user.click(checkbox);
 
       await waitFor(() => {
         expect(screen.getByText('Action Disabled')).toBeInTheDocument();
       });
 
       const row = screen.getByText('Action Disabled').closest('tr')!;
-      expect(within(row).getByText('Reactiver')).toBeInTheDocument();
+      expect(within(row).getByText('Réactiver')).toBeInTheDocument();
     });
 
     it('calls reactivateAction on click', async () => {
       const user = userEvent.setup();
-      mockGetAdminActions
-        .mockResolvedValueOnce(makeResponse(activeActions))
-        .mockResolvedValueOnce(makeResponse(allActions));
+      mockGetAdminActions.mockResolvedValue(makeResponse(allActions));
       mockReactivateAction.mockResolvedValue({ ...disabledAction, status: 'published' } as never);
 
       renderPage();
 
       await waitFor(() => {
-        expect(screen.getByText('Action Draft Zero')).toBeInTheDocument();
-      });
-
-      const checkbox = screen.getByLabelText('Inclure les actions desactivees');
-      await user.click(checkbox);
-
-      await waitFor(() => {
         expect(screen.getByText('Action Disabled')).toBeInTheDocument();
       });
 
       const row = screen.getByText('Action Disabled').closest('tr')!;
-      await user.click(within(row).getByText('Reactiver'));
+      await user.click(within(row).getByText('Réactiver'));
 
       await waitFor(() => {
         expect(mockReactivateAction).toHaveBeenCalledWith(4);
@@ -461,7 +380,7 @@ describe('Story 18.1 — AdminPage Actions', () => {
       expect(within(row).getByText('Supprimer')).toBeInTheDocument();
     });
 
-    it('published with exec=0: shows Voir, Supprimer, Desactiver', async () => {
+    it('published with exec=0: shows Voir, Supprimer, Désactiver', async () => {
       renderPage();
 
       await waitFor(() => {
@@ -471,10 +390,10 @@ describe('Story 18.1 — AdminPage Actions', () => {
       const row = screen.getByText('Action Published Zero').closest('tr')!;
       expect(within(row).getByText('Voir')).toBeInTheDocument();
       expect(within(row).getByText('Supprimer')).toBeInTheDocument();
-      expect(within(row).getByText('Desactiver')).toBeInTheDocument();
+      expect(within(row).getByText('Désactiver')).toBeInTheDocument();
     });
 
-    it('published with exec>0: shows Voir, Desactiver (not Supprimer)', async () => {
+    it('published with exec>0: shows Voir, Désactiver (not Supprimer)', async () => {
       renderPage();
 
       await waitFor(() => {
@@ -483,24 +402,14 @@ describe('Story 18.1 — AdminPage Actions', () => {
 
       const row = screen.getByText('Action Published Exec').closest('tr')!;
       expect(within(row).getByText('Voir')).toBeInTheDocument();
-      expect(within(row).getByText('Desactiver')).toBeInTheDocument();
+      expect(within(row).getByText('Désactiver')).toBeInTheDocument();
       expect(within(row).queryByText('Supprimer')).not.toBeInTheDocument();
     });
 
     it('disabled: shows Modifier, Reactiver (Supprimer only when execution_count=0)', async () => {
-      const user = userEvent.setup();
-      mockGetAdminActions
-        .mockResolvedValueOnce(makeResponse(activeActions))
-        .mockResolvedValueOnce(makeResponse(allActions));
+      mockGetAdminActions.mockResolvedValue(makeResponse(allActions));
 
       renderPage();
-
-      await waitFor(() => {
-        expect(screen.getByText('Action Draft Zero')).toBeInTheDocument();
-      });
-
-      const checkbox = screen.getByLabelText('Inclure les actions desactivees');
-      await user.click(checkbox);
 
       await waitFor(() => {
         expect(screen.getByText('Action Disabled')).toBeInTheDocument();
@@ -508,26 +417,16 @@ describe('Story 18.1 — AdminPage Actions', () => {
 
       const row = screen.getByText('Action Disabled').closest('tr')!;
       expect(within(row).getByText('Modifier')).toBeInTheDocument();
-      expect(within(row).getByText('Reactiver')).toBeInTheDocument();
+      expect(within(row).getByText('Réactiver')).toBeInTheDocument();
       // Action Disabled has execution_count=3 → no Supprimer
       expect(within(row).queryByText('Supprimer')).not.toBeInTheDocument();
-      expect(within(row).queryByText('Desactiver')).not.toBeInTheDocument();
+      expect(within(row).queryByText('Désactiver')).not.toBeInTheDocument();
     });
 
     it('disabled with execution_count=0: shows Modifier, Supprimer, Reactiver', async () => {
-      const user = userEvent.setup();
-      mockGetAdminActions
-        .mockResolvedValueOnce(makeResponse(activeActions))
-        .mockResolvedValueOnce(makeResponse(allActions));
+      mockGetAdminActions.mockResolvedValue(makeResponse(allActions));
 
       renderPage();
-
-      await waitFor(() => {
-        expect(screen.getByText('Action Draft Zero')).toBeInTheDocument();
-      });
-
-      const checkbox = screen.getByLabelText('Inclure les actions desactivees');
-      await user.click(checkbox);
 
       await waitFor(() => {
         expect(screen.getByText('Action Disabled Zero')).toBeInTheDocument();
@@ -536,7 +435,7 @@ describe('Story 18.1 — AdminPage Actions', () => {
       const row = screen.getByText('Action Disabled Zero').closest('tr')!;
       expect(within(row).getByText('Modifier')).toBeInTheDocument();
       expect(within(row).getByText('Supprimer')).toBeInTheDocument();
-      expect(within(row).getByText('Reactiver')).toBeInTheDocument();
+      expect(within(row).getByText('Réactiver')).toBeInTheDocument();
     });
   });
 
@@ -579,7 +478,7 @@ describe('Story 18.1 — AdminPage Actions', () => {
 
       const row = screen.getByText('Action Published Exec').closest('tr')!;
       const user = userEvent.setup();
-      await user.click(within(row).getByText('Desactiver'));
+      await user.click(within(row).getByText('Désactiver'));
 
       await waitFor(() => {
         expect(mockDeactivateAction).toHaveBeenCalledWith(3);
@@ -588,26 +487,17 @@ describe('Story 18.1 — AdminPage Actions', () => {
 
     it('shows error notification when reactivate fails', async () => {
       const user = userEvent.setup();
-      mockGetAdminActions
-        .mockResolvedValueOnce(makeResponse(activeActions))
-        .mockResolvedValueOnce(makeResponse(allActions));
+      mockGetAdminActions.mockResolvedValue(makeResponse(allActions));
       mockReactivateAction.mockRejectedValue(new Error('Conflict'));
 
       renderPage();
-
-      await waitFor(() => {
-        expect(screen.getByText('Action Draft Zero')).toBeInTheDocument();
-      });
-
-      const checkbox = screen.getByLabelText('Inclure les actions desactivees');
-      await user.click(checkbox);
 
       await waitFor(() => {
         expect(screen.getByText('Action Disabled')).toBeInTheDocument();
       });
 
       const row = screen.getByText('Action Disabled').closest('tr')!;
-      await user.click(within(row).getByText('Reactiver'));
+      await user.click(within(row).getByText('Réactiver'));
 
       await waitFor(() => {
         expect(mockReactivateAction).toHaveBeenCalledWith(4);

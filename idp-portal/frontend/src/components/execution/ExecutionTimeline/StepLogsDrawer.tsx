@@ -5,6 +5,7 @@
  * Ant Design Drawer with detailed step logs (timestamps, error, JSON output).
  */
 
+import type { RefObject } from 'react';
 import { Drawer } from 'antd';
 import type { ExecutionStepResponse } from '../../../types/api';
 
@@ -12,7 +13,7 @@ interface StepLogsDrawerProps {
   step: ExecutionStepResponse | null;
   open: boolean;
   onClose: () => void;
-  contentRef: React.RefObject<HTMLDivElement | null>;
+  contentRef: RefObject<HTMLDivElement | null>;
 }
 
 export function StepLogsDrawer({ step, open, onClose, contentRef }: StepLogsDrawerProps) {

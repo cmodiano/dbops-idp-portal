@@ -51,7 +51,7 @@ describe('useThemeMode', () => {
   });
 
   it('reads initial mode from localStorage (AC #2)', () => {
-    localStorage.setItem('idp-portal-theme', 'dark');
+    localStorage.setItem('idp-portal-theme-v1', 'dark');
     const { result } = renderHook(() => useThemeMode());
     expect(result.current.mode).toBe('dark');
     expect(result.current.effectiveMode).toBe('dark');
@@ -64,7 +64,7 @@ describe('useThemeMode', () => {
       result.current.setMode('dark');
     });
 
-    expect(localStorage.getItem('idp-portal-theme')).toBe('dark');
+    expect(localStorage.getItem('idp-portal-theme-v1')).toBe('dark');
     expect(result.current.mode).toBe('dark');
     expect(result.current.effectiveMode).toBe('dark');
   });
@@ -105,7 +105,7 @@ describe('useThemeMode', () => {
   });
 
   it('ignores invalid localStorage values', () => {
-    localStorage.setItem('idp-portal-theme', 'invalid-value');
+    localStorage.setItem('idp-portal-theme-v1', 'invalid-value');
     const { result } = renderHook(() => useThemeMode());
     expect(result.current.mode).toBe('system');
   });

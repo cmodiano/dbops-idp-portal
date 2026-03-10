@@ -186,8 +186,10 @@ export default function ExecutionsPage() {
       if (aRunning !== bRunning) return aRunning - bRunning;
       let aVal: string | number | null = null;
       let bVal: string | number | null = null;
-      if (sortField === 'created_at') { aVal = a.created_at; bVal = b.created_at; }
-      else if (sortField === 'status') { aVal = a.status; bVal = b.status; }
+      if (sortField === 'created_at' || sortField === 'started_at') {
+        aVal = a.started_at || a.created_at;
+        bVal = b.started_at || b.created_at;
+      } else if (sortField === 'status') { aVal = a.status; bVal = b.status; }
       else if (sortField === 'action_name') { aVal = a.action_name || ''; bVal = b.action_name || ''; }
       if (aVal === null || bVal === null) return 0;
       if (aVal < bVal) return sortOrder === 'ascend' ? -1 : 1;
@@ -206,7 +208,7 @@ export default function ExecutionsPage() {
     [activeScope, sortField, sortOrder, integrationIconsMap, user, canViewAll, canApprove, cancellingId, handleCancelExecution, restartLoadingId, handleRestartExecution]
   );
 
-  const handleTableChange = (
+  const handleTableChange = useCallback((
     pagination: TablePaginationConfig,
     _filters: Record<string, FilterValue | null>,
     sorter: SorterResult<ExecutionResponse> | SorterResult<ExecutionResponse>[],
@@ -217,7 +219,7 @@ export default function ExecutionsPage() {
       setSortField(singleSorter.field as string);
       setSortOrder(singleSorter.order || 'descend');
     }
-  };
+  }, [currentPage, setCurrentPage, setSortField, setSortOrder]);
 
   // Skeleton loading
   if (loading && executions.length === 0) {
@@ -230,7 +232,8 @@ export default function ExecutionsPage() {
         { title: 'Utilisateur', key: 'user', width: 150, render: () => <Skeleton active title={false} paragraph={{ rows: 1 }} /> },
       ] : []),
       { title: 'Environnement', key: 'env', width: 120, render: () => <Skeleton active title={false} paragraph={{ rows: 1 }} /> },
-      { title: 'Date', key: 'date', width: 160, render: () => <Skeleton active title={false} paragraph={{ rows: 1 }} /> },
+      { title: 'Début', key: 'started_at', width: 140, render: () => <Skeleton active title={false} paragraph={{ rows: 1 }} /> },
+      { title: 'Fin', key: 'completed_at', width: 140, render: () => <Skeleton active title={false} paragraph={{ rows: 1 }} /> },
       { title: 'Durée', key: 'duration', width: 100, render: () => <Skeleton active title={false} paragraph={{ rows: 1 }} /> },
     ];
     return (

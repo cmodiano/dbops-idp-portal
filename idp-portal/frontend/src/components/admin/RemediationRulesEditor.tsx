@@ -11,7 +11,7 @@
  * Story 48.8 (SOLID-FE-4, AC4): fetchCatalogActions encapsulé dans useRemediationCatalogActions hook (DIP).
  */
 
-import React from 'react';
+import type { FC } from 'react';
 import {
   Button,
   Input,
@@ -64,7 +64,7 @@ interface RuleCardProps {
   onRemove: (index: number) => void;
 }
 
-const RuleCard: React.FC<RuleCardProps> = ({
+const RuleCard: FC<RuleCardProps> = ({
   rule,
   index,
   actions,
@@ -229,7 +229,7 @@ const RuleCard: React.FC<RuleCardProps> = ({
   );
 };
 
-export const RemediationRulesEditor: React.FC<RemediationRulesEditorProps> = ({
+export const RemediationRulesEditor: FC<RemediationRulesEditorProps> = ({
   value = EMPTY_REMEDIATION_RULES,
   onChange,
   currentActionId,

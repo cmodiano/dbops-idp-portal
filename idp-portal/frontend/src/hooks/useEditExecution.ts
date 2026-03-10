@@ -41,15 +41,16 @@ export function useEditExecution(
     setExecutionToEdit(exec);
     setEditModalVisible(true);
     const isRecurring = !!exec.recurring_pattern;
+    // API renvoie UTC ; on affiche en heure locale (comme SchedulingPanel)
     if (isRecurring) {
       editForm.setFieldsValue({
         next_execution_date: exec.recurring_pattern?.next_execution_date
-          ? dayjs.utc(exec.recurring_pattern.next_execution_date)
+          ? dayjs(exec.recurring_pattern.next_execution_date)
           : undefined,
       });
     } else {
       editForm.setFieldsValue({
-        scheduled_at: exec.scheduled_at ? dayjs.utc(exec.scheduled_at) : undefined,
+        scheduled_at: exec.scheduled_at ? dayjs(exec.scheduled_at) : undefined,
       });
     }
   }, [editForm]);

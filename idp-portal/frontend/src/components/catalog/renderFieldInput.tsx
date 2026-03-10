@@ -69,9 +69,11 @@ export function renderFieldInput(
           aria-label={field.label}
           loading={loadingInventory}
           showSearch
-          filterOption={(input, option) =>
-            (String(option?.label ?? '')).toLowerCase().includes(input.toLowerCase())
-          }
+          filterOption={(input, option) => {
+            // F12 fix: pre-compute lowerInput once per option evaluation to avoid duplicate .toLowerCase() calls
+            const lowerInput = input.toLowerCase();
+            return (option?.label?.toString().toLowerCase() ?? '').includes(lowerInput);
+          }}
           notFoundContent={loadingInventory ? undefined : notFoundMessage}
           options={items.map((item) => {
             // Story 37.5: Use configured column if set, else default (id as value, name as label)
@@ -98,7 +100,7 @@ export function renderFieldInput(
     case 'select':
       return (
         <Select
-          placeholder={`Selectionnez ${field.label.toLowerCase()}`}
+          placeholder={`Selectionnez ${field.label.toLocaleLowerCase('fr-FR')}`}
           aria-label={field.label}
           options={(field.enum || []).map((v) => ({ value: v, label: v }))}
         />
@@ -129,7 +131,7 @@ export function renderFieldInput(
       return (
         <Select
           mode="tags"
-          placeholder={`Entrez ${field.label.toLowerCase()}`}
+          placeholder={`Entrez ${field.label.toLocaleLowerCase('fr-FR')}`}
           aria-label={field.label}
         />
       );

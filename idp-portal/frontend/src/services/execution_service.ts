@@ -226,7 +226,7 @@ export async function approveExecution(
   executionId: number,
   comment?: string
 ): Promise<ApproveExecutionResponse> {
-  const body = comment ? JSON.stringify({ comment }) : undefined;
+  const body = JSON.stringify(comment ? { comment } : {});
   return apiFetch<ApproveExecutionResponse>(`/executions/${executionId}/approve`, {
     method: 'POST',
     body,
@@ -253,7 +253,7 @@ export async function rejectExecution(
   executionId: number,
   comment?: string
 ): Promise<RejectExecutionResponse> {
-  const body = comment ? JSON.stringify({ comment }) : undefined;
+  const body = JSON.stringify(comment ? { comment } : {});
   return apiFetch<RejectExecutionResponse>(`/executions/${executionId}/reject`, {
     method: 'POST',
     body,

@@ -21,8 +21,9 @@ function mockJsonResponse(body: unknown) {
 /**
  * Fail-fast fetch mock: handles known authenticated endpoints, throws for any other.
  * Use after mockResolvedValueOnce for auth (refresh + me).
+ * @param userExtraProps - Optional extra fields to merge into the /users/me response (e.g. { is_auditor: true })
  */
-function createAuthenticatedFetchMock(profile: string, navigationTabs: string[]) {
+function createAuthenticatedFetchMock(profile: string, navigationTabs: string[], userExtraProps: Record<string, unknown> = {}) {
   return vi.fn()
     .mockResolvedValueOnce(mockJsonResponse({ data: { access_token: 'token', token_type: 'bearer' } }))
     .mockResolvedValueOnce(mockJsonResponse({
@@ -32,6 +33,7 @@ function createAuthenticatedFetchMock(profile: string, navigationTabs: string[])
         display_name: 'Test User',
         profile,
         navigation_tabs: navigationTabs,
+        ...userExtraProps,
       },
     }))
     .mockImplementation((url: string | URL | Request, init?: RequestInit) => {
@@ -90,12 +92,20 @@ function createAuthenticatedFetchMock(profile: string, navigationTabs: string[])
       if (u.includes('/reference/engines')) {
         return Promise.resolve(mockJsonResponse({ data: [] }));
       }
+      // Scheduled executions (CalendarPage)
+      if (u.includes('/scheduled-executions')) {
+        return Promise.resolve(mockJsonResponse({ data: [], available_actions: [] }));
+      }
+      // Audit executions (AuditPage)
+      if (u.includes('/audit/executions')) {
+        return Promise.resolve(mockJsonResponse({ data: [], pagination: { total: 0, total_pages: 0 } }));
+      }
       unexpectedFetchHandler(url, init);
     });
 }
 
-function mockAuthSession(profile: string, navigationTabs: string[]) {
-  global.fetch = createAuthenticatedFetchMock(profile, navigationTabs);
+function mockAuthSession(profile: string, navigationTabs: string[], userExtraProps: Record<string, unknown> = {}) {
+  global.fetch = createAuthenticatedFetchMock(profile, navigationTabs, userExtraProps);
 }
 
 describe('App routing', () => {
@@ -116,7 +126,7 @@ describe('App routing', () => {
   it('redirects to /login when not authenticated', async () => {
     render(<App />);
     await waitFor(() => {
-      expect(screen.getByText(/connexion|login|SSO/i)).toBeInTheDocument();
+      expect(screen.getByText(/Se connecter|connexion|login|SSO/i)).toBeInTheDocument();
     });
   });
 
@@ -196,6 +206,85 @@ describe('App routing', () => {
     await waitFor(() => {
       // Should be redirected to /executions page
       expect(screen.getByText(/exécutions|executions/i)).toBeInTheDocument();
+    });
+  });
+
+  // Story 13.6 AC1: CalendarGuard — access based on 'calendar' navigation tab
+  it('CalendarGuard allows access to /calendar when user has calendar in navigation_tabs', async () => {
+    // User with 'calendar' in navigation_tabs can access /calendar (no redirect)
+    mockAuthSession('dbops', ['catalog', 'executions', 'calendar']);
+
+    window.history.pushState({}, '', '/calendar');
+    render(<App />);
+
+    await waitFor(() => {
+      // Guard must NOT redirect: URL stays at /calendar
+      expect(window.location.pathname).toBe('/calendar');
+      // Both assertions must pass together inside waitFor: while CalendarPage lazy-loads,
+      // Suspense suspends the entire Routes tree (AppLayout included), so "Catalogue" nav
+      // is not in the DOM — this window is when both conditions are simultaneously true.
+      expect(screen.queryByText('Catalogue')).not.toBeInTheDocument();
+    });
+  });
+
+  it('CalendarGuard redirects to /catalog when user lacks calendar in navigation_tabs', async () => {
+    // User without 'calendar' in navigation_tabs is redirected from /calendar
+    mockAuthSession('dba_applicatif', ['catalog', 'executions']);
+
+    window.history.pushState({}, '', '/calendar');
+    render(<App />);
+
+    await waitFor(() => {
+      // Should be redirected to /catalog
+      expect(screen.getByText('Catalogue')).toBeInTheDocument();
+    });
+  });
+
+  // Story 6.3 AC8: AuditGuard — access for 'audit' tab OR is_auditor
+  it('AuditGuard allows access to /audit when user has audit in navigation_tabs', async () => {
+    // User with 'audit' in navigation_tabs can access /audit (no redirect)
+    mockAuthSession('dbops', ['catalog', 'audit']);
+
+    window.history.pushState({}, '', '/audit');
+    render(<App />);
+
+    await waitFor(() => {
+      // Guard must NOT redirect: URL stays at /audit
+      // Both assertions must pass together inside waitFor: while AuditPage lazy-loads,
+      // Suspense suspends the entire Routes tree (AppLayout included), so "Catalogue" nav
+      // is not in the DOM — this window is when both conditions are simultaneously true.
+      expect(window.location.pathname).toBe('/audit');
+      expect(screen.queryByText('Catalogue')).not.toBeInTheDocument();
+    });
+  });
+
+  it('AuditGuard allows access to /audit when user has is_auditor: true without audit tab (AC8)', async () => {
+    // Auditor user: is_auditor=true but 'audit' NOT in navigation_tabs — alternative access path
+    mockAuthSession('auditor', ['catalog'], { is_auditor: true });
+
+    window.history.pushState({}, '', '/audit');
+    render(<App />);
+
+    await waitFor(() => {
+      // Guard must NOT redirect: is_auditor path grants access
+      // Both assertions must pass together inside waitFor: while AuditPage lazy-loads,
+      // Suspense suspends the entire Routes tree (AppLayout included), so "Catalogue" nav
+      // is not in the DOM — this window is when both conditions are simultaneously true.
+      expect(window.location.pathname).toBe('/audit');
+      expect(screen.queryByText('Catalogue')).not.toBeInTheDocument();
+    });
+  });
+
+  it('AuditGuard redirects to /catalog when user lacks audit tab AND is_auditor is false', async () => {
+    // Regular user: no 'audit' tab, is_auditor=false → redirected from /audit
+    mockAuthSession('dba_applicatif', ['catalog', 'executions'], { is_auditor: false });
+
+    window.history.pushState({}, '', '/audit');
+    render(<App />);
+
+    await waitFor(() => {
+      // Should be redirected to /catalog
+      expect(screen.getByText('Catalogue')).toBeInTheDocument();
     });
   });
 });

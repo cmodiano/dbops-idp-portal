@@ -10,6 +10,8 @@
  * - Keyboard accessible (AC6)
  */
 
+import { memo } from 'react';
+import type { KeyboardEvent } from 'react';
 import { Tag, Button, Space } from 'antd';
 import { CloseCircleOutlined } from '@ant-design/icons';
 import type { CatalogTagWithCount } from '../../services/catalog_service';
@@ -33,7 +35,7 @@ export interface TagCloudProps {
  * Each tag is clickable and toggles selection (AND logic for filtering).
  * Story 8.7 AC3: Tags are pre-filtered by category in parent (CatalogPage).
  */
-export function TagCloud({ tags, selectedTags, onSelectionChange }: TagCloudProps) {
+export const TagCloud = memo(function TagCloud({ tags, selectedTags, onSelectionChange }: TagCloudProps) {
   const { effectiveMode } = useTheme();
   const isDark = effectiveMode === 'dark';
 
@@ -49,7 +51,7 @@ export function TagCloud({ tags, selectedTags, onSelectionChange }: TagCloudProp
     onSelectionChange([]);
   };
 
-  const handleKeyDown = (tagName: string, event: React.KeyboardEvent) => {
+  const handleKeyDown = (tagName: string, event: KeyboardEvent) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       const isSelected = selectedTags.includes(tagName);
@@ -77,6 +79,7 @@ export function TagCloud({ tags, selectedTags, onSelectionChange }: TagCloudProp
             key={tag.name}
             onKeyDown={(e) => handleKeyDown(tag.name, e)}
             tabIndex={0}
+            style={{ display: 'inline-block' }}
           >
             <CheckableTag
               checked={isSelected}
@@ -111,6 +114,6 @@ export function TagCloud({ tags, selectedTags, onSelectionChange }: TagCloudProp
       )}
     </Space>
   );
-}
+});
 
 export default TagCloud;

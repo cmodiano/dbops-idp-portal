@@ -32,6 +32,13 @@ class ServiceNowService(IHealthCheckable):
     - base_url: ServiceNow instance URL
     - credential_ref: Vault reference for authentication
     - config: Additional configuration (instance, table, etc.)
+
+    .. note::
+        **Mixed sync/async pattern (by design).**
+        Business methods (create_change, close_change, cancel_change) are synchronous
+        because they are called from synchronous Celery tasks. The health_check()
+        method is async to satisfy the ``IHealthCheckable`` interface used by the
+        async health dashboard endpoint. This is intentional and expected.
     """
 
     def __init__(
@@ -166,14 +173,51 @@ class ServiceNowService(IHealthCheckable):
             ) from exc
 
     def update_change(self, change_id: str, **kwargs: object) -> None:
-        """Update a ServiceNow change request (not yet implemented)."""
+        """Update a ServiceNow change request.
+
+        .. note::
+            **Not implemented — v1 scope exclusion.**
+
+        This method is an intentional stub deferred from the v1 scope.
+        Implementing PATCH update semantics (partial field updates) requires
+        additional field-mapping work aligned with the ServiceNow data model.
+
+        # TODO(story-future): Implement update_change for ServiceNow PATCH endpoint.
+        # Deferred from v1 scope — see ADR-007 (change management v1 scope definition).
+        # Expected signature: change_id, **field_updates -> dict with 'sys_id'.
+
+        Args:
+            change_id: sys_id or change number of the change request.
+            **kwargs: Fields to update.
+
+        Raises:
+            NotImplementedError: Always — method not yet implemented.
+        """
         raise NotImplementedError(
             "ServiceNowService.update_change() is not yet implemented. "
             "See integration-type-catalogue.md for specification."
         )
 
     def get_change_status(self, change_id: str) -> None:
-        """Query ServiceNow change request status (not yet implemented)."""
+        """Query ServiceNow change request status.
+
+        .. note::
+            **Not implemented — v1 scope exclusion.**
+
+        This method is an intentional stub deferred from the v1 scope.
+        A read-only GET endpoint with proper status mapping (e.g., open, review,
+        implement, closed, cancelled) is required before this can be implemented.
+
+        # TODO(story-future): Implement get_change_status for ServiceNow GET endpoint.
+        # Deferred from v1 scope — see ADR-007 (change management v1 scope definition).
+        # Expected return: dict with 'number', 'state', 'sys_id'.
+
+        Args:
+            change_id: sys_id or change number of the change request.
+
+        Raises:
+            NotImplementedError: Always — method not yet implemented.
+        """
         raise NotImplementedError(
             "ServiceNowService.get_change_status() is not yet implemented. "
             "See integration-type-catalogue.md for specification."
@@ -208,7 +252,8 @@ class ServiceNowService(IHealthCheckable):
                 sys_id = result.get('sys_id', '')
                 if not sys_id:
                     logger.error(
-                        f"servicenow_{operation}_no_sys_id",
+                        "servicenow_patch_no_sys_id",
+                        operation=operation,
                         change_id=change_id,
                         status_code=resp.status_code,
                         base_url=self.base_url,
@@ -220,7 +265,8 @@ class ServiceNowService(IHealthCheckable):
                         details=details,
                     )
                 logger.info(
-                    f"servicenow_{operation}_success",
+                    "servicenow_patch_success",
+                    operation=operation,
                     change_id=change_id,
                     sys_id=sys_id,
                     base_url=self.base_url,
@@ -229,7 +275,8 @@ class ServiceNowService(IHealthCheckable):
                 return {success_key: success_value, "sys_id": str(sys_id)}
         except httpx.TimeoutException as exc:
             logger.error(
-                f"servicenow_{operation}_timeout",
+                "servicenow_patch_timeout",
+                operation=operation,
                 change_id=change_id,
                 base_url=self.base_url,
                 error=str(exc),
@@ -242,7 +289,8 @@ class ServiceNowService(IHealthCheckable):
             ) from exc
         except httpx.HTTPStatusError as exc:
             logger.error(
-                f"servicenow_{operation}_http_error",
+                "servicenow_patch_http_error",
+                operation=operation,
                 change_id=change_id,
                 status=exc.response.status_code,
                 error=str(exc),
@@ -256,7 +304,8 @@ class ServiceNowService(IHealthCheckable):
             ) from exc
         except httpx.RequestError as exc:
             logger.error(
-                f"servicenow_{operation}_request_error",
+                "servicenow_patch_request_error",
+                operation=operation,
                 change_id=change_id,
                 base_url=self.base_url,
                 error=str(exc),

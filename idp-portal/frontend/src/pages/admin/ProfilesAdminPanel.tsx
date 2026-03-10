@@ -1,12 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Card, App } from 'antd';
-
-type NotificationInstance = ReturnType<typeof App.useApp>['notification'];
 import { ProfileWizard } from '../../components/admin/ProfileWizard';
 import { ProfilesTable } from '../../components/admin/ProfilesTable';
-import { ProfileImportModal } from '../../components/admin/ProfileImportModal';
 import { getProfiles, getProfile, deleteProfile, exportProfilesYaml } from '../../services/profiles_service';
 import type { ProfileResponse, ProfileListItem } from '../../types/api';
+
+type NotificationInstance = ReturnType<typeof App.useApp>['notification'];
 
 export interface ProfilesAdminPanelProps {
   notification: NotificationInstance;
@@ -17,7 +16,6 @@ export function ProfilesAdminPanel({ notification }: ProfilesAdminPanelProps) {
   const [profilesLoading, setProfilesLoading] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [editProfile, setEditProfile] = useState<ProfileResponse | null>(null);
-  const [importYamlModalOpen, setImportYamlModalOpen] = useState(false);
 
   const fetchProfiles = useCallback(async () => {
     setProfilesLoading(true);
@@ -54,7 +52,7 @@ export function ProfilesAdminPanel({ notification }: ProfilesAdminPanelProps) {
   const handleProfileDelete = async (record: ProfileListItem) => {
     try {
       await deleteProfile(record.id);
-      notification.success({ title: 'Succes', description: `Profil "${record.name}" supprime` });
+      notification.success({ title: 'Succès', description: `Profil "${record.name}" supprimé` });
       fetchProfiles();
     } catch (err) {
       notification.error({
@@ -68,8 +66,8 @@ export function ProfilesAdminPanel({ notification }: ProfilesAdminPanelProps) {
     setProfileModalOpen(false);
     setEditProfile(null);
     notification.success({
-      title: 'Succes',
-      description: editProfile ? `Profil "${profile.name}" mis a jour` : `Profil "${profile.name}" cree`,
+      title: 'Succès',
+      description: editProfile ? `Profil "${profile.name}" mis à jour` : `Profil "${profile.name}" créé`,
     });
     fetchProfiles();
   };
@@ -91,19 +89,6 @@ export function ProfilesAdminPanel({ notification }: ProfilesAdminPanelProps) {
     }
   }, [notification]);
 
-  const handleImportYaml = useCallback(() => {
-    setImportYamlModalOpen(true);
-  }, []);
-
-  const handleImportYamlSuccess = useCallback((created: number, updated: number) => {
-    setImportYamlModalOpen(false);
-    notification.success({
-      title: 'Import YAML',
-      description: `Import reussi : ${created} cree(s), ${updated} mis a jour.`,
-    });
-    fetchProfiles();
-  }, [notification, fetchProfiles]);
-
   return (
     <>
       <Card styles={{ header: { borderBottom: 'none', paddingBottom: 0 }, body: { paddingTop: 16 } }}>
@@ -117,7 +102,6 @@ export function ProfilesAdminPanel({ notification }: ProfilesAdminPanelProps) {
             setProfileModalOpen(true);
           }}
           onExportYaml={handleExportYaml}
-          onImportYaml={handleImportYaml}
         />
       </Card>
 
@@ -126,12 +110,6 @@ export function ProfilesAdminPanel({ notification }: ProfilesAdminPanelProps) {
         onCancel={handleProfileCancel}
         editProfile={editProfile}
         onSuccess={handleProfileSuccess}
-      />
-
-      <ProfileImportModal
-        open={importYamlModalOpen}
-        onCancel={() => setImportYamlModalOpen(false)}
-        onSuccess={handleImportYamlSuccess}
       />
     </>
   );

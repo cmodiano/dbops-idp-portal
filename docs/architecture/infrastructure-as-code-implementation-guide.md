@@ -1,7 +1,11 @@
 # Infrastructure as Code — Implementation Guide
 
+> ⚠️ **OBSOLÈTE** — Ce document a été remplacé par la Story 64-17 (renommage IaC→CaC).
+> Le document de référence actuel est : [Configuration as Code – Guide d'implémentation](configuration-as-code-implementation-guide.md)
+> Ce document est conservé à titre historique uniquement.
+
 **Date:** 2026-03-07
-**Status:** Implementation specification
+**Status:** Implementation specification — ⚠️ OBSOLÈTE, remplacé par CaC
 **Companion doc:** [Strategy document](./infrastructure-as-code-strategy.md)
 
 This document is the **developer handbook** for implementing the IaC feature. It explains

@@ -7,8 +7,10 @@
  * - External link to crontab.guru
  */
 
+import type { TableProps } from 'antd';
 import { Modal, Table, Typography, Space, Divider, Button, Tag } from 'antd';
 import { LinkOutlined } from '@ant-design/icons';
+import type { CronFieldDoc, CronExample } from '../../utils/cronHelper';
 import { CRON_FIELD_DOCS, CRON_EXAMPLES } from '../../utils/cronHelper';
 
 const { Title, Text, Paragraph } = Typography;
@@ -18,8 +20,11 @@ interface CronExpressionHelperProps {
   onClose: () => void;
 }
 
+type FieldColumns = NonNullable<TableProps<CronFieldDoc>['columns']>;
+type ExampleColumns = NonNullable<TableProps<CronExample>['columns']>;
+
 export default function CronExpressionHelper({ open, onClose }: CronExpressionHelperProps) {
-  const fieldColumns = [
+  const fieldColumns: FieldColumns = [
     {
       title: 'Champ',
       dataIndex: 'name',
@@ -43,15 +48,15 @@ export default function CronExpressionHelper({ open, onClose }: CronExpressionHe
       key: 'examples',
       render: (examples: string[]) => (
         <Space>
-          {examples.map((ex: string, idx: number) => (
-            <Tag key={idx}>{ex}</Tag>
+          {examples.map((ex: string) => (
+            <Tag key={ex}>{ex}</Tag>
           ))}
         </Space>
       ),
     },
   ];
 
-  const exampleColumns = [
+  const exampleColumns: ExampleColumns = [
     {
       title: 'Expression',
       dataIndex: 'expression',

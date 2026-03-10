@@ -31,6 +31,7 @@ vi.mock('../../contexts/AuthContext', () => ({
     user: null,
     accessToken: null,
     login: vi.fn(),
+    loginWithCredentials: vi.fn(),
     logout: vi.fn(),
     refreshToken: vi.fn().mockResolvedValue(null),
     hasTab: vi.fn().mockReturnValue(true),
@@ -994,10 +995,10 @@ describe('ExecutionWizard', () => {
   // Story 7.2: Simplified variant tests
   describe('Simplified Variant (Story 7.2)', () => {
     beforeEach(() => {
-      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: true, isLoading: false, user: null, accessToken: null, login: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
+      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: true, isLoading: false, user: null, accessToken: null, login: vi.fn(), loginWithCredentials: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
     });
     afterEach(() => {
-      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: false, isLoading: false, user: null, accessToken: null, login: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
+      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: false, isLoading: false, user: null, accessToken: null, login: vi.fn(), loginWithCredentials: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
     });
 
     it('renders simplified step labels when variant is simplified (Task 5.1)', () => {
@@ -1063,7 +1064,7 @@ describe('ExecutionWizard', () => {
     });
 
     it('does not show contextual descriptions in default mode', () => {
-      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: false, isLoading: false, user: null, accessToken: null, login: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
+      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: false, isLoading: false, user: null, accessToken: null, login: vi.fn(), loginWithCredentials: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
       render(
         <ExecutionWizard {...defaultProps} />,
         { wrapper: TestWrapper }
@@ -1074,7 +1075,7 @@ describe('ExecutionWizard', () => {
     });
 
     it('uses default labels when variant is not specified', () => {
-      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: false, isLoading: false, user: null, accessToken: null, login: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
+      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: false, isLoading: false, user: null, accessToken: null, login: vi.fn(), loginWithCredentials: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
       render(<ExecutionWizard {...defaultProps} />, { wrapper: TestWrapper });
 
       // Should show default labels (Story 13.2: Step 1 renamed to "Cible(s)")
@@ -1136,10 +1137,10 @@ describe('ExecutionWizard', () => {
   // Story 7.2: Accessibility tests for simplified variant
   describe('Accessibility - Simplified Variant (Story 7.2, Task 5.5)', () => {
     beforeEach(() => {
-      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: true, isLoading: false, user: null, accessToken: null, login: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
+      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: true, isLoading: false, user: null, accessToken: null, login: vi.fn(), loginWithCredentials: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
     });
     afterEach(() => {
-      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: false, isLoading: false, user: null, accessToken: null, login: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
+      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: false, isLoading: false, user: null, accessToken: null, login: vi.fn(), loginWithCredentials: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
     });
 
     it('has proper aria-labels for simplified step titles', async () => {
@@ -1574,6 +1575,7 @@ describe('ExecutionWizard — coverage extras', () => {
       user: null,
       accessToken: null,
       login: vi.fn(),
+      loginWithCredentials: vi.fn(),
       logout: vi.fn(),
       refreshToken: vi.fn().mockResolvedValue(null),
       hasTab: vi.fn().mockReturnValue(true),

@@ -25,6 +25,7 @@ class AuthService:
     Handles complex operations like SAML subject lookup and profile resolution.
     """
     
+    @transaction.atomic
     def create_or_update_user(self, username: str, display_name: str | None = None,
                              profile: str | None = None, saml_subject: str | None = None,
                              email: str | None = None) -> User:
@@ -40,6 +41,10 @@ class AuthService:
 
         Returns:
             User instance
+
+        Note:
+            @transaction.atomic ensures the audit entry and user UPSERT are committed together
+            (AUTH-MED-02: prevents orphan audit entries on DB rollback).
         """
         defaults: dict = {
             'display_name': display_name,
@@ -52,8 +57,8 @@ class AuthService:
             username=username,
             defaults=defaults,
         )
-        
-        # Audit
+
+        # Audit inside atomic block — both commit or both rollback (AUTH-MED-02)
         AuditService.create_entry(
             user_id=str(user.id),
             action_type=AuditActionType.USER_CREATED if created else AuditActionType.USER_UPDATED,
@@ -61,7 +66,7 @@ class AuthService:
             entity_id=user.id,
             details={'username': user.username, 'profile': user.profile, 'email': user.email}
         )
-        
+
         return user
     
     def get_by_username(self, username: str) -> User | None:

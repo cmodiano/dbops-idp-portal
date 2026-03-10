@@ -111,7 +111,7 @@ notif.notify_execution_event(
 - **email** : `django.core.mail.send_mail()` via SMTP
 - **teams** : POST webhook MessageCard
 - **page_individual** : POST API interne (prod + critique uniquement)
-- **page_dba** : POST API interne DBA on-call (prod + critique uniquement)
+- **page_oncall** : POST API interne on-call (prod + critique uniquement)
 
 ## A ne pas confondre
 

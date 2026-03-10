@@ -72,16 +72,12 @@ describe('ProfilesTable', () => {
     expect(screen.getByText('Aucun profil')).toBeInTheDocument();
   });
 
-  it('renders Exporter YAML and Importer YAML when handlers provided (Story 2.13)', async () => {
+  it('renders Exporter YAML when handler provided (Story 2.13)', async () => {
     const onExportYaml = vi.fn();
-    const onImportYaml = vi.fn();
-    render(<ProfilesTable {...defaultProps} onExportYaml={onExportYaml} onImportYaml={onImportYaml} />);
+    render(<ProfilesTable {...defaultProps} onExportYaml={onExportYaml} />);
     expect(screen.getByRole('button', { name: /Exporter YAML/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Importer YAML/i })).toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole('button', { name: /Exporter YAML/i }));
     expect(onExportYaml).toHaveBeenCalled();
-    await userEvent.setup().click(screen.getByRole('button', { name: /Importer YAML/i }));
-    expect(onImportYaml).toHaveBeenCalled();
   });
 
   it('affiche Oui/Non pour les colonnes Admin et Auditeur', () => {

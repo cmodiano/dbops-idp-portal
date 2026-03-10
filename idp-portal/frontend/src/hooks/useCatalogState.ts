@@ -89,7 +89,7 @@ export interface UseCatalogStateReturn {
   setParentExecutionId: React.Dispatch<React.SetStateAction<number | null>>;
   setExecutionWizardOpen: React.Dispatch<React.SetStateAction<boolean>>;
   handleExecuteClick: () => void;
-  handleExecutionSuccess: (executionId: number) => void;
+  handleExecutionSuccess: (executionId: number, opts?: { isScheduled?: boolean }) => void;
   handleBackToCatalog: () => void;
   handleRemediationSuggestionClick: (suggestion: RemediationSuggestion) => Promise<void>;
 }
@@ -294,17 +294,17 @@ export function useCatalogState(): UseCatalogStateReturn {
 
   // Handle execution success (Story 4.1, 4.6; Story 19.4 AC1, AC8: close wizard + open ExecutionView)
   const handleExecutionSuccess = useCallback(
-    (executionId: number) => {
-      // Story 19.4 AC1: Close wizard and open ExecutionView drawer automatically
+    (executionId: number, opts?: { isScheduled?: boolean }) => {
       setExecutionWizardOpen(false);
       setActiveExecutionId(null);
-      // Story 19.4 AC8: Reset wizard-related state
       setSelectedAction(null);
       setSelectedActionDetail(null);
       setDrawerVisible(false);
-      // Story 19.4 AC1: Open ExecutionView with returned executionId
-      setExecutionViewId(executionId);
-      logger.info('CatalogPage: Opening ExecutionView after execution created', { executionId });
+      // Exécution immédiate uniquement : ouvrir ExecutionView. Pour planifiée, scheduledId ≠ execution_id → getExecution 404
+      if (!opts?.isScheduled) {
+        setExecutionViewId(executionId);
+        logger.info('CatalogPage: Opening ExecutionView after execution created', { executionId });
+      }
       loadData();
     },
     [loadData],

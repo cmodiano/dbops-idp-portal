@@ -4,7 +4,7 @@ import json
 import structlog
 from typing import cast
 from django.db import models
-from django.db.models import Q
+from django.db.models import Count, Q
 
 logger = structlog.get_logger(__name__)
 
@@ -79,8 +79,6 @@ class ProfileManager(models.Manager):
         Returns:
             QuerySet with permission_count annotation (used by ProfileListSerializer).
         """
-        from django.db.models import Count, Q
-
         return self.annotate(  # type: ignore[no-any-return]
             permission_count=Count(
                 'profileactionpermission',
@@ -190,7 +188,7 @@ class ProfileActionPermission(models.Model):
             try:
                 return json.loads(self.action_ids_json)  # type: ignore[no-any-return]
             except (json.JSONDecodeError, TypeError) as e:
-                logger.warning(f"Failed to deserialize action_ids for Profile {self.profile_id}: {e}")
+                logger.warning("Failed to deserialize action_ids", profile_id=self.profile_id, error=str(e))
                 return []
         return []
 
@@ -207,7 +205,7 @@ class ProfileActionPermission(models.Model):
             try:
                 return json.loads(self.tag_patterns_json)  # type: ignore[no-any-return]
             except (json.JSONDecodeError, TypeError) as e:
-                logger.warning(f"Failed to deserialize tag_patterns for Profile {self.profile_id}: {e}")
+                logger.warning("Failed to deserialize tag_patterns", profile_id=self.profile_id, error=str(e))
                 return []
         return []
 
@@ -224,7 +222,7 @@ class ProfileActionPermission(models.Model):
             try:
                 return json.loads(self.environments_json)  # type: ignore[no-any-return]
             except (json.JSONDecodeError, TypeError) as e:
-                logger.warning(f"Failed to deserialize environments for Profile {self.profile_id}: {e}")
+                logger.warning("Failed to deserialize environments", profile_id=self.profile_id, error=str(e))
                 return []
         return []
 
@@ -291,7 +289,7 @@ class ProfileTargetPermission(models.Model):
             try:
                 return json.loads(self.target_names_json)  # type: ignore[no-any-return]
             except (json.JSONDecodeError, TypeError) as e:
-                logger.warning(f"Failed to deserialize target_names for Profile {self.profile_id}: {e}")
+                logger.warning("Failed to deserialize target_names", profile_id=self.profile_id, error=str(e))
                 return []
         return []
 
@@ -308,7 +306,7 @@ class ProfileTargetPermission(models.Model):
             try:
                 return json.loads(self.target_patterns_json)  # type: ignore[no-any-return]
             except (json.JSONDecodeError, TypeError) as e:
-                logger.warning(f"Failed to deserialize target_patterns for Profile {self.profile_id}: {e}")
+                logger.warning("Failed to deserialize target_patterns", profile_id=self.profile_id, error=str(e))
                 return []
         return []
 
@@ -334,9 +332,7 @@ class ProfileTargetPermission(models.Model):
                 return cast("dict[str, list[str]] | None", json.loads(self.filter_by_attribute_json))
             except (json.JSONDecodeError, TypeError) as e:
                 # Code review fix: JSON malformé = ERROR (corruption données), pas WARNING
-                logger.error(
-                    f"Failed to deserialize filter_by_attribute for Profile {self.profile_id}: {e}"
-                )
+                logger.error("Failed to deserialize filter_by_attribute", profile_id=self.profile_id, error=str(e))
                 return None
         return None
 
@@ -371,21 +367,15 @@ class ProfileTargetPermission(models.Model):
                 # Validate that it's a list of strings
                 if not isinstance(patterns, list):
                     # Code review fix: ERROR (not WARNING) - this is data corruption
-                    logger.error(
-                        f"exclusion_patterns for Profile {self.profile_id} is not a list (data corruption), returning empty"
-                    )
+                    logger.error("exclusion_patterns_data_corruption", profile_id=self.profile_id, reason="not a list")
                     return []
                 # Filter out invalid patterns (non-string, empty)
                 valid_patterns = [p for p in patterns if isinstance(p, str) and p.strip()]
                 if len(valid_patterns) != len(patterns):
-                    logger.warning(
-                        f"exclusion_patterns for Profile {self.profile_id} contained invalid patterns (filtered out)"
-                    )
+                    logger.warning("exclusion_patterns_invalid_items_filtered", profile_id=self.profile_id)
                 return valid_patterns
             except (json.JSONDecodeError, TypeError) as e:
-                logger.error(
-                    f"Failed to deserialize exclusion_patterns for Profile {self.profile_id}: {e}"
-                )
+                logger.error("Failed to deserialize exclusion_patterns", profile_id=self.profile_id, error=str(e))
                 return []
         return []
 

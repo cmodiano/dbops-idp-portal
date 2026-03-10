@@ -8,12 +8,12 @@
  * Use for dates from API/database (e.g. scheduled_at, created_at, next_execution_date).
  *
  * @param dateStr - ISO 8601 string (e.g. "2026-02-06T06:00:00Z" or "2026-02-06T06:00:00+00:00")
- * @param format - 'datetime' (DD/MM/YYYY HH:mm) or 'date' (DD/MM/YYYY)
+ * @param format - 'datetime' (DD/MM/YYYY HH:mm), 'datetimeWithSeconds' (DD/MM/YYYY HH:mm:ss), or 'date' (DD/MM/YYYY)
  * @returns Formatted string in local time, or '—' if null/empty
  */
 export function formatUtcToLocal(
   dateStr: string | null | undefined,
-  format: 'datetime' | 'date' = 'datetime'
+  format: 'datetime' | 'datetimeWithSeconds' | 'date' = 'datetime'
 ): string {
   if (!dateStr || typeof dateStr !== 'string') return '—';
   const date = new Date(dateStr);
@@ -23,6 +23,16 @@ export function formatUtcToLocal(
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
+    });
+  }
+  if (format === 'datetimeWithSeconds') {
+    return date.toLocaleString('fr-FR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
     });
   }
   return date.toLocaleString('fr-FR', {

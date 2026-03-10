@@ -362,4 +362,5 @@ describe('WorkflowStepNode', () => {
       expect(screen.queryByText('Récurrent')).not.toBeInTheDocument();
     });
   });
+
 });

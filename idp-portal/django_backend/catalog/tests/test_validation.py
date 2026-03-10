@@ -196,31 +196,67 @@ class TestValidateWorkflowSteps:
             validate_workflow_steps(steps)
         assert "referenced_action_id is required for platform steps" in str(exc_info.value)
 
+    def test_step_not_dict_raises(self):
+        """Step that is not a dict raises ValidationError."""
+        steps = [{'order': 1, 'name': 'Step 1', 'referenced_action_id': 10}, ['not', 'a', 'dict']]
+        with pytest.raises(drf_serializers.ValidationError) as exc_info:
+            validate_workflow_steps(steps)
+        assert "must be an object" in str(exc_info.value)
+
+    def test_routing_to_former_parallel_member_now_valid(self):
+        """Story 67.1: parallel_group member restriction removed — routing to any valid step_id is allowed."""
+        steps = [
+            {
+                'order': 1, 'name': 'Step 1', 'referenced_action_id': 10, 'step_id': 's1',
+                'on_success_step_ids': ['p1'],
+            },
+            {'order': 2, 'name': 'P1', 'referenced_action_id': 20, 'step_id': 'p1', 'on_success_step_ids': []},
+            {'order': 3, 'name': 'P2', 'referenced_action_id': 30, 'step_id': 'p2', 'on_success_step_ids': []},
+        ]
+        # Should not raise — routing to any valid step_id is now allowed
+        result = validate_workflow_steps(steps)
+        assert result is not None
+
+    def test_routing_to_step_via_error_ids_now_valid(self):
+        """Story 67.1: on_error_step_ids can target any valid step_id."""
+        steps = [
+            {
+                'order': 1, 'name': 'Step 1', 'referenced_action_id': 10, 'step_id': 's1',
+                'on_success_step_ids': [],
+                'on_error_step_ids': ['p1'],
+            },
+            {'order': 2, 'name': 'P1', 'referenced_action_id': 20, 'step_id': 'p1', 'on_success_step_ids': []},
+            {'order': 3, 'name': 'P2', 'referenced_action_id': 30, 'step_id': 'p2', 'on_success_step_ids': []},
+        ]
+        # Should not raise
+        result = validate_workflow_steps(steps)
+        assert result is not None
+
     def test_workflow_with_branches_valid(self):
         """Workflow with valid branches is valid."""
         steps = [
             {
                 'order': 1, 'name': 'Step 1', 'referenced_action_id': 10, 'step_id': 's1',
-                'on_success_step_id': 's2', 'on_error_step_id': 's3'
+                'on_success_step_ids': ['s2'], 'on_error_step_ids': ['s3']
             },
             {
                 'order': 2, 'name': 'Step 2', 'referenced_action_id': 20, 'step_id': 's2',
-                'on_success_step_id': None  # Exit on success
+                'on_success_step_ids': []  # Exit on success
             },
             {
                 'order': 3, 'name': 'Error Step', 'referenced_action_id': 30, 'step_id': 's3',
-                'on_error_step_id': None  # Exit on error
+                'on_error_step_ids': []  # Exit on error
             },
         ]
         result = validate_workflow_steps(steps)
         assert result == steps
 
     def test_invalid_on_success_reference(self):
-        """Invalid on_success_step_id reference raises error."""
+        """Invalid on_success_step_ids reference raises error."""
         steps = [
             {
                 'order': 1, 'name': 'Step 1', 'referenced_action_id': 10, 'step_id': 's1',
-                'on_success_step_id': 'invalid_step_id'
+                'on_success_step_ids': ['invalid_step_id']
             },
         ]
         with pytest.raises(drf_serializers.ValidationError) as exc_info:
@@ -228,11 +264,11 @@ class TestValidateWorkflowSteps:
         assert "does not reference a valid step_id" in str(exc_info.value)
 
     def test_invalid_on_error_reference(self):
-        """Invalid on_error_step_id reference raises error."""
+        """Invalid on_error_step_ids reference raises error."""
         steps = [
             {
                 'order': 1, 'name': 'Step 1', 'referenced_action_id': 10, 'step_id': 's1',
-                'on_error_step_id': 'nonexistent_step'
+                'on_error_step_ids': ['nonexistent_step']
             },
         ]
         with pytest.raises(drf_serializers.ValidationError) as exc_info:
@@ -244,11 +280,11 @@ class TestValidateWorkflowSteps:
         steps = [
             {
                 'order': 1, 'name': 'Step 1', 'referenced_action_id': 10, 'step_id': 's1',
-                'on_success_step_id': 's2', 'on_error_step_id': 's2'
+                'on_success_step_ids': ['s2'], 'on_error_step_ids': ['s2']
             },
             {
                 'order': 2, 'name': 'Step 2', 'referenced_action_id': 20, 'step_id': 's2',
-                'on_success_step_id': 's1', 'on_error_step_id': 's1'
+                'on_success_step_ids': ['s1'], 'on_error_step_ids': ['s1']
             },
         ]
         with pytest.raises(drf_serializers.ValidationError) as exc_info:
@@ -261,7 +297,7 @@ class TestValidateWorkflowSteps:
             {
                 'order': 1, 'name': 'Step 1', 'referenced_action_id': 10, 'step_id': 's1',
                 'retry_enabled': True,
-                'on_success_step_id': None
+                'on_success_step_ids': []
             },
         ]
         result = validate_workflow_steps(steps)
@@ -277,7 +313,7 @@ class TestValidateWorkflowSteps:
                 'retry_enabled': True,
                 'retry_max_attempts': 0,
                 'retry_interval_seconds': 60,
-                'on_success_step_id': None
+                'on_success_step_ids': []
             },
         ]
         with pytest.raises(drf_serializers.ValidationError) as exc_info:
@@ -291,7 +327,7 @@ class TestValidateWorkflowSteps:
                 'order': 1, 'name': 'Step 1', 'referenced_action_id': 10, 'step_id': 's1',
                 'retry_enabled': True,
                 'retry_max_attempts': 3,
-                'on_success_step_id': None
+                'on_success_step_ids': []
             },
         ]
         result = validate_workflow_steps(steps)
@@ -306,7 +342,7 @@ class TestValidateWorkflowSteps:
                 'retry_enabled': True,
                 'retry_max_attempts': 3,
                 'retry_interval_seconds': 0,
-                'on_success_step_id': None
+                'on_success_step_ids': []
             },
         ]
         with pytest.raises(drf_serializers.ValidationError) as exc_info:
@@ -322,7 +358,7 @@ class TestValidateWorkflowSteps:
                 'retry_max_attempts': 5,
                 'retry_interval_seconds': 30,
                 'retry_backoff_multiplier': 1.5,
-                'on_success_step_id': None
+                'on_success_step_ids': []
             },
         ]
         result = validate_workflow_steps(steps)
@@ -331,7 +367,7 @@ class TestValidateWorkflowSteps:
     def test_branches_require_step_id(self):
         """Branch fields require step_id on all steps."""
         steps = [
-            {'order': 1, 'name': 'Step 1', 'referenced_action_id': 10, 'on_success_step_id': None},
+            {'order': 1, 'name': 'Step 1', 'referenced_action_id': 10, 'on_success_step_ids': []},
         ]
         with pytest.raises(drf_serializers.ValidationError) as exc_info:
             validate_workflow_steps(steps)
@@ -340,8 +376,8 @@ class TestValidateWorkflowSteps:
     def test_duplicate_step_id_invalid(self):
         """Duplicate step_id values are rejected."""
         steps = [
-            {'order': 1, 'name': 'Step 1', 'referenced_action_id': 10, 'step_id': 'dup', 'on_success_step_id': None},
-            {'order': 2, 'name': 'Step 2', 'referenced_action_id': 20, 'step_id': 'dup', 'on_success_step_id': None},
+            {'order': 1, 'name': 'Step 1', 'referenced_action_id': 10, 'step_id': 'dup', 'on_success_step_ids': []},
+            {'order': 2, 'name': 'Step 2', 'referenced_action_id': 20, 'step_id': 'dup', 'on_success_step_ids': []},
         ]
         with pytest.raises(drf_serializers.ValidationError) as exc_info:
             validate_workflow_steps(steps)
@@ -352,12 +388,12 @@ class TestValidateWorkflowSteps:
         steps = [
             {
                 'order': 1, 'name': 'Step 1', 'referenced_action_id': 10, 'step_id': 's1',
-                'on_success_step_id': 's2',
-                'on_error_step_id': None,  # Explicit exit point
+                'on_success_step_ids': ['s2'],
+                'on_error_step_ids': [],  # Explicit exit point
             },
             {
                 'order': 2, 'name': 'Step 2', 'referenced_action_id': 20, 'step_id': 's2',
-                'on_success_step_id': 's1'  # Loop back to s1
+                'on_success_step_ids': ['s1']  # Loop back to s1
             },
         ]
         with pytest.raises(drf_serializers.ValidationError) as exc_info:
@@ -369,16 +405,16 @@ class TestValidateWorkflowSteps:
         steps = [
             {
                 'order': 1, 'name': 'Step 1', 'referenced_action_id': 10, 'step_id': 's1',
-                'on_success_step_id': 's2',
-                'on_error_step_id': None,  # Explicit exit point
+                'on_success_step_ids': ['s2'],
+                'on_error_step_ids': [],  # Explicit exit point
             },
             {
                 'order': 2, 'name': 'Step 2', 'referenced_action_id': 20, 'step_id': 's2',
-                'on_success_step_id': 's3'
+                'on_success_step_ids': ['s3']
             },
             {
                 'order': 3, 'name': 'Step 3', 'referenced_action_id': 30, 'step_id': 's3',
-                'on_success_step_id': 's1'  # Loop back to s1
+                'on_success_step_ids': ['s1']  # Loop back to s1
             },
         ]
         with pytest.raises(drf_serializers.ValidationError) as exc_info:
@@ -390,12 +426,12 @@ class TestValidateWorkflowSteps:
         steps = [
             {
                 'order': 1, 'name': 'Step 1', 'referenced_action_id': 10, 'step_id': 's1',
-                'on_success_step_id': None,
-                'on_error_step_id': 's2'
+                'on_success_step_ids': [],
+                'on_error_step_ids': ['s2']
             },
             {
                 'order': 2, 'name': 'Error Handler', 'referenced_action_id': 20, 'step_id': 's2',
-                'on_error_step_id': 's2'  # Loop back to itself
+                'on_error_step_ids': ['s2']  # Loop back to itself
             },
         ]
         with pytest.raises(drf_serializers.ValidationError) as exc_info:
@@ -407,15 +443,15 @@ class TestValidateWorkflowSteps:
         steps = [
             {
                 'order': 1, 'name': 'Step 1', 'referenced_action_id': 10, 'step_id': 's1',
-                'on_success_step_id': 's3', 'on_error_step_id': 's2'
+                'on_success_step_ids': ['s3'], 'on_error_step_ids': ['s2']
             },
             {
                 'order': 2, 'name': 'Step 2', 'referenced_action_id': 20, 'step_id': 's2',
-                'on_success_step_id': 's3'
+                'on_success_step_ids': ['s3']
             },
             {
                 'order': 3, 'name': 'Step 3', 'referenced_action_id': 30, 'step_id': 's3',
-                'on_success_step_id': None  # Exit
+                'on_success_step_ids': []  # Exit
             },
         ]
         result = validate_workflow_steps(steps)
@@ -458,31 +494,34 @@ class TestValidateRetryConstraints:
 
 
 class TestDetectWorkflowCycles:
-    """Test cycle detection in workflow branch paths."""
+    """Test cycle detection in workflow branch paths.
+
+    Story 67.1: _detect_workflow_cycles uses on_success_step_ids / on_error_step_ids (plural).
+    """
 
     def test_no_cycle_linear_workflow(self):
         """Linear workflow (s1 -> s2 -> s3) has no cycle."""
         steps = [
-            {'step_id': 's1', 'on_success_step_id': 's2'},
-            {'step_id': 's2', 'on_success_step_id': 's3'},
-            {'step_id': 's3', 'on_success_step_id': None},
+            {'step_id': 's1', 'on_success_step_ids': ['s2']},
+            {'step_id': 's2', 'on_success_step_ids': ['s3']},
+            {'step_id': 's3', 'on_success_step_ids': []},
         ]
         _detect_workflow_cycles(steps)  # Should not raise
 
     def test_no_cycle_diamond_workflow(self):
         """Diamond workflow (s1 -> s2, s3; s2, s3 -> s4) has no cycle."""
         steps = [
-            {'step_id': 's1', 'on_success_step_id': 's2', 'on_error_step_id': 's3'},
-            {'step_id': 's2', 'on_success_step_id': 's4'},
-            {'step_id': 's3', 'on_success_step_id': 's4'},
-            {'step_id': 's4', 'on_success_step_id': None},
+            {'step_id': 's1', 'on_success_step_ids': ['s2'], 'on_error_step_ids': ['s3']},
+            {'step_id': 's2', 'on_success_step_ids': ['s4']},
+            {'step_id': 's3', 'on_success_step_ids': ['s4']},
+            {'step_id': 's4', 'on_success_step_ids': []},
         ]
         _detect_workflow_cycles(steps)  # Should not raise
 
     def test_cycle_self_loop(self):
         """Self-loop (s1 -> s1) is detected."""
         steps = [
-            {'step_id': 's1', 'on_success_step_id': 's1'},
+            {'step_id': 's1', 'on_success_step_ids': ['s1']},
         ]
         with pytest.raises(drf_serializers.ValidationError) as exc_info:
             _detect_workflow_cycles(steps)
@@ -491,8 +530,8 @@ class TestDetectWorkflowCycles:
     def test_cycle_two_node_loop(self):
         """Two-node cycle (s1 -> s2 -> s1) is detected."""
         steps = [
-            {'step_id': 's1', 'on_success_step_id': 's2'},
-            {'step_id': 's2', 'on_success_step_id': 's1'},
+            {'step_id': 's1', 'on_success_step_ids': ['s2']},
+            {'step_id': 's2', 'on_success_step_ids': ['s1']},
         ]
         with pytest.raises(drf_serializers.ValidationError) as exc_info:
             _detect_workflow_cycles(steps)

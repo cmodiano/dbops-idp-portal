@@ -9,6 +9,8 @@ dist/
 # WARNING: .env files should NEVER be copied into Docker images
 # Vite injects env vars at BUILD time, not runtime
 .env*
+# Exception: .env.docker has no secrets, needed for mode=docker (VITE_DEV_AUTH, etc.)
+!.env.docker
 
 # Development files
 *.log

@@ -46,8 +46,8 @@ const makeStep = (overrides: Partial<WorkflowStepEditable> = {}): WorkflowStepEd
   name: null,
   referenced_action_id: 1,
   step_id: 'step-abc-123',
-  on_success_step_id: null,
-  on_error_step_id: null,
+  on_success_step_ids: [],
+  on_error_step_ids: [],
   retry_enabled: false,
   retry_max_attempts: null,
   retry_interval_seconds: null,
@@ -262,21 +262,21 @@ describe('SortableStepCard — coverage extras', () => {
     expect(onStepChange).toHaveBeenCalledWith(0, 'name', null);
   });
 
-  it('on_success_step_id Select onChange calls onStepChange (EXIT_VALUE → null)', async () => {
+  it('on_success_step_ids Select onChange calls onStepChange (EXIT_VALUE → empty)', async () => {
     const user = userEvent.setup();
     const onStepChange = vi.fn();
     const step2 = makeStep({ order: 2, step_id: 'step-2', _tempId: 'temp-2' });
     render(
       <SortableStepCard
         {...defaultProps}
-        step={makeStep({ on_success_step_id: 'step-2' })}
+        step={makeStep({ on_success_step_ids: ['step-2'] })}
         stepIdsFromEditor={['step-abc-123', 'step-2']}
         allSteps={[makeStep(), step2]}
         onStepChange={onStepChange}
       />
     );
 
-    const successSelect = screen.getByRole('combobox', { name: /on_success_step_id de l'étape 1/i });
+    const successSelect = screen.getByRole('combobox', { name: /on_success_step_ids de l'étape 1/i });
     await user.click(successSelect);
     await waitFor(() => {
       // Multiple "(fin du workflow)" elements may exist (value + option)
@@ -287,17 +287,17 @@ describe('SortableStepCard — coverage extras', () => {
     const optionItems = screen.getAllByText('(fin du workflow)');
     // Click the last one which should be in the dropdown
     await user.click(optionItems[optionItems.length - 1]);
-    expect(onStepChange).toHaveBeenCalledWith(0, 'on_success_step_id', null);
+    expect(onStepChange).toHaveBeenCalledWith(0, 'on_success_step_ids', []);
   });
 
-  it('on_error_step_id Select onChange calls onStepChange', async () => {
+  it('on_error_step_ids Select onChange calls onStepChange', async () => {
     const user = userEvent.setup();
     const onStepChange = vi.fn();
     const step2 = makeStep({ order: 2, step_id: 'step-2', _tempId: 'temp-2' });
     render(
       <SortableStepCard
         {...defaultProps}
-        step={makeStep({ on_error_step_id: null })}
+        step={makeStep({ on_error_step_ids: [] })}
         stepIdsFromEditor={['step-abc-123', 'step-2']}
         allSteps={[makeStep(), step2]}
         onStepChange={onStepChange}
@@ -308,7 +308,7 @@ describe('SortableStepCard — coverage extras', () => {
       />
     );
 
-    const errorSelect = screen.getByRole('combobox', { name: /on_error_step_id de l'étape 1/i });
+    const errorSelect = screen.getByRole('combobox', { name: /on_error_step_ids de l'étape 1/i });
     await user.click(errorSelect);
     await waitFor(() => {
       // We should see "(fin du workflow)" as default

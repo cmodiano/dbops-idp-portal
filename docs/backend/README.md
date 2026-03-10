@@ -1,6 +1,6 @@
 # Documentation Backend Django - IDP Portal
 
-**Version:** Django 5.2.11 + Django REST Framework 3.15+
+**Version:** Django 5.2 + Django REST Framework 3.16
 **Base de données:** Oracle (via python-oracledb mode Thin)
 **Dernière mise à jour:** 2026-02-05
 
@@ -21,6 +21,8 @@ Le backend IDP Portal est construit avec Django et Django REST Framework (DRF). 
 | [observability.md](./observability.md) | Middleware, logging et monitoring |
 | [testing.md](./testing.md) | Tests, fixtures et couverture |
 | [contributing.md](./contributing.md) | Guide de contribution |
+| [Workflow Output Schemas](../../idp-portal/django_backend/docs/workflow-output-schemas.md) | Schémas d'output pour les workflows (Epic 63) — dans `django_backend/docs/` |
+| [Parallel Group](../../idp-portal/django_backend/docs/parallel-group.md) | Implémentation Parallel Group (Epic 65) — dans `django_backend/docs/` |
 
 ## Architecture en couches
 

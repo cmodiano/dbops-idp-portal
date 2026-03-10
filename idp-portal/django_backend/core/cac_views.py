@@ -5,6 +5,8 @@ Story 64.8 — API endpoints for CaC sync (export GET + sync POST).
 Pattern: FBV @api_view (Story 63.1 canonical pattern).
 """
 
+import structlog
+
 from django.http import HttpResponse
 from rest_framework.decorators import api_view, permission_classes, parser_classes
 from rest_framework.parsers import MultiPartParser
@@ -15,6 +17,8 @@ from core.exceptions import InvalidStateError
 from core.parsers import YAMLParser, extract_yaml_content
 from core.permissions import IsAdminUser
 from core.services_export_import import export_feature_flags_yaml, import_feature_flags_yaml
+
+logger = structlog.get_logger(__name__)
 
 
 @api_view(['GET'])
@@ -44,6 +48,14 @@ def sync_feature_flags(request: Request) -> Response:
             {"error": {"code": "EMPTY_BODY", "message": "Aucun contenu YAML fourni."}},
             status=400,
         )
+    # MEDIUM-5: mode='full' is accepted by this endpoint but import_feature_flags_yaml
+    # only supports additive (create-or-update). Full deletion of stale flags is not implemented.
+    if mode == 'full':
+        logger.warning(
+            "feature_flags_sync_mode_full_not_implemented",
+            message="mode='full' requested but feature-flags sync only supports additive import. "
+                    "Stale flags will NOT be deleted. Use the PATCH endpoint to disable individual flags.",
+        )
     try:
         created, updated, unchanged = import_feature_flags_yaml(content_bytes, user=request.user)
     except InvalidStateError as e:
@@ -52,7 +64,10 @@ def sync_feature_flags(request: Request) -> Response:
             status=400,
         )
     status_code = 201 if created > 0 and updated == 0 else 200
-    return Response(
-        {"data": {"created": created, "updated": updated, "unchanged": unchanged, "mode": mode}},
-        status=status_code,
-    )
+    warnings = []
+    if mode == 'full':
+        warnings.append("mode='full' not fully implemented for feature-flags: stale flags were not deleted")
+    response_data: dict = {"created": created, "updated": updated, "unchanged": unchanged, "mode": mode}
+    if warnings:
+        response_data["warnings"] = warnings
+    return Response({"data": response_data}, status=status_code)

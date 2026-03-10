@@ -4,6 +4,7 @@ from django.db.models import Count
 from django.db.models.functions import TruncWeek
 from datetime import timedelta
 
+import structlog
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -13,8 +14,11 @@ from rest_framework.views import APIView
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from catalog.models import Action, ActionStatus
 from core.exceptions import BadRequestError
+from core.middleware import get_correlation_id
 from core.permissions import AdminProfilePermission
 from executions.models import Execution
+
+logger = structlog.get_logger(__name__)
 
 
 class AdminAnalyticsView(APIView):
@@ -34,6 +38,8 @@ class AdminAnalyticsView(APIView):
     )
     def get(self, request: Request) -> Response:
         days_raw = request.query_params.get("days", "90")
+        # DASH-LOW-05: int parsing inline (fonctionnellement équivalent à _parse_int() de dashboard/views.py).
+        # Incohérence documentée : préférer _parse_int() dans une future uniformisation.
         try:
             days = int(days_raw)
         except (ValueError, TypeError):
@@ -41,6 +47,14 @@ class AdminAnalyticsView(APIView):
 
         if days <= 0 or days > 3650:
             raise BadRequestError(code="BAD_REQUEST", message="days invalide", details={"days": days})
+
+        # DASH-MED-03: structlog logging for consistency with other dashboard views
+        logger.info(
+            "admin_analytics_requested",
+            days=days,
+            user_id=request.user.id,
+            correlation_id=get_correlation_id(),
+        )
 
         now = timezone.now()
         date_from = now - timedelta(days=days)

@@ -6,12 +6,14 @@
  * des templates prédéfinis, et intègre le VariablePicker sur les champs de template.
  */
 
-import React, { useRef } from 'react';
+import { useRef } from 'react';
+import type { FC, ElementRef, RefObject } from 'react';
 import { Button, Input, Space, Typography } from 'antd';
 import type { InputRef } from 'antd';
 
-type TextAreaRef = React.ElementRef<typeof Input.TextArea>;
 import { VariablePicker } from '../workflow/VariablePicker';
+
+type TextAreaRef = ElementRef<typeof Input.TextArea>;
 
 const { TextArea } = Input;
 const { Text } = Typography;
@@ -64,7 +66,7 @@ const PREDEFINED_TEMPLATES = {
   ],
 };
 
-export const NotificationTemplateEditor: React.FC<NotificationTemplateEditorProps> = ({
+export const NotificationTemplateEditor: FC<NotificationTemplateEditorProps> = ({
   value,
   onChange,
   disabled = false,
@@ -85,7 +87,7 @@ export const NotificationTemplateEditor: React.FC<NotificationTemplateEditorProp
   };
 
   const insertAtCursor = (
-    ref: React.RefObject<InputRef | TextAreaRef | null>,
+    ref: RefObject<InputRef | TextAreaRef | null>,
     key: string,
     expression: string,
   ) => {

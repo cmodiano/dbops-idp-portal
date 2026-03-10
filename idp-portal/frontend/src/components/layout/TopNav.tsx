@@ -1,5 +1,6 @@
 import './TopNav.css';
-import { Fragment } from 'react';
+import { Fragment, useRef, useEffect } from 'react';
+import type { ReactNode } from 'react';
 import { Dropdown, Avatar, Space, Typography, theme, Badge, Tooltip } from 'antd';
 import {
   AppstoreOutlined,
@@ -27,7 +28,7 @@ const { Text } = Typography;
 
 // Story 9.10: Dashboard renamed to Analytics (DBOPS only); label in French
 // Story 13.6: Calendar menu for DBA/DBOPS to view scheduled executions
-const TAB_CONFIG: Record<NavigationTabKey, { label: string; icon: React.ReactNode }> = {
+const TAB_CONFIG: Record<NavigationTabKey, { label: string; icon: ReactNode }> = {
   catalog: { label: 'Catalogue', icon: <AppstoreOutlined /> },
   executions: { label: 'Exécutions', icon: <PlayCircleOutlined /> },
   calendar: { label: 'Calendrier', icon: <CalendarOutlined /> },
@@ -47,6 +48,10 @@ const TAB_ROUTES: Record<NavigationTabKey, string> = {
   audit: '/audit',
 };
 
+// Story 8.8 AC9 / Story 66.2 F2: real DBA profiles — 'dba' kept for legacy/edge-case safety
+// Note: same constant exists in usePendingApprovalsCount.ts
+const DBA_PROFILES = ['dba', 'dba_applicatif', 'dba_infrastructure'];
+
 export function TopNav() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -64,13 +69,23 @@ export function TopNav() {
 
   // Story 8.8 AC9: Only DBA/DBOPS see bell icon
   const showApprovalsBell =
-    user?.profile?.toLowerCase() === 'dba' ||
+    DBA_PROFILES.includes(user?.profile?.toLowerCase() ?? '') ||
     user?.profile?.toLowerCase() === 'dbops';
 
   // Story 8.8 AC5: Navigate to executions page and scroll to pending-approvals section
+  // Story 66.2 F3 (MEDIUM): cleanup setTimeout on unmount to avoid memory leak
+  const bellTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (bellTimeoutRef.current) clearTimeout(bellTimeoutRef.current);
+    };
+  }, []);
+
   const handleBellClick = () => {
     navigate('/executions');
-    setTimeout(() => {
+    if (bellTimeoutRef.current) clearTimeout(bellTimeoutRef.current);
+    bellTimeoutRef.current = setTimeout(() => {
       document.getElementById('pending-approvals')?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
   };
@@ -93,7 +108,7 @@ export function TopNav() {
     },
     {
       key: 'role',
-      label: <Text type="secondary" style={{ textTransform: 'capitalize' }}>{user?.profile?.replace('_', ' ') ?? ''}</Text>,
+      label: <Text type="secondary" style={{ textTransform: 'capitalize' }}>{user?.profile?.replaceAll('_', ' ') ?? ''}</Text>,
       disabled: true,
     },
     { type: 'divider' },
@@ -317,7 +332,7 @@ export function TopNav() {
                   {user.display_name?.split(' ')[0] ?? user.username}
                 </Text>
                 <Text type="secondary" style={{ fontSize: 11, textTransform: 'capitalize' }}>
-                  {user.profile?.replace('_', ' ')}
+                  {user.profile?.replaceAll('_', ' ')}
                 </Text>
               </div>
             </Space>

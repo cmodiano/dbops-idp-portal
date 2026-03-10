@@ -4,11 +4,11 @@
 
 import { render, screen, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { FeatureFlagProvider, useFeatureFlag, useFeatureFlags } from './FeatureFlagContext';
+import { FeatureFlagProvider, useFeatureFlag, useFeatureFlags, useFeatureFlagContext } from './FeatureFlagContext';
 import { AuthProvider } from './AuthContext';
 
 // Mock the feature flag service
-vi.mock('../services/featureFlagService', () => ({
+vi.mock('../services/feature_flag_service', () => ({
   fetchFeatureFlagsStatus: vi.fn(),
 }));
 
@@ -36,7 +36,7 @@ vi.mock('../services/api_client', () => ({
   apiFetchRaw: vi.fn(),
 }));
 
-import { fetchFeatureFlagsStatus } from '../services/featureFlagService';
+import { fetchFeatureFlagsStatus } from '../services/feature_flag_service';
 
 function FlagDisplay({ flagKey }: { flagKey: string }) {
   const isEnabled = useFeatureFlag(flagKey);
@@ -94,13 +94,12 @@ describe('FeatureFlagProvider with mocked flags', () => {
     globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 401 });
   });
 
-  it('provides flag values from service', async () => {
+  it('returns false for all flags when user is not authenticated (service not called)', async () => {
     vi.mocked(fetchFeatureFlagsStatus).mockResolvedValue({
       new_ui: true,
       dark_mode: false,
     });
 
-    // Render without AuthProvider to test standalone
     render(
       <AuthProvider>
         <FeatureFlagProvider>
@@ -110,7 +109,7 @@ describe('FeatureFlagProvider with mocked flags', () => {
       </AuthProvider>
     );
 
-    // Since user is not authenticated, flags won't be fetched
+    // User is not authenticated → fetchFeatureFlagsStatus is NOT called → flags stay empty
     await waitFor(() => {
       expect(screen.getByTestId('flag-new_ui').textContent).toBe('false');
       expect(screen.getByTestId('flag-dark_mode').textContent).toBe('false');
@@ -152,6 +151,38 @@ describe('useFeatureFlags hook', () => {
 });
 
 // ============================================================================
+// useFeatureFlagContext hook
+// ============================================================================
+
+function ContextDisplay() {
+  const { flags, isEnabled, isLoading } = useFeatureFlagContext();
+  return (
+    <span data-testid="ctx">
+      {JSON.stringify({ flagCount: Object.keys(flags).length, isLoading, isEnabledFn: typeof isEnabled })}
+    </span>
+  );
+}
+
+describe('useFeatureFlagContext hook', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 401 });
+    vi.mocked(fetchFeatureFlagsStatus).mockResolvedValue({});
+  });
+
+  it('exposes flags, isEnabled function and isLoading', async () => {
+    renderWithProviders(<ContextDisplay />);
+    await waitFor(() => {
+      const raw = screen.getByTestId('ctx').textContent;
+      const parsed = JSON.parse(raw!);
+      expect(parsed.isEnabledFn).toBe('function');
+      expect(typeof parsed.isLoading).toBe('boolean');
+      expect(typeof parsed.flagCount).toBe('number');
+    });
+  });
+});
+
+// ============================================================================
 // Story 20.7 Task 5: Auto-refresh timer tests
 // ============================================================================
 
@@ -182,6 +213,7 @@ describe('FeatureFlagProvider auto-refresh', () => {
       isAuthenticated: true,
       isLoading: false,
       login: vi.fn(),
+      loginWithCredentials: vi.fn(),
       logout: vi.fn().mockResolvedValue(undefined),
       refreshToken: vi.fn().mockResolvedValue('mock-token'),
       hasTab: vi.fn().mockReturnValue(true),
@@ -255,6 +287,7 @@ describe('FeatureFlagProvider auto-refresh', () => {
       isAuthenticated: false,
       isLoading: false,
       login: vi.fn(),
+      loginWithCredentials: vi.fn(),
       logout: vi.fn().mockResolvedValue(undefined),
       refreshToken: vi.fn().mockResolvedValue(null),
       hasTab: vi.fn().mockReturnValue(false),
