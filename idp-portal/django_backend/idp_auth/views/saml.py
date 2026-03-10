@@ -216,7 +216,7 @@ class SAMLCallbackView(APIView):
             action_type=AuditActionType.USER_LOGIN,
             entity_type=AuditEntityType.USER,
             entity_id=user.id,
-            details={"username": username, "ad_groups": ad_groups, "correlation_id": correlation_id}
+            details={"username": username, "ad_groups": ad_groups, "correlation_id": correlation_id, "auth_method": "saml"}
         )
 
         # Generate JWT tokens (include ad_groups for RBAC cumulative permissions, Story 2.12)

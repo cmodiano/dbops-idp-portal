@@ -17,6 +17,7 @@ from executions.utils.workflow_parsing import (
     extract_workflow_referenced_action_ids,
     extract_workflow_step_map,
     extract_workflow_step_names_by_order,
+    get_workflow_entry_step_ids,
     enrich_workflow_step_parameters_for_display,
     validate_workflow_step_parameters,
     validate_workflow_referenced_actions,
@@ -36,6 +37,44 @@ def _make_action_mock(execution_steps):
     action.id = 1
     action.name = 'Workflow Action'
     return action
+
+
+# ============================================================================
+# get_workflow_entry_step_ids
+# ============================================================================
+
+class TestGetWorkflowEntryStepIds(TestCase):
+    """Entry = steps with no incoming edges. Used by runtime for correct start step."""
+
+    def test_approval_first_then_db_check(self):
+        """Approval added at beginning: no incoming edges → entry. DB-check has incoming."""
+        steps = [
+            {'step_id': 'approval', 'order': 2, 'on_success_step_ids': ['db-check'], 'on_error_step_ids': ['db-check']},
+            {'step_id': 'db-check', 'order': 1, 'on_success_step_ids': [], 'on_error_step_ids': []},
+        ]
+        result = get_workflow_entry_step_ids(steps)
+        self.assertIn('approval', result)
+        self.assertNotIn('db-check', result)
+
+    def test_single_step_is_entry(self):
+        steps = [{'step_id': 's1', 'order': 1, 'on_success_step_ids': [], 'on_error_step_ids': []}]
+        self.assertEqual(get_workflow_entry_step_ids(steps), ['s1'])
+
+    def test_linear_chain_first_is_entry(self):
+        steps = [
+            {'step_id': 'a', 'order': 1, 'on_success_step_ids': ['b'], 'on_error_step_ids': []},
+            {'step_id': 'b', 'order': 2, 'on_success_step_ids': [], 'on_error_step_ids': []},
+        ]
+        self.assertEqual(get_workflow_entry_step_ids(steps), ['a'])
+
+    def test_parallel_from_start_both_entries(self):
+        steps = [
+            {'step_id': 'a', 'order': 1, 'on_success_step_ids': ['c'], 'on_error_step_ids': []},
+            {'step_id': 'b', 'order': 2, 'on_success_step_ids': ['c'], 'on_error_step_ids': []},
+            {'step_id': 'c', 'order': 3, 'on_success_step_ids': [], 'on_error_step_ids': []},
+        ]
+        result = get_workflow_entry_step_ids(steps)
+        self.assertCountEqual(result, ['a', 'b'])
 
 
 # ============================================================================

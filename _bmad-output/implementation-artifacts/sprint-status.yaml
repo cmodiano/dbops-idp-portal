@@ -862,7 +862,7 @@ development_status:
     68-1-configuration-ldap-methode-prioritaire: done
     68-2-restriction-acces-comptes-haut-privilege: done
     68-3-authentification-explicite-sans-sso-transparent: done
-    68-4-validation-non-regression-saml: backlog
+    68-4-validation-non-regression-saml: done
     epic-68-retrospective: optional
     # === Epic 69: Représentation enrichie des workflows dans le catalogue ===
     # Réf: planning-artifacts/epic-69-representation-workflows-catalogue.md

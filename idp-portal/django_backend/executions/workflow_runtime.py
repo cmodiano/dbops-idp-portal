@@ -19,6 +19,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from executions.models import Execution, ExecutionStatus
+from executions.utils.workflow_parsing import get_workflow_entry_step_ids
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.middleware import get_correlation_id
@@ -349,7 +350,9 @@ class WorkflowRuntime:
         self.execution.started_at = timezone.now()
         self.execution.save()
 
-        # Find first step (order = 1 or minimum order)
+        # Find first step: use graph entry points (steps with no incoming edges),
+        # not min(order). Fixes workflow starting at wrong step when approval/gate
+        # is added at the beginning but has higher order due to array position.
         if not self.workflow_steps:
             logger.error(
                 "workflow_empty",
@@ -362,7 +365,14 @@ class WorkflowRuntime:
             self.execution.save()
             return ExecutionStatus.FAILED
 
-        first_step = min(self.workflow_steps, key=lambda s: s.get('order', 0))
+        entry_ids = get_workflow_entry_step_ids(self.workflow_steps)
+        if entry_ids:
+            # Pick entry with minimum order (deterministic when multiple entries)
+            entry_steps = [s for s in self.workflow_steps if s.get('step_id') in entry_ids]
+            first_step = min(entry_steps, key=lambda s: s.get('order', 0))
+        else:
+            # Fallback: no entry found (cycle?) — use min order
+            first_step = min(self.workflow_steps, key=lambda s: s.get('order', 0))
         self.state.current_step_id = first_step.get('step_id')
 
         # Main execution loop

@@ -71,6 +71,43 @@ def extract_workflow_referenced_action_ids(workflow_action: Action) -> list[int]
     return ids
 
 
+def get_workflow_entry_step_ids(steps: list | None) -> list[str]:
+    """
+    Compute entry step IDs from workflow graph structure.
+
+    Entry = steps with no incoming edges (no other step points to them via
+    on_success_step_ids/on_error_step_ids or singular variants).
+
+    Used by runtime to determine where to start execution, instead of relying
+    on min(order) which fails when a new step (e.g. approval) is added at the
+    beginning but gets a higher order due to array position.
+    """
+    if not isinstance(steps, list):
+        return []
+    all_targets: set[str] = set()
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        for key in ('on_success_step_ids', 'on_error_step_ids'):
+            ids = step.get(key)
+            if isinstance(ids, list):
+                for sid in ids:
+                    if isinstance(sid, str) and sid.strip():
+                        all_targets.add(sid.strip())
+        for key in ('on_success_step_id', 'on_error_step_id'):
+            sid = step.get(key)
+            if isinstance(sid, str) and sid.strip():
+                all_targets.add(sid.strip())
+    entry_ids: list[str] = []
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        step_id = step.get('step_id')
+        if isinstance(step_id, str) and step_id.strip() and step_id not in all_targets:
+            entry_ids.append(step_id)
+    return entry_ids
+
+
 def extract_workflow_step_map(workflow_action: Action) -> dict[int, int]:
     """
     Build mapping step_order -> referenced_action_id for a workflow.
@@ -122,10 +159,18 @@ def extract_workflow_step_names_by_order(workflow_action: Action) -> dict[int, s
     Build mapping step_order -> step_name for a workflow.
     step_name is the human-readable label for UI display (approval modal).
     Includes all steps (platform, gate, etc.) so keys match workflow_step_parameters.
+    Falls back to action_name (from referenced action) when step name is missing.
     """
     steps = workflow_action.execution_steps or []
     if not isinstance(steps, list):
         return {}
+    # Load action names for steps with referenced_action_id (fallback when name is missing)
+    ref_ids = list({s.get("referenced_action_id") for s in steps if isinstance(s, dict) and s.get("referenced_action_id")})
+    action_names: dict[int, str] = {}
+    if ref_ids:
+        from catalog.models import Action as CatalogAction
+        for row in CatalogAction.objects.filter(id__in=ref_ids).values("id", "name"):
+            action_names[int(row["id"])] = row["name"] or ""
     out: dict[int, str] = {}
     for idx, step in enumerate(steps):
         if not isinstance(step, dict):
@@ -136,7 +181,12 @@ def extract_workflow_step_names_by_order(workflow_action: Action) -> dict[int, s
             if isinstance(name, str) and name.strip():
                 out[order] = name.strip()
             else:
-                out[order] = f"Étape {order}"
+                ref_id = step.get("referenced_action_id")
+                action_name = action_names.get(ref_id, "") if ref_id else ""
+                if isinstance(action_name, str) and action_name.strip():
+                    out[order] = action_name.strip()
+                else:
+                    out[order] = f"Étape {order}"
         except (TypeError, ValueError):
             continue
     return out
@@ -150,25 +200,42 @@ def enrich_workflow_step_parameters_for_display(
     Enrich workflow_step_parameters with step_name from workflow definition.
     Used when serializing execution for display (approval modal).
     Ensures step names are shown even for executions created before step_name was stored.
+    Supports keys as order (int string) or step_id (UUID).
     """
     if not parameters or not workflow_action:
         return parameters
     wsp = parameters.get("workflow_step_parameters")
     if not isinstance(wsp, dict):
         return parameters
-    step_names = extract_workflow_step_names_by_order(workflow_action)
-    if not step_names:
-        return parameters
+    step_names_by_order = extract_workflow_step_names_by_order(workflow_action)
+    steps = workflow_action.execution_steps or []
+    step_names_by_id: dict[str, str] = {}
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        step_id = step.get("step_id")
+        if isinstance(step_id, str) and step_id.strip():
+            try:
+                order = step.get("order")
+                order_int = int(order) if order is not None else None
+            except (TypeError, ValueError):
+                order_int = None
+            step_names_by_id[step_id] = (
+                step_names_by_order.get(order_int, f"Étape {order_int or step_id}")
+                if order_int is not None
+                else step_id
+            )
     result = dict(parameters)
     wsp_copy = dict(wsp)
     for key, entry in wsp_copy.items():
         if not isinstance(entry, dict):
             continue
+        step_name: str
         try:
             order_int = int(key)
+            step_name = step_names_by_order.get(order_int, f"Étape {order_int}")
         except (TypeError, ValueError):
-            continue
-        step_name = step_names.get(order_int, f"Étape {order_int}")
+            step_name = step_names_by_id.get(key, key if isinstance(key, str) else str(key))
         wsp_copy[key] = {**entry, "step_name": step_name}
     result["workflow_step_parameters"] = wsp_copy
     return result

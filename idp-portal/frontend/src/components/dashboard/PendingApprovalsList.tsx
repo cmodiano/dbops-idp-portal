@@ -207,16 +207,17 @@ export function PendingApprovalsList({
     if (!selectedExecution) return;
     const execId = selectedExecution.id;
     const approvalComment = comment || undefined;
-    // Fermer la modal immédiatement (l'API retourne dès que l'approbation est enregistrée,
-    // le lancement du workflow se fait en arrière-plan — pas d'attente de fin d'exécution)
-    setApproveModalOpen(false);
-    setSelectedExecution(null);
-    setComment('');
     const result = await approve(execId, approvalComment);
     if (result.success) {
+      setApproveModalOpen(false);
+      setSelectedExecution(null);
+      setComment('');
       message.success(`Exécution #${execId} approuvée`);
     } else {
-      message.error(result.error);
+      const errMsg = result.error ?? 'Erreur lors de l\'approbation';
+      message.error(errMsg);
+      // Reject to prevent Ant Design Modal from closing on error
+      throw new Error(errMsg);
     }
   };
 
@@ -226,8 +227,12 @@ export function PendingApprovalsList({
     if (result.success) {
       message.success(`Exécution #${selectedExecution.id} refusée`);
       setRejectModalOpen(false);
+      setSelectedExecution(null);
+      setComment('');
     } else {
-      message.error(result.error);
+      const errMsg = result.error ?? 'Erreur lors du refus';
+      message.error(errMsg);
+      throw new Error(errMsg);
     }
   };
 

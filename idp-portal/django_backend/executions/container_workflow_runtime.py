@@ -41,6 +41,7 @@ from core.models import AuditActionType, AuditEntityType
 from core.middleware import get_correlation_id
 from executions.output_extractor import OutputExtractor
 from executions.template_resolver import StepTemplateResolver
+from executions.utils.workflow_parsing import get_workflow_entry_step_ids
 from executions.step_handlers.condition_evaluator import StepConditionEvaluator
 from executions.step_handlers.service_call_handler import ServiceCallHandler
 from executions.step_handlers.http_request_handler import HttpRequestHandler
@@ -1439,13 +1440,19 @@ class ContainerWorkflowRuntime:
         if initial_wave:
             current_wave = [s for s in initial_wave if s in self._step_lookup_by_id]
         else:
-            # Démarrer par le step d'ordre minimum
-            first_step = min(self.workflow_steps, key=lambda s: s.get('order', 0))
-            first_step_id = first_step.get('step_id')
-            if not first_step_id:
+            # Démarrer par les steps d'entrée (aucune connexion entrante), pas min(order).
+            # Fixe le cas où une étape d'approbation ajoutée au début a un order élevé.
+            entry_ids = get_workflow_entry_step_ids(self.workflow_steps)
+            if entry_ids:
+                current_wave = [s for s in entry_ids if s in self._step_lookup_by_id]
+            else:
+                # Fallback: pas d'entrée (cycle?) — min order
+                first_step = min(self.workflow_steps, key=lambda s: s.get('order', 0))
+                first_step_id = first_step.get('step_id')
+                current_wave = [first_step_id] if first_step_id else []
+            if not current_wave:
                 # Rétrocompat : step sans step_id → exécution séquentielle par ordre
                 return self._execute_workflow_steps_sequential()
-            current_wave = [first_step_id]
 
         while current_wave:
             # Check cancellation avant chaque vague (AC4)
