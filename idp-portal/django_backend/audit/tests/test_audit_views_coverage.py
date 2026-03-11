@@ -2,7 +2,7 @@
 Story 66-19 — Couverture `audit/views.py` (AC #2, #8)
 
 Couvre les branches non couvertes par les tests existants :
-- _is_auditor : None, non-authentifié, ad_groups vide/non-list, profil is_auditor=1
+- is_auditor_user : None, non-authentifié, ad_groups vide/non-list, profil is_auditor=1 (Story 71.9: centralisé dans core/permissions.py)
 - _derive_status : chaque valeur status + chaque action_type fallback
 - _build_audit_queryset : entity_type invalide, non-execution, filtres exec, sort/order invalide
 - AuditExecutionsView.get : permissions, limites pagination, entrées non-EXECUTION, details None/non-None
@@ -15,7 +15,6 @@ from unittest.mock import MagicMock, patch
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from audit.views import (
-    _is_auditor,
     _derive_status,
     AuditExecutionsView,
     AuditExportView,
@@ -23,6 +22,7 @@ from audit.views import (
     _parse_dt,
     _resolve_user_names,
 )
+from core.permissions import is_auditor_user
 from core.models import AuditActionType, AuditEntityType, AuditLog
 
 
@@ -54,7 +54,7 @@ def _call_audit_view(rf, query_string="", auditor=True):
     request.auth = None
     force_authenticate(request, user=user)
     view = AuditExecutionsView.as_view()
-    with patch("audit.views._is_auditor", return_value=auditor):
+    with patch("audit.views.is_auditor_user", return_value=auditor):
         return view(request)
 
 
@@ -65,7 +65,7 @@ def _call_export_view(rf, query_string="", auditor=True):
     request.auth = None
     force_authenticate(request, user=user)
     view = AuditExportView.as_view()
-    with patch("audit.views._is_auditor", return_value=auditor):
+    with patch("audit.views.is_auditor_user", return_value=auditor):
         return view(request)
 
 
@@ -89,48 +89,14 @@ def _create_audit_log(
 
 
 # ---------------------------------------------------------------------------
-# Tests _is_auditor (sous-tâche 2.1)
+# Tests is_auditor_user integration (Story 71.9: DB-level tests)
+# Pure unit tests for is_auditor_user are in core/tests/test_permissions.py
 # ---------------------------------------------------------------------------
 
-class TestIsAuditor:
-
-    def test_user_none_returns_false(self):
-        assert _is_auditor(None) is False
-
-    def test_user_not_authenticated_returns_false(self):
-        user = MagicMock()
-        user.is_authenticated = False
-        assert _is_auditor(user) is False
-
-    def test_user_no_is_authenticated_attr_returns_false(self):
-        user = MagicMock(spec=[])  # Pas d'attributs
-        assert _is_auditor(user) is False
+class TestIsAuditorUserIntegration:
 
     @pytest.mark.django_db
-    def test_user_with_empty_ad_groups_and_no_profile_returns_false(self):
-        """ad_groups=[] ET profile vide → pas de profil auditeur."""
-        user = MagicMock()
-        user.is_authenticated = True
-        user.ad_groups = []
-        user.profile = ""
-        assert _is_auditor(user) is False
-
-    @pytest.mark.django_db
-    def test_user_with_non_list_ad_groups_and_profile_name(self):
-        """ad_groups non-list + profile renseigné → construit [profile_name] et cherche."""
-        from profiles.models import Profile
-        Profile.objects.get_or_create(name="AUDIT", defaults={"is_auditor": 1, "ad_group": "CN=Audit"})
-
-        user = MagicMock()
-        user.is_authenticated = True
-        user.ad_groups = "AUDIT"  # non-list
-        user.profile = "AUDIT"
-
-        result = _is_auditor(user)
-        assert result is True
-
-    @pytest.mark.django_db
-    def test_user_ad_groups_list_with_auditor_profile(self):
+    def test_user_with_ad_groups_auditor_profile(self):
         """ad_groups liste non vide → appelle find_by_ad_groups, retourne True si is_auditor=1."""
         from profiles.models import Profile
         Profile.objects.get_or_create(name="AUDIT", defaults={"is_auditor": 1, "ad_group": "CN=Audit"})
@@ -138,7 +104,9 @@ class TestIsAuditor:
         user = MagicMock()
         user.is_authenticated = True
         user.ad_groups = ["AUDIT"]
-        result = _is_auditor(user)
+        del user.profiles
+        del user.profile
+        result = is_auditor_user(user)
         assert result is True
 
     @pytest.mark.django_db
@@ -150,7 +118,9 @@ class TestIsAuditor:
         user = MagicMock()
         user.is_authenticated = True
         user.ad_groups = ["DBA"]
-        result = _is_auditor(user)
+        del user.profiles
+        del user.profile
+        result = is_auditor_user(user)
         assert result is False
 
 

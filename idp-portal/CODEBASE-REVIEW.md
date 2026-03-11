@@ -821,9 +821,9 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 |---|-------|------|--------|
 | ~~SEC-13~~ | ~~`SERVICENOW_VERIFY_TLS` désactivable en production~~ | ~~Sécurité~~ | ~~Trivial~~ ✅ Story 54.4 |
 | ~~SEC-14~~ | ~~Pas de vérification path traversal sur écriture icône~~ | ~~Sécurité~~ | ~~Trivial~~ ✅ Story 54.4 |
-| NEW-FE-1 | Nested key props redondants (TopNav) | Frontend | Trivial |
-| NEW-FE-3 | `.catch()` silencieux (ReportingDashboard) | Frontend | Trivial |
-| NEW-FE-4 | Prop `allowedEnvironments` ignorée (code mort) | Frontend | Trivial |
+| ~~NEW-FE-1~~ | ~~Nested key props redondants (TopNav)~~ ✅ RÉSOLU Story 54.3 | Frontend | — |
+| ~~NEW-FE-3~~ | ~~`.catch()` silencieux (ReportingDashboard)~~ ✅ RÉSOLU Story 54.3 | Frontend | — |
+| ~~NEW-FE-4~~ | ~~Prop `allowedEnvironments` ignorée (code mort)~~ ✅ RÉSOLU Story 54.3 | Frontend | — |
 | ~~MAINT-BE-8~~ | ~~Late imports `PLC0415` (couplage inter-modules)~~ | ~~Backend~~ | ~~Faible~~ ✅ Story 54.16 |
 | ~~MAINT-BE-9~~ | ~~Validation en 4 couches dans vues d'exécution~~ | ~~Backend~~ | ~~Moyen~~ ✅ Story 71.5 |
 | ~~MAINT-FE-4~~ | ~~Debounce pattern dupliqué (hook vs setTimeout)~~ | ~~Frontend~~ | ~~Trivial~~ ✅ Story 54.16 |
@@ -905,7 +905,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | Fichiers FE > 500 LOC | — | — | — | — | **4** (IntegrationForm, ActionWizard, execution_service, ProfileForm) | Nouveau |
 | God classes/methods | — | — | — | — | **3** (QueryExecutor, idp_auth/views, IntegrationForm) | -1 (update_status story 54.6) |
 
-**Bilan global (audit #5, snapshot 2026-02-27) :** Sur 133 findings cumulés, **117 sont résolus** (88%). Les 13 issues restantes de l'audit #5 se concentrent sur la **maintenabilité structurelle** : god classes/modules qui, bien que fonctionnellement corrects, posent des risques de maintenabilité à terme. Aucune issue CRITICAL. La posture sécurité est **entièrement résolue** (0 ouvertes — SEC-13, SEC-14 corrigés story 54.4). L'architecture SOLID est globalement exemplaire (registries, ISP, DI, hooks) — les findings restants sont du polissage structurel et des extractions de responsabilités dans les fichiers les plus volumineux.
+**Bilan global (audit #5, snapshot 2026-02-27) :** Sur 133 findings cumulés, **118 sont résolus** (89%). Les 15 issues restantes de l'audit #5 se concentrent sur la **maintenabilité structurelle** : god classes/modules qui, bien que fonctionnellement corrects, posent des risques de maintenabilité à terme. Aucune issue CRITICAL. La posture sécurité est **entièrement résolue** (0 ouvertes — SEC-13, SEC-14 corrigés story 54.4). L'architecture SOLID est globalement exemplaire (registries, ISP, DI, hooks) — les findings restants sont du polissage structurel et des extractions de responsabilités dans les fichiers les plus volumineux.
 
 ---
 
@@ -934,13 +934,10 @@ Le tableau §21 "Sécurité 12/14 | 2" est inexact — SEC-13 et SEC-14 ont ét�
 
 | # | Sévérité | Description | Statut |
 |---|----------|-------------|--------|
-| ~~**SOLID-FE-4**~~ | ~~HIGH~~ | ~~~25 composants importent directement les services~~ | ✅ RÉSOLU — Story 71.1 (2026-03-10) |
-| ~~**MAINT-BE-9**~~ | ~~LOW~~ | ~~Validation en 4 couches dans vues d'exécution~~ | ✅ RÉSOLU — Story 71.5 (2026-03-10) |
 | **INCON-2** | LOW | MD5 hash collision (documenté, acceptable pour N<1000) | Documenté — acceptable |
 | **PERF-4** | LOW | `<style>` inline dans 3 composants (impact négligeable) | Documenté — acceptable |
-| **16.4** | INFO | STATUS_CONFIG locals potentiellement consolidables | ✅ RESOLVED — Story 71.3 |
 
-**Bilan mis à jour (2026-03-10, post-Story 71.5) :** Sur 133 findings, **131 sont résolus** (98.5%). 2 issues ouvertes en backlog (INCON-2, PERF-4). MAINT-BE-9 résolu par Story 71.5. Posture sécurité : 0 ouvertes. Architecture SOLID : excellente.
+**Bilan mis à jour (2026-03-10, post-Story 71.5) :** Sur 133 findings, **131 sont résolus** (98.5%). 2 issues ouvertes en backlog (INCON-2, PERF-4). Posture sécurité : 0 ouvertes. Architecture SOLID : excellente.
 
 ---
 
@@ -983,7 +980,7 @@ Les 246+ findings Epic 66 s'ajoutent aux 133 findings des audits historiques (§
 |-----------|-------|--------|
 | ~~MEDIUM — Container runtime~~ | ~~EXE-MED-05/06~~ | ~~Atomicité container workflow (non-bloquant pré-release)~~ — **Résolu** (story 71.7) : CAS pattern + `transaction.atomic()` pour `container_workflow_runtime.py` et `gates.py` |
 | ~~MEDIUM — Celery limits~~ | ~~EXE-MED-07/08/09~~ | ~~`task_soft_time_limit` absent~~ — **Résolu** (story 71.8) : `soft_time_limit` + `time_limit` sur les 11 tâches Celery, handlers `SoftTimeLimitExceeded` avec cleanup gracieux, valeurs centralisées dans `settings.CELERY_TASK_TIME_LIMITS` |
-| MEDIUM — Qualité | EXE-MED-10, AUD-MED-03 | Testabilité throttle, duplication `_is_auditor()` |
+| ~~MEDIUM — Qualité~~ | ~~EXE-MED-10, AUD-MED-03~~ | ~~Testabilité throttle, duplication `_is_auditor()`~~ — **Résolu** (story 71.9) : fixture `throttle_rates` réutilisable, `THROTTLE_PORTAL_LOGIN_RATE` validé au startup, `is_auditor_user()` + `IsAuditorUser` centralisés dans `core/permissions.py`, duplication éliminée |
 | ADRs manquants | 4 ADRs | Celery, Oracle, CaC, Parallel Group |
 | Tests frontend | ~15 fichiers | Services/hooks non couverts |
 | ~~CSS tokens~~ | ~~TopNav.css~~ | ~~Couleurs hardcodées → design tokens~~ — **Résolu** (story 71.4) : 15 `rgba(0,135,78,…)` remplacées par `color-mix(in srgb, var(--ant-color-primary) X%, transparent)` |

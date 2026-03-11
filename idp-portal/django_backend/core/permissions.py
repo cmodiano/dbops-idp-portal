@@ -90,6 +90,21 @@ def is_admin_user(user: Any) -> bool:
     return any(getattr(p, 'is_admin_bool', False) for p in profiles)
 
 
+def is_auditor_user(user: Any) -> bool:
+    """
+    Check if user has an auditor profile (profile string, profiles M2M, or ad_groups).
+
+    Story 71.9: Centralised auditor check — replaces duplicated _is_auditor() in
+    audit/views.py and inline logic in idp_auth/views/jwt.py.
+    Uses _resolve_user_profiles() (same as is_admin_user) to avoid duplication.
+    Oracle is_auditor is NUMBER(1) — always compare with == 1, not truthiness.
+    """
+    if not user or not getattr(user, 'is_authenticated', False):
+        return False
+    profiles = _resolve_user_profiles(user)
+    return any(getattr(p, 'is_auditor', 0) == 1 for p in profiles)
+
+
 class IsAdminUser(permissions.BasePermission):
     """
     Permission DRF : accès aux utilisateurs avec profil admin (is_admin=1).
@@ -144,6 +159,21 @@ class IsAdminUser(permissions.BasePermission):
             return True
 
         return False
+
+
+class IsAuditorUser(permissions.BasePermission):
+    """
+    Permission DRF : accès aux utilisateurs avec profil auditor (is_auditor=1).
+
+    Story 71.9: Centralised auditor permission class — same pattern as IsAdminUser.
+
+    Utilisation :
+    - View-level : `permission_classes = [IsAuthenticated, IsAuditorUser]`
+    """
+
+    def has_permission(self, request: Any, view: Any) -> bool:
+        """Check view-level permission : user a-t-il un profil auditor ?"""
+        return is_auditor_user(request.user)
 
 
 class AdminProfilePermission(permissions.BasePermission):

@@ -18,6 +18,7 @@ from idp_auth.serializers import (
 from idp_auth.jwt_utils import verify_token, create_access_token
 from profiles.services import ProfileService
 from profiles.models import Profile
+from core.permissions import is_auditor_user
 from core.rbac import get_user_navigation_permissions, is_business_profile
 from core.exceptions import UnauthorizedError
 from core.services import AuditService
@@ -79,11 +80,8 @@ class CurrentUserProfileView(APIView):
                 )
                 cumulative_permissions = None
 
-        # Check if user is auditor
-        # Story 30.12 AC4: Use explicit == 1 comparison (not truthiness) for Oracle IntegerField
-        is_auditor = False
-        if profiles:
-            is_auditor = any(p.is_auditor == 1 for p in profiles if hasattr(p, 'is_auditor'))
+        # Check if user is auditor — Story 71.9: centralised via core.permissions
+        is_auditor = is_auditor_user(user)
 
         # Build navigation tabs, injecting 'audit' for auditors (Story 6.5)
         navigation_tabs = list(get_user_navigation_permissions(profile_name))  # Copy to avoid mutating global

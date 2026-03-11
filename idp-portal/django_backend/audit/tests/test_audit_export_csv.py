@@ -46,7 +46,7 @@ def _export_csv(rf: APIRequestFactory, query_string: str = "") -> list[dict]:
     request.user = user
     force_authenticate(request, user=user)
     view = AuditExportView.as_view()
-    with patch("audit.views._is_auditor", return_value=True):
+    with patch("audit.views.is_auditor_user", return_value=True):
         response = view(request)
     assert response.status_code == 200
     content = response.content.decode("utf-8")

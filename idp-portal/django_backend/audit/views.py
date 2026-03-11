@@ -17,11 +17,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.exceptions import BadRequestError, ForbiddenError
+from core.permissions import is_auditor_user
 from core.utils import ensure_utc_isoformat
 from core.models import AuditLog, AuditEntityType, AuditActionType
 from executions.models import Execution, ExecutionStatus
 from idp_auth.models import User
-from profiles.models import Profile
 
 logger = structlog.get_logger(__name__)
 
@@ -44,30 +44,6 @@ def _parse_dt(value: str | None, *, name: str) -> datetime | None:
     if timezone.is_naive(dt):
         dt = timezone.make_aware(dt)
     return dt
-
-
-def _is_auditor(user) -> bool:
-    """
-    Determine if user is auditor based on resolved profiles.
-
-    Note (AUD-MED-03): This mirrors the auditor-check logic used in /auth/me (idp_auth).
-    The duplication is intentional to avoid a circular import between `audit` and `idp_auth`.
-    If the auditor logic changes, both places must be updated.
-    Consider extracting to `profiles.utils.is_auditor()` to consolidate in a future refactor.
-    """
-    if not user or not getattr(user, "is_authenticated", False):
-        return False
-
-    ad_groups = getattr(user, "ad_groups", None)
-    if not isinstance(ad_groups, list) or not ad_groups:
-        profile_name = getattr(user, "profile", "") or ""
-        if profile_name:
-            ad_groups = [profile_name]
-        else:
-            ad_groups = []
-
-    profiles = Profile.objects.find_by_ad_groups(ad_groups) if ad_groups else []
-    return any(getattr(p, "is_auditor", 0) == 1 for p in profiles)
 
 
 # Map audit filter value to current Execution.status (filter by execution state, not audit event type)
@@ -321,7 +297,7 @@ class AuditExecutionsView(APIView):
         ],
     )
     def get(self, request: Request):
-        if not _is_auditor(request.user):
+        if not is_auditor_user(request.user):
             logger.warning(
                 "audit.unauthorized_access",
                 view="AuditExecutionsView",
@@ -450,7 +426,7 @@ class AuditExportView(APIView):
         ],
     )
     def get(self, request: Request):
-        if not _is_auditor(request.user):
+        if not is_auditor_user(request.user):
             logger.warning(
                 "audit.unauthorized_access",
                 view="AuditExportView",
