@@ -51,6 +51,47 @@ from executions.step_handlers.gate_handler import GateHandler
 logger = structlog.get_logger(__name__)
 
 
+def _broadcast_step(execution_id: int, step: ExecutionStep) -> None:
+    """Broadcast step_update via WebSocket (best-effort, never interrupts runtime)."""
+    try:
+        from executions.utils.websocket_broadcast import broadcast_step_update  # noqa: PLC0415
+        broadcast_step_update(execution_id, step)
+    except Exception:  # noqa: BLE001 — best-effort: must not interrupt workflow execution
+        pass
+
+
+def _broadcast_terminal(execution: Execution) -> None:
+    """Broadcast execution_complete or execution_failed via WebSocket (best-effort)."""
+    try:
+        from channels.layers import get_channel_layer  # noqa: PLC0415
+        from asgiref.sync import async_to_sync  # noqa: PLC0415
+
+        channel_layer = get_channel_layer()
+        if channel_layer is None:
+            return
+
+        event_type = (
+            "execution_complete" if execution.status == ExecutionStatus.COMPLETED
+            else "execution_failed"
+        )
+        async_to_sync(channel_layer.group_send)(
+            f"execution_{execution.id}",
+            {
+                "type": event_type,
+                "data": {
+                    "execution_id": execution.id,
+                    "status": execution.status,
+                    "finished": (
+                        execution.completed_at.isoformat()
+                        if execution.completed_at else None
+                    ),
+                },
+            },
+        )
+    except Exception:  # noqa: BLE001 — best-effort: must not interrupt workflow execution
+        pass
+
+
 class ParallelContext(NamedTuple):
     """Thread-safe context for parallel step execution (Story 71.6)."""
     step_order: int
@@ -806,7 +847,10 @@ class ContainerWorkflowRuntime:
                 step_def_order, step.get('referenced_action_id'), parent_step,
             )
             if referenced_action is None:
+                _broadcast_step(self.execution.id, parent_step)
                 return ExecutionStatus.FAILED
+
+        _broadcast_step(self.execution.id, parent_step)  # RUNNING
 
         # Pure computation outside transaction to minimize lock duration
         child_params = self._get_step_parameters(step)
@@ -851,6 +895,8 @@ class ContainerWorkflowRuntime:
                 })
                 parent_step.save()
 
+            _broadcast_step(self.execution.id, parent_step)  # COMPLETED or FAILED
+
             if step_id is not None:
                 self._extract_and_store_output(step_id, parent_step, step.get('output_mapping', {}))
 
@@ -870,6 +916,7 @@ class ContainerWorkflowRuntime:
                         completed_at=now,
                         error_message=str(exc),
                     )
+            _broadcast_step(self.execution.id, parent_step)  # FAILED
             logger.error(
                 "container_workflow_platform_step_exception",
                 execution_id=self.execution.id,
@@ -941,19 +988,7 @@ class ContainerWorkflowRuntime:
         parent_step.status = ExecutionStepStatus.WAITING
         parent_step.save()
 
-        try:
-            from executions.utils.websocket_broadcast import broadcast_step_update  # noqa: PLC0415
-            broadcast_step_update(self.execution.id, parent_step)
-        except Exception as e:  # noqa: BLE001 — best-effort: must not fail runtime
-            logger.error(
-                "container_workflow_broadcast_step_update_failed",
-                execution_id=self.execution.id,
-                step_id=parent_step.id,
-                step_name=parent_step.step_name,
-                correlation_id=self.correlation_id,
-                error=str(e),
-                exc_info=True,
-            )
+        _broadcast_step(self.execution.id, parent_step)  # WAITING
 
         logger.info(
             "container_workflow_gate_step_waiting",
@@ -1029,6 +1064,7 @@ class ContainerWorkflowRuntime:
         )
         parent_step.completed_at = timezone.now()
         parent_step.save()
+        _broadcast_step(self.execution.id, parent_step)  # COMPLETED or FAILED
         return result_execution_status
 
     def _execute_handler_step(
@@ -1060,6 +1096,7 @@ class ContainerWorkflowRuntime:
             status=ExecutionStepStatus.RUNNING,
             started_at=timezone.now(),
         )
+        _broadcast_step(self.execution.id, parent_step)  # RUNNING
 
         try:
             result = handler.execute(
@@ -1079,6 +1116,7 @@ class ContainerWorkflowRuntime:
             parent_step.status = ExecutionStepStatus.FAILED
             parent_step.completed_at = timezone.now()
             parent_step.save()
+            _broadcast_step(self.execution.id, parent_step)  # FAILED
             return ExecutionStatus.FAILED
 
         # Protocole WAITING pour gate steps (story 57.7)
@@ -1093,6 +1131,7 @@ class ContainerWorkflowRuntime:
                 parent_step.status = ExecutionStepStatus.FAILED
                 parent_step.completed_at = timezone.now()
                 parent_step.save()
+                _broadcast_step(self.execution.id, parent_step)  # FAILED
                 return ExecutionStatus.FAILED
             return self._handle_gate_waiting(result, parent_step, step_name, step_id)
 
@@ -1458,6 +1497,8 @@ class ContainerWorkflowRuntime:
         # Sync in-memory object after commit (values are known, no refresh needed)
         self.execution.status = final_status
         self.execution.completed_at = completed_at
+
+        _broadcast_terminal(self.execution)
 
         logger.info(
             "container_workflow_execution_finished",
