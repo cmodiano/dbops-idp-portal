@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, date
 from typing import Any
 
-from django.db.models import Q, Count, QuerySet
+from django.db.models import Exists, OuterRef, Q, Count, QuerySet
 from django.db.models.functions import TruncDate, TruncWeek
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema, OpenApiParameter
@@ -19,7 +19,7 @@ from core.exceptions import BadRequestError
 from core.middleware import get_correlation_id
 from core.models import AuditLog, AuditActionType, AuditEntityType
 from core.permissions import IsAdminUser, AdminProfilePermission
-from executions.models import Execution, ExecutionStatus, ExecutionStepType, ExecutionStepStatus, ScheduledExecution
+from executions.models import Execution, ExecutionStatus, ExecutionStep, ExecutionStepStatus, ExecutionStepType, ScheduledExecution
 
 logger = structlog.get_logger(__name__)
 
@@ -149,10 +149,20 @@ class DashboardStatsView(APIView):
         executions_jour = qs_base.filter(created_at__gte=today_start).count()
 
         # executions_en_cours: current running/pending (not period-scoped)
-        # ADR-007: PENDING_APPROVAL removed — approval is now step-based
-        executions_en_cours = qs_base.filter(
-            status__in=[ExecutionStatus.SUBMITTED, ExecutionStatus.RUNNING]
-        ).count()
+        # ADR-007: PENDING_APPROVAL removed — approval is now step-based.
+        # Exclude child executions and executions where all steps are COMPLETED/FAILED
+        # (stale Execution.status when workflow finished but parent was never updated).
+        en_cours_base = qs_base.filter(
+            status__in=[ExecutionStatus.SUBMITTED, ExecutionStatus.RUNNING],
+            parent_execution__isnull=True,
+        )
+        has_no_steps = ~Exists(ExecutionStep.objects.filter(execution_id=OuterRef("id")))
+        has_non_terminal_step = Exists(
+            ExecutionStep.objects.filter(execution_id=OuterRef("id")).exclude(
+                status__in=[ExecutionStepStatus.COMPLETED, ExecutionStepStatus.FAILED]
+            )
+        )
+        executions_en_cours = en_cours_base.filter(has_no_steps | has_non_terminal_step).count()
 
         # executions_en_erreur + taux_succes_pct: period-scoped
         executions_en_erreur = qs_period.filter(status=ExecutionStatus.FAILED).count()
