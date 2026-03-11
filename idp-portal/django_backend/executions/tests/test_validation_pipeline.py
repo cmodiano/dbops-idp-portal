@@ -209,6 +209,11 @@ class TestExecutionValidationPipeline(TestCase):
         assert result.delegated_referenced_action_ids == [10, 20]
         assert result.target_names == ['server1', 'server2']
         assert result.correlation_id == 'test-corr-pipeline'
+        # Pipeline normalizes workflow_step_parameters via validate_step_parameters
+        expected_wsp = {'1': {'param': 'val'}}
+        assert result.workflow_step_parameters == expected_wsp
+        assert result.parameters is not None
+        assert result.parameters.get('workflow_step_parameters') == expected_wsp
 
     # ── Test 6: Exécution sans target (environment direct) ────────────────
 

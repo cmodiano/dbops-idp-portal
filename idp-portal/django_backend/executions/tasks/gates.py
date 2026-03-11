@@ -296,7 +296,7 @@ def _update_waiting_context(step: ExecutionStep, gate_status: dict, correlation_
     # Compare BEFORE setting last_evaluated_at — otherwise the timestamp always differs
     # and output_changed would be True every time, defeating the skip-unnecessary-save optimization.
     def _comparable_output(o: dict) -> dict:
-        return {k: o.get(k) for k in ('gate_status', 'next_possible_at')}
+        return {k: o.get(k) for k in ('gate_status', 'next_possible_at', 'evaluation_error')}
 
     old_output = json.loads(step.output) if step.output else {}
     output_changed = (
@@ -392,33 +392,39 @@ def _cleanup_step_resources(step: ExecutionStep, old_status: ExecutionStepStatus
 
     Story 71.6: Extracted from _transition_step_to_running and _handle_gate_timeout
     to eliminate duplication (~30 LOC x2).
+    Deferred to on_commit so delete/emit only run after successful transaction.
     """
-    try:
-        from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
-        RunnableStepService.delete(step.id)
-    except Exception as e:
-        logger.error(
-            "evaluate_waiting_gates_runnable_step_delete_failed",
-            step_id=step.id,
-            execution_id=step.execution_id,
-            error=str(e),
-            correlation_id=correlation_id,
-            exc_info=True,
-        )
-    try:
-        from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
-        WorkflowEventService.emit_step_status_changed(
-            step.execution_id, step, old_status=old_status,
-        )
-    except Exception as e:
-        logger.error(
-            "evaluate_waiting_gates_emit_step_status_changed_failed",
-            step_id=step.id,
-            execution_id=step.execution_id,
-            error=str(e),
-            correlation_id=correlation_id,
-            exc_info=True,
-        )
+    from django.db import transaction  # noqa: PLC0415
+
+    def _do_cleanup() -> None:
+        try:
+            from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
+            RunnableStepService.delete(step.id)
+        except Exception as e:
+            logger.error(
+                "evaluate_waiting_gates_runnable_step_delete_failed",
+                step_id=step.id,
+                execution_id=step.execution_id,
+                error=str(e),
+                correlation_id=correlation_id,
+                exc_info=True,
+            )
+        try:
+            from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
+            WorkflowEventService.emit_step_status_changed(
+                step.execution_id, step, old_status=old_status,
+            )
+        except Exception as e:
+            logger.error(
+                "evaluate_waiting_gates_emit_step_status_changed_failed",
+                step_id=step.id,
+                execution_id=step.execution_id,
+                error=str(e),
+                correlation_id=correlation_id,
+                exc_info=True,
+            )
+
+    transaction.on_commit(_do_cleanup)
 
 
 def _complete_execution_on_last_step(step: ExecutionStep, correlation_id: str) -> None:

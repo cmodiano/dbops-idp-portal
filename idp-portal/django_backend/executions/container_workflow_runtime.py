@@ -719,12 +719,37 @@ class ContainerWorkflowRuntime:
                     error_message=f"Simulation failed: {sim_error}",
                 )
         else:
-            now = timezone.now()
-            Execution.objects.filter(id=child_execution.id).update(
-                status=ExecutionStatus.COMPLETED,
-                started_at=now,
-                completed_at=now,
-            )
+            # Run the child execution via the real action path (Story 71.7).
+            # For workflows, run_sync blocks until completion; for other types,
+            # no runtime is registered — keep placeholder behavior.
+            action = child_execution.action
+            if action and action.item_type == "workflow":
+                try:
+                    ContainerWorkflowRuntime(child_execution).run_sync()
+                except Exception as run_err:  # noqa: BLE001
+                    logger.error(
+                        "container_workflow_child_execution_run_failed",
+                        child_execution_id=child_execution.id,
+                        parent_execution_id=self.execution.id,
+                        error=str(run_err),
+                        correlation_id=self.correlation_id,
+                        exc_info=True,
+                    )
+                    now = timezone.now()
+                    Execution.objects.filter(id=child_execution.id).update(
+                        status=ExecutionStatus.FAILED,
+                        started_at=now,
+                        completed_at=now,
+                        error_message=str(run_err),
+                    )
+            else:
+                # No runtime for item_type='action' — placeholder: mark completed
+                now = timezone.now()
+                Execution.objects.filter(id=child_execution.id).update(
+                    status=ExecutionStatus.COMPLETED,
+                    started_at=now,
+                    completed_at=now,
+                )
 
     def _extract_and_store_output(
         self, step_id: str, parent_step: ExecutionStep, output_mapping: Any,
@@ -916,8 +941,19 @@ class ContainerWorkflowRuntime:
         parent_step.status = ExecutionStepStatus.WAITING
         parent_step.save()
 
-        from executions.utils.websocket_broadcast import broadcast_step_update  # noqa: PLC0415
-        broadcast_step_update(self.execution.id, parent_step)
+        try:
+            from executions.utils.websocket_broadcast import broadcast_step_update  # noqa: PLC0415
+            broadcast_step_update(self.execution.id, parent_step)
+        except Exception as e:  # noqa: BLE001 — best-effort: must not fail runtime
+            logger.error(
+                "container_workflow_broadcast_step_update_failed",
+                execution_id=self.execution.id,
+                step_id=parent_step.id,
+                step_name=parent_step.step_name,
+                correlation_id=self.correlation_id,
+                error=str(e),
+                exc_info=True,
+            )
 
         logger.info(
             "container_workflow_gate_step_waiting",
@@ -933,8 +969,19 @@ class ContainerWorkflowRuntime:
         if is_approval_gate:
             if self._has_approval_notification_configured():
                 self._schedule_approval_notification()
-            from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
-            WorkflowEventService.emit_approval_requested(self.execution.id, parent_step)
+            try:
+                from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
+                WorkflowEventService.emit_approval_requested(self.execution.id, parent_step)
+            except Exception as e:  # noqa: BLE001 — best-effort: must not fail runtime
+                logger.error(
+                    "container_workflow_emit_approval_requested_failed",
+                    execution_id=self.execution.id,
+                    step_id=parent_step.id,
+                    step_name=parent_step.step_name,
+                    correlation_id=self.correlation_id,
+                    error=str(e),
+                    exc_info=True,
+                )
         return ExecutionStatus.RUNNING
 
     def _finalize_handler_step(

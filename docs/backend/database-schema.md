@@ -514,8 +514,8 @@ Table des étapes d'une exécution.
 | CREATED_AT | TIMESTAMP | DEFAULT SYSTIMESTAMP | Date de création |
 
 **Valeurs CHECK:**
-- `STEP_TYPE`: 'vault', 'servicenow', 'platform', 'prerequisite', 'verification'
-- `STATUS`: 'PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'SKIPPED'
+- `STEP_TYPE`: 'vault', 'servicenow', 'platform', 'prerequisite', 'verification', 'service_call', 'http_request', 'evaluation', 'gate', 'schedule_execution'
+- `STATUS`: 'PENDING', 'WAITING', 'RUNNING', 'COMPLETED', 'FAILED', 'SKIPPED'
 
 **Contrainte:** `UK_EXECUTION_STEPS (EXECUTION_ID, STEP_ORDER)` - unicité
 

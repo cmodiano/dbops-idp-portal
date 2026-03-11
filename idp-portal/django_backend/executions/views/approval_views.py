@@ -5,6 +5,7 @@ Responsabilité : Endpoints liés aux approbations (liste, approve, reject).
 
 from __future__ import annotations
 
+import time
 from typing import cast
 
 import structlog
@@ -41,6 +42,27 @@ from rest_framework import serializers
 from drf_spectacular.utils import extend_schema, OpenApiParameter, inline_serializer
 
 logger = structlog.get_logger(__name__)
+
+
+def _enqueue_resume_with_retries(execution_id: int, step_ids: list[str], max_retries: int = 3) -> None:
+    """Enqueue resume_container_workflow_from_gate with retries on transient broker errors."""
+    for attempt in range(max_retries):
+        try:
+            resume_container_workflow_from_gate.apply_async(
+                args=[execution_id, step_ids], queue="default"
+            )
+            return
+        except Exception as e:  # noqa: BLE001
+            if attempt < max_retries - 1:
+                time.sleep(0.5 * (attempt + 1))
+            else:
+                logger.error(
+                    "approval_resume_enqueue_failed",
+                    execution_id=execution_id,
+                    step_ids=step_ids,
+                    error=str(e),
+                    exc_info=True,
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -398,11 +420,16 @@ class ApproveExecutionView(APIView):
         step.set_output(output)
         step.save()
 
-        # V113: Durable approval event + dequeue runnable step
+        # V113: Durable approval event + dequeue runnable step (deferred to on_commit)
         from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
         from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
-        WorkflowEventService.emit_approval_granted(execution_id, step, approved_by=user_id)
-        RunnableStepService.delete(step.id)
+        _eid, _step_id, _user_id_val = execution_id, step.id, user_id
+
+        def _emit_approval_and_dequeue() -> None:
+            WorkflowEventService.emit_approval_granted(_eid, step, approved_by=_user_id_val)
+            RunnableStepService.delete(_step_id)
+
+        transaction.on_commit(_emit_approval_and_dequeue)
 
         execution_steps = step.execution.action.execution_steps or []
         on_success_step_ids = _get_on_success_step_ids(step_config, execution_steps)
@@ -457,11 +484,7 @@ class ApproveExecutionView(APIView):
             transaction.on_commit(_launch_after_approval)
         elif on_success_step_ids:
             _eid, _sids = execution_id, on_success_step_ids
-            transaction.on_commit(
-                lambda: resume_container_workflow_from_gate.apply_async(
-                    args=[_eid, _sids], queue="default"
-                )
-            )
+            transaction.on_commit(lambda: _enqueue_resume_with_retries(_eid, _sids))
         else:
             if execution.status == ExecutionStatus.RUNNING:
                 execution.status = ExecutionStatus.COMPLETED
@@ -575,22 +598,23 @@ class RejectExecutionView(APIView):
         step.rejected_at = timezone.now()
         step.save()
 
-        # V113: Durable rejection event + dequeue runnable step
+        # V113: Durable rejection event + dequeue runnable step (deferred to on_commit)
         from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
         from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
-        WorkflowEventService.emit_approval_rejected(execution_id, step, rejected_by=user_id)
-        RunnableStepService.delete(step.id)
+        _eid_rej, _step_id_rej, _user_id_rej = execution_id, step.id, user_id
+
+        def _emit_rejection_and_dequeue() -> None:
+            WorkflowEventService.emit_approval_rejected(_eid_rej, step, rejected_by=_user_id_rej)
+            RunnableStepService.delete(_step_id_rej)
+
+        transaction.on_commit(_emit_rejection_and_dequeue)
 
         on_error_step_ids = step_config.get("on_error_step_ids") or []
         execution = step.execution
 
         if on_error_step_ids:
             _eid, _sids_err = execution_id, on_error_step_ids
-            transaction.on_commit(
-                lambda eid=_eid, sids=_sids_err: resume_container_workflow_from_gate.apply_async(  # type: ignore[misc]
-                    args=[eid, sids], queue="default"
-                )
-            )
+            transaction.on_commit(lambda: _enqueue_resume_with_retries(_eid, _sids_err))
         else:
             # ADR-007: For auto-approval-gate rejection, mark execution as FAILED
             # (it was never launched, so it's in SUBMITTED status).
@@ -793,11 +817,7 @@ class RejectStepView(APIView):
 
         if on_error_step_ids:
             _eid, _sids_err = execution_id, on_error_step_ids
-            transaction.on_commit(
-                lambda eid=_eid, sids=_sids_err: resume_container_workflow_from_gate.apply_async(  # type: ignore[misc]
-                    args=[eid, sids], queue="default"
-                )
-            )
+            transaction.on_commit(lambda: _enqueue_resume_with_retries(_eid, _sids_err))
         else:
             execution = step.execution
             if execution.status == ExecutionStatus.RUNNING:

@@ -21,7 +21,7 @@ services:
   # Container 1: Oracle Database 23ai Free Edition
   # ==========================================================================
   oracle-db:
-    image: container-registry.oracle.com/database/free:${ORACLE_IMAGE_TAG:-latest}
+    image: container-registry.oracle.com/database/free:${ORACLE_IMAGE_TAG:-23.4.0}
     container_name: dbops-oracle
     hostname: oracle-db
 

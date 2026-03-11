@@ -177,7 +177,7 @@ describe('getApprovalInfoFromSteps', () => {
     });
   });
 
-  it('returns first step with approval when multiple steps have approval info', () => {
+  it('returns latest step with approval when multiple steps have approval info', () => {
     const steps = [
       makeStep({
         id: 1,
@@ -195,8 +195,8 @@ describe('getApprovalInfoFromSteps', () => {
       }),
     ];
     const result = getApprovalInfoFromSteps(steps);
-    expect(result.approvedById).toBe(10);
-    expect(result.approvalComment).toBe('First');
+    expect(result.approvedById).toBe(20);
+    expect(result.approvalComment).toBe('Second');
   });
 
   it('handles step with approved_by_id but no comment', () => {

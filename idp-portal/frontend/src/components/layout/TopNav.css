@@ -28,12 +28,15 @@ html.dark .nav-pill {
 }
 
 .nav-pill:hover {
+  background: rgba(24, 144, 255, 0.12);
   background: color-mix(in srgb, var(--ant-color-primary) 12%, transparent) !important;
   color: var(--ant-color-primary) !important;
+  border-color: rgba(24, 144, 255, 0.2);
   border-color: color-mix(in srgb, var(--ant-color-primary) 20%, transparent);
 }
 
 html.light .nav-pill:hover {
+  background: color-mix(in srgb, var(--ant-color-primary) 12%, transparent) !important;
   border-color: color-mix(in srgb, var(--ant-color-primary) 20%, transparent) !important;
 }
 
@@ -98,11 +101,14 @@ html.dark .nav-icon-btn {
 }
 
 .nav-icon-btn:hover {
+  background: rgba(24, 144, 255, 0.12);
   background: color-mix(in srgb, var(--ant-color-primary) 12%, transparent) !important;
+  border-color: rgba(24, 144, 255, 0.2);
   border-color: color-mix(in srgb, var(--ant-color-primary) 20%, transparent);
 }
 
 html.light .nav-icon-btn:hover {
+  background: color-mix(in srgb, var(--ant-color-primary) 12%, transparent) !important;
   border-color: color-mix(in srgb, var(--ant-color-primary) 20%, transparent) !important;
 }
 
@@ -142,12 +148,15 @@ html.dark .theme-toggle {
 }
 
 .theme-toggle:hover {
+  background: rgba(24, 144, 255, 0.12);
   background: color-mix(in srgb, var(--ant-color-primary) 12%, transparent) !important;
   transform: scale(1.05);
+  border-color: rgba(24, 144, 255, 0.2);
   border-color: color-mix(in srgb, var(--ant-color-primary) 20%, transparent);
 }
 
 html.light .theme-toggle:hover {
+  background: color-mix(in srgb, var(--ant-color-primary) 12%, transparent) !important;
   border-color: color-mix(in srgb, var(--ant-color-primary) 20%, transparent) !important;
 }
 
@@ -177,11 +186,14 @@ html.dark .nav-profile {
 }
 
 .nav-profile:hover {
+  background: rgba(24, 144, 255, 0.1);
   background: color-mix(in srgb, var(--ant-color-primary) 10%, transparent) !important;
+  border-color: rgba(24, 144, 255, 0.2);
   border-color: color-mix(in srgb, var(--ant-color-primary) 20%, transparent);
 }
 
 html.light .nav-profile:hover {
+  background: color-mix(in srgb, var(--ant-color-primary) 12%, transparent) !important;
   border-color: color-mix(in srgb, var(--ant-color-primary) 20%, transparent) !important;
 }
 

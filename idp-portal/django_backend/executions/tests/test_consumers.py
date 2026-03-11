@@ -413,6 +413,82 @@ async def test_dashboard_consumer_access_check_exception_closes_4003():
 
 
 # ============================================================================
+# _check_dashboard_access — direct unit tests (real logic, patch user lookup)
+# ============================================================================
+
+@pytest.mark.asyncio
+async def test_check_dashboard_access_admin_returns_true():
+    """Admin user → _check_dashboard_access returns True (real is_admin_user, patched User)."""
+    from unittest.mock import MagicMock
+
+    consumer = _make_dashboard_consumer()
+    consumer.user_id = "7"
+
+    mock_user = MagicMock()
+    mock_user.id = 7
+    mock_user.is_authenticated = True
+    mock_user_model = MagicMock()
+    mock_user_model.objects.get = MagicMock(return_value=mock_user)
+
+    with patch('django.contrib.auth.get_user_model', return_value=mock_user_model):
+        with patch(
+            'core.permissions._resolve_user_profiles',
+            return_value=[MagicMock(is_admin_bool=True)],
+        ):
+            result = await consumer._check_dashboard_access()
+
+    assert result is True
+    mock_user_model.objects.get.assert_called_once_with(id="7")
+
+
+@pytest.mark.asyncio
+async def test_check_dashboard_access_non_admin_returns_false():
+    """Non-admin user → _check_dashboard_access returns False (real is_admin_user, patched User)."""
+    from unittest.mock import MagicMock
+
+    consumer = _make_dashboard_consumer()
+    consumer.user_id = "99"
+
+    mock_user = MagicMock()
+    mock_user.id = 99
+    mock_user_model = MagicMock()
+    mock_user_model.objects.get = MagicMock(return_value=mock_user)
+
+    with patch('django.contrib.auth.get_user_model', return_value=mock_user_model):
+        with patch(
+            'core.permissions._resolve_user_profiles',
+            return_value=[MagicMock(is_admin_bool=False)],
+        ):
+            result = await consumer._check_dashboard_access()
+
+    assert result is False
+    mock_user_model.objects.get.assert_called_once_with(id="99")
+
+
+@pytest.mark.asyncio
+async def test_check_dashboard_access_missing_user_returns_false():
+    """Missing user_id (None) → _check_dashboard_access returns False (fail-secure)."""
+    consumer = _make_dashboard_consumer()
+    consumer.user_id = None
+
+    result = await consumer._check_dashboard_access()
+
+    assert result is False
+
+
+@pytest.mark.django_db
+@pytest.mark.asyncio
+async def test_check_dashboard_access_nonexistent_user_returns_false():
+    """User.DoesNotExist (user_id not in DB) → _check_dashboard_access returns False."""
+    consumer = _make_dashboard_consumer()
+    consumer.user_id = "999999"
+
+    result = await consumer._check_dashboard_access()
+
+    assert result is False
+
+
+# ============================================================================
 # Story 59-2 — SEC-2 : vérification d'accès après auth JWT
 # ============================================================================
 

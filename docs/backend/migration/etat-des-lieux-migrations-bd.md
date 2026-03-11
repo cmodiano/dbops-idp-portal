@@ -9,7 +9,7 @@
 
 | Composant | Emplacement | Version actuelle | Rôle |
 |-----------|-------------|------------------|------|
-| **Flyway** | `idp-portal/database/migrations/` | V000–V117 (118 scripts) | Schéma Oracle en production |
+| **Flyway** | `idp-portal/database/migrations/` | V000–V118 (119 scripts) | Schéma Oracle en production |
 | **Baseline** | `idp-portal/database/baseline/baseline_schema_v088.sql` | État V116 | Nouveaux environnements vierges |
 | **Django** | `idp-portal/django_backend/*/migrations/` | 60 migrations (8 apps) | Tests SQLite + mapping ORM Oracle |
 
@@ -19,11 +19,11 @@
 
 ### 2.1 Périmètre
 
-- **118 scripts** : `V000__create_schema_version.sql` → `V117__add_missing_audit_types_align_django.sql`
+- **119 scripts** : `V000__create_schema_version.sql` → `V118__add_rejected_by_rejected_at_to_execution_steps.sql`
 - **Commande** : `flyway migrate` (via `scripts/run_migrations.sh` ou `flyway.conf`)
 - **Historique** : table `flyway_schema_history`
 
-### 2.2 Dernières migrations (V089–V117)
+### 2.2 Dernières migrations (V089–V118)
 
 | Version | Description |
 |---------|-------------|
@@ -56,6 +56,7 @@
 | V115 | add_output_schema_id_to_actions_catalog |
 | V116 | add_config_step_id_to_execution_steps |
 | V117 | add_missing_audit_types_align_django |
+| V118 | add_rejected_by_rejected_at_to_execution_steps |
 
 ---
 
@@ -84,7 +85,7 @@
 
 1. `sqlplus ... @database/baseline/baseline_schema_v088.sql`
 2. `flyway baseline -baselineVersion=116 -baselineDescription=baseline_schema_v088`
-3. `flyway migrate` (pour V117+ futures)
+3. `flyway migrate` (pour V118+ futures)
 4. `manage.py migrate --fake-initial` — applique les migrations Django de données (ex. `reference/0004_refengine_icon_url_fix_paths`) qui corrigent les chemins `icon_url` des REF_ENGINES ; les migrations DDL sont fakées car les tables existent déjà.
 
 ---
@@ -153,7 +154,7 @@ Aucun écart ouvert restant pour ces types.
 
 | Document | Contenu obsolète (historique) | Statut |
 |----------|------------------------------|--------|
-| `docs/backend/database-schema.md` | "45 migrations V000–V044" | OK — 118 migrations V000–V117 (2026-03-10) |
+| `docs/backend/database-schema.md` | "45 migrations V000–V044" | OK — 119 migrations V000–V118 (2026-03-10) |
 | `django_backend/MIGRATION_STRATEGY.md` | "V041 dernière migration Flyway" | OK — V117 (2026-03-10) |
 | `docs/backend/schema-differences.md` | CHANGE_TYPE_CONFIG dans ACTIONS_CATALOG | OK — colonne supprimée V109, doc à jour (2026-03-10) |
 | `docs/backend/migration/migration-audit-epic41.md` | Périmètre V000–V088 | À mettre à jour — étendre à V117 |
@@ -176,6 +177,7 @@ Aucun écart ouvert restant pour ces types.
 
 1. **V117 créée** : `V117__add_missing_audit_types_align_django.sql` — ajoute à `CK_AUDIT_LOG_ACTION_TYPE` : SCHEDULED_EXECUTION_RECURRING_ENABLED, EXECUTION_STEP_POLICY_APPROVAL_REQUIRED, EXECUTION_STEP_POLICY_AUTO_APPROVED, EXECUTION_STEP_POLICY_EVALUATION_FAILED, POLICY_CREATED, POLICY_UPDATED, POLICY_DELETED, EXECUTION_POLLING_EXHAUSTED.
 2. **Documentation mise à jour** : `database-schema.md`, `MIGRATION_STRATEGY.md`, `schema-differences.md`, `database/baseline/README.md`.
+3. **V118 créée** : `V118__add_rejected_by_rejected_at_to_execution_steps.sql` — ajoute REJECTED_BY et REJECTED_AT sur EXECUTION_STEPS (gate rejection, ADR-007).
 
 ---
 

@@ -21,33 +21,43 @@ export interface RejectionInfo {
 
 /**
  * Extract approval info from execution steps.
- * Finds the first step with `approved_by_id` set (source of truth per ADR-007).
+ * Picks the latest decided gate by approved_at (source of truth per ADR-007).
  */
 export function getApprovalInfoFromSteps(steps: ExecutionStepResponse[]): ApprovalInfo {
-  const approvalStep = steps.find(s => s.approved_by_id != null);
-  if (!approvalStep) {
+  const withApproval = steps.filter((s): s is ExecutionStepResponse & { approved_at: string } =>
+    s.approved_at != null
+  );
+  if (withApproval.length === 0) {
     return { approvedById: null, approvedAt: null, approvalComment: null };
   }
+  const latest = withApproval.reduce((a, b) =>
+    (a.approved_at ?? '') >= (b.approved_at ?? '') ? a : b
+  );
   return {
-    approvedById: approvalStep.approved_by_id ?? null,
-    approvedAt: approvalStep.approved_at ?? null,
-    approvalComment: approvalStep.approval_comment ?? null,
+    approvedById: latest.approved_by_id ?? null,
+    approvedAt: latest.approved_at ?? null,
+    approvalComment: latest.approval_comment ?? null,
   };
 }
 
 /**
  * Extract rejection info from execution steps (ADR-007, V118).
- * Finds the first step with `rejected_by_id` set (gate rejection).
+ * Picks the latest decided gate by rejected_at (gate rejection).
  */
 export function getRejectionInfoFromSteps(steps: ExecutionStepResponse[]): RejectionInfo {
-  const rejectionStep = steps.find(s => s.rejected_by_id != null);
-  if (!rejectionStep) {
+  const withRejection = steps.filter((s): s is ExecutionStepResponse & { rejected_at: string } =>
+    s.rejected_at != null
+  );
+  if (withRejection.length === 0) {
     return { rejectedById: null, rejectedAt: null, rejectionReason: null };
   }
+  const latest = withRejection.reduce((a, b) =>
+    (a.rejected_at ?? '') >= (b.rejected_at ?? '') ? a : b
+  );
   return {
-    rejectedById: rejectionStep.rejected_by_id ?? null,
-    rejectedAt: rejectionStep.rejected_at ?? null,
-    rejectionReason: rejectionStep.approval_comment ?? null,
+    rejectedById: latest.rejected_by_id ?? null,
+    rejectedAt: latest.rejected_at ?? null,
+    rejectionReason: latest.approval_comment ?? null,
   };
 }
 

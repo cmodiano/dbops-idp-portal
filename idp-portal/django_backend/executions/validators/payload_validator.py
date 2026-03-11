@@ -28,10 +28,32 @@ class ExecutionPayloadValidator:
                 message="action_id est requis",
                 details={"action_id": action_id},
             )
+        if isinstance(action_id, bool):
+            raise BadRequestError(
+                code="BAD_REQUEST",
+                message="action_id invalide (bool non accepté)",
+                details={"action_id": action_id},
+            )
+        if isinstance(action_id, float) and not action_id.is_integer():
+            raise BadRequestError(
+                code="BAD_REQUEST",
+                message="action_id invalide (float non entier)",
+                details={"action_id": action_id},
+            )
+        if isinstance(action_id, str) and not action_id.isdigit():
+            raise BadRequestError(
+                code="BAD_REQUEST",
+                message="action_id invalide (chaîne non numérique)",
+                details={"action_id": action_id},
+            )
         try:
             normalized_action_id = int(action_id)
         except (ValueError, TypeError):
-            raise BadRequestError(code="BAD_REQUEST", message="action_id invalide", details={"action_id": action_id})
+            raise BadRequestError(
+                code="BAD_REQUEST",
+                message="action_id invalide",
+                details={"action_id": action_id},
+            )
         try:
             return cast(Action, Action.objects.get(id=normalized_action_id, status=ActionStatus.PUBLISHED))
         except Action.DoesNotExist:

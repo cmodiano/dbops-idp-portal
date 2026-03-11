@@ -215,13 +215,18 @@ class TestDashboardStatsApprobationsDelay:
 
     def test_avg_delay_legacy_path(self):
         """Délai = approved_at - created_at via Execution.approved_at.
-        approved_at dans le futur (> created_at auto_now_add) → delta positif.
+        approved_at 1h après created_at → delta positif (timestamps dans le passé).
         """
+        from executions.models import Execution
+
         action = ActionFactory.create()
+        past_created = timezone.now() - timedelta(hours=2)
         execution = ExecutionFactory.create(
             action=action, status='COMPLETED',
             approved_at=None,  # set after refresh
         )
+        execution.refresh_from_db()
+        Execution.objects.filter(id=execution.id).update(created_at=past_created)
         execution.refresh_from_db()
         approved = execution.created_at + timedelta(seconds=3600)  # 1h après created_at
         execution.approved_at = approved
