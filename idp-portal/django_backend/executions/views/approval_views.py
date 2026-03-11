@@ -362,7 +362,6 @@ class ApproveExecutionView(APIView):
         ),
         responses={200: ExecutionStepSerializer},
     )
-    @transaction.atomic
     def post(self, request: Request, execution_id: int) -> Response:
         # Return 404 when the Execution does not exist
         if not Execution.objects.filter(id=execution_id).exists():
@@ -429,82 +428,89 @@ class ApproveExecutionView(APIView):
             WorkflowEventService.emit_approval_granted(_eid, step, approved_by=_user_id_val)
             RunnableStepService.delete(_step_id)
 
-        transaction.on_commit(_emit_approval_and_dequeue)
-
         execution_steps = step.execution.action.execution_steps or []
         on_success_step_ids = _get_on_success_step_ids(step_config, execution_steps)
 
         execution = step.execution
 
-        # ADR-007: Check is_auto_gate FIRST. The auto-approval-gate is a synthetic step
-        # not in action.execution_steps, so find_step_config returns None and
-        # _get_on_success_step_ids falls through to _get_next_step_by_order, returning
-        # the first workflow step. That would incorrectly trigger resume_container_workflow_from_gate,
-        # which exits early (execution is SUBMITTED, not RUNNING). We must launch the workflow.
+        with transaction.atomic():
+            transaction.on_commit(_emit_approval_and_dequeue)
+
+            # ADR-007: Check is_auto_gate FIRST. The auto-approval-gate is a synthetic step
+            # not in action.execution_steps, so find_step_config returns None and
+            # _get_on_success_step_ids falls through to _get_next_step_by_order, returning
+            # the first workflow step. That would incorrectly trigger resume_container_workflow_from_gate,
+            # which exits early (execution is SUBMITTED, not RUNNING). We must launch the workflow.
+            if is_auto_gate:
+                # Auto-approval-gate: launch runs synchronously AFTER this block commits
+                # (see below) so we can return HTTP 400 on failure for actionable user feedback.
+                pass
+            elif on_success_step_ids:
+                _eid, _sids = execution_id, on_success_step_ids
+                transaction.on_commit(lambda: _enqueue_resume_with_retries(_eid, _sids))
+            else:
+                if execution.status == ExecutionStatus.RUNNING:
+                    execution.status = ExecutionStatus.COMPLETED
+                    execution.completed_at = timezone.now()
+                    execution.save()
+
+            AuditService.create_entry(
+                user_id=user_id,
+                action_type=AuditActionType.EXECUTION_APPROVED,
+                entity_type=AuditEntityType.EXECUTION,
+                entity_id=execution_id,
+                details={
+                    "step_id": step.id,
+                    "step_name": step.step_name,
+                    "on_success_step_ids": on_success_step_ids,
+                    "action_name": step.execution.action.name if step.execution.action else None,
+                    **_get_execution_audit_context(step.execution),
+                },
+                correlation_id=correlation_id,
+            )
+
+        # Auto-approval-gate: launch synchronously after commit so we can return HTTP 400
+        # on failure. Previously launch ran in on_commit; failures were only logged and
+        # the execution stayed stuck in SUBMITTED with no actionable feedback.
         if is_auto_gate:
-            # Auto-approval-gate: launch the workflow now that approval is granted
-            _eid_launch = execution_id
-            _corr = correlation_id
-            _user_id = user_id
-
-            def _launch_after_approval() -> None:
+            try:
+                exec_obj = Execution.objects.select_related('action').get(id=execution_id)
+                self.get_execution_service().launch_workflow(exec_obj, correlation_id)
+            except Exception as e:  # noqa: BLE001
+                logger.error(
+                    "integration_error_on_approval_launch",
+                    execution_id=execution_id,
+                    error_type=type(e).__name__,
+                    error_message=str(e),
+                    correlation_id=correlation_id,
+                    exc_info=True,
+                )
                 try:
-                    exec_obj = Execution.objects.select_related('action').get(id=_eid_launch)
-                    self.get_execution_service().launch_workflow(exec_obj, _corr)
-                except Exception as e:  # noqa: BLE001
-                    logger.error(
-                        "integration_error_on_approval_launch",
-                        execution_id=_eid_launch,
-                        error_type=type(e).__name__,
-                        error_message=str(e),
-                        correlation_id=_corr,
-                        exc_info=True,
+                    self.get_execution_service().update_status(
+                        execution_id,
+                        ExecutionStatus.INTEGRATION_ERROR,
+                        user_id,
                     )
-                    try:
-                        self.get_execution_service().update_status(
-                            _eid_launch,
-                            ExecutionStatus.INTEGRATION_ERROR,
-                            _user_id,
-                        )
-                    except ValueError as ve:
-                        logger.error(
-                            "unexpected_state_machine_error_after_approval_launch",
-                            execution_id=_eid_launch,
-                            error=str(ve),
-                            correlation_id=_corr,
-                        )
-                        fallback_exec = Execution.objects.get(id=_eid_launch)
-                        fallback_exec.status = ExecutionStatus.INTEGRATION_ERROR
-                        if not fallback_exec.completed_at:
-                            fallback_exec.completed_at = timezone.now()
-                        fallback_exec.save(update_fields=["status", "completed_at"])
+                except ValueError as ve:
+                    logger.error(
+                        "unexpected_state_machine_error_after_approval_launch",
+                        execution_id=execution_id,
+                        error=str(ve),
+                        correlation_id=correlation_id,
+                    )
+                    fallback_exec = Execution.objects.get(id=execution_id)
+                    fallback_exec.status = ExecutionStatus.INTEGRATION_ERROR
+                    if not fallback_exec.completed_at:
+                        fallback_exec.completed_at = timezone.now()
+                    fallback_exec.save(update_fields=["status", "completed_at"])
 
-                    Execution.objects.filter(id=_eid_launch).update(error_message=str(e))
+                Execution.objects.filter(id=execution_id).update(error_message=str(e))
 
-            transaction.on_commit(_launch_after_approval)
-        elif on_success_step_ids:
-            _eid, _sids = execution_id, on_success_step_ids
-            transaction.on_commit(lambda: _enqueue_resume_with_retries(_eid, _sids))
-        else:
-            if execution.status == ExecutionStatus.RUNNING:
-                execution.status = ExecutionStatus.COMPLETED
-                execution.completed_at = timezone.now()
-                execution.save()
-
-        AuditService.create_entry(
-            user_id=user_id,
-            action_type=AuditActionType.EXECUTION_APPROVED,
-            entity_type=AuditEntityType.EXECUTION,
-            entity_id=execution_id,
-            details={
-                "step_id": step.id,
-                "step_name": step.step_name,
-                "on_success_step_ids": on_success_step_ids,
-                "action_name": step.execution.action.name if step.execution.action else None,
-                **_get_execution_audit_context(step.execution),
-            },
-            correlation_id=correlation_id,
-        )
+                raise BadRequestError(
+                    code="INTEGRATION_ERROR",
+                    message="Échec du lancement du workflow après approbation",
+                    details={"error": str(e), "execution_id": execution_id},
+                )
 
         logger.info(
             "step_approved",
