@@ -884,7 +884,7 @@ development_status:
     # === Epic 71: Code Review — Points restants (post-Audit #6) ===
     # Réf: planning-artifacts/epic-71-code-review-points-restants.md
     # SOLID-FE-4, FE-01, MAINT-BE-9, SMELL-05, EXE-MED-*, ADRs, tests frontend, CSS tokens
-    epic-71: in-progress
+    epic-71: done
     71-1-migration-dip-composants-restants-vers-hooks: done
     71-2-frontend-lire-approbation-depuis-execution-steps: done
     71-3-consolidation-status-config: done
@@ -896,5 +896,5 @@ development_status:
     71-9-testabilite-throttle-deduplication-is-auditor: done
     71-10-adrs-manquants-celery-oracle-cac-parallel: done
     71-11-couverture-tests-frontend-services-hooks: done
-    71-12-mise-a-jour-codebase-review-statuts-finaux: backlog
+    71-12-mise-a-jour-codebase-review-statuts-finaux: done
     epic-71-retrospective: optional

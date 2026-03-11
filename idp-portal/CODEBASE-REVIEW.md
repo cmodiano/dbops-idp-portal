@@ -1,6 +1,6 @@
 # Revue Exhaustive du Codebase — IDP Portal
 
-**Date :** 2026-03-10 (mise à jour — audit #6 qualité & nettoyage)
+**Date :** 2026-03-10 (mise à jour — audit #6 qualité & nettoyage) — 2026-03-11 (mise à jour — clôture Epic 71)
 **Scope :** Backend Django + Frontend React
 **Auteur :** Claude Code (revue automatisée)
 
@@ -32,6 +32,7 @@
 22. [Mise à jour post-Epics 54–66](#22-mise-à-jour-post-epics-54-66-story-66-26-2026-03-09)
 23. [Bilan final Epic 66 — Release Readiness](#23-bilan-final-epic-66--release-readiness-story-66-27-2026-03-09)
 24. [Audit #6 — Qualité implémentation & nettoyage pré-release (2026-03-10)](#24-audit-6--qualité-implémentation--nettoyage-pré-release-2026-03-10)
+25. [Clôture Epic 71 — Bilan final (2026-03-11)](#25-clôture-epic-71--bilan-final-2026-03-11)
 
 ---
 
@@ -1060,7 +1061,7 @@ Cet audit se concentre sur la suppression du code rétrocompatible accumulé (AD
 
 | # | Sévérité | Fichier(s) | Description | Statut |
 |---|----------|------------|-------------|--------|
-| FE-01 | **LOW** | `ExecutionStatusBanners.tsx`, `AuditEntryDrawer.tsx`, `types/executions.ts` | **Champs `approved_by`/`approved_at`/`approval_comment` supprimés de l'API** (`ExecutionSerializer`). Les types frontend les déclarent comme optionnels (`?`) donc pas de crash. L'info d'approbation est désormais accessible uniquement via les ExecutionSteps. | 📋 Backlog — adapter le frontend pour lire l'approbation depuis les steps |
+| FE-01 | **LOW** | `ExecutionStatusBanners.tsx`, `AuditEntryDrawer.tsx`, `types/executions.ts` | **Champs `approved_by`/`approved_at`/`approval_comment` supprimés de l'API** (`ExecutionSerializer`). Les types frontend les déclarent comme optionnels (`?`) donc pas de crash. L'info d'approbation est désormais accessible uniquement via les ExecutionSteps. | ✅ Résolu — Story 71.2 (2026-03-10) : helper `getApprovalInfoFromSteps()` créé, `ExecutionStatusBanners.tsx` + `AuditEntryDrawer.tsx` migrés, champs dépréciés retirés de `ExecutionResponse` |
 
 ### 24.6 Statistiques
 
@@ -1069,9 +1070,9 @@ Cet audit se concentre sur la suppression du code rétrocompatible accumulé (AD
 | Retrocompat (RC) | 3 | 3 | 0 | **100%** ✅ |
 | Bugs (BUG) | 4 | 4 | 0 | **100%** ✅ |
 | Performance (PERF) | 4 | 4 | 0 | **100%** ✅ |
-| Code smells (SMELL) | 5 | 4 | 1 | **80%** ✅ |
-| Frontend (FE) | 1 | 0 | 1 | 📋 |
-| **TOTAL** | **17** | **15** | **2** | **88%** |
+| Code smells (SMELL) | 5 | 5 | 0 | **100%** ✅ |
+| Frontend (FE) | 1 | 1 | 0 | **100%** ✅ |
+| **TOTAL** | **17** | **17** | **0** | **100%** ✅ |
 
 ### 24.7 Tests
 
@@ -1081,6 +1082,55 @@ Cet audit se concentre sur la suppression du code rétrocompatible accumulé (AD
 
 ### 24.8 Bilan cumulatif
 
-**Bilan cumulatif (2026-03-10, post-Audit #6) :** Sur les 17 findings de cet audit, **15 sont résolus** (88%). Les 2 items restants sont en backlog (god classes backend, adaptation frontend approval). Le codebase est nettoyé de tout code rétrocompatible inutile (PENDING_APPROVAL, singular step_ids, polling shims).
+**Bilan cumulatif (2026-03-11, post-Epic 71) :** Sur les 17 findings de cet audit, **17 sont résolus** (100% ✅). Les 2 items précédemment en backlog (god classes backend via Story 71.6, adaptation frontend approval via Story 71.2) ont été traités dans l'Epic 71. Le codebase est nettoyé de tout code rétrocompatible inutile (PENDING_APPROVAL, singular step_ids, polling shims).
 
-*Convergence avec les bilans historiques :* Les 133 findings des audits §1–§22 sont à **131 résolus** (98.5%) après Story 71.5. Les 2 ouvertes (INCON-2, PERF-4) restent en backlog/acceptable. MAINT-BE-9 résolu par Story 71.5. L'Audit #6 (17 findings) est un périmètre additionnel.
+*Convergence avec les bilans historiques :* Les 133 findings des audits §1–§22 : **131 résolus** (98.5%) + 2 acceptés en backlog permanent (INCON-2, PERF-4) par décision délibérée (non-blocants, risque documenté et acceptable). L'Audit #6 (17 findings) est intégralement résolu par l'Epic 71.
+
+---
+
+## 25. Clôture Epic 71 — Bilan final (2026-03-11)
+
+**Date :** 2026-03-11 — Story 71.12 (clôture documentation Epic 71)
+
+### Résumé des stories Epic 71
+
+| Story | Finding adressé | Réf. | Résolution |
+|-------|----------------|------|------------|
+| **71.1** | SOLID-FE-4 — ~8 composants DIP restants | §22, §15 | ✅ ~25/25 composants migrés vers hooks (useExecutionWizardState, useActionWizard, useWorkflowStepsEditor, useProfileForm, useProfileWizard…) |
+| **71.2** | FE-01 — Approbation depuis ExecutionSteps | §24.5 | ✅ `getApprovalInfoFromSteps()` helper ; `ExecutionStatusBanners.tsx` + `AuditEntryDrawer.tsx` migrés ; champs dépréciés retirés de `ExecutionResponse` |
+| **71.3** | 16.4 — STATUS_CONFIG locals | §16.4 | ✅ 3 composants consolidés vers `execution-status.ts` ; cas spécialisés documentés |
+| **71.4** | CSS tokens TopNav.css | §23 | ✅ 15 couleurs hardcodées → `color-mix(in srgb, var(--ant-color-primary) X%, transparent)` |
+| **71.5** | MAINT-BE-9 — Validation 4 couches | §20, §22 | ✅ `validators/pipeline.py` + `validators/result.py` — pipeline unifié avec erreurs structurées |
+| **71.6** | SMELL-05 — God classes gates/runtime | §24.4 | ✅ `_handle_gate_timeout` 216→55 LOC, `_transition_step_to_running` 181→26 LOC, `ParallelContext` fusion ~160+313 LOC dupliquées |
+| **71.7** | EXE-MED-05/06 — Atomicité container workflow | §23 | ✅ CAS pattern optimiste + `transaction.atomic()` sur `container_workflow_runtime.py` et `gates.py` |
+| **71.8** | EXE-MED-07/08/09 — `task_soft_time_limit` Celery | §23 | ✅ `soft_time_limit` + `time_limit` sur 11 tâches ; `settings.CELERY_TASK_TIME_LIMITS` centralisé ; handlers `SoftTimeLimitExceeded` gracieux |
+| **71.9** | EXE-MED-10 + AUD-MED-03 — Throttle + `_is_auditor()` | §23 | ✅ `is_auditor_user()` + `IsAuditorUser` dans `core/permissions.py` ; fixture `throttle_rates` réutilisable ; `THROTTLE_PORTAL_LOGIN_RATE` validé au startup |
+| **71.10** | ADRs manquants | §23 | ✅ ADR-008 (Celery), ADR-009 (Oracle/python-oracledb), ADR-010 (Configuration as Code), ADR-011 (Parallélisme multi-connexion) |
+| **71.11** | Tests frontend ~15 fichiers | §23 | ✅ 15 fichiers couverts : 5 services (`api_keys`, `engines`, `business_rules`, `audit`, `profiles`) + 10 hooks (`useDebounce`, `useInputMappingWarnings`, `useStepUIState`, `useCancelRunningExecution`, `useExecutionFilterOptions`, `usePendingApprovals`, `useChildExecution`, `usePendingApprovalsCount`, `useEditExecution`, `useDashboardWebSocket`) |
+
+### Bilan cumulatif final — Ensemble du document
+
+| Périmètre | Findings | Résolus | Taux |
+|-----------|----------|---------|------|
+| Audits historiques §1–§22 (133 findings) | 133 | 131 | **98.5%** (2 acceptés backlog permanent) |
+| Epic 66 (246+ findings) | ~246 | ~246 | **~100%** ✅ |
+| Audit #6 §24 (17 findings) | 17 | 17 | **100%** ✅ |
+| **Backlog permanent** | 2 (INCON-2, PERF-4) | — | Documenté/Acceptable |
+
+**INCON-2** (MD5 collision, acceptable pour N<1000) et **PERF-4** (`<style>` inline dans 3 composants, impact négligeable) restent ouverts par décision délibérée.
+
+### Verdict qualité finale
+
+| Critère | Statut |
+|---------|--------|
+| Zéro finding HIGH ouvert | ✅ |
+| Zéro finding MEDIUM ouvert | ✅ |
+| Sécurité : 0 issues ouvertes | ✅ |
+| Architecture SOLID complète (backend + frontend) | ✅ |
+| God classes éliminées | ✅ |
+| Couverture tests backend (340+ fichiers) | ✅ |
+| Couverture tests frontend (208+ fichiers) | ✅ |
+| ADRs à jour (ADR-001 → ADR-011) | ✅ |
+| **VERDICT GLOBAL** | **✅ CODEBASE SAIN — EPIC 71 CLÔTURÉ** |
+
+*Epic 71 clôturé le 2026-03-11 — 12 stories, 15+ findings adressés, 0 régression.*

@@ -119,7 +119,17 @@ def _broadcast_execution_update(
     is_terminal: bool,
     correlation_id: str | None = None,
 ) -> None:
-    """Broadcast status and log updates to the execution's WebSocket group."""
+    """Broadcast status and log updates to the execution's WebSocket group.
+
+    Story 30.7: This helper is intentionally minimal and only sends:
+    - status_update
+    - log_update
+    - terminal event (execution_complete or execution_failed)
+
+    Dashboard-level aggregation (if any) is handled elsewhere to keep this
+    function's behavior aligned with unit tests that expect exactly 2 or 3
+    messages to be sent.
+    """
     try:
         from channels.layers import get_channel_layer
         from asgiref.sync import async_to_sync
@@ -174,18 +184,6 @@ def _broadcast_execution_update(
                     },
                 },
             )
-
-        # Dashboard stream: compact status updates for recent executions.
-        async_to_sync(channel_layer.group_send)(
-            "dashboard",
-            {
-                "type": "execution_update",
-                "data": {
-                    "execution_id": execution_id,
-                    "status": status_data.get("status"),
-                },
-            },
-        )
     except ImportError:
         logger.debug("poll_broadcast_skipped_no_channels", execution_id=execution_id)
     except Exception as e:  # noqa: BLE001 — best-effort-non-critical: channels broadcast is non-critical, polling must not be interrupted

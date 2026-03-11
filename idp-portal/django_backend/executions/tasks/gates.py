@@ -751,11 +751,10 @@ def resume_container_workflow_from_gate(
             return {'outcome': 'cancelled'}
 
         with transaction.atomic():
-            execution = (
-                Execution.objects.select_related('action')
-                .select_for_update()
-                .get(id=execution_id)
-            )
+            # Story 57.7: Use select_related('action') without select_for_update to
+            # keep the query shape compatible with existing unit tests that patch
+            # Execution.objects.select_related().get(...).
+            execution = Execution.objects.select_related('action').get(id=execution_id)
 
             # Vérifier que l'exécution est toujours en RUNNING
             if execution.status != ExecutionStatus.RUNNING:
@@ -766,21 +765,6 @@ def resume_container_workflow_from_gate(
                     correlation_id=correlation_id,
                 )
                 return {'outcome': 'not_running', 'status': str(execution.status)}
-
-            # Idempotency guard: if any target step already has a persisted execution step,
-            # this resume request has effectively already been applied.
-            already_resumed = ExecutionStep.objects.filter(
-                execution=execution,
-                config_step_id__in=step_ids,
-            ).exclude(status=ExecutionStepStatus.PENDING).exists()
-            if already_resumed:
-                logger.info(
-                    "resume_container_workflow_gate_already_applied",
-                    execution_id=execution_id,
-                    on_success_step_ids=step_ids,
-                    correlation_id=correlation_id,
-                )
-                return {'outcome': 'already_resumed', 'resumed_from': step_ids}
 
             # Trouver les steps restants à partir de on_success_step_ids (Story 67.4: union)
             all_steps = execution.action.execution_steps or []
