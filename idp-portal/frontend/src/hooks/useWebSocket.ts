@@ -106,7 +106,17 @@ export function useWebSocket(executionId: number | null): UseWebSocketResult {
             type: string;
             execution_id?: number;
             user_id?: string;
-            data?: { step_order?: number; step_name?: string; status?: string; step_type?: string; started_at?: string | null; completed_at?: string | null }; // Story 58.3: step_type ajouté
+            data?: {
+              id?: number;
+              step_order?: number;
+              step_name?: string;
+              status?: string;
+              step_type?: string;
+              started_at?: string | null;
+              completed_at?: string | null;
+              /** Workflow config step ID — used by the graph to colour the correct node. */
+              config_step_id?: string | null;
+            };
             status?: string;
             error_message?: string;
           };
@@ -130,17 +140,22 @@ export function useWebSocket(executionId: number | null): UseWebSocketResult {
               const idx = prev.findIndex((s) => s.step_order === d.step_order);
               const base = idx >= 0 ? prev[idx] : null;
               const updated: ExecutionStepResponse = {
-                id: base?.id ?? 0,
+                // Prefer the DB id from the WS message; fall back to what we already had.
+                id: d.id ?? base?.id ?? 0,
                 execution_id: executionId!,
                 step_order: d.step_order ?? base?.step_order ?? 0,
                 step_name: d.step_name ?? base?.step_name ?? '',
-                step_type: (d.step_type as ExecutionStepResponse['step_type']) ?? base?.step_type ?? 'platform', // Story 58.3: lire step_type depuis le message WS en priorité
+                step_type: (d.step_type as ExecutionStepResponse['step_type']) ?? base?.step_type ?? 'platform',
                 status: (d.status as ExecutionStepResponse['status']) ?? base?.status ?? 'PENDING',
                 started_at: d.started_at ?? base?.started_at ?? null,
                 completed_at: d.completed_at ?? base?.completed_at ?? null,
                 output: base?.output ?? null,
                 platform_job_id: base?.platform_job_id ?? null,
                 error_message: base?.error_message ?? null,
+                // Always carry config_step_id so the graph can map this step to the
+                // correct workflow node (WorkflowExecutionGraph falls back to array index
+                // which is unreliable for branching workflows if this is absent).
+                config_step_id: d.config_step_id ?? base?.config_step_id ?? null,
               };
               if (idx >= 0) {
                 const next = [...prev];
@@ -151,6 +166,12 @@ export function useWebSocket(executionId: number | null): UseWebSocketResult {
               next.sort((a, b) => a.step_order - b.step_order);
               return next;
             });
+          } else if (msg.type === 'status_update' && msg.data) {
+            // Execution-level status update (from polling broadcaster or replay)
+            const status = msg.data.status as ExecutionResponse['status'] | undefined;
+            if (status) {
+              setExecution((e) => (e ? { ...e, status } : null));
+            }
           } else if (msg.type === 'execution_complete') {
             setExecution((e) => (e ? { ...e, status: 'COMPLETED' } : null));
             ws.close();
