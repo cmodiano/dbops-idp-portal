@@ -228,7 +228,7 @@ def _update_execution_from_poll(
                     correlation_id=correlation_id,
                 )
 
-        # Update platform step logs and output fields
+        # Update platform step logs, output fields, and terminal status
         platform_step = (
             ExecutionStep.objects.filter(
                 execution_id=execution_id,
@@ -242,9 +242,39 @@ def _update_execution_from_poll(
             # Stocker les champs AAP standard si fournis
             if output_fields:
                 output.update(output_fields)
-            if logs_content or output_fields:
+
+            # Update step status when the platform job reaches a terminal state.
+            # The step is created as RUNNING in workflow_step_executor and stays RUNNING
+            # until polling detects completion — update it here so DB and UI stay correct.
+            _TERMINAL_STEP_STATUS: dict[str, ExecutionStepStatus] = {
+                "COMPLETED": ExecutionStepStatus.COMPLETED,
+                "FAILED": ExecutionStepStatus.FAILED,
+                "CANCELLED": ExecutionStepStatus.FAILED,
+            }
+            new_step_status = _TERMINAL_STEP_STATUS.get(idp_status)
+            step_status_changed = False
+            if new_step_status and platform_step.status not in {
+                ExecutionStepStatus.COMPLETED, ExecutionStepStatus.FAILED
+            }:
+                platform_step.status = new_step_status
+                platform_step.completed_at = timezone.now()
+                step_status_changed = True
+
+            if logs_content or output_fields or step_status_changed:
                 platform_step.set_output(output)
                 platform_step.save()
+
+            # Notify WebSocket clients so the workflow visualiser updates in real time.
+            if step_status_changed:
+                try:
+                    from executions.utils.websocket_broadcast import broadcast_step_update  # noqa: PLC0415
+                    broadcast_step_update(execution_id, platform_step)
+                except Exception:  # noqa: BLE001 — best-effort: must never interrupt polling
+                    logger.debug(
+                        "poll_broadcast_step_update_failed",
+                        execution_id=execution_id,
+                        step_id=platform_step.id,
+                    )
 
     except Execution.DoesNotExist:
         logger.warning(

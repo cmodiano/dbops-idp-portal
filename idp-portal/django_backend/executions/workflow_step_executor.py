@@ -198,6 +198,14 @@ class StepExecutor:
             started_at=timezone.now(),
         )
 
+        # Notify WebSocket clients that this step has started (RUNNING).
+        # Gate steps broadcast separately via their own path above; all other types go here.
+        try:
+            from executions.utils.websocket_broadcast import broadcast_step_update  # noqa: PLC0415
+            broadcast_step_update(self.execution.id, execution_step)
+        except Exception:  # noqa: BLE001 — best-effort: must never interrupt workflow execution
+            pass
+
         try:
             # Story 4.12 AC5: Load referenced action and prepare adapter payload
             referenced_action_id = step.get('referenced_action_id')

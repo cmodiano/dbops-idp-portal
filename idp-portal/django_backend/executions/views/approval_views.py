@@ -421,6 +421,13 @@ class ApproveExecutionView(APIView):
             step.set_output(output)
             step.save()
 
+            # Notify WebSocket clients that the gate step is now COMPLETED.
+            try:
+                from executions.utils.websocket_broadcast import broadcast_step_update  # noqa: PLC0415
+                broadcast_step_update(execution_id, step)
+            except Exception:  # noqa: BLE001 — best-effort: must not fail the approval
+                pass
+
             # V113: Durable approval event + dequeue runnable step (deferred to on_commit)
             from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
             from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
@@ -718,6 +725,13 @@ class ApproveStepView(APIView):
         step.set_output(output)
 
         step.save()
+
+        # Notify WebSocket clients that the gate step is now COMPLETED.
+        try:
+            from executions.utils.websocket_broadcast import broadcast_step_update  # noqa: PLC0415
+            broadcast_step_update(execution_id, step)
+        except Exception:  # noqa: BLE001 — best-effort: must not fail the approval
+            pass
 
         # V113: Durable approval event + dequeue runnable step
         from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415

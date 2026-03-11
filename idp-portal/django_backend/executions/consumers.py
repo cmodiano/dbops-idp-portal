@@ -194,6 +194,7 @@ class ExecutionConsumer(AuthenticatedWebSocketConsumer):
                     "step_order": step.step_order,
                     "step_name": step.step_name,
                     "step_type": step_type,
+                    "config_step_id": getattr(step, "config_step_id", None),
                     "status": step.status,
                     "started_at": (
                         step.started_at.isoformat() if step.started_at else None
