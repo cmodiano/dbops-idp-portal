@@ -209,20 +209,23 @@ def _transition_step_to_running(step: ExecutionStep, gate_status: dict, correlat
 
     Story 25.3: Sets status=RUNNING, started_at, triggers the actual step execution.
     Story 71.6: Refactored into orchestrator calling sub-functions.
+    Story 71.7 AC#5: CAS + audit wrapped in transaction.atomic(); resume after commit.
     """
-    if not _perform_step_transition(step, correlation_id):
-        return
+    # Story 71.7 AC#5: Wrap CAS transition + audit in transaction for consistency
+    with transaction.atomic():
+        if not _perform_step_transition(step, correlation_id):
+            return
 
-    logger.info(
-        "evaluate_waiting_gates_step_satisfied",
-        step_id=step.id,
-        execution_id=step.execution_id,
-        correlation_id=correlation_id,
-    )
+        logger.info(
+            "evaluate_waiting_gates_step_satisfied",
+            step_id=step.id,
+            execution_id=step.execution_id,
+            correlation_id=correlation_id,
+        )
 
-    _emit_gate_satisfied_audit(step, correlation_id)
+        _emit_gate_satisfied_audit(step, correlation_id)
 
-    # Trigger actual step execution
+    # Story 71.7 AC#5: Resume after transaction commit so Celery sees committed data
     action = step.execution.action
     from executions.utils.step_config import find_step_config  # noqa: PLC0415
     step_def = find_step_config(action.execution_steps or [], step)
@@ -618,40 +621,43 @@ def _handle_gate_timeout(step: ExecutionStep, gate_status: dict, correlation_id:
         else ExecutionStepStatus.FAILED
     )
 
-    if not _perform_timeout_step_update(step, next_step_status, error_msg, timeout_action, correlation_id):
-        return
+    # Story 71.7 AC#6: Wrap CAS timeout update + audit in transaction for consistency
+    with transaction.atomic():
+        if not _perform_timeout_step_update(step, next_step_status, error_msg, timeout_action, correlation_id):
+            return
 
-    logger.info(
-        "evaluate_waiting_gates_step_timeout",
-        step_id=step.id,
-        execution_id=step.execution_id,
-        timeout_hours=timeout_hours,
-        timeout_action=timeout_action,
-        error_message=error_msg,
-        correlation_id=correlation_id,
-    )
+        logger.info(
+            "evaluate_waiting_gates_step_timeout",
+            step_id=step.id,
+            execution_id=step.execution_id,
+            timeout_hours=timeout_hours,
+            timeout_action=timeout_action,
+            error_message=error_msg,
+            correlation_id=correlation_id,
+        )
 
-    # Audit trail: gate timeout
-    waiting_duration = (timezone.now() - step.created_at).total_seconds()
-    AuditService.create_entry(
-        user_id=str(step.execution.user_id),
-        action_type=AuditActionType.EXECUTION_STEP_GATE_TIMEOUT,
-        entity_type=AuditEntityType.EXECUTION,
-        entity_id=step.execution_id,
-        details={
-            'execution_id': str(step.execution_id),
-            'action_name': step.execution.action.name if step.execution.action else None,
-            'step_id': step.id,
-            'step_order': step.step_order,
-            'step_name': step.step_name,
-            'timeout_hours': timeout_hours,
-            'on_timeout': timeout_action,
-            'error_message': error_msg,
-            'waiting_duration_seconds': round(waiting_duration, 1),
-        },
-        correlation_id=correlation_id,
-    )
+        # Audit trail: gate timeout
+        waiting_duration = (timezone.now() - step.created_at).total_seconds()
+        AuditService.create_entry(
+            user_id=str(step.execution.user_id),
+            action_type=AuditActionType.EXECUTION_STEP_GATE_TIMEOUT,
+            entity_type=AuditEntityType.EXECUTION,
+            entity_id=step.execution_id,
+            details={
+                'execution_id': str(step.execution_id),
+                'action_name': step.execution.action.name if step.execution.action else None,
+                'step_id': step.id,
+                'step_order': step.step_order,
+                'step_name': step.step_name,
+                'timeout_hours': timeout_hours,
+                'on_timeout': timeout_action,
+                'error_message': error_msg,
+                'waiting_duration_seconds': round(waiting_duration, 1),
+            },
+            correlation_id=correlation_id,
+        )
 
+    # Story 71.7 AC#6: Continuation after transaction commit so Celery sees committed data
     _handle_timeout_continuation(step, timeout_action, correlation_id)
 
 

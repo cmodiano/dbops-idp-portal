@@ -221,15 +221,21 @@ class ContainerWorkflowRuntime:
         return is_cancelled(self.execution.id)
 
     def _cancel_child_executions(self) -> None:
-        """Cancel all running/submitted child executions (cascade cancellation)."""
+        """Cancel all running/submitted child executions (cascade cancellation).
+
+        Story 71.7 AC#2: CAS pattern instead of read-modify-write to prevent
+        overwriting a COMPLETED status with CANCELLED.
+        """
         cancellable_statuses = [ExecutionStatus.SUBMITTED, ExecutionStatus.RUNNING]
         for child in self.child_executions:
-            child.refresh_from_db(fields=['status'])
-            if child.status in cancellable_statuses:
-                child.status = ExecutionStatus.CANCELLED
-                child.completed_at = timezone.now()
-                child.save(update_fields=['status', 'completed_at'])
-
+            updated = Execution.objects.filter(
+                id=child.id,
+                status__in=cancellable_statuses,
+            ).update(
+                status=ExecutionStatus.CANCELLED,
+                completed_at=timezone.now(),
+            )
+            if updated > 0:
                 logger.info(
                     "container_workflow_child_cancelled",
                     parent_execution_id=self.execution.id,
@@ -759,22 +765,25 @@ class ContainerWorkflowRuntime:
         step_def_order = step.get('order', 0)
         step_order = parallel_context.step_order if parallel_context else self._step_order_counter
 
-        parent_step = ExecutionStep.objects.create(
-            execution=self.execution,
-            step_order=step_order,
-            step_name=step_name,
-            config_step_id=step_id,
-            step_type=ExecutionStepType.PLATFORM,
-            status=ExecutionStepStatus.RUNNING,
-            started_at=timezone.now(),
-        )
+        # Story 71.7 AC#4: Transaction 1 — step creation + validation
+        with transaction.atomic():
+            parent_step = ExecutionStep.objects.create(
+                execution=self.execution,
+                step_order=step_order,
+                step_name=step_name,
+                config_step_id=step_id,
+                step_type=ExecutionStepType.PLATFORM,
+                status=ExecutionStepStatus.RUNNING,
+                started_at=timezone.now(),
+            )
 
-        referenced_action = self._validate_and_load_referenced_action(
-            step_def_order, step.get('referenced_action_id'), parent_step,
-        )
-        if referenced_action is None:
-            return ExecutionStatus.FAILED
+            referenced_action = self._validate_and_load_referenced_action(
+                step_def_order, step.get('referenced_action_id'), parent_step,
+            )
+            if referenced_action is None:
+                return ExecutionStatus.FAILED
 
+        # Pure computation outside transaction to minimize lock duration
         child_params = self._get_step_parameters(step)
         if resolved_params:
             child_params = {**child_params, **resolved_params}
@@ -796,41 +805,46 @@ class ContainerWorkflowRuntime:
                 correlation_id=self.correlation_id,
             )
 
+            # Execution runs OUTSIDE transaction (can be long-running)
             self._run_child_execution(child_execution)
             child_execution.refresh_from_db()
 
-            parent_step.status = (
-                ExecutionStepStatus.FAILED
-                if child_execution.status == ExecutionStatus.FAILED
-                else ExecutionStepStatus.COMPLETED
-            )
-            parent_step.completed_at = timezone.now()
-            parent_step.set_output({
-                'child_execution_id': child_execution.id,
-                'referenced_action_id': referenced_action.id,
-                'referenced_action_name': referenced_action.name,
-                'child_status': child_execution.status,
-                'parameters_injected': bool(child_params),
-            })
-            parent_step.save()
+            # Story 71.7 AC#4: Transaction 2 — finalize parent_step after execution
+            with transaction.atomic():
+                parent_step.status = (
+                    ExecutionStepStatus.FAILED
+                    if child_execution.status == ExecutionStatus.FAILED
+                    else ExecutionStepStatus.COMPLETED
+                )
+                parent_step.completed_at = timezone.now()
+                parent_step.set_output({
+                    'child_execution_id': child_execution.id,
+                    'referenced_action_id': referenced_action.id,
+                    'referenced_action_name': referenced_action.name,
+                    'child_status': child_execution.status,
+                    'parameters_injected': bool(child_params),
+                })
+                parent_step.save()
 
             if step_id is not None:
                 self._extract_and_store_output(step_id, parent_step, step.get('output_mapping', {}))
 
             return cast(ExecutionStatus, child_execution.status)
         except Exception as exc:  # noqa: BLE001
-            parent_step.status = ExecutionStepStatus.FAILED
-            parent_step.completed_at = timezone.now()
-            parent_step.error_message = f"Platform step failed: {exc}"
-            parent_step.save()
-            if child_execution is not None:
-                now = timezone.now()
-                Execution.objects.filter(id=child_execution.id).update(
-                    status=ExecutionStatus.FAILED,
-                    started_at=now,
-                    completed_at=now,
-                    error_message=str(exc),
-                )
+            # Story 71.7 AC#4: Atomic error handling for parent_step + child_execution
+            with transaction.atomic():
+                parent_step.status = ExecutionStepStatus.FAILED
+                parent_step.completed_at = timezone.now()
+                parent_step.error_message = f"Platform step failed: {exc}"
+                parent_step.save()
+                if child_execution is not None:
+                    now = timezone.now()
+                    Execution.objects.filter(id=child_execution.id).update(
+                        status=ExecutionStatus.FAILED,
+                        started_at=now,
+                        completed_at=now,
+                        error_message=str(exc),
+                    )
             logger.error(
                 "container_workflow_platform_step_exception",
                 execution_id=self.execution.id,
@@ -1055,10 +1069,22 @@ class ContainerWorkflowRuntime:
             correlation_id=self.correlation_id,
         )
 
-        # Update parent to RUNNING immediately (visible to frontend)
-        self.execution.status = ExecutionStatus.RUNNING
-        self.execution.started_at = timezone.now()
-        self.execution.save(update_fields=['status', 'started_at'])
+        # CAS transition SUBMITTED→RUNNING to prevent double-start (Story 71.7 AC#3)
+        updated = Execution.objects.filter(
+            id=self.execution.id,
+            status=ExecutionStatus.SUBMITTED,
+        ).update(
+            status=ExecutionStatus.RUNNING,
+            started_at=timezone.now(),
+        )
+        if updated == 0:
+            logger.warning(
+                "container_workflow_already_started",
+                execution_id=self.execution.id,
+                correlation_id=self.correlation_id,
+            )
+            return
+        self.execution.refresh_from_db(fields=['status', 'started_at'])
 
         if not self.workflow_steps:
             logger.error(
@@ -1101,9 +1127,26 @@ class ContainerWorkflowRuntime:
             correlation_id=self.correlation_id,
         )
 
-        self.execution.status = ExecutionStatus.RUNNING
-        self.execution.started_at = timezone.now()
-        self.execution.save(update_fields=['status', 'started_at'])
+        # CAS transition SUBMITTED→RUNNING to prevent double-start (Story 71.7 AC#3)
+        updated = Execution.objects.filter(
+            id=self.execution.id,
+            status=ExecutionStatus.SUBMITTED,
+        ).update(
+            status=ExecutionStatus.RUNNING,
+            started_at=timezone.now(),
+        )
+        if updated == 0:
+            # Allow proceeding if already RUNNING (test scenario / resume)
+            self.execution.refresh_from_db(fields=['status', 'started_at'])
+            if self.execution.status != ExecutionStatus.RUNNING:
+                logger.warning(
+                    "container_workflow_already_started",
+                    execution_id=self.execution.id,
+                    correlation_id=self.correlation_id,
+                )
+                return ExecutionStatus.FAILED
+        else:
+            self.execution.refresh_from_db(fields=['status', 'started_at'])
 
         if not self.workflow_steps:
             self.execution.status = ExecutionStatus.FAILED
@@ -1144,13 +1187,23 @@ class ContainerWorkflowRuntime:
                 correlation_id=self.correlation_id,
                 exc_info=True,
             )
+            # Story 71.7 AC#7: CAS pattern to avoid overwriting terminal status
             try:
-                execution = Execution.objects.get(id=execution_id)
-                if execution.status not in (ExecutionStatus.COMPLETED, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED):
-                    execution.status = ExecutionStatus.FAILED
-                    execution.completed_at = timezone.now()
-                    execution.error_message = f"Workflow thread error: {e}"
-                    execution.save(update_fields=['status', 'completed_at', 'error_message'])
+                updated = Execution.objects.filter(
+                    id=execution_id,
+                ).exclude(
+                    status__in=[ExecutionStatus.COMPLETED, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED],
+                ).update(
+                    status=ExecutionStatus.FAILED,
+                    completed_at=timezone.now(),
+                    error_message=f"Workflow thread error: {e}",
+                )
+                if updated > 0:
+                    logger.info(
+                        "container_workflow_thread_error_marked_failed",
+                        execution_id=execution_id,
+                        correlation_id=self.correlation_id,
+                    )
             except Exception as _:  # noqa: BLE001 — best-effort-non-critical: cleanup after thread error must not raise
                 logger.error("container_workflow_thread_cleanup_failed", execution_id=execution_id, exc_info=True)
         finally:
@@ -1306,16 +1359,14 @@ class ContainerWorkflowRuntime:
         Story 71.6 code review: extracted to eliminate duplication between
         _execute_workflow_steps and _execute_workflow_steps_sequential.
         """
+        completed_at = timezone.now()
         update_fields: dict[str, Any] = {
             'status': final_status,
-            'completed_at': timezone.now(),
+            'completed_at': completed_at,
         }
         if final_status == ExecutionStatus.FAILED:
             step_info = f" (step: {failed_step_name})" if failed_step_name else ""
             update_fields['error_message'] = f"Workflow failed: a referenced action failed{step_info}"
-        Execution.objects.filter(id=self.execution.id).update(**update_fields)
-        self.execution.status = final_status
-        self.execution.completed_at = update_fields['completed_at']
 
         audit_action_type = {
             ExecutionStatus.COMPLETED: AuditActionType.EXECUTION_COMPLETED,
@@ -1323,21 +1374,43 @@ class ContainerWorkflowRuntime:
             ExecutionStatus.CANCELLED: AuditActionType.EXECUTION_CANCELLED,
         }.get(final_status, AuditActionType.EXECUTION_FAILED)
 
-        AuditService.create_entry(
-            user_id=str(self.execution.user_id),
-            action_type=audit_action_type,
-            entity_type=AuditEntityType.EXECUTION,
-            entity_id=self.execution.id,
-            details={
-                'action_id': self.action.id,
-                'action_name': self.action.name,
-                'workflow_type': 'container',
-                'step_count': len(self.workflow_steps),
-                'child_execution_ids': [c.id for c in self.child_executions],
-                'final_status': final_status,
-            },
-            correlation_id=self.correlation_id,
-        )
+        # Story 71.7 AC#1: Atomic update + audit to prevent inconsistent state
+        # CAS guard: do not overwrite a terminal status set by _run_workflow_loop error handler
+        with transaction.atomic():
+            updated = Execution.objects.filter(
+                id=self.execution.id,
+            ).exclude(
+                status__in=[ExecutionStatus.COMPLETED, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED],
+            ).update(**update_fields)
+            if updated == 0:
+                self.execution.refresh_from_db(fields=['status', 'completed_at'])
+                logger.warning(
+                    "container_workflow_finalize_already_terminal",
+                    execution_id=self.execution.id,
+                    target_status=final_status,
+                    actual_status=self.execution.status,
+                    correlation_id=self.correlation_id,
+                )
+                return cast(ExecutionStatus, self.execution.status)
+            AuditService.create_entry(
+                user_id=str(self.execution.user_id),
+                action_type=audit_action_type,
+                entity_type=AuditEntityType.EXECUTION,
+                entity_id=self.execution.id,
+                details={
+                    'action_id': self.action.id,
+                    'action_name': self.action.name,
+                    'workflow_type': 'container',
+                    'step_count': len(self.workflow_steps),
+                    'child_execution_ids': [c.id for c in self.child_executions],
+                    'final_status': final_status,
+                },
+                correlation_id=self.correlation_id,
+            )
+
+        # Sync in-memory object after commit (values are known, no refresh needed)
+        self.execution.status = final_status
+        self.execution.completed_at = completed_at
 
         logger.info(
             "container_workflow_execution_finished",

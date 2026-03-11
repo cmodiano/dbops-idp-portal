@@ -891,7 +891,7 @@ development_status:
     71-4-css-tokens-topnav: done
     71-5-pipeline-validation-unifie-vues-execution: done
     71-6-refactoring-god-classes-gates-container-runtime: done
-    71-7-atomicite-container-workflow: backlog
+    71-7-atomicite-container-workflow: done
     71-8-task-soft-time-limit-celery: backlog
     71-9-testabilite-throttle-deduplication-is-auditor: backlog
     71-10-adrs-manquants-celery-oracle-cac-parallel: backlog
