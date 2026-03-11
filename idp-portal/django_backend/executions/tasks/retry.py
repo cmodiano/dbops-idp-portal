@@ -8,6 +8,8 @@ from typing import Any
 
 import structlog
 from celery import shared_task  # type: ignore[import-untyped]
+from celery.exceptions import SoftTimeLimitExceeded  # type: ignore[import-untyped]
+from django.conf import settings
 
 from executions.models import Execution
 from executions.workflow_runtime import StepOutcome
@@ -20,7 +22,16 @@ logger = structlog.get_logger(__name__)
 _MAX_RETRY_DELAY_SECONDS = 86400  # 24h max, prevents overflow on high attempt counts
 
 
-@shared_task(bind=True, max_retries=0, name="executions.tasks.retry_workflow_step")
+_RETRY_LIMITS = settings.CELERY_TASK_TIME_LIMITS["retry_workflow_step"]
+
+
+@shared_task(
+    bind=True,
+    max_retries=0,
+    name="executions.tasks.retry_workflow_step",
+    soft_time_limit=_RETRY_LIMITS["soft"],
+    time_limit=_RETRY_LIMITS["hard"],
+)
 def retry_workflow_step(self: Any, execution_id: int, step: dict, attempt: int) -> dict:
     """
     Retry a workflow step asynchronously after a calculated delay.
@@ -200,6 +211,35 @@ def retry_workflow_step(self: Any, execution_id: int, step: dict, attempt: int) 
             'next_attempt': attempt + 1,
             'delay_seconds': delay_seconds,
         }
+
+    except SoftTimeLimitExceeded:
+        logger.error(
+            "celery_retry_workflow_step_soft_timeout",
+            execution_id=execution_id,
+            step_id=step_id,
+            attempt=attempt,
+        )
+        # Mark step FAILED with timeout message
+        try:
+            from executions.models import ExecutionStep, ExecutionStepStatus  # noqa: PLC0415
+            from django.utils import timezone as tz  # noqa: PLC0415
+            ExecutionStep.objects.filter(
+                execution_id=execution_id,
+                config_step_id=step_id,
+                status=ExecutionStepStatus.RUNNING,
+            ).update(
+                status=ExecutionStepStatus.FAILED,
+                error_message="Soft time limit exceeded in retry_workflow_step",
+                completed_at=tz.now(),
+            )
+        except Exception:  # noqa: BLE001 — best-effort
+            logger.error(
+                "celery_retry_workflow_step_timeout_step_update_failed",
+                execution_id=execution_id,
+                step_id=step_id,
+                exc_info=True,
+            )
+        raise
 
     except Execution.DoesNotExist:
         logger.error(

@@ -10,6 +10,7 @@ from typing import Any
 
 import structlog
 from celery import shared_task  # type: ignore[import-untyped]
+from celery.exceptions import SoftTimeLimitExceeded  # type: ignore[import-untyped]
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
@@ -28,8 +29,16 @@ from core.middleware import get_correlation_id
 
 logger = structlog.get_logger(__name__)
 
+_SCHED_LIMITS = settings.CELERY_TASK_TIME_LIMITS["process_pending_scheduled_executions"]
 
-@shared_task(bind=True, max_retries=0, name="executions.tasks.process_pending_scheduled_executions")
+
+@shared_task(
+    bind=True,
+    max_retries=0,
+    name="executions.tasks.process_pending_scheduled_executions",
+    soft_time_limit=_SCHED_LIMITS["soft"],
+    time_limit=_SCHED_LIMITS["hard"],
+)
 def process_pending_scheduled_executions(self: Any) -> dict:
     """
     Story 42.1: Periodic Celery Beat task to process pending scheduled executions.
@@ -166,6 +175,17 @@ def process_pending_scheduled_executions(self: Any) -> dict:
                 correlation_id=correlation_id,
             )
             triggered += 1
+
+        except SoftTimeLimitExceeded:
+            logger.warning(
+                "process_pending_scheduled_executions_soft_timeout",
+                processed=triggered + errors,
+                total=count,
+                triggered=triggered,
+                errors=errors,
+                correlation_id=correlation_id,
+            )
+            return {'processed': count, 'triggered': triggered, 'errors': errors, 'status': 'partial_timeout'}
 
         except Exception as e:  # noqa: BLE001 — resilience-boundary: error in one se must not block others
             logger.error(

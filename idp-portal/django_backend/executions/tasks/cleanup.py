@@ -14,6 +14,8 @@ from datetime import timedelta
 
 import structlog
 from celery import shared_task  # type: ignore[import-untyped]
+from celery.exceptions import SoftTimeLimitExceeded  # type: ignore[import-untyped]
+from django.conf import settings
 from django.utils import timezone
 
 logger = structlog.get_logger(__name__)
@@ -33,7 +35,14 @@ LOG_RETENTION_DAYS = _parse_log_retention_days()
 PURGE_BATCH_SIZE = 100
 
 
-@shared_task(name="executions.tasks.purge_old_platform_logs")
+_PURGE_LOGS_LIMITS = settings.CELERY_TASK_TIME_LIMITS["purge_old_platform_logs"]
+
+
+@shared_task(
+    name="executions.tasks.purge_old_platform_logs",
+    soft_time_limit=_PURGE_LOGS_LIMITS["soft"],
+    time_limit=_PURGE_LOGS_LIMITS["hard"],
+)
 def purge_old_platform_logs() -> dict:
     """Purge platform_logs from ExecutionStep output for old terminal executions.
 
@@ -74,40 +83,48 @@ def purge_old_platform_logs() -> dict:
     total_purged = 0
     total_errors = 0
 
-    # Process in batches to avoid long transactions
-    while True:
-        batch_ids = list(qs.values_list("id", flat=True)[:PURGE_BATCH_SIZE])
-        if not batch_ids:
-            break
+    try:
+        # Process in batches to avoid long transactions
+        while True:
+            batch_ids = list(qs.values_list("id", flat=True)[:PURGE_BATCH_SIZE])
+            if not batch_ids:
+                break
 
-        steps = ExecutionStep.objects.filter(id__in=batch_ids).only("id", "output")
-        for step in steps:
-            output = None
-            try:
-                output = step.get_output()
-                if not output or "platform_logs" not in output:
-                    continue
+            steps = ExecutionStep.objects.filter(id__in=batch_ids).only("id", "output")
+            for step in steps:
+                output = None
+                try:
+                    output = step.get_output()
+                    if not output or "platform_logs" not in output:
+                        continue
 
-                del output["platform_logs"]
-                output["logs_purged"] = True
-                output["logs_purged_at"] = timezone.now().isoformat()
-                step.set_output(output)
-                step.save(update_fields=["output"])
-                total_purged += 1
-            except Exception:  # noqa: BLE001 — best-effort: never crash the task
-                logger.exception(
-                    "purge_platform_logs_step_error",
-                    step_id=step.id,
-                )
-                total_errors += 1
-                # Mark step with logs_purged so it won't be retried indefinitely
-                if output is not None:
-                    try:
-                        output["logs_purged"] = True
-                        step.set_output(output)
-                        step.save(update_fields=["output"])
-                    except Exception:  # noqa: BLE001 — best-effort
-                        pass
+                    del output["platform_logs"]
+                    output["logs_purged"] = True
+                    output["logs_purged_at"] = timezone.now().isoformat()
+                    step.set_output(output)
+                    step.save(update_fields=["output"])
+                    total_purged += 1
+                except Exception:  # noqa: BLE001 — best-effort: never crash the task
+                    logger.exception(
+                        "purge_platform_logs_step_error",
+                        step_id=step.id,
+                    )
+                    total_errors += 1
+                    # Mark step with logs_purged so it won't be retried indefinitely
+                    if output is not None:
+                        try:
+                            output["logs_purged"] = True
+                            step.set_output(output)
+                            step.save(update_fields=["output"])
+                        except Exception:  # noqa: BLE001 — best-effort
+                            pass
+    except SoftTimeLimitExceeded:
+        logger.warning(
+            "purge_old_platform_logs_soft_timeout",
+            purged=total_purged,
+            errors=total_errors,
+        )
+        return {"purged": total_purged, "errors": total_errors, "status": "partial_timeout"}
 
     logger.info(
         "purge_old_platform_logs_complete",
@@ -133,7 +150,14 @@ WORKFLOW_EVENT_RETENTION_DAYS = _parse_workflow_event_retention_days()
 WORKFLOW_EVENT_PURGE_BATCH_SIZE = 1000
 
 
-@shared_task(name="executions.tasks.purge_old_workflow_events")
+_PURGE_EVENTS_LIMITS = settings.CELERY_TASK_TIME_LIMITS["purge_old_workflow_events"]
+
+
+@shared_task(
+    name="executions.tasks.purge_old_workflow_events",
+    soft_time_limit=_PURGE_EVENTS_LIMITS["soft"],
+    time_limit=_PURGE_EVENTS_LIMITS["hard"],
+)
 def purge_old_workflow_events() -> dict:
     """Purge workflow events older than the retention period.
 
@@ -152,18 +176,25 @@ def purge_old_workflow_events() -> dict:
     cutoff = timezone.now() - timedelta(days=WORKFLOW_EVENT_RETENTION_DAYS)
     total_deleted = 0
 
-    while True:
-        # Fetch IDs in a batch to delete — avoids unbounded DELETE with WHERE
-        batch_ids = list(
-            WorkflowEvent.objects
-            .filter(created_at__lt=cutoff)
-            .values_list("id", flat=True)[:WORKFLOW_EVENT_PURGE_BATCH_SIZE]
-        )
-        if not batch_ids:
-            break
+    try:
+        while True:
+            # Fetch IDs in a batch to delete — avoids unbounded DELETE with WHERE
+            batch_ids = list(
+                WorkflowEvent.objects
+                .filter(created_at__lt=cutoff)
+                .values_list("id", flat=True)[:WORKFLOW_EVENT_PURGE_BATCH_SIZE]
+            )
+            if not batch_ids:
+                break
 
-        deleted, _ = WorkflowEvent.objects.filter(id__in=batch_ids).delete()
-        total_deleted += deleted
+            deleted, _ = WorkflowEvent.objects.filter(id__in=batch_ids).delete()
+            total_deleted += deleted
+    except SoftTimeLimitExceeded:
+        logger.warning(
+            "purge_old_workflow_events_soft_timeout",
+            deleted=total_deleted,
+        )
+        return {"deleted": total_deleted, "status": "partial_timeout"}
 
     logger.info(
         "purge_old_workflow_events_complete",

@@ -12,6 +12,8 @@ from typing import Any
 
 import structlog
 from celery import shared_task  # type: ignore[import-untyped]
+from celery.exceptions import SoftTimeLimitExceeded  # type: ignore[import-untyped]
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
@@ -28,7 +30,16 @@ from core.models import AuditActionType, AuditEntityType
 logger = structlog.get_logger(__name__)
 
 
-@shared_task(bind=True, max_retries=0, name="executions.tasks.evaluate_waiting_gates")
+_GATES_LIMITS = settings.CELERY_TASK_TIME_LIMITS["evaluate_waiting_gates"]
+
+
+@shared_task(
+    bind=True,
+    max_retries=0,
+    name="executions.tasks.evaluate_waiting_gates",
+    soft_time_limit=_GATES_LIMITS["soft"],
+    time_limit=_GATES_LIMITS["hard"],
+)
 def evaluate_waiting_gates(self: Any) -> dict:
     """
     Story 25.3: Periodic Celery Beat task to evaluate WAITING gate conditions.
@@ -78,6 +89,7 @@ def evaluate_waiting_gates(self: Any) -> dict:
     still_waiting = 0
     errors = 0
 
+    processed = 0
     for step in waiting_steps:
         try:
             all_satisfied, gate_status = evaluator.evaluate(step)
@@ -86,6 +98,7 @@ def evaluate_waiting_gates(self: Any) -> dict:
             if gate_status.get('timeout_triggered'):
                 _handle_gate_timeout(step, gate_status, correlation_id or "")
                 errors += 1  # Count as "processed" but not unblocked
+                processed += 1
                 continue
 
             if all_satisfied:
@@ -96,6 +109,26 @@ def evaluate_waiting_gates(self: Any) -> dict:
                 # AC5: Update waiting context
                 _update_waiting_context(step, gate_status, correlation_id or "")
                 still_waiting += 1
+            processed += 1
+
+        except SoftTimeLimitExceeded:
+            logger.warning(
+                "evaluate_waiting_gates_soft_timeout",
+                processed=processed,
+                total=step_count,
+                unblocked=unblocked,
+                still_waiting=still_waiting,
+                errors=errors,
+                correlation_id=correlation_id,
+            )
+            return {
+                'waiting_steps': step_count,
+                'unblocked': unblocked,
+                'still_waiting': still_waiting,
+                'errors': errors,
+                'status': 'partial_timeout',
+                'processed': processed,
+            }
 
         except Exception as e:  # noqa: BLE001 — resilience-boundary: gate evaluation must continue for other steps on error
             # AC9: Error handling — log and continue
@@ -661,7 +694,16 @@ def _handle_gate_timeout(step: ExecutionStep, gate_status: dict, correlation_id:
     _handle_timeout_continuation(step, timeout_action, correlation_id)
 
 
-@shared_task(bind=True, max_retries=0, name="executions.tasks.resume_container_workflow_from_gate")
+_RESUME_LIMITS = settings.CELERY_TASK_TIME_LIMITS["resume_container_workflow_from_gate"]
+
+
+@shared_task(
+    bind=True,
+    max_retries=0,
+    name="executions.tasks.resume_container_workflow_from_gate",
+    soft_time_limit=_RESUME_LIMITS["soft"],
+    time_limit=_RESUME_LIMITS["hard"],
+)
 def resume_container_workflow_from_gate(
     self: Any, execution_id: int, on_success_step_ids: str | list[str]
 ) -> dict:
@@ -816,6 +858,16 @@ def resume_container_workflow_from_gate(
             correlation_id=correlation_id,
         )
         return {'outcome': 'completed', 'resumed_from': step_ids}
+
+    except SoftTimeLimitExceeded:
+        logger.error(
+            "resume_workflow_soft_timeout",
+            execution_id=execution_id,
+            on_success_step_ids=step_ids,
+            correlation_id=correlation_id,
+        )
+        # Do NOT modify execution status — the workflow loop handles inconsistent states
+        raise
 
     except Execution.DoesNotExist:
         logger.error(

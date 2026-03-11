@@ -12,6 +12,8 @@ from typing import Any
 
 import structlog
 from celery import shared_task  # type: ignore[import-untyped]
+from celery.exceptions import SoftTimeLimitExceeded  # type: ignore[import-untyped]
+from django.conf import settings
 from django.utils import timezone
 
 from executions.models import (
@@ -324,7 +326,16 @@ def _forward_platform_logs_to_splunk(
 # Story 34.5 (SOLID-BE-3): Tâche Celery générique — OCP poller
 # ---------------------------------------------------------------------------
 
-@shared_task(bind=True, max_retries=0, name="executions.tasks.poll_platform_job_status")
+_POLL_LIMITS = settings.CELERY_TASK_TIME_LIMITS["poll_platform_job_status"]
+
+
+@shared_task(
+    bind=True,
+    max_retries=0,
+    name="executions.tasks.poll_platform_job_status",
+    soft_time_limit=_POLL_LIMITS["soft"],
+    time_limit=_POLL_LIMITS["hard"],
+)
 def poll_platform_job_status(
     self: Any,
     execution_id: int,
@@ -402,6 +413,25 @@ def poll_platform_job_status(
             correlation_id=correlation_id,
             **(poll_kwargs or {}),
         )
+    except SoftTimeLimitExceeded:
+        logger.error(
+            "poll_platform_job_soft_timeout",
+            execution_id=execution_id,
+            platform_job_id=platform_job_id,
+            platform_type=platform_type,
+            retry_count=retry_count,
+            correlation_id=correlation_id,
+        )
+        # Mark step/execution in error
+        _tasks._mark_execution_polling_exhausted(
+            execution_id=execution_id,
+            platform_job_id=platform_job_id,
+            retry_count=retry_count,
+            error="Soft time limit exceeded in poll_platform_job_status",
+            correlation_id=correlation_id,
+        )
+        raise
+
     except Exception as e:  # noqa: BLE001 — resilience-boundary: adapter error logged, polling returns error outcome
         logger.error(
             "poll_platform_job_status_adapter_error",

@@ -726,6 +726,25 @@ CELERY_TASK_ROUTES = {
 del _adapters_pkg, _adapter_registry  # nettoyer le namespace settings
 
 # ============================================================================
+# Celery task time limits (seconds) — Story 71.8
+# soft_time_limit: raises SoftTimeLimitExceeded for graceful cleanup
+# time_limit: hard kill after soft + 30s margin
+# ============================================================================
+CELERY_TASK_TIME_LIMITS = {
+    "trigger_platform_job": {"soft": 600, "hard": 630},                    # 10min — external API call
+    "poll_platform_job_status": {"soft": 300, "hard": 330},                # 5min — single poll cycle
+    "process_pending_scheduled_executions": {"soft": 300, "hard": 330},    # 5min — batch
+    "retry_workflow_step": {"soft": 600, "hard": 630},                     # 10min — step execution
+    "purge_old_platform_logs": {"soft": 900, "hard": 930},                 # 15min — bulk delete
+    "purge_old_workflow_events": {"soft": 300, "hard": 330},               # 5min — bulk delete
+    "evaluate_waiting_gates": {"soft": 300, "hard": 330},                  # 5min — batch eval
+    "resume_container_workflow_from_gate": {"soft": 600, "hard": 630},     # 10min — workflow resume
+    "run_integration_health_check": {"soft": 120, "hard": 150},            # 2min — single HC
+    "health_check_all_integrations": {"soft": 300, "hard": 330},           # 5min — dispatch
+    "warmup_vault_secrets_cache": {"soft": 120, "hard": 150},              # 2min — cache warmup
+}
+
+# ============================================================================
 # Django Channels / WebSocket Configuration (Story 22.13)
 # ============================================================================
 # Default: inmemory for non-production, redis for production (override via CHANNEL_LAYER_BACKEND env)

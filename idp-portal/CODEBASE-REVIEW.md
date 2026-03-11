@@ -982,7 +982,7 @@ Les 246+ findings Epic 66 s'ajoutent aux 133 findings des audits historiques (§
 | Catégorie | Items | Nature |
 |-----------|-------|--------|
 | ~~MEDIUM — Container runtime~~ | ~~EXE-MED-05/06~~ | ~~Atomicité container workflow (non-bloquant pré-release)~~ — **Résolu** (story 71.7) : CAS pattern + `transaction.atomic()` pour `container_workflow_runtime.py` et `gates.py` |
-| MEDIUM — Celery limits | EXE-MED-07/08/09 | `task_soft_time_limit` absent |
+| ~~MEDIUM — Celery limits~~ | ~~EXE-MED-07/08/09~~ | ~~`task_soft_time_limit` absent~~ — **Résolu** (story 71.8) : `soft_time_limit` + `time_limit` sur les 11 tâches Celery, handlers `SoftTimeLimitExceeded` avec cleanup gracieux, valeurs centralisées dans `settings.CELERY_TASK_TIME_LIMITS` |
 | MEDIUM — Qualité | EXE-MED-10, AUD-MED-03 | Testabilité throttle, duplication `_is_auditor()` |
 | ADRs manquants | 4 ADRs | Celery, Oracle, CaC, Parallel Group |
 | Tests frontend | ~15 fichiers | Services/hooks non couverts |
