@@ -21,7 +21,7 @@ services:
   # Container 1: Oracle Database 23ai Free Edition
   # ==========================================================================
   oracle-db:
-    image: container-registry.oracle.com/database/free:${ORACLE_IMAGE_TAG:-23.4.0}
+    image: container-registry.oracle.com/database/free:${ORACLE_IMAGE_TAG:-latest}
     container_name: dbops-oracle
     hostname: oracle-db
 
@@ -121,7 +121,7 @@ services:
       dockerfile: Dockerfile
     container_name: idp-celery-worker
     # Worker unique consommant toutes les queues (bulkhead pattern — défaut recommandé)
-    command: celery -A idp_backend worker -Q aap,azure,github,terraform,default --concurrency=4 -n worker@%h
+    command: celery -A idp_backend worker -Q aap,azure,github,terraform,default --concurrency=8 -n worker@%h
     # Option avancée — Workers dédiés par plateforme (isolation stricte) :
     # Pour activer : commenter la ligne command: ci-dessus, décommenter UN seul service ci-dessous,
     # puis dupliquer ce service pour chaque plateforme voulue dans un compose override.

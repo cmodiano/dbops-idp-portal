@@ -371,69 +371,69 @@ class ApproveExecutionView(APIView):
                 details={"execution_id": execution_id},
             )
         # ADR-007: Only step-based approval path. Find the first WAITING approval step.
-        step = _find_first_waiting_approval_step(execution_id)
-        if step is None:
-            raise BadRequestError(
-                code="NO_PENDING_APPROVAL",
-                message="Aucun step d'approbation en attente pour cette exécution",
-                details={"execution_id": execution_id},
-            )
-
-        _validate_approval_gate_step(step)
-
-        # ADR-007: For auto-approval-gate (created by _create_execution_atomic),
-        # require admin permission (same as legacy PENDING_APPROVAL).
-        # For workflow step gates, use granular approver_profile_ids check.
-        is_auto_gate = step.config_step_id == 'auto-approval-gate'
-        if is_auto_gate:
-            if not is_admin_user(request.user):
-                raise PermissionDenied("Seuls les administrateurs peuvent approuver cette exécution")
-            step_config = _get_step_config(step)
-        else:
-            # Story 58.4 AC3: check approver permission for step gate path
-            step_config = _get_step_config(step)
-            if not _check_approver_permission(cast(User, request.user), step_config):
-                raise PermissionDenied("Vous n'avez pas les permissions pour approuver ce step")
-
-        correlation_id = get_correlation_id()
-        user_id = (
-            str(request.user.id)
-            if request.user and hasattr(request.user, "id")
-            else "unknown"
-        )
-        step.approved_by = cast(User, request.user)
-        step.approved_at = timezone.now()
-        step.approval_comment = (request.data or {}).get("comment", "") or ""
-        step.status = ExecutionStepStatus.COMPLETED
-        step.completed_at = timezone.now()
-
-        # Update output so gate_status reflects approval (UI shows correct state)
-        output = step.get_output() or {}
-        gate_status = output.get("gate_status", [])
-        for gs in gate_status:
-            if isinstance(gs, dict) and gs.get("type") == "approval_granted":
-                gs["satisfied"] = True
-                gs["reason"] = f"Approuvé par utilisateur {user_id}"
-                break
-        output["gate_status"] = gate_status
-        step.set_output(output)
-        step.save()
-
-        # V113: Durable approval event + dequeue runnable step (deferred to on_commit)
-        from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
-        from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
-        _eid, _step_id, _user_id_val = execution_id, step.id, user_id
-
-        def _emit_approval_and_dequeue() -> None:
-            WorkflowEventService.emit_approval_granted(_eid, step, approved_by=_user_id_val)
-            RunnableStepService.delete(_step_id)
-
-        execution_steps = step.execution.action.execution_steps or []
-        on_success_step_ids = _get_on_success_step_ids(step_config, execution_steps)
-
-        execution = step.execution
-
+        # select_for_update requires an atomic transaction.
         with transaction.atomic():
+            step = _find_first_waiting_approval_step(execution_id)
+            if step is None:
+                raise BadRequestError(
+                    code="NO_PENDING_APPROVAL",
+                    message="Aucun step d'approbation en attente pour cette exécution",
+                    details={"execution_id": execution_id},
+                )
+
+            _validate_approval_gate_step(step)
+
+            # ADR-007: For auto-approval-gate (created by _create_execution_atomic),
+            # require admin permission (same as legacy PENDING_APPROVAL).
+            # For workflow step gates, use granular approver_profile_ids check.
+            is_auto_gate = step.config_step_id == 'auto-approval-gate'
+            if is_auto_gate:
+                if not is_admin_user(request.user):
+                    raise PermissionDenied("Seuls les administrateurs peuvent approuver cette exécution")
+                step_config = _get_step_config(step)
+            else:
+                # Story 58.4 AC3: check approver permission for step gate path
+                step_config = _get_step_config(step)
+                if not _check_approver_permission(cast(User, request.user), step_config):
+                    raise PermissionDenied("Vous n'avez pas les permissions pour approuver ce step")
+
+            correlation_id = get_correlation_id()
+            user_id = (
+                str(request.user.id)
+                if request.user and hasattr(request.user, "id")
+                else "unknown"
+            )
+            step.approved_by = cast(User, request.user)
+            step.approved_at = timezone.now()
+            step.approval_comment = (request.data or {}).get("comment", "") or ""
+            step.status = ExecutionStepStatus.COMPLETED
+            step.completed_at = timezone.now()
+
+            # Update output so gate_status reflects approval (UI shows correct state)
+            output = step.get_output() or {}
+            gate_status = output.get("gate_status", [])
+            for gs in gate_status:
+                if isinstance(gs, dict) and gs.get("type") == "approval_granted":
+                    gs["satisfied"] = True
+                    gs["reason"] = f"Approuvé par utilisateur {user_id}"
+                    break
+            output["gate_status"] = gate_status
+            step.set_output(output)
+            step.save()
+
+            # V113: Durable approval event + dequeue runnable step (deferred to on_commit)
+            from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
+            from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
+            _eid, _step_id, _user_id_val = execution_id, step.id, user_id
+
+            def _emit_approval_and_dequeue() -> None:
+                WorkflowEventService.emit_approval_granted(_eid, step, approved_by=_user_id_val)
+                RunnableStepService.delete(_step_id)
+
+            execution_steps = step.execution.action.execution_steps or []
+            on_success_step_ids = _get_on_success_step_ids(step_config, execution_steps)
+
+            execution = step.execution
             transaction.on_commit(_emit_approval_and_dequeue)
 
             # ADR-007: Check is_auto_gate FIRST. The auto-approval-gate is a synthetic step

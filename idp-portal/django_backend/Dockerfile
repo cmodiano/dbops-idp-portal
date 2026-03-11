@@ -76,10 +76,10 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8000/api/v1/health/ || exit 1
 
 # Start Gunicorn with ASGI worker for HTTP + WebSocket support
-# Uses native ASGI worker (Gunicorn 25+) — 4 workers, 60s timeout, access/error logging
+# Uses native ASGI worker (Gunicorn 25+) — 6 workers, 60s timeout, access/error logging
 CMD ["gunicorn", "idp_backend.asgi:application", \
     "--worker-class", "asgi", \
-    "--workers", "4", \
+    "--workers", "6", \
     "--bind", "0.0.0.0:8000", \
     "--timeout", "60", \
     "--graceful-timeout", "30", \

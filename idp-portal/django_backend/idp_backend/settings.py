@@ -754,6 +754,8 @@ CHANNEL_LAYER_BACKEND = (
     else ('redis' if APP_ENV.lower() == 'production' else 'inmemory')
 ).lower()
 CHANNEL_REDIS_URL = os.getenv('CHANNEL_REDIS_URL', os.getenv('REDIS_URL', 'redis://localhost:6379/2'))
+CHANNEL_REDIS_CAPACITY = int(os.getenv('CHANNEL_REDIS_CAPACITY', '5000'))
+CHANNEL_REDIS_EXPIRY = int(os.getenv('CHANNEL_REDIS_EXPIRY', '10'))
 CHANNEL_LAYERS: dict[str, dict[str, Any]]
 
 if CHANNEL_LAYER_BACKEND in {'inmemory', 'memory', 'in_memory'}:
@@ -769,6 +771,10 @@ else:
             "BACKEND": "channels_redis.core.RedisChannelLayer",
             "CONFIG": {
                 "hosts": [CHANNEL_REDIS_URL],
+                # Higher capacity absorbs bursty workflow fan-out.
+                "capacity": CHANNEL_REDIS_CAPACITY,
+                # Shorter expiry reduces stale queued messages.
+                "expiry": CHANNEL_REDIS_EXPIRY,
             },
         },
     }
