@@ -22,6 +22,7 @@ import { ACTION_TYPE_LABELS } from '../../constants/auditActionTypes';
 import { ENTITY_TYPE_LABELS, formatDate, getEntityLabel } from './auditLabels';
 import { getEnvironmentLabel } from '../../utils/environmentHelpers';
 import { getApprovalInfoFromSteps } from '../../utils/executionHelpers';
+import { FormattedJson } from '../common/FormattedJson';
 
 const { Text } = Typography;
 
@@ -75,17 +76,9 @@ export interface AuditEntryDrawerProps {
   onClose: () => void;
 }
 
-/** Renders a change value: null/undefined → '—', object → <pre>JSON</pre>, else String(v). */
+/** Renders a change value using FormattedJson for consistency (Story 72.4). */
 function renderChangeValue(v: unknown): ReactNode {
-  if (v === null || v === undefined) return '—';
-  if (typeof v === 'object') {
-    return (
-      <pre style={{ margin: 0, fontSize: 11, whiteSpace: 'pre-wrap' }}>
-        {JSON.stringify(v, null, 2)}
-      </pre>
-    );
-  }
-  return String(v);
+  return <FormattedJson value={v} />;
 }
 
 /** Row type for the changes table (Modifications section). */
@@ -200,13 +193,7 @@ export function AuditEntryDrawer({
               <Descriptions column={1} size="small">
                 {filteredDetails.map(([key, value]) => (
                     <Descriptions.Item key={key} label={DETAIL_KEY_LABELS[key] ?? key}>
-                      {typeof value === 'object' ? (
-                        <pre style={{ margin: 0, fontSize: 11, whiteSpace: 'pre-wrap' }}>
-                          {JSON.stringify(value, null, 2)}
-                        </pre>
-                      ) : (
-                        String(value)
-                      )}
+                      <FormattedJson value={value} />
                     </Descriptions.Item>
                   ))}
               </Descriptions>
@@ -244,13 +231,7 @@ export function AuditEntryDrawer({
                 <Descriptions column={1} size="small">
                   {filteredDetails.map(([key, value]) => (
                     <Descriptions.Item key={key} label={DETAIL_KEY_LABELS[key] ?? key}>
-                      {typeof value === 'object' ? (
-                        <pre style={{ margin: 0, fontSize: 11, whiteSpace: 'pre-wrap' }}>
-                          {JSON.stringify(value, null, 2)}
-                        </pre>
-                      ) : (
-                        String(value)
-                      )}
+                      <FormattedJson value={value} />
                     </Descriptions.Item>
                   ))}
                 </Descriptions>
@@ -319,9 +300,7 @@ export function AuditEntryDrawer({
                   )}
                   {entry.details?.parameters && (
                     <Descriptions.Item label="Paramètres">
-                      <pre style={{ margin: 0, fontSize: 12, whiteSpace: 'pre-wrap' }}>
-                        {JSON.stringify(entry.details.parameters, null, 2)}
-                      </pre>
+                      <FormattedJson value={entry.details.parameters} />
                     </Descriptions.Item>
                   )}
                 </Descriptions>

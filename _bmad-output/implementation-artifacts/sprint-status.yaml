@@ -905,5 +905,5 @@ development_status:
     72-1-correlation-id-sur-tout-le-cycle-execution: done # Code review adversarial 2026-03-11: 3 HIGH/MEDIUM fixes (H1 _create_status_audit_entry correlation_id, H2 ContainerWorkflowRuntime fallback execution.correlation_id, M1 _schedule_notification), test AC search by correlation_id ajouté, 14/14 propagation + 71 services tests pass
     72-2-etat-avant-apres-pour-toutes-modifications-audit: done
     72-3-aucun-uuid-audit-uniquement-noms-lisibles: done # Code review adversariale 2026-03-11: 5 issues corrigées (H1: referenced_action_name BLOCKED_INVALID_INTEGRATION, H2: test nom explicite, M1: correlation_id DETAIL_KEY_LABELS, M2: execution_id supprimé CSV, M3: correlation_id ALREADY_SHOWN_KEYS)
-    72-4-formatage-json-pour-lisibilite: ready-for-dev
+    72-4-formatage-json-pour-lisibilite: done # Code review adversarial 2026-03-11: 6 fixes (H1 StepDetailDrawer, H2 formatParamValue, M1 EventDetailsPopover, M2-M4 FormattedJson, L1 typo)
     epic-72-retrospective: optional

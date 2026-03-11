@@ -20,6 +20,7 @@ import { STEP_STATUS_COLOR as STATUS_COLOR } from '../../../utils/execution-stat
 import { formatDuration } from './utils';
 import { formatUtcToLocal } from '../../../utils/dateFormat';
 import type { ExecutionStepResponse } from '../../../types/api';
+import { FormattedJson } from '../../common/FormattedJson';
 
 const { Text } = Typography;
 
@@ -129,9 +130,7 @@ export function TimelineStepItem({
               <div style={{ color: '#EF4444', marginBottom: 8 }}>{step.error_message}</div>
             )}
             {output && typeof output === 'object' && (
-              <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12 }}>
-                {JSON.stringify(output, null, 2)}
-              </pre>
+              <FormattedJson value={output} style={{ wordBreak: 'break-word', fontSize: 12 }} />
             )}
             {changeId && (
               <a href={changeId} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12 }}>

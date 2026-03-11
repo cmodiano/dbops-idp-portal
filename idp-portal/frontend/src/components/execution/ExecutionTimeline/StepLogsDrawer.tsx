@@ -8,6 +8,7 @@
 import type { RefObject } from 'react';
 import { Drawer } from 'antd';
 import type { ExecutionStepResponse } from '../../../types/api';
+import { FormattedJson } from '../../common/FormattedJson';
 
 interface StepLogsDrawerProps {
   step: ExecutionStepResponse | null;
@@ -49,20 +50,17 @@ export function StepLogsDrawer({ step, open, onClose, contentRef }: StepLogsDraw
           {step.output != null && typeof step.output === 'object' && (
             <div>
               <strong>Output :</strong>
-              <pre
+              <FormattedJson
+                value={step.output}
+                maxHeight={400}
                 style={{
                   margin: '4px 0 0 0',
                   padding: 12,
                   backgroundColor: 'rgba(0,0,0,0.04)',
                   borderRadius: 4,
-                  overflow: 'auto',
-                  maxHeight: 400,
-                  whiteSpace: 'pre-wrap',
                   wordBreak: 'break-word',
                 }}
-              >
-                {JSON.stringify(step.output, null, 2)}
-              </pre>
+              />
             </div>
           )}
         </div>

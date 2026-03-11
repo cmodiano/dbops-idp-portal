@@ -11,6 +11,7 @@
 import { useMemo } from 'react';
 import { Drawer, Space, Typography, Badge, Alert, Card, Spin, List, theme } from 'antd';
 import { CloseOutlined, CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined, ClockCircleOutlined, BranchesOutlined } from '@ant-design/icons';
+import { FormattedJson } from '../common/FormattedJson';
 import { StructuredErrorCard } from './StructuredErrorCard';
 import { ExecutionTimeline } from './ExecutionTimeline';
 import { useChildExecution } from '../../hooks/useChildExecution';
@@ -20,6 +21,18 @@ import type { BadgeStatusType } from '../../utils/execution-status';
 import { findExecutionStepsForParallelGroup, computeParallelGroupStatus } from '../../utils/parallelGroupUtils';
 
 const { Title, Text } = Typography;
+
+const STEP_OUTPUT_STYLE = {
+  margin: 0,
+  padding: 12,
+  borderRadius: 6,
+  fontSize: 12,
+  fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace" as const,
+  lineHeight: 1.6,
+  overflowX: 'auto' as const,
+  whiteSpace: 'pre-wrap' as const,
+  wordBreak: 'break-word' as const,
+};
 
 interface StepDetailDrawerProps {
   open: boolean;
@@ -120,15 +133,7 @@ export function StepDetailDrawer({
     return <ClockCircleOutlined style={{ color: token.colorTextQuaternary, fontSize: 18 }} />;
   }, [effectiveStatus, token.colorSuccess, token.colorError, token.colorWarning, token.colorTextQuaternary]);
 
-  // Parse step output (logs) — raw JSON for fallback or when no child execution
-  const stepLogs = useMemo(() => {
-    if (!executionStep?.output) return null;
-    if (typeof executionStep.output === 'string') return executionStep.output;
-    if (typeof executionStep.output === 'object') {
-      return JSON.stringify(executionStep.output, null, 2);
-    }
-    return null;
-  }, [executionStep?.output]);
+  const hasStepOutput = executionStep?.output != null;
 
   // child_execution_id from step output — when present, show timeline of the child action
   const childExecutionId = useMemo(() => {
@@ -344,25 +349,16 @@ export function StepDetailDrawer({
                       description={childError}
                       style={{ marginBottom: 12 }}
                     />
-                    {stepLogs && (
-                      <pre
+                    {hasStepOutput && (
+                      <FormattedJson
+                        value={executionStep!.output}
+                        maxHeight={400}
                         style={{
-                          margin: 0,
-                          padding: 12,
+                          ...STEP_OUTPUT_STYLE,
                           background: token.colorBgElevated,
                           color: token.colorText,
-                          borderRadius: 6,
-                          fontSize: 12,
-                          fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
-                          lineHeight: 1.6,
-                          overflowX: 'auto',
-                          maxHeight: 400,
-                          whiteSpace: 'pre-wrap',
-                          wordBreak: 'break-word',
                         }}
-                      >
-                        {stepLogs}
-                      </pre>
+                      />
                     )}
                   </>
                 )}
@@ -374,26 +370,17 @@ export function StepDetailDrawer({
                       mode="historical"
                       embedInWorkflowStepDrawer
                     />
-                    {childSteps.length === 0 && stepLogs && (
+                    {childSteps.length === 0 && hasStepOutput && (
                       <Card size="small" title={<span style={{ fontSize: 13 }}>Résumé de l&apos;étape (output)</span>} style={{ marginTop: 16 }}>
-                        <pre
+                        <FormattedJson
+                          value={executionStep!.output}
+                          maxHeight={300}
                           style={{
-                            margin: 0,
-                            padding: 12,
+                            ...STEP_OUTPUT_STYLE,
                             background: token.colorBgElevated,
                             color: token.colorText,
-                            borderRadius: 6,
-                            fontSize: 12,
-                            fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
-                            lineHeight: 1.6,
-                            overflowX: 'auto',
-                            maxHeight: 300,
-                            whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-word',
                           }}
-                        >
-                          {stepLogs}
-                        </pre>
+                        />
                       </Card>
                     )}
                   </>
@@ -401,27 +388,18 @@ export function StepDetailDrawer({
               </Card>
             )}
 
-            {/* Logs (JSON) — when no child execution or as fallback */}
-            {stepLogs && childExecutionId == null && (
+            {/* Logs (JSON) — when no child execution or as fallback (Story 72.4: FormattedJson) */}
+            {hasStepOutput && childExecutionId == null && (
               <Card size="small" title={<span style={{ fontSize: 13 }}>Logs</span>}>
-                <pre
+                <FormattedJson
+                  value={executionStep!.output}
+                  maxHeight={400}
                   style={{
-                    margin: 0,
-                    padding: 12,
+                    ...STEP_OUTPUT_STYLE,
                     background: token.colorBgElevated,
                     color: token.colorText,
-                    borderRadius: 6,
-                    fontSize: 12,
-                    fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
-                    lineHeight: 1.6,
-                    overflowX: 'auto',
-                    maxHeight: 400,
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
                   }}
-                >
-                  {stepLogs}
-                </pre>
+                />
               </Card>
             )}
 
