@@ -981,7 +981,7 @@ Les 246+ findings Epic 66 s'ajoutent aux 133 findings des audits historiques (§
 | ~~MEDIUM — Container runtime~~ | ~~EXE-MED-05/06~~ | ~~Atomicité container workflow (non-bloquant pré-release)~~ — **Résolu** (story 71.7) : CAS pattern + `transaction.atomic()` pour `container_workflow_runtime.py` et `gates.py` |
 | ~~MEDIUM — Celery limits~~ | ~~EXE-MED-07/08/09~~ | ~~`task_soft_time_limit` absent~~ — **Résolu** (story 71.8) : `soft_time_limit` + `time_limit` sur les 11 tâches Celery, handlers `SoftTimeLimitExceeded` avec cleanup gracieux, valeurs centralisées dans `settings.CELERY_TASK_TIME_LIMITS` |
 | ~~MEDIUM — Qualité~~ | ~~EXE-MED-10, AUD-MED-03~~ | ~~Testabilité throttle, duplication `_is_auditor()`~~ — **Résolu** (story 71.9) : fixture `throttle_rates` réutilisable, `THROTTLE_PORTAL_LOGIN_RATE` validé au startup, `is_auditor_user()` + `IsAuditorUser` centralisés dans `core/permissions.py`, duplication éliminée |
-| ADRs manquants | 4 ADRs | Celery, Oracle, CaC, Parallel Group |
+| ~~ADRs manquants~~ | ~~4 ADRs~~ | ~~Celery, Oracle, CaC, Parallel Group~~ — **Résolu** (story 71.10) : ADR-008 (Celery), ADR-009 (Oracle/python-oracledb), ADR-010 (Configuration as Code), ADR-011 (Parallélisme multi-connexion) créés dans `docs/backend/decisions/` |
 | Tests frontend | ~15 fichiers | Services/hooks non couverts |
 | ~~CSS tokens~~ | ~~TopNav.css~~ | ~~Couleurs hardcodées → design tokens~~ — **Résolu** (story 71.4) : 15 `rgba(0,135,78,…)` remplacées par `color-mix(in srgb, var(--ant-color-primary) X%, transparent)` |
 

@@ -894,7 +894,7 @@ development_status:
     71-7-atomicite-container-workflow: done
     71-8-task-soft-time-limit-celery: done
     71-9-testabilite-throttle-deduplication-is-auditor: done
-    71-10-adrs-manquants-celery-oracle-cac-parallel: backlog
+    71-10-adrs-manquants-celery-oracle-cac-parallel: done
     71-11-couverture-tests-frontend-services-hooks: backlog
     71-12-mise-a-jour-codebase-review-statuts-finaux: backlog
     epic-71-retrospective: optional
