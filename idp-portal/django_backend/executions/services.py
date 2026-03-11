@@ -21,6 +21,7 @@ from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.exceptions import BadRequestError
 from core.middleware import get_correlation_id
+from core.utils import sanitize_audit_changes
 from executions.dtos import ExecutionRequest
 from integrations.models import IntegrationStatus
 
@@ -564,6 +565,7 @@ class ExecutionService:
                 f"Unknown execution status for audit: {new_status}"
             )
 
+        changes = sanitize_audit_changes({'status': {'old': old_status, 'new': new_status}})
         AuditService.create_entry(
             user_id=user_id,
             action_type=audit_action_type,
@@ -572,8 +574,7 @@ class ExecutionService:
             details={
                 'action_id': execution.action_id,
                 'action_name': execution.action.name if execution.action else None,
-                'previous_status': old_status,
-                'new_status': new_status,
+                'changes': changes,
             },
             correlation_id=execution.correlation_id or get_correlation_id(),
         )

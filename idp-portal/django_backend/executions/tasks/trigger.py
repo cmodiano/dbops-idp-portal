@@ -14,7 +14,7 @@ from celery import shared_task  # type: ignore[import-untyped]
 from celery.exceptions import SoftTimeLimitExceeded  # type: ignore[import-untyped]
 from django.conf import settings
 
-logger = structlog.get_logger("executions.tasks")
+logger = structlog.get_logger(__name__)
 
 _LIMITS = settings.CELERY_TASK_TIME_LIMITS["trigger_platform_job"]
 
@@ -219,7 +219,10 @@ def trigger_platform_job(
         from core.services import AuditService  # noqa: PLC0415
         from core.models import AuditActionType, AuditEntityType  # noqa: PLC0415
         try:
+            from core.utils import sanitize_audit_changes  # noqa: PLC0415
+
             execution = Execution.objects.get(id=execution_id)
+            old_status = execution.status
             if execution.status not in (
                 ExecutionStatus.COMPLETED,
                 ExecutionStatus.FAILED,
@@ -228,6 +231,7 @@ def trigger_platform_job(
             ):
                 execution.status = ExecutionStatus.INTEGRATION_ERROR
                 execution.save(update_fields=["status"])
+            changes = sanitize_audit_changes({'status': {'old': old_status, 'new': ExecutionStatus.INTEGRATION_ERROR}})
             AuditService.create_entry(
                 user_id=str(execution.user_id),
                 action_type=AuditActionType.EXECUTION_INTEGRATION_ERROR,
@@ -238,6 +242,7 @@ def trigger_platform_job(
                     "error": str(exc),
                     "step_id": execution_step_id,
                     "adapter": "trigger_platform_job",
+                    "changes": changes,
                 },
                 correlation_id=correlation_id,
             )

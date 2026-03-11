@@ -25,7 +25,9 @@ from catalog.models import Action
 from idp_auth.models import User
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
-from core.utils import ensure_utc_isoformat
+from core.middleware import get_correlation_id
+from core.pagination import MAX_PAGE_SIZE
+from core.utils import ensure_utc_isoformat, sanitize_audit_changes
 from executions.utils import calculate_next_execution_date
 
 
@@ -67,6 +69,7 @@ class SchedulingService:
             scheduled_execution.save()
         
         # Create recurring pattern if provided
+        correlation_id = get_correlation_id()
         if recurring_pattern_data:
             RecurringPattern.objects.create(
                 scheduled_execution=scheduled_execution,
@@ -85,7 +88,8 @@ class SchedulingService:
                     'action_name': action.name,
                     'environment': environment,
                     'pattern_type': recurring_pattern_data['pattern_type'],
-                }
+                },
+                correlation_id=correlation_id,
             )
         else:
             AuditService.create_entry(
@@ -98,7 +102,8 @@ class SchedulingService:
                     'action_name': action.name,
                     'environment': environment,
                     'scheduled_at': ensure_utc_isoformat(scheduled_at),
-                }
+                },
+                correlation_id=correlation_id,
             )
         
         return scheduled_execution
@@ -138,8 +143,11 @@ class SchedulingService:
                 Q(scheduled_at__lte=scheduled_to) | Q(recurringpattern__next_execution_date__lte=scheduled_to)
             )
         
-        queryset = queryset.order_by('scheduled_at', 'recurringpattern__next_execution_date')
-        
+        queryset = queryset.order_by('scheduled_at', 'recurringpattern__next_execution_date').distinct()
+
+        # MED-01: Cap page_size to prevent unbounded queries
+        page_size = min(page_size, MAX_PAGE_SIZE)
+
         # Pagination
         total_count = queryset.count()
         start_index = (page - 1) * page_size
@@ -188,8 +196,14 @@ class SchedulingService:
         scheduled_execution.save()
         
         # If it's a recurring pattern and status changed to EXECUTED, update next_execution_date
-        if hasattr(scheduled_execution, 'recurringpattern') and new_status == ScheduledExecutionStatus.EXECUTED:
+        # MED-03: Use try/except instead of hasattr() — Django OneToOne raises DoesNotExist,
+        # not AttributeError, so hasattr() is unreliable for optional reverse relations.
+        pattern = None
+        try:
             pattern = scheduled_execution.recurringpattern
+        except RecurringPattern.DoesNotExist:
+            pass
+        if pattern is not None and new_status == ScheduledExecutionStatus.EXECUTED:
             if pattern.is_active == 1:
                 pattern_config = pattern.get_pattern_config() or {}
                 pattern.next_execution_date = calculate_next_execution_date(
@@ -205,6 +219,7 @@ class SchedulingService:
         }
         audit_action_type = status_to_audit_type.get(new_status)  # type: ignore[call-overload]
         if audit_action_type:
+            changes = sanitize_audit_changes({'status': {'old': old_status, 'new': new_status}})
             AuditService.create_entry(
                 user_id=user_id,
                 action_type=audit_action_type,
@@ -213,8 +228,7 @@ class SchedulingService:
                 details={
                     'action_id': scheduled_execution.action_id,
                     'action_name': scheduled_execution.action.name if scheduled_execution.action else None,
-                    'previous_status': old_status,
-                    'new_status': new_status,
+                    'changes': changes,
                 }
             )
         

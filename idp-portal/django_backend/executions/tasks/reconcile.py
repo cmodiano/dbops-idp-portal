@@ -130,6 +130,7 @@ def _mark_execution_failed(execution: Any, reason: str) -> None:
     from executions.models import ExecutionStatus  # noqa: PLC0415
     from core.services import AuditService  # noqa: PLC0415
     from core.models import AuditActionType, AuditEntityType  # noqa: PLC0415
+    from core.utils import sanitize_audit_changes  # noqa: PLC0415
 
     terminal_statuses = {
         ExecutionStatus.COMPLETED,
@@ -139,18 +140,24 @@ def _mark_execution_failed(execution: Any, reason: str) -> None:
     if execution.status in terminal_statuses:
         return
 
+    old_status = execution.status
     execution.status = ExecutionStatus.FAILED
     execution.completed_at = timezone.now()
     execution.error_message = reason
     execution.save(update_fields=["status", "completed_at", "error_message"])
 
     try:
+        changes = sanitize_audit_changes({'status': {'old': old_status, 'new': ExecutionStatus.FAILED}})
         AuditService.create_entry(
             user_id=str(execution.user_id),
             action_type=AuditActionType.EXECUTION_FAILED,
             entity_type=AuditEntityType.EXECUTION,
             entity_id=execution.id,
-            details={"reason": reason, "reconciled_at": timezone.now().isoformat()},
+            details={
+                "reason": reason,
+                "reconciled_at": timezone.now().isoformat(),
+                "changes": changes,
+            },
         )
     except Exception as exc:  # noqa: BLE001 — best-effort audit
         logger.warning(

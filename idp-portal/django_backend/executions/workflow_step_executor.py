@@ -8,9 +8,10 @@ from typing import TYPE_CHECKING, Optional, Any, Dict
 from django.db import transaction
 from django.utils import timezone
 
-from executions.models import ExecutionStep, ExecutionStepStatus
+from executions.models import ExecutionStep, ExecutionStepStatus, ExecutionStatus
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
+from core.utils import sanitize_audit_changes
 
 if TYPE_CHECKING:
     from executions.models import Execution
@@ -428,6 +429,7 @@ class StepExecutor:
             # AC: audit trail sur toutes les transitions FAILED (story 66-16 finding HIGH-1)
             # story 66-16 review: wrapped in try/except to prevent audit failure from suppressing StepResult
             try:
+                changes = sanitize_audit_changes({'status': {'old': ExecutionStatus.RUNNING, 'new': ExecutionStatus.FAILED}})
                 AuditService.create_entry(
                     user_id=str(self.execution.user_id) if self.execution.user_id is not None else '',
                     action_type=AuditActionType.EXECUTION_FAILED,
@@ -438,6 +440,7 @@ class StepExecutor:
                         'error_type': 'validation',
                         'step_id': getattr(execution_step, 'id', None),
                         'step_name': step_name,
+                        'changes': changes,
                     },
                     correlation_id=self.correlation_id,
                 )
@@ -475,6 +478,7 @@ class StepExecutor:
             # AC: audit trail sur toutes les transitions FAILED (story 66-16 finding HIGH-2)
             # story 66-16 review: wrapped in try/except to prevent audit failure from suppressing StepResult
             try:
+                changes = sanitize_audit_changes({'status': {'old': ExecutionStatus.RUNNING, 'new': ExecutionStatus.FAILED}})
                 AuditService.create_entry(
                     user_id=str(self.execution.user_id) if self.execution.user_id is not None else '',
                     action_type=AuditActionType.EXECUTION_FAILED,
@@ -485,6 +489,7 @@ class StepExecutor:
                         'error_type': type(e).__name__,
                         'step_id': getattr(execution_step, 'id', None),
                         'step_name': step_name,
+                        'changes': changes,
                     },
                     correlation_id=self.correlation_id,
                 )
@@ -944,6 +949,7 @@ class StepExecutor:
             # AC: audit trail sur toutes les transitions FAILED (story 66-16 finding HIGH-3)
             # story 66-16 review: wrapped in try/except to prevent audit failure from suppressing StepResult
             try:
+                changes = sanitize_audit_changes({'status': {'old': ExecutionStatus.RUNNING, 'new': ExecutionStatus.FAILED}})
                 AuditService.create_entry(
                     user_id=str(self.execution.user_id) if self.execution.user_id is not None else '',
                     action_type=AuditActionType.EXECUTION_FAILED,
@@ -955,6 +961,7 @@ class StepExecutor:
                         'step_id': getattr(execution_step, 'id', None),
                         'step_name': step_name,
                         'step_context': 'schedule_step',
+                        'changes': changes,
                     },
                     correlation_id=self.correlation_id,
                 )

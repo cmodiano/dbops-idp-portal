@@ -23,6 +23,7 @@ from executions.utils.workflow_parsing import get_workflow_entry_step_ids
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.middleware import get_correlation_id
+from core.utils import sanitize_audit_changes
 
 logger = structlog.get_logger(__name__)
 
@@ -395,6 +396,7 @@ class WorkflowRuntime:
                 self.execution.save()
 
                 # Audit
+                changes = sanitize_audit_changes({'status': {'old': ExecutionStatus.RUNNING, 'new': ExecutionStatus.FAILED}})
                 AuditService.create_entry(
                     user_id=str(self.execution.user_id),
                     action_type=AuditActionType.EXECUTION_FAILED,
@@ -405,6 +407,7 @@ class WorkflowRuntime:
                         'action_name': self.action.name,
                         'error': error_msg,
                         'transition_count': self.state.transition_count,
+                        'changes': changes,
                     },
                     correlation_id=self.correlation_id,
                 )
@@ -506,6 +509,8 @@ class WorkflowRuntime:
             else AuditActionType.EXECUTION_FAILED
         )
 
+        old_status = self.execution.status
+        changes = sanitize_audit_changes({'status': {'old': old_status, 'new': final_status}})
         audit_details = {
             'action_id': self.action.id,
             'action_name': self.action.name,
@@ -513,6 +518,7 @@ class WorkflowRuntime:
             'final_outcome': self.state.last_step_outcome.value if self.state.last_step_outcome else None,
             # AC4: minimal audit proof of the path taken
             'path_trace': self.state.path_trace,
+            'changes': changes,
         }
 
         if self.state.last_error:

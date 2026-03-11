@@ -417,6 +417,12 @@ class TestExecutionService(TestCase):
             entity_id=execution.id,
         ).first()
         self.assertIsNotNone(audit)
+        # Story 72.2: format standard changes: { status: { old, new } }
+        details = audit.get_details() or {}
+        self.assertIn('changes', details)
+        self.assertIn('status', details['changes'])
+        self.assertEqual(details['changes']['status']['old'], ExecutionStatus.SUBMITTED)
+        self.assertEqual(details['changes']['status']['new'], ExecutionStatus.FAILED)
 
     # ----------------------------------------------------------------
     # Tâche 1.16/1.17 — list_by_user: offset < 0 et limit <= 0

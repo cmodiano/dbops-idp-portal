@@ -38,6 +38,7 @@ from executions.simulation_service import SimulationService
 from executions.cancellation_cache import is_cancelled
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
+from core.utils import sanitize_audit_changes
 from core.middleware import get_correlation_id
 from executions.output_extractor import OutputExtractor
 from executions.template_resolver import StepTemplateResolver
@@ -1480,6 +1481,8 @@ class ContainerWorkflowRuntime:
                     correlation_id=self.correlation_id,
                 )
                 return cast(ExecutionStatus, self.execution.status)
+            old_status = self.execution.status
+            changes = sanitize_audit_changes({'status': {'old': old_status, 'new': final_status}})
             AuditService.create_entry(
                 user_id=str(self.execution.user_id),
                 action_type=audit_action_type,
@@ -1492,6 +1495,7 @@ class ContainerWorkflowRuntime:
                     'step_count': len(self.workflow_steps),
                     'child_execution_ids': [c.id for c in self.child_executions],
                     'final_status': final_status,
+                    'changes': changes,
                 },
                 correlation_id=self.correlation_id,
             )

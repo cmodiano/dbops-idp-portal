@@ -22,6 +22,7 @@ from executions.models import (
 )
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
+from core.utils import sanitize_audit_changes
 
 logger = structlog.get_logger(__name__)
 
@@ -65,6 +66,7 @@ def _mark_execution_polling_exhausted(
         execution = Execution.objects.get(id=execution_id)
         terminal_statuses = {ExecutionStatus.COMPLETED, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED}
 
+        old_status = execution.status
         if execution.status not in terminal_statuses:
             execution.status = ExecutionStatus.FAILED
             execution.completed_at = timezone.now()
@@ -83,6 +85,7 @@ def _mark_execution_polling_exhausted(
             platform_step.completed_at = timezone.now()
             platform_step.save()
 
+        changes = sanitize_audit_changes({'status': {'old': old_status, 'new': ExecutionStatus.FAILED}})
         AuditService.create_entry(
             user_id=str(execution.user_id),
             action_type=AuditActionType.EXECUTION_POLLING_EXHAUSTED,
@@ -93,6 +96,7 @@ def _mark_execution_polling_exhausted(
                 'retry_count': retry_count,
                 'max_retries': MAX_POLLING_RETRIES,
                 'last_error': error,
+                'changes': changes,
             },
             correlation_id=correlation_id,
         )

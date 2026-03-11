@@ -26,6 +26,7 @@ from executions.models import (
 from core.services import AuditService
 from core.middleware import get_correlation_id
 from core.models import AuditActionType, AuditEntityType
+from core.utils import sanitize_audit_changes
 
 logger = structlog.get_logger(__name__)
 
@@ -451,12 +452,17 @@ def _complete_execution_on_last_step(step: ExecutionStep, correlation_id: str) -
                 completed_at=timezone.now(),
             )
             if updated:
+                changes = sanitize_audit_changes({'status': {'old': ExecutionStatus.RUNNING, 'new': ExecutionStatus.COMPLETED}})
                 AuditService.create_entry(
                     user_id=str(execution.user_id),
                     action_type=AuditActionType.EXECUTION_COMPLETED,
                     entity_type=AuditEntityType.EXECUTION,
                     entity_id=execution.id,
-                    details={'execution_id': str(execution.id), 'action_name': execution.action.name if execution.action else None},
+                    details={
+                        'action_id': execution.action_id,
+                        'action_name': execution.action.name if execution.action else None,
+                        'changes': changes,
+                    },
                     correlation_id=correlation_id,
                 )
                 logger.info(
