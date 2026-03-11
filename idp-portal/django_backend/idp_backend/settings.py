@@ -742,6 +742,7 @@ CELERY_TASK_TIME_LIMITS = {
     "run_integration_health_check": {"soft": 120, "hard": 150},            # 2min — single HC
     "health_check_all_integrations": {"soft": 300, "hard": 330},           # 5min — dispatch
     "warmup_vault_secrets_cache": {"soft": 120, "hard": 150},              # 2min — cache warmup
+    "reconcile_stale_executions": {"soft": 120, "hard": 150},              # 2min — startup reconciliation
 }
 
 # ============================================================================

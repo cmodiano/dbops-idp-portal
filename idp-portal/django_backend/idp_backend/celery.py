@@ -272,3 +272,23 @@ app.conf.beat_schedule['purge-old-workflow-events'] = {
     'task': 'executions.tasks.purge_old_workflow_events',
     'schedule': _purge_events_schedule,
 }
+
+# Crash recovery: reconcile stale RUNNING executions (orphaned after backend crash).
+# Runs periodically as a safety net in addition to the AppConfig.ready() startup trigger.
+# Default interval = 300s (5 minutes). Set to 0 to disable periodic reconciliation
+# (startup-only mode). Env var: CELERY_BEAT_RECONCILE_INTERVAL (seconds, default: 300).
+try:
+    _reconcile_schedule = float(os.getenv('CELERY_BEAT_RECONCILE_INTERVAL', '300.0'))
+except ValueError as exc:
+    logger.warning(
+        "celery_beat_invalid_reconcile_interval: value=%r error=%s fallback=300.0",
+        os.getenv('CELERY_BEAT_RECONCILE_INTERVAL'),
+        exc,
+    )
+    _reconcile_schedule = 300.0
+
+if _reconcile_schedule > 0:
+    app.conf.beat_schedule['reconcile-stale-executions'] = {
+        'task': 'executions.tasks.reconcile_stale_executions',
+        'schedule': _reconcile_schedule,
+    }
