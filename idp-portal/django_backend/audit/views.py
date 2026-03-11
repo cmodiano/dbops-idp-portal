@@ -481,16 +481,14 @@ class AuditExportView(APIView):
 
         buf = io.StringIO()
         writer = csv.writer(buf)
+        # Story 72.3: no user_id/action_id/execution_id — only readable names (user_name, action_name)
         writer.writerow(
             [
                 "id",
                 "timestamp",
-                "user_id",
                 "user_name",
                 "action_type",
                 "entity_type",          # Story 43.6
-                "execution_id",
-                "action_id",
                 "action_name",
                 "environment",
                 "status",
@@ -504,18 +502,18 @@ class AuditExportView(APIView):
             details = r.get_details() or {}
             # Story 43.1: ne récupérer l'Execution que pour les entrées de type EXECUTION
             exec_obj = exec_by_id.get(r.entity_id) if r.entity_type == AuditEntityType.EXECUTION else None
+            action_name_val = (
+                (exec_obj.action.name if exec_obj and getattr(exec_obj, "action", None) else "")
+                or details.get("action_name", "")
+            )
             writer.writerow(
                 [
                     r.id,
                     ensure_utc_isoformat(r.timestamp) or "",
-                    r.user_id or "",
                     user_name_by_id_export.get(r.user_id) or r.user_id or "",
                     r.action_type,
                     r.entity_type,          # Story 43.6
-                    ("" if r.entity_id is None else int(r.entity_id)) if r.entity_type == AuditEntityType.EXECUTION else "",
-                    (details["action_id"] if "action_id" in details else (exec_obj.action_id if exec_obj else "")),
-                    (exec_obj.action.name if exec_obj and getattr(exec_obj, "action", None) else "")
-                    or details.get("action_name", ""),      # Story 43.6 : fallback depuis details
+                    action_name_val,
                     details.get("environment") or (exec_obj.environment if exec_obj else ""),
                     (exec_obj.status if exec_obj else details.get("status") or ""),
                     details.get("servicenow_change_id") or (exec_obj.servicenow_change_id if exec_obj else ""),

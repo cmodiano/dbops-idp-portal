@@ -94,7 +94,7 @@ describe('AuditTable', () => {
       expect(getActionName(entry)).toBe(getEntityLabel(entry));
     });
 
-    it('returns "Action inconnue" shape via getEntityLabel for unknown execution', () => {
+    it('returns entity type label via getEntityLabel for unknown execution (Story 72.3: no UUID)', () => {
       const entry = {
         ...mockEntry,
         action_name: undefined,
@@ -102,8 +102,7 @@ describe('AuditTable', () => {
         entity_id: 42,
         details: { action_id: undefined, environment: 'prod', servicenow_change_id: undefined },
       };
-      // entity_type=execution falls through to generic fallback #entity_id
-      expect(getActionName(entry)).toBe('#42');
+      expect(getActionName(entry)).toBe('Exécution');
     });
   });
 
@@ -122,7 +121,7 @@ describe('AuditTable', () => {
       expect(getEntityLabel(entry)).toBe('My Action');
     });
 
-    it('test_getEntityLabel_function — entity_type action fallback to entity_id', () => {
+    it('test_getEntityLabel_function — entity_type action fallback (Story 72.3: no UUID)', () => {
       const entry = {
         ...mockEntry,
         action_name: undefined,
@@ -130,10 +129,26 @@ describe('AuditTable', () => {
         entity_id: 99,
         details: { action_id: undefined, environment: 'prod', servicenow_change_id: undefined },
       };
-      expect(getEntityLabel(entry)).toBe('Action #99');
+      expect(getEntityLabel(entry)).toBe('Action');
     });
 
-    it('test_getEntityLabel_function — entity_type integration fallback', () => {
+    it('test_getEntityLabel_function — entity_type integration uses integration_name first (Story 72.3)', () => {
+      const entry = {
+        ...mockEntry,
+        action_name: undefined,
+        entity_type: 'integration' as const,
+        entity_id: 55,
+        details: {
+          integration_name: 'AAP Production',
+          action_code: 'aap',
+          environment: 'prod',
+          servicenow_change_id: undefined,
+        },
+      };
+      expect(getEntityLabel(entry)).toBe('AAP Production');
+    });
+
+    it('test_getEntityLabel_function — entity_type integration fallback (Story 72.3: no UUID)', () => {
       const entry = {
         ...mockEntry,
         action_name: undefined,
@@ -141,10 +156,10 @@ describe('AuditTable', () => {
         entity_id: 55,
         details: { action_id: undefined, environment: 'prod', servicenow_change_id: undefined },
       };
-      expect(getEntityLabel(entry)).toBe('Intégration #55');
+      expect(getEntityLabel(entry)).toBe('Intégration');
     });
 
-    it('test_getEntityLabel_function — entity_type profile fallback', () => {
+    it('test_getEntityLabel_function — entity_type profile fallback (Story 72.3: no UUID)', () => {
       const entry = {
         ...mockEntry,
         action_name: undefined,
@@ -152,7 +167,7 @@ describe('AuditTable', () => {
         entity_id: 77,
         details: { action_id: undefined, environment: 'prod', servicenow_change_id: undefined },
       };
-      expect(getEntityLabel(entry)).toBe('Profil #77');
+      expect(getEntityLabel(entry)).toBe('Profil');
     });
 
     it('test_getEntityLabel_function — entity_type user with user_name', () => {
@@ -165,7 +180,7 @@ describe('AuditTable', () => {
       expect(getEntityLabel(entry)).toBe('bob');
     });
 
-    it('test_getEntityLabel_function — generic fallback with entity_id', () => {
+    it('test_getEntityLabel_function — generic fallback (Story 72.3: entity type label)', () => {
       const entry = {
         ...mockEntry,
         action_name: undefined,
@@ -173,10 +188,10 @@ describe('AuditTable', () => {
         entity_id: 42,
         details: { action_id: undefined, environment: 'prod', servicenow_change_id: undefined },
       };
-      expect(getEntityLabel(entry)).toBe('#42');
+      expect(getEntityLabel(entry)).toBe('Exécution');
     });
 
-    it('test_getEntityLabel_function — returns #0 when entity_id is 0 (valid zero)', () => {
+    it('test_getEntityLabel_function — execution with entity_id 0 (Story 72.3: entity type label)', () => {
       const entry = {
         ...mockEntry,
         action_name: undefined,
@@ -184,14 +199,14 @@ describe('AuditTable', () => {
         entity_id: 0,
         details: { action_id: undefined, environment: 'prod', servicenow_change_id: undefined },
       };
-      expect(getEntityLabel(entry)).toBe('#0');
+      expect(getEntityLabel(entry)).toBe('Exécution');
     });
 
-    it('test_getEntityLabel_function — returns — when entity_id is null', () => {
+    it('test_getEntityLabel_function — returns — when no entity_type', () => {
       const entry = {
         ...mockEntry,
         action_name: undefined,
-        entity_type: 'execution' as const,
+        entity_type: '' as unknown as 'execution',
         entity_id: null as unknown as number,
         details: { action_id: undefined, environment: 'prod', servicenow_change_id: undefined },
       };
@@ -386,7 +401,7 @@ describe('AuditTable', () => {
       expect(screen.getByText('Deploy App')).toBeInTheDocument();
     });
 
-    it('test_entity_column_shows_entity_id_for_non_action — Entité affiche préfixe entity_id pour intégration', () => {
+    it('test_entity_column_shows_readable_label_for_integration — Story 72.3: Entité affiche "Intégration" (pas d\'UUID)', () => {
       const integrationEntry: AuditExecutionEntry = {
         ...mockEntry,
         action_name: undefined,
@@ -396,7 +411,7 @@ describe('AuditTable', () => {
         details: { action_id: undefined, environment: undefined, servicenow_change_id: undefined },
       };
       render(<AuditTable {...defaultProps} topLevelEntries={[integrationEntry]} />);
-      expect(screen.getByText('Intégration #55')).toBeInTheDocument();
+      expect(screen.getByText('Intégration')).toBeInTheDocument();
     });
 
     it('test_type_column_shows_readable_label — Type affiche "Action publiée" pour ACTION_PUBLISHED', () => {

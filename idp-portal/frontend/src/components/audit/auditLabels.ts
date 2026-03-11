@@ -25,7 +25,7 @@ export function formatDate(dateStr: string | null): string {
   return formatUtcToLocal(dateStr, 'datetime');
 }
 
-/** Get entity label for the Entité column. Replaces getActionName. */
+/** Get entity label for the Entité column. Story 72.3: no UUID, use readable names only. */
 export function getEntityLabel(entry: AuditExecutionEntry): string {
   if (entry.action_name) {
     return entry.action_name;
@@ -33,23 +33,26 @@ export function getEntityLabel(entry: AuditExecutionEntry): string {
   if (entry.entity_type === 'action') {
     const raw = entry.details?.name ?? entry.details?.action_name;
     if (typeof raw === 'string') return raw;
-    return `Action #${entry.entity_id}`;
+    return 'Action';
   }
   if (entry.entity_type === 'integration') {
-    const raw = entry.details?.action_code ?? entry.details?.integration_type_code;
+    const raw =
+      entry.details?.integration_name ??
+      entry.details?.action_code ??
+      entry.details?.integration_type_code;
     if (typeof raw === 'string') return raw;
-    return `Intégration #${entry.entity_id}`;
+    return 'Intégration';
   }
   if (entry.entity_type === 'profile') {
     const raw = entry.details?.name;
     if (typeof raw === 'string') return raw;
-    return `Profil #${entry.entity_id}`;
+    return 'Profil';
   }
   if (entry.entity_type === 'user') {
-    return entry.user_name ?? entry.user_id ?? `Utilisateur #${entry.entity_id}`;
+    return entry.user_name ?? entry.user_id ?? 'Utilisateur';
   }
-  if (entry.entity_id != null) {
-    return `#${entry.entity_id}`;
+  if (entry.entity_type && ENTITY_TYPE_LABELS[entry.entity_type]) {
+    return ENTITY_TYPE_LABELS[entry.entity_type];
   }
   return '—';
 }

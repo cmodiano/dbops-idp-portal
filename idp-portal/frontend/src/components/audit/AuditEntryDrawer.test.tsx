@@ -168,10 +168,43 @@ describe('AuditEntryDrawer', () => {
     expect(screen.getByText('Quand')).toBeInTheDocument();
   });
 
-  it('ne affiche pas la section Détails pour une entrée execution', () => {
-    render(<AuditEntryDrawer {...defaultProps} entry={executionEntry} />);
-    expect(screen.queryByText('Détails')).not.toBeInTheDocument();
-    expect(screen.queryByText('Nom de l\'action')).not.toBeInTheDocument();
+  it('affiche la section Détails pour une entrée execution avec champs additionnels (Story 72.3)', () => {
+    const entryWithExtraDetails: AuditExecutionEntry = {
+      ...executionEntry,
+      details: {
+        ...executionEntry.details,
+        step_order: 2,
+        step_type: 'platform',
+        referenced_action_name: 'Patch Oracle',
+      },
+    };
+    render(<AuditEntryDrawer {...defaultProps} entry={entryWithExtraDetails} />);
+    expect(screen.getByText('Détails')).toBeInTheDocument();
+    expect(screen.getByText('Ordre de l\'étape')).toBeInTheDocument();
+    expect(screen.getByText('Type d\'étape')).toBeInTheDocument();
+    expect(screen.getByText('Patch Oracle')).toBeInTheDocument();
+  });
+
+  it('Story 72.3 — step_id, execution_id, referenced_action_id ne sont pas affichés dans Détails', () => {
+    const entryWithIds: AuditExecutionEntry = {
+      ...actionEntry,
+      entity_type: 'action',
+      entity_id: 7,
+      details: {
+        step_id: 'uuid-abc-123',
+        execution_id: 88888,
+        referenced_action_id: 77777,
+        step_name: 'Étape AAP',
+        referenced_action_name: 'Patch Oracle',
+      },
+    };
+    render(<AuditEntryDrawer {...defaultProps} entry={entryWithIds} />);
+    expect(screen.getByText('Détails')).toBeInTheDocument();
+    expect(screen.getByText('Étape AAP')).toBeInTheDocument();
+    expect(screen.getByText('Patch Oracle')).toBeInTheDocument();
+    expect(screen.queryByText('uuid-abc-123')).not.toBeInTheDocument();
+    expect(screen.queryByText('88888')).not.toBeInTheDocument();
+    expect(screen.queryByText('77777')).not.toBeInTheDocument();
   });
 });
 

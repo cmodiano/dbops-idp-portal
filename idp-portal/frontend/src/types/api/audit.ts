@@ -24,6 +24,8 @@ export interface AuditExecutionEntry {
     servicenow_change_id?: string;
     error_message?: string;
     action_name?: string;                                      // Story 61.10 (details enrichis par 61.7/61.8)
+    step_name?: string;                                        // Story 72.3 (readable audit — step name)
+    referenced_action_name?: string;                           // Story 72.3 (readable audit — no UUID)
     changes?: Record<string, { old: unknown; new: unknown }>; // Story 61.9
     targets?: string[];                                        // Story 61.10
     [key: string]: unknown;

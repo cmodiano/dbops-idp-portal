@@ -254,6 +254,7 @@ class StepExecutor:
                             'integration_name': integration.name,
                             'integration_type': integration.type,
                             'referenced_action_id': referenced_action.id,
+                            'referenced_action_name': referenced_action.name,
                         },
                         correlation_id=self.correlation_id,
                     )
@@ -901,7 +902,7 @@ class StepExecutor:
             execution_step.set_output(step_output)
             execution_step.save()
 
-            # Audit trail
+            # Audit trail — Story 72.3: referenced_action_name for readable audit (no UUID without name)
             AuditService.create_entry(
                 user_id=str(self.execution.user_id),
                 action_type=AuditActionType.WORKFLOW_STEP_SCHEDULE_CREATED,
@@ -913,6 +914,7 @@ class StepExecutor:
                     'step_order': step_order,
                     'scheduled_execution_id': scheduled_execution.id,
                     'referenced_action_id': referenced_action_id,
+                    'referenced_action_name': target_action.name,
                     'correlation_id': self.correlation_id,
                 },
                 correlation_id=self.correlation_id,

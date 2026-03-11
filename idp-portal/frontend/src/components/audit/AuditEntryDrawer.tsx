@@ -25,20 +25,44 @@ import { getApprovalInfoFromSteps } from '../../utils/executionHelpers';
 
 const { Text } = Typography;
 
+/** Story 72.3: Technical ID fields — never display to auditor (names only). */
+const EXCLUDED_DETAIL_KEYS = new Set([
+  'step_id',
+  'execution_id',
+  'referenced_action_id',
+  'scheduled_execution_id',
+  'integration_id',
+  'action_id',
+]);
+
 /** User-friendly labels for audit detail keys (Détails section). */
 const DETAIL_KEY_LABELS: Record<string, string> = {
   action_name: 'Nom de l\'action',
-  action_id: 'ID action',
   previous_status: 'Statut précédent',
   new_status: 'Nouveau statut',
   environment: 'Environnement',
   status: 'Statut',
   name: 'Nom',
-  integration_id: 'ID intégration',
   integration_name: 'Nom intégration',
   integration_type: 'Type intégration',
   integration_status: 'Statut intégration',
   reason: 'Raison',
+  step_name: 'Nom de l\'étape',
+  step_order: 'Ordre de l\'étape',
+  step_type: 'Type d\'étape',
+  gate_types: 'Types de gate',
+  waiting_duration_seconds: 'Durée d\'attente (s)',
+  referenced_action_name: 'Action référencée',
+  gate_conditions_count: 'Nombre de conditions de gate',
+  error_type: 'Type d\'erreur',
+  platform_job_id: 'ID job plateforme',
+  retry_count: 'Tentative',
+  max_retries: 'Tentatives max',
+  last_error: 'Dernière erreur',
+  timeout_hours: 'Timeout (heures)',
+  on_timeout: 'Comportement timeout',
+  error_message: 'Message d\'erreur',
+  correlation_id: 'Correlation ID',
 };
 
 export interface AuditEntryDrawerProps {
@@ -158,10 +182,17 @@ export function AuditEntryDrawer({
             </Card>
           )}
 
-          {/* Details for non-execution entries (action, integration, profile, user, etc.) */}
+          {/* Details for non-execution entries (action, integration, profile, user, etc.) — Story 72.3: exclude ID fields */}
           {entry.entity_type !== 'execution' && (() => {
             const filteredDetails = entry.details
-              ? Object.entries(entry.details).filter(([k, v]) => k !== 'changes' && v !== null && v !== undefined && v !== '')
+              ? Object.entries(entry.details).filter(
+                  ([k, v]) =>
+                    k !== 'changes' &&
+                    !EXCLUDED_DETAIL_KEYS.has(k) &&
+                    v !== null &&
+                    v !== undefined &&
+                    v !== '',
+                )
               : [];
             if (filteredDetails.length === 0) return null;
             return (
@@ -180,6 +211,50 @@ export function AuditEntryDrawer({
                   ))}
               </Descriptions>
             </Card>
+            );
+          })()}
+
+          {/* Details for execution entries — Story 72.3: show readable fields, exclude IDs; skip keys already shown elsewhere */}
+          {entry.entity_type === 'execution' && (() => {
+            const ALREADY_SHOWN_KEYS = new Set([
+              'action_name',
+              'step_name',
+              'referenced_action_name',
+              'targets',
+              'parameters',
+              'environment',
+              'status',
+              'servicenow_change_id',
+              'correlation_id',
+            ]);
+            const filteredDetails = entry.details
+              ? Object.entries(entry.details).filter(
+                  ([k, v]) =>
+                    k !== 'changes' &&
+                    !EXCLUDED_DETAIL_KEYS.has(k) &&
+                    !ALREADY_SHOWN_KEYS.has(k) &&
+                    v !== null &&
+                    v !== undefined &&
+                    v !== '',
+                )
+              : [];
+            if (filteredDetails.length === 0) return null;
+            return (
+              <Card title="Détails" size="small" style={{ marginBottom: 24 }}>
+                <Descriptions column={1} size="small">
+                  {filteredDetails.map(([key, value]) => (
+                    <Descriptions.Item key={key} label={DETAIL_KEY_LABELS[key] ?? key}>
+                      {typeof value === 'object' ? (
+                        <pre style={{ margin: 0, fontSize: 11, whiteSpace: 'pre-wrap' }}>
+                          {JSON.stringify(value, null, 2)}
+                        </pre>
+                      ) : (
+                        String(value)
+                      )}
+                    </Descriptions.Item>
+                  ))}
+                </Descriptions>
+              </Card>
             );
           })()}
 
@@ -210,10 +285,12 @@ export function AuditEntryDrawer({
             );
           })()}
 
-          {/* Execution context section — action, targets, parameters (Story 61.10) */}
+          {/* Execution context section — action, targets, parameters (Story 61.10); Story 72.3: step_name, referenced_action_name */}
           {entry.entity_type === 'execution' && (() => {
             const hasContext =
               entry.details?.action_name ||
+              entry.details?.step_name ||
+              entry.details?.referenced_action_name ||
               (entry.details?.targets && entry.details.targets.length > 0) ||
               entry.details?.parameters;
             if (!hasContext) return null;
@@ -223,6 +300,16 @@ export function AuditEntryDrawer({
                   {entry.details?.action_name && (
                     <Descriptions.Item label="Action">
                       {String(entry.details.action_name)}
+                    </Descriptions.Item>
+                  )}
+                  {entry.details?.step_name && (
+                    <Descriptions.Item label="Étape">
+                      {String(entry.details.step_name)}
+                    </Descriptions.Item>
+                  )}
+                  {entry.details?.referenced_action_name && (
+                    <Descriptions.Item label="Action référencée">
+                      {String(entry.details.referenced_action_name)}
                     </Descriptions.Item>
                   )}
                   {entry.details?.targets && entry.details.targets.length > 0 && (
