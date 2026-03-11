@@ -75,10 +75,14 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8000/api/v1/health/ || exit 1
 
-# Start Gunicorn with ASGI worker for HTTP + WebSocket support
-# Uses native ASGI worker (Gunicorn 25+) — 6 workers, 60s timeout, access/error logging
+# Start Gunicorn with Uvicorn ASGI workers for HTTP + WebSocket support
+# Uvicorn workers provide mature WebSocket handling and full Django Channels
+# channel layer compatibility (background receive loop for group_send).
+# Gunicorn's native --worker-class asgi has known issues:
+#   - RFC 6455 close code 1005 violation (see gunicorn-websocket-close-1005-bug.md)
+#   - Channel layer messages not delivered to consumers (breaks real-time updates)
 CMD ["gunicorn", "idp_backend.asgi:application", \
-    "--worker-class", "asgi", \
+    "--worker-class", "uvicorn.workers.UvicornWorker", \
     "--workers", "6", \
     "--bind", "0.0.0.0:8000", \
     "--timeout", "60", \
