@@ -146,6 +146,7 @@ def trigger_platform_job(
         )
 
         # Scheduler le premier poll
+        # Story 72.1 (AC2): passer correlation_id en kwarg pour propagation Celery
         if platform_job_id:
             poll_platform_job_status.apply_async(
                 args=[execution_id, platform_job_id, platform_type],
@@ -155,6 +156,7 @@ def trigger_platform_job(
                     "auth_flow": getattr(integration, "auth_flow", "token"),
                     "poll_interval": 5,
                     "retry_count": 0,
+                    "correlation_id": correlation_id,
                 },
                 queue=get_platform_queue(platform_type),
             )

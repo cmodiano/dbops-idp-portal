@@ -55,7 +55,10 @@ def evaluate_waiting_gates(self: Any) -> dict:
     """
     from executions.gate_evaluator import GateEvaluator
 
-    correlation_id = get_correlation_id()
+    # Story 72.1 (AC3): get_correlation_id() retourne None dans les workers Celery (pas de
+    # contexte HTTP). On utilise un correlation_id de tâche pour les logs globaux de la tâche,
+    # et step.execution.correlation_id pour chaque step dans la boucle.
+    task_correlation_id = get_correlation_id()
 
     # Story 25.3 code review fix MEDIUM-4: Configurable batch size to prevent task timeout
     max_steps_per_batch = int(os.getenv('CELERY_BEAT_EVALUATE_GATES_MAX_STEPS', '100'))
@@ -78,7 +81,7 @@ def evaluate_waiting_gates(self: Any) -> dict:
     logger.info(
         "evaluate_waiting_gates_start",
         waiting_step_count=step_count,
-        correlation_id=correlation_id,
+        correlation_id=task_correlation_id,
     )
 
     if step_count == 0:
@@ -91,23 +94,26 @@ def evaluate_waiting_gates(self: Any) -> dict:
 
     processed = 0
     for step in waiting_steps:
+        # Story 72.1 (AC3): Utiliser execution.correlation_id pour chaque step.
+        # get_correlation_id() retourne None dans les workers Celery (pas de contexte HTTP).
+        step_correlation_id = (step.execution.correlation_id or task_correlation_id or "")
         try:
             all_satisfied, gate_status = evaluator.evaluate(step)
 
             # AC8: Timeout handling
             if gate_status.get('timeout_triggered'):
-                _handle_gate_timeout(step, gate_status, correlation_id or "")
+                _handle_gate_timeout(step, gate_status, step_correlation_id)
                 errors += 1  # Count as "processed" but not unblocked
                 processed += 1
                 continue
 
             if all_satisfied:
                 # AC4: Transition WAITING → RUNNING
-                _transition_step_to_running(step, gate_status, correlation_id or "")
+                _transition_step_to_running(step, gate_status, step_correlation_id)
                 unblocked += 1
             else:
                 # AC5: Update waiting context
-                _update_waiting_context(step, gate_status, correlation_id or "")
+                _update_waiting_context(step, gate_status, step_correlation_id)
                 still_waiting += 1
             processed += 1
 
@@ -119,7 +125,7 @@ def evaluate_waiting_gates(self: Any) -> dict:
                 unblocked=unblocked,
                 still_waiting=still_waiting,
                 errors=errors,
-                correlation_id=correlation_id,
+                correlation_id=task_correlation_id,
             )
             return {
                 'waiting_steps': step_count,
@@ -138,7 +144,7 @@ def evaluate_waiting_gates(self: Any) -> dict:
                 execution_id=step.execution_id,
                 error=str(e),
                 error_type=type(e).__name__,
-                correlation_id=correlation_id,
+                correlation_id=step_correlation_id,
                 exc_info=True,
             )
             # Story 25.3 code review fix MEDIUM-1: persist error in step output for user visibility
@@ -159,7 +165,7 @@ def evaluate_waiting_gates(self: Any) -> dict:
                     "evaluate_waiting_gates_error_persist_failed",
                     step_id=step.id,
                     error=str(save_error),
-                    correlation_id=correlation_id,
+                    correlation_id=step_correlation_id,
                     exc_info=True,
                 )
             errors += 1
@@ -170,7 +176,7 @@ def evaluate_waiting_gates(self: Any) -> dict:
         unblocked=unblocked,
         still_waiting=still_waiting,
         errors=errors,
-        correlation_id=correlation_id,
+        correlation_id=task_correlation_id,
     )
 
     return {

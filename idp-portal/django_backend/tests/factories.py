@@ -208,6 +208,7 @@ class ExecutionFactory(DjangoModelFactory):
     parent_execution = None
     started_at = None
     completed_at = None
+    correlation_id = None
 
 
 class ExecutionStepFactory(DjangoModelFactory):

@@ -376,6 +376,7 @@ def poll_platform_job_status(
     retry_count: int = 0,
     adapter_kwargs: dict | None = None,
     poll_kwargs: dict | None = None,
+    correlation_id: str | None = None,
 ) -> dict:
     """
     Story 34.5 (SOLID-BE-3): Tâche de polling générique OCP.
@@ -400,6 +401,8 @@ def poll_platform_job_status(
         adapter_kwargs: Kwargs spécifiques à l'adapter (ssl_verify, owner, etc.).
         poll_kwargs: Kwargs transmis à get_status() et get_job_logs()
             (resource_type, pipeline_id, etc.).
+        correlation_id: Story 72.1 (AC4) — ID de corrélation passé depuis trigger_platform_job
+            ou récupéré depuis Execution.correlation_id si absent.
 
     Returns:
         dict avec outcome: 'complete' | 'polling' | 'error' | 'exhausted'.
@@ -407,7 +410,14 @@ def poll_platform_job_status(
     from asgiref.sync import async_to_sync  # noqa: PLC0415
     import executions.tasks as _tasks  # noqa: PLC0415
 
-    correlation_id = _tasks.get_correlation_id()
+    # Story 72.1 (AC4): Priorité au kwarg passé depuis trigger_platform_job.
+    # Fallback : récupérer depuis Execution.correlation_id (workers Celery sans contexte HTTP).
+    if not correlation_id:
+        try:
+            _exec = Execution.objects.only('correlation_id').get(id=execution_id)
+            correlation_id = _exec.correlation_id
+        except Execution.DoesNotExist:
+            pass
 
     logger.info(
         "poll_platform_job_status_start",
@@ -493,6 +503,7 @@ def poll_platform_job_status(
                 "retry_count": retry_count + 1,
                 "adapter_kwargs": adapter_kwargs,
                 "poll_kwargs": poll_kwargs,
+                "correlation_id": correlation_id,
             },
             countdown=poll_interval,
             queue=get_platform_queue(platform_type),
@@ -575,6 +586,7 @@ def poll_platform_job_status(
         return {"outcome": "complete", "status": idp_status}
 
     # Re-schedule next poll (reset retry_count on success)
+    # Story 72.1 (AC4): propager correlation_id dans le re-schedule
     poll_platform_job_status.apply_async(
         args=[execution_id, platform_job_id, platform_type],
         kwargs={
@@ -585,6 +597,7 @@ def poll_platform_job_status(
             "retry_count": 0,
             "adapter_kwargs": adapter_kwargs,
             "poll_kwargs": poll_kwargs,
+            "correlation_id": correlation_id,
         },
         countdown=poll_interval,
         queue=get_platform_queue(platform_type),

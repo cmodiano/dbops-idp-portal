@@ -898,3 +898,12 @@ development_status:
     71-11-couverture-tests-frontend-services-hooks: done
     71-12-mise-a-jour-codebase-review-statuts-finaux: done
     epic-71-retrospective: optional
+    # === Epic 72: Audit — Améliorations traçabilité et lisibilité ===
+    # Réf: planning-artifacts/epic-72-audit-ameliorations-traçabilite.md
+    # Correlation ID, état avant/après, aucun UUID (noms lisibles), formatage JSON
+    epic-72: in-progress
+    72-1-correlation-id-sur-tout-le-cycle-execution: done # Code review adversarial 2026-03-11: 3 HIGH/MEDIUM fixes (H1 _create_status_audit_entry correlation_id, H2 ContainerWorkflowRuntime fallback execution.correlation_id, M1 _schedule_notification), test AC search by correlation_id ajouté, 14/14 propagation + 71 services tests pass
+    72-2-etat-avant-apres-pour-toutes-modifications-audit: ready-for-dev
+    72-3-aucun-uuid-audit-uniquement-noms-lisibles: backlog
+    72-4-formatage-json-pour-lisibilite: backlog
+    epic-72-retrospective: optional

@@ -168,7 +168,9 @@ class ContainerWorkflowRuntime:
         """
         self.execution = execution
         self.action = execution.action
-        self.correlation_id = get_correlation_id()
+        # Story 72.1: In Celery (e.g. resume_container_workflow_from_gate), get_correlation_id()
+        # returns None — use execution.correlation_id for audit consistency.
+        self.correlation_id = get_correlation_id() or (execution.correlation_id or "")
         self.execution_service = execution_service or ExecutionService()
 
         # Load workflow steps from action's execution_steps

@@ -213,6 +213,7 @@ class ExecutionService:
             environment=request.environment,
             status=initial_status,
             parent_execution_id=request.parent_execution_id,
+            correlation_id=request.correlation_id,
         )
 
         # ADR-007: Create an approval gate step instead of PENDING_APPROVAL status
@@ -573,7 +574,8 @@ class ExecutionService:
                 'action_name': execution.action.name if execution.action else None,
                 'previous_status': old_status,
                 'new_status': new_status,
-            }
+            },
+            correlation_id=execution.correlation_id or get_correlation_id(),
         )
 
     @staticmethod
@@ -595,7 +597,7 @@ class ExecutionService:
             page_me = bool(params.get('__page_me', False))
             page_me_user_id = params.get('__page_me_user_id')
             page_me_user_name = params.get('__page_me_user_name')
-            _correlation_id = get_correlation_id()
+            _correlation_id = execution.correlation_id or get_correlation_id()
             _execution_id_snap = execution.id
 
             def _send_notifications() -> None:

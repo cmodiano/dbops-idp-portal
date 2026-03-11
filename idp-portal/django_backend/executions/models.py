@@ -163,6 +163,14 @@ class Execution(models.Model):
     )
     # Story 18.6: Error message for integration failures
     error_message = models.TextField(null=True, blank=True, db_column='ERROR_MESSAGE')
+    # Story 72.1: Correlation ID pour traçabilité bout-en-bout (HTTP → Celery → audit)
+    # Nullable pour rétrocompatibilité avec les exécutions existantes (V119).
+    correlation_id = models.CharField(
+        max_length=64,
+        null=True,
+        blank=True,
+        db_column='CORRELATION_ID',
+    )
     started_at = models.DateTimeField(null=True, blank=True, db_column='STARTED_AT')
     completed_at = models.DateTimeField(null=True, blank=True, db_column='COMPLETED_AT')
     created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
