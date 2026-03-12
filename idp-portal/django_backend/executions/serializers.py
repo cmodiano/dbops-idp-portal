@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import uuid as uuid_module
+
 from rest_framework import serializers
 from drf_spectacular.utils import extend_schema_serializer
 
@@ -107,6 +109,8 @@ class ExecutionSerializer(serializers.Serializer):
             "integration_icon": getattr(integration, "icon", None) if integration else None,
             # Story 25.1: ExecutionTarget list
             "targets": ExecutionTargetSerializer(obj.targets.all(), many=True).data,
+            # Story 72.1: correlation_id pour traçabilité (audit, logs)
+            "correlation_id": getattr(obj, "correlation_id", None),
         }
 
 
@@ -126,11 +130,19 @@ class ExecutionStepSerializer(serializers.Serializer):
     error_message = serializers.CharField(read_only=True, allow_null=True)
 
     def to_representation(self, obj: ExecutionStep) -> dict:
+        # Story 72.3: step_name lisible — si UUID (legacy), afficher "Étape N"
+        step_name = obj.step_name
+        if step_name:
+            try:
+                uuid_module.UUID(str(step_name))
+                step_name = f"Étape {obj.step_order}"
+            except (ValueError, TypeError, AttributeError):
+                pass
         return {
             "id": obj.id,
             "execution_id": obj.execution_id,
             "step_order": obj.step_order,
-            "step_name": obj.step_name,
+            "step_name": step_name or f"Étape {obj.step_order}",
             "config_step_id": obj.config_step_id,
             "step_type": obj.step_type,
             "status": obj.status,

@@ -11,7 +11,8 @@ class TestBroadcastStepUpdate(TransactionTestCase):
     """Tests unitaires pour executions.utils.websocket_broadcast.broadcast_step_update."""
 
     def _make_mock_step(self, execution_id=1, step_id=42, step_order=1,
-                        step_name="Gate", step_type="gate", status="WAITING"):
+                        step_name="Gate", step_type="gate", status="WAITING",
+                        config_step_id=None):
         step = MagicMock()
         step.id = step_id
         step.step_order = step_order
@@ -22,6 +23,7 @@ class TestBroadcastStepUpdate(TransactionTestCase):
         step.completed_at = None
         step.platform_job_id = None
         step.error_message = None
+        step.config_step_id = config_step_id
         step.get_output = MagicMock(return_value={"gate_conditions": []})
         return step
 
@@ -55,6 +57,7 @@ class TestBroadcastStepUpdate(TransactionTestCase):
                     "step_order": 1,
                     "step_name": "Gate",
                     "step_type": "gate",
+                    "config_step_id": None,
                     "status": "WAITING",
                     "started_at": None,
                     "completed_at": None,

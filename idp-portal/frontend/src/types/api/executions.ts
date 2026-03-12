@@ -79,6 +79,8 @@ export interface ExecutionResponse {
   integration_icon?: string | null;
   /** Story 25.1/58.2: Targets sélectionnés pour cette exécution. */
   targets?: ExecutionTarget[];
+  /** Story 72.1: ID de corrélation pour traçabilité (audit, logs). */
+  correlation_id?: string | null;
 }
 
 /** Execution step status (Story 4.6, Story 58.3: WAITING ajouté). */

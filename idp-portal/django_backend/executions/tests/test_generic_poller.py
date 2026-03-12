@@ -138,10 +138,8 @@ class TestPollPlatformJobStatusExhaustion:
     """AC5: adapter lève Exception, retry_count=MAX → exhausted + _mark_exhausted appelé."""
 
     @patch("executions.tasks._mark_execution_polling_exhausted")
-    @patch("executions.tasks.get_correlation_id", return_value="test-corr-exhaust")
     def test_exhausted_when_max_retries_reached(
         self,
-        mock_corr: MagicMock,
         mock_exhausted: MagicMock,
     ) -> None:
         """retry_count >= MAX_POLLING_RETRIES + exception → outcome='exhausted'."""
@@ -155,6 +153,7 @@ class TestPollPlatformJobStatusExhaustion:
                     platform_job_id="job-exhaust-1",
                     platform_type="aap",
                     retry_count=MAX_POLLING_RETRIES,
+                    correlation_id="test-corr-exhaust",
                 )
 
         assert result["outcome"] == "exhausted"
@@ -337,10 +336,8 @@ class TestPollTerminalCallsSplunk:
     @patch("executions.tasks._forward_platform_logs_to_splunk")
     @patch("executions.tasks._broadcast_execution_update")
     @patch("executions.tasks._update_execution_from_poll")
-    @patch("executions.tasks.get_correlation_id", return_value="test-corr-splunk")
     def test_terminal_triggers_splunk_forward(
         self,
-        mock_corr: MagicMock,
         mock_update: MagicMock,
         mock_broadcast: MagicMock,
         mock_forward: MagicMock,
@@ -358,6 +355,7 @@ class TestPollTerminalCallsSplunk:
                     execution_id=200,
                     platform_job_id="job-fwd-1",
                     platform_type="aap",
+                    correlation_id="test-corr-splunk",
                 )
 
         assert result["outcome"] == "complete"

@@ -76,19 +76,105 @@ export interface AuditEntryDrawerProps {
   onClose: () => void;
 }
 
-/** Renders a change value using FormattedJson for consistency (Story 72.4). */
+/**
+ * Affiche les paramètres d'exécution.
+ * workflow_step_parameters : step_name + (param, value) par étape — Story 72.3.
+ * Gère format brut (step_id, step_name, parameters) et format audit (step_name, parameters).
+ */
+function ParametersDisplay({ params }: { params: Record<string, unknown> }) {
+  const wsp = params.workflow_step_parameters as Record<string, Record<string, unknown>> | undefined;
+  const otherKeys = Object.keys(params).filter((k) => k !== 'workflow_step_parameters');
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {wsp && typeof wsp === 'object' && (
+        <div>
+          {Object.entries(wsp).map(([order, entry]) => {
+            const stepName =
+              typeof entry === 'object' && entry !== null
+                ? (entry.step_name as string) ?? `Étape ${order}`
+                : typeof entry === 'string'
+                  ? entry
+                  : `Étape ${order}`;
+            const parameters =
+              typeof entry === 'object' && entry !== null && 'parameters' in entry
+                ? (entry.parameters as Record<string, unknown>)
+                : undefined;
+            const paramRows =
+              parameters && typeof parameters === 'object'
+                ? Object.entries(parameters).map(([param, val]) => ({
+                    key: `${order}-${param}`,
+                    param,
+                    value: typeof val === 'object' && val !== null ? JSON.stringify(val) : String(val ?? '—'),
+                  }))
+                : [];
+            return (
+              <div key={order} style={{ marginBottom: 12 }}>
+                <Text strong style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
+                  {stepName}
+                </Text>
+                {paramRows.length > 0 ? (
+                  <Table
+                    dataSource={paramRows}
+                    columns={[
+                      { title: 'Paramètre', dataIndex: 'param', key: 'param', width: 140 },
+                      { title: 'Valeur', dataIndex: 'value', key: 'value' },
+                    ]}
+                    pagination={false}
+                    size="small"
+                    style={{ fontSize: 11 }}
+                  />
+                ) : (
+                  <Text type="secondary" style={{ fontSize: 11 }}>
+                    Aucun paramètre
+                  </Text>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {otherKeys.length > 0 && (
+        <FormattedJson
+          value={Object.fromEntries(otherKeys.map((k) => [k, params[k]]))}
+          asTable
+        />
+      )}
+    </div>
+  );
+}
+
+/** Renders a change value — Story 72.4: format tableau pour objets/tableaux */
 function renderChangeValue(v: unknown): ReactNode {
-  return <FormattedJson value={v} />;
+  if (v === undefined) return <span>—</span>;
+  const useTable = (typeof v === 'object' && v !== null) || Array.isArray(v);
+  return <FormattedJson value={v} asTable={!!useTable} />;
 }
 
 /** Row type for the changes table (Modifications section). */
-type ChangeRow = { key: string; field: string; old: unknown; new: unknown };
+type ChangeRow = { key: string; field: string; oldVal: unknown; newVal: unknown };
 
 /** Typed columns for the changes table — FRONTEND-STANDARDS: TableProps<T>['columns']. */
 const CHANGE_COLUMNS: TableProps<ChangeRow>['columns'] = [
-  { title: 'Champ', dataIndex: 'field', key: 'field' },
-  { title: 'Avant', dataIndex: 'old', key: 'old', render: renderChangeValue },
-  { title: 'Après', dataIndex: 'new', key: 'new', render: renderChangeValue },
+  { title: 'Champ', dataIndex: 'field', key: 'field', width: 160 },
+  {
+    title: 'Avant',
+    dataIndex: 'oldVal',
+    key: 'oldVal',
+    width: 260,
+    render: (_: unknown, r: ChangeRow) => (
+      <div style={{ minWidth: 240, overflow: 'auto', maxWidth: '100%' }}>{renderChangeValue(r.oldVal)}</div>
+    ),
+  },
+  {
+    title: 'Après',
+    dataIndex: 'newVal',
+    key: 'newVal',
+    width: 260,
+    render: (_: unknown, r: ChangeRow) => (
+      <div style={{ minWidth: 240, overflow: 'auto', maxWidth: '100%' }}>{renderChangeValue(r.newVal)}</div>
+    ),
+  },
 ];
 
 export function AuditEntryDrawer({
@@ -109,7 +195,7 @@ export function AuditEntryDrawer({
       title={drawerTitle}
       open={open}
       onClose={onClose}
-      styles={{ wrapper: { width: 600 } }}
+      styles={{ wrapper: { width: 680 } }}
       destroyOnClose
     >
       {loading ? (
@@ -144,11 +230,14 @@ export function AuditEntryDrawer({
               );
             })()}
             <Descriptions.Item label="Adresse IP">{entry.ip_address || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Correlation ID">
-              <Text copyable={entry.correlation_id ? { text: entry.correlation_id } : undefined}>
-                {entry.correlation_id || '—'}
-              </Text>
-            </Descriptions.Item>
+            {/* Story 72.1: correlation_id visible pour traçabilité (audit, logs) */}
+            {(entry.correlation_id || (entry.entity_type === 'execution' && execution?.correlation_id)) && (
+              <Descriptions.Item label="Correlation ID">
+                <Text copyable={{ text: String(entry.correlation_id ?? execution?.correlation_id ?? '') }}>
+                  {String(entry.correlation_id ?? execution?.correlation_id ?? '')}
+                </Text>
+              </Descriptions.Item>
+            )}
             {entry.entity_type === 'execution' && entry.details?.servicenow_change_id && (
               <Descriptions.Item label="Change ServiceNow">
                 <Text copyable={{ text: String(entry.details.servicenow_change_id) }}>
@@ -165,12 +254,13 @@ export function AuditEntryDrawer({
                 dataSource={Object.entries(entry.details.changes).map(([field, vals]) => ({
                   key: field,
                   field,
-                  old: vals.old,
-                  new: vals.new,
+                  oldVal: vals['old'],
+                  newVal: vals['new'],
                 }))}
                 columns={CHANGE_COLUMNS}
                 pagination={false}
                 size="small"
+                scroll={{ x: 640 }}
               />
             </Card>
           )}
@@ -193,7 +283,10 @@ export function AuditEntryDrawer({
               <Descriptions column={1} size="small">
                 {filteredDetails.map(([key, value]) => (
                     <Descriptions.Item key={key} label={DETAIL_KEY_LABELS[key] ?? key}>
-                      <FormattedJson value={value} />
+                      <FormattedJson
+                        value={value}
+                        asTable={typeof value === 'object' && value !== null}
+                      />
                     </Descriptions.Item>
                   ))}
               </Descriptions>
@@ -201,14 +294,15 @@ export function AuditEntryDrawer({
             );
           })()}
 
-          {/* Details for execution entries — Story 72.3: show readable fields, exclude IDs; skip keys already shown elsewhere */}
-          {entry.entity_type === 'execution' && (() => {
+          {/* Details for execution entries — masqué quand Timeline présente (redondant) */}
+          {entry.entity_type === 'execution' && !execution && !(steps.length > 0) && (() => {
             const ALREADY_SHOWN_KEYS = new Set([
               'action_name',
               'step_name',
               'referenced_action_name',
               'targets',
               'parameters',
+              'workflow_step_parameters',
               'environment',
               'status',
               'servicenow_change_id',
@@ -231,7 +325,10 @@ export function AuditEntryDrawer({
                 <Descriptions column={1} size="small">
                   {filteredDetails.map(([key, value]) => (
                     <Descriptions.Item key={key} label={DETAIL_KEY_LABELS[key] ?? key}>
-                      <FormattedJson value={value} />
+                      <FormattedJson
+                        value={value}
+                        asTable={typeof value === 'object' && value !== null}
+                      />
                     </Descriptions.Item>
                   ))}
                 </Descriptions>
@@ -273,7 +370,8 @@ export function AuditEntryDrawer({
               entry.details?.step_name ||
               entry.details?.referenced_action_name ||
               (entry.details?.targets && entry.details.targets.length > 0) ||
-              entry.details?.parameters;
+              entry.details?.parameters ||
+              entry.details?.workflow_step_parameters;
             if (!hasContext) return null;
             return (
               <Card title="Contexte d'exécution" size="small" style={{ marginBottom: 24 }}>
@@ -298,9 +396,16 @@ export function AuditEntryDrawer({
                       {entry.details.targets.join(', ')}
                     </Descriptions.Item>
                   )}
-                  {entry.details?.parameters && (
+                  {Boolean(entry.details?.parameters || entry.details?.workflow_step_parameters) && (
                     <Descriptions.Item label="Paramètres">
-                      <FormattedJson value={entry.details.parameters} />
+                      <ParametersDisplay
+                        params={{
+                          ...((entry.details?.parameters as Record<string, unknown>) || {}),
+                          workflow_step_parameters:
+                            entry.details?.workflow_step_parameters ??
+                            (entry.details?.parameters as Record<string, unknown>)?.workflow_step_parameters,
+                        }}
+                      />
                     </Descriptions.Item>
                   )}
                 </Descriptions>
@@ -315,6 +420,7 @@ export function AuditEntryDrawer({
                 execution={execution}
                 steps={steps}
                 mode="historical"
+                correlationId={entry.correlation_id ?? execution?.correlation_id ?? undefined}
               />
             </Card>
           )}

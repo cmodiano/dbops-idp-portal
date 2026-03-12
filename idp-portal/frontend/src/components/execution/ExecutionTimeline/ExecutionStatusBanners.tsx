@@ -142,6 +142,15 @@ export function ExecutionStatusBanners({
                   </Text>
                 </>
               )}
+              {/* Story 72.1: correlation_id pour traçabilité */}
+              {execution?.correlation_id && (
+                <>
+                  <br />
+                  <Text type="secondary" style={{ fontSize: 11 }}>
+                    Correlation ID: <Text copyable={{ text: execution.correlation_id }} style={{ fontFamily: 'monospace' }}>{execution.correlation_id}</Text>
+                  </Text>
+                </>
+              )}
             </>
           }
           style={{ marginBottom: 16 }}

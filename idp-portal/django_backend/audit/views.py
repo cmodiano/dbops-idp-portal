@@ -21,6 +21,10 @@ from core.permissions import is_auditor_user
 from core.utils import ensure_utc_isoformat
 from core.models import AuditLog, AuditEntityType, AuditActionType
 from executions.models import Execution, ExecutionStatus
+from executions.utils.workflow_parsing import (
+    enrich_workflow_step_parameters_for_display,
+    strip_step_ids_for_audit_display,
+)
 from idp_auth.models import User
 
 logger = structlog.get_logger(__name__)
@@ -340,16 +344,38 @@ class AuditExecutionsView(APIView):
             exec_obj = exec_by_id.get(r.entity_id) if r.entity_type == AuditEntityType.EXECUTION else None
 
             if details is None and exec_obj is not None:
+                params = exec_obj.get_parameters()
+                action = getattr(exec_obj, "action", None)
+                if params and action:
+                    params = enrich_workflow_step_parameters_for_display(params, action) or params
+                    params = strip_step_ids_for_audit_display(params) or params
                 details = {
                     "action_id": exec_obj.action_id,
                     "environment": exec_obj.environment,
                     "status": exec_obj.status,
-                    "parameters": exec_obj.get_parameters(),
+                    "parameters": params,
                     "servicenow_change_id": exec_obj.servicenow_change_id,
                 }
             elif details is not None and exec_obj is not None:
                 # Always enrich with current execution status (not stale audit-time status)
                 details["status"] = exec_obj.status
+                # Story 72.3: enrich parameters with step_name, strip step_id for audit display
+                action = getattr(exec_obj, "action", None)
+                if details.get("parameters"):
+                    details["parameters"] = (
+                        enrich_workflow_step_parameters_for_display(details["parameters"], action)
+                        or details["parameters"]
+                    )
+                    details["parameters"] = (
+                        strip_step_ids_for_audit_display(details["parameters"])
+                        or details["parameters"]
+                    )
+                # workflow_step_parameters au niveau racine (ex. container workflow)
+                if details.get("workflow_step_parameters") and action:
+                    params = {"workflow_step_parameters": details["workflow_step_parameters"]}
+                    params = enrich_workflow_step_parameters_for_display(params, action) or params
+                    params = strip_step_ids_for_audit_display(params) or params
+                    details["workflow_step_parameters"] = params.get("workflow_step_parameters")
 
             # Story 43.1 T3.3: champs execution-only = None pour les entrées non-exécution
             if r.entity_type == AuditEntityType.EXECUTION:

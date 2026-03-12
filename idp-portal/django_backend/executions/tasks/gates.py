@@ -778,6 +778,21 @@ def resume_container_workflow_from_gate(
                 )
                 return {'outcome': 'not_running', 'status': str(execution.status)}
 
+            # Idempotency: si un step cible existe déjà (RUNNING ou COMPLETED), ne pas re-exécuter
+            target_steps_exist = ExecutionStep.objects.filter(
+                execution=execution,
+                config_step_id__in=step_ids,
+                status__in=[ExecutionStepStatus.RUNNING, ExecutionStepStatus.COMPLETED],
+            ).exists()
+            if target_steps_exist:
+                logger.info(
+                    "resume_container_workflow_gate_already_resumed",
+                    execution_id=execution_id,
+                    on_success_step_ids=step_ids,
+                    correlation_id=correlation_id,
+                )
+                return {'outcome': 'already_resumed', 'step_ids': step_ids}
+
             # Trouver les steps restants à partir de on_success_step_ids (Story 67.4: union)
             all_steps = execution.action.execution_steps or []
             remaining_steps = []

@@ -25,7 +25,8 @@ class TestResumeContainerWorkflowGenericException:
         """Exception non-DoesNotExist → {'outcome': 'error', 'error': str(exc)}."""
         with patch('executions.cancellation_cache.is_cancelled', return_value=False):
             with patch.object(Execution.objects, 'select_related') as mock_qs:
-                mock_qs.return_value.select_for_update.return_value.get.side_effect = RuntimeError("Unexpected DB error")
+                # Code uses select_related('action').get(id=...) — no select_for_update
+                mock_qs.return_value.get.side_effect = RuntimeError("Unexpected DB error")
                 result = resume_container_workflow_from_gate.run(
                     execution_id=1, on_success_step_ids='step-1'
                 )

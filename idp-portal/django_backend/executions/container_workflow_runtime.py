@@ -351,7 +351,8 @@ class ContainerWorkflowRuntime:
         Returns:
             ExecutionStatus of the step (COMPLETED for SKIPPED steps)
         """
-        step_name = step.get('name') or step.get('step_id') or f"Step {step.get('order', 0)}"
+        # Story 72.3: step_name = nom lisible, jamais UUID (step_id)
+        step_name = step.get('name') or f"Étape {step.get('order', 0)}"
         step_id = step.get('step_id')
         step_type = step.get('step_type') or 'platform'  # ADR-007 §3d
 
@@ -985,8 +986,14 @@ class ContainerWorkflowRuntime:
         Returns:
             ExecutionStatus.RUNNING — sentinel to pause the BFS loop.
         """
-        gate_output = result.get('gate_output', {})
+        gate_output = dict(result.get('gate_output', {}))
         gate_conditions = gate_output.get('gate_conditions', [])
+        # Story 72.3: ajouter gate_type pour affichage timeline (Approbation / Fenêtre maintenance)
+        if gate_conditions and isinstance(gate_conditions[0], dict):
+            cond_type = gate_conditions[0].get('type', '')
+            gate_output['gate_type'] = (
+                'approval' if cond_type == 'approval_granted' else 'maintenance_window'
+            )
         parent_step.set_output(gate_output)
         parent_step.status = ExecutionStepStatus.WAITING
         parent_step.save()
