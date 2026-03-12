@@ -167,6 +167,133 @@ def _mark_execution_failed(execution: Any, reason: str) -> None:
         )
 
 
+def _is_container_workflow(execution: Any) -> bool:
+    """Return True if the execution's action defines a container workflow.
+
+    A container workflow has ``execution_steps`` as a non-empty list of dicts
+    that each contain a ``step_id`` key.
+    """
+    try:
+        steps = execution.action.execution_steps
+        if not steps or not isinstance(steps, list):
+            return False
+        return any(isinstance(s, dict) and s.get("step_id") for s in steps)
+    except AttributeError:
+        return False
+
+
+def _resume_container_workflow(execution: Any, correlation_id: str = "") -> str:
+    """Resume a container workflow execution that crashed between steps.
+
+    Reconstructs ``_step_outputs`` from COMPLETED steps in the DB, computes
+    the next wave of steps to execute, and either marks the execution
+    COMPLETED (if the workflow is fully done) or calls
+    ``_execute_workflow_steps()`` to continue from where it left off.
+
+    Returns 'reattached' on success.
+    Raises on any error so the caller can fall back to ``_mark_execution_failed``.
+    """
+    from executions.models import ExecutionStep, ExecutionStepStatus, ExecutionStatus  # noqa: PLC0415
+    from executions.container_workflow_runtime import ContainerWorkflowRuntime  # noqa: PLC0415
+    from executions.output_extractor import OutputExtractor  # noqa: PLC0415
+    from executions.container_routing import get_next_step_ids  # noqa: PLC0415
+    from executions.container_parallel import apply_join_policy  # noqa: PLC0415
+    from django.db.models import Max  # noqa: PLC0415
+
+    all_steps = execution.action.execution_steps or []
+    _step_config_by_id = {
+        s.get("step_id"): s for s in all_steps if isinstance(s, dict) and s.get("step_id")
+    }
+    step_name_to_id = {
+        s.get("name"): s.get("step_id")
+        for s in all_steps
+        if isinstance(s, dict) and s.get("name") and s.get("step_id")
+    }
+
+    completed_steps = list(
+        ExecutionStep.objects.filter(
+            execution=execution,
+            status=ExecutionStepStatus.COMPLETED,
+        ).order_by("step_order")
+    )
+
+    if not completed_steps:
+        raise ValueError("No COMPLETED steps found — cannot resume container workflow")
+
+    # --- Rebuild _step_outputs from COMPLETED DB steps ---
+    runtime = ContainerWorkflowRuntime(execution=execution)
+    _extractor = OutputExtractor()
+    for db_step in completed_steps:
+        raw_output = db_step.get_output() or {}
+        step_id_key = db_step.config_step_id
+        if not step_id_key and db_step.step_name:
+            step_id_key = step_name_to_id.get(db_step.step_name)
+        if step_id_key:
+            step_cfg = _step_config_by_id.get(step_id_key, {})
+            output_mapping = step_cfg.get("output_mapping", {})
+            if isinstance(output_mapping, dict) and output_mapping:
+                extracted = _extractor.extract(raw_output, output_mapping)
+            else:
+                extracted = raw_output
+            runtime._step_outputs[step_id_key] = extracted
+
+    # --- Compute next wave ---
+    results: dict = {}
+    for db_step in completed_steps:
+        step_id = db_step.config_step_id
+        if step_id and step_id in _step_config_by_id:
+            step_cfg = _step_config_by_id[step_id]
+            next_ids = get_next_step_ids(step_cfg, ExecutionStatus.COMPLETED, all_steps)
+            results[step_id] = (ExecutionStatus.COMPLETED, next_ids)
+
+    completed_step_ids = {s.config_step_id for s in completed_steps if s.config_step_id}
+
+    candidate_steps = [
+        _step_config_by_id[sid] for sid in results if sid in _step_config_by_id
+    ]
+    next_wave = [
+        nid
+        for nid in apply_join_policy(candidate_steps, results, runtime._step_lookup_by_id)
+        if nid not in completed_step_ids
+    ]
+
+    logger.info(
+        "reconcile_container_workflow_resume",
+        execution_id=execution.id,
+        completed_count=len(completed_steps),
+        next_wave=next_wave,
+        correlation_id=correlation_id,
+    )
+
+    if not next_wave:
+        # All steps already COMPLETED — mark execution COMPLETED
+        execution.status = ExecutionStatus.COMPLETED
+        execution.completed_at = timezone.now()
+        execution.save(update_fields=["status", "completed_at"])
+        logger.info(
+            "reconcile_container_workflow_completed",
+            execution_id=execution.id,
+            correlation_id=correlation_id,
+        )
+        return "reattached"
+
+    # Resume from next wave
+    max_order = ExecutionStep.objects.filter(execution=execution).aggregate(
+        Max("step_order")
+    )["step_order__max"]
+    runtime._step_order_counter = max_order if max_order is not None else 0
+    runtime._initial_wave = next_wave
+    runtime._execute_workflow_steps()
+
+    logger.info(
+        "reconcile_container_workflow_reattached",
+        execution_id=execution.id,
+        next_wave=next_wave,
+        correlation_id=correlation_id,
+    )
+    return "reattached"
+
+
 def _reconcile_execution(execution: Any) -> str:
     """
     Reconcile a single stale RUNNING execution.
@@ -188,11 +315,28 @@ def _reconcile_execution(execution: Any) -> str:
     )
 
     if not running_steps:
-        # Execution is RUNNING but no step is RUNNING — crashed between steps
+        # Execution is RUNNING but no step is RUNNING — crashed between steps.
+        # For container workflows with COMPLETED steps, attempt automatic resume.
         logger.warning(
             "reconcile_execution_no_running_step",
             execution_id=execution_id,
         )
+        if _is_container_workflow(execution):
+            try:
+                result = _resume_container_workflow(
+                    execution,
+                    correlation_id=getattr(execution, "correlation_id", "") or "",
+                )
+                return result
+            except Exception as exc:  # noqa: BLE001
+                logger.error(
+                    "reconcile_container_workflow_resume_failed",
+                    execution_id=execution_id,
+                    error=str(exc),
+                    exc_info=True,
+                )
+                # Fall through to _mark_execution_failed below
+
         _mark_execution_failed(
             execution,
             "Execution found RUNNING at startup with no active step — marked FAILED by reconciliation.",
@@ -268,7 +412,9 @@ def reconcile_stale_executions() -> dict:
 
     - If a RUNNING step has a platform_job_id: reattach poll_platform_job_status.
     - If a RUNNING step has no platform_job_id: mark step + execution FAILED.
-    - If no RUNNING step exists: mark execution FAILED.
+    - If no RUNNING step exists and execution is a container workflow with COMPLETED steps:
+      attempt automatic resume from the last completed step; fall back to FAILED on error.
+    - If no RUNNING step exists and not a resumable container workflow: mark execution FAILED.
 
     Child executions (parent_execution_id set) are skipped — the parent workflow
     reconciliation handles cascade.
