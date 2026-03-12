@@ -14,7 +14,7 @@ Triggered at two points:
   1. AppConfig.ready() on Gunicorn/worker startup (immediate recovery after crash).
   2. Celery Beat every N minutes (safety net for mid-flight task losses).
 
-Stale threshold: executions whose updated_at is older than RECONCILE_STALE_THRESHOLD_MINUTES
+Stale threshold: executions whose created_at is older than RECONCILE_STALE_THRESHOLD_MINUTES
 (default 10) are considered orphaned. This prevents false positives on slow but healthy runs.
 """
 from __future__ import annotations
@@ -416,8 +416,14 @@ def reconcile_stale_executions() -> dict:
       attempt automatic resume from the last completed step; fall back to FAILED on error.
     - If no RUNNING step exists and not a resumable container workflow: mark execution FAILED.
 
-    Child executions (parent_execution_id set) are skipped — the parent workflow
-    reconciliation handles cascade.
+    Processing order:
+    1. Root executions (parent_execution_id is null) are processed first.
+    2. Child executions (parent_execution_id is not null) are processed second:
+       - If the parent was reconciled in this run (present in processed_parent_ids):
+         mark child FAILED directly by cascade.
+       - If the parent is already in a terminal state (FAILED/COMPLETED/CANCELLED) in DB:
+         mark child FAILED directly by cascade.
+       - Otherwise: apply normal reconciliation (reattach or resume).
 
     Returns:
         dict with 'reattached', 'failed', 'skipped', 'errors' counts.
@@ -426,16 +432,29 @@ def reconcile_stale_executions() -> dict:
 
     cutoff = timezone.now() - timedelta(minutes=STALE_THRESHOLD_MINUTES)
 
-    # Use created_at as the staleness signal — Execution has no updated_at field.
-    # An execution created more than STALE_THRESHOLD_MINUTES ago that is still RUNNING
-    # is considered orphaned. This is conservative: short-lived executions that finish
-    # quickly are never in RUNNING long enough to be caught.
-    stale_executions = list(
+    terminal_statuses = {
+        ExecutionStatus.COMPLETED,
+        ExecutionStatus.FAILED,
+        ExecutionStatus.CANCELLED,
+    }
+
+    # --- 1. Root executions (no parent) ---
+    stale_roots = list(
         Execution.objects.filter(
             status=ExecutionStatus.RUNNING,
             created_at__lt=cutoff,
-            parent_execution__isnull=True,  # skip child executions
+            parent_execution__isnull=True,
         ).select_related("action__integration")
+    )
+
+    # --- 2. Child executions (have a parent) ---
+    # select_related includes parent_execution to avoid N+1 when checking parent status.
+    stale_children = list(
+        Execution.objects.filter(
+            status=ExecutionStatus.RUNNING,
+            created_at__lt=cutoff,
+            parent_execution__isnull=False,
+        ).select_related("action__integration", "parent_execution")
     )
 
     total_reattached = 0
@@ -445,20 +464,88 @@ def reconcile_stale_executions() -> dict:
 
     logger.info(
         "reconcile_stale_executions_start",
-        stale_count=len(stale_executions),
+        stale_roots=len(stale_roots),
+        stale_children=len(stale_children),
         stale_threshold_minutes=STALE_THRESHOLD_MINUTES,
         cutoff=cutoff.isoformat(),
     )
 
-    for execution in stale_executions:
+    # IDs of root executions reconciled (terminal) in this run — used to cascade FAILED
+    # to children whose parent was just reconciled.
+    processed_parent_ids: set[int] = set()
+
+    # --- Process root executions ---
+    for execution in stale_roots:
         try:
             outcome = _reconcile_execution(execution)
+            processed_parent_ids.add(execution.id)
             if outcome == "reattached":
                 total_reattached += 1
             elif outcome == "failed":
                 total_failed += 1
             else:
                 total_skipped += 1
+        except SoftTimeLimitExceeded:
+            logger.warning(
+                "reconcile_stale_executions_soft_timeout",
+                reattached=total_reattached,
+                failed=total_failed,
+                skipped=total_skipped,
+                errors=total_errors,
+            )
+            return {
+                "reattached": total_reattached,
+                "failed": total_failed,
+                "skipped": total_skipped,
+                "errors": total_errors,
+                "status": "partial_timeout",
+            }
+        except Exception as exc:  # noqa: BLE001 — never crash the whole reconciliation for one execution
+            processed_parent_ids.add(execution.id)
+            logger.error(
+                "reconcile_execution_error",
+                execution_id=execution.id,
+                error=str(exc),
+                exc_info=True,
+            )
+            total_errors += 1
+
+    # --- Process child executions ---
+    # NOTE: This loop handles 2-level hierarchies only (root → child).
+    # For deeper hierarchies (root → parent → grandchild), a grandchild's parent
+    # may have been marked FAILED during this same loop iteration, but the
+    # grandchild's prefetched parent_execution object still holds the pre-update
+    # RUNNING status. Such grandchildren fall through to _reconcile_execution
+    # rather than cascade-FAILED. This is an accepted limitation: the next
+    # reconciliation run will cascade them correctly.
+    for execution in stale_children:
+        try:
+            parent_id = execution.parent_execution_id
+            parent = execution.parent_execution  # prefetched via select_related
+
+            if parent_id in processed_parent_ids:
+                # Parent was reconciled (and made terminal) in this run → cascade FAILED
+                _mark_execution_failed(
+                    execution,
+                    "Parent execution reconciled as terminal — child marked FAILED by cascade.",
+                )
+                total_failed += 1
+            elif parent is not None and parent.status in terminal_statuses:
+                # Parent is already in a terminal state in DB → cascade FAILED
+                _mark_execution_failed(
+                    execution,
+                    "Parent execution already in terminal state — child marked FAILED by cascade.",
+                )
+                total_failed += 1
+            else:
+                # Parent is healthy or unknown → apply normal reconciliation
+                outcome = _reconcile_execution(execution)
+                if outcome == "reattached":
+                    total_reattached += 1
+                elif outcome == "failed":
+                    total_failed += 1
+                else:
+                    total_skipped += 1
         except SoftTimeLimitExceeded:
             logger.warning(
                 "reconcile_stale_executions_soft_timeout",

@@ -1,13 +1,20 @@
 """
-Tests unitaires pour la logique de réconciliation crash-recovery — Story 76.1
+Tests unitaires pour la logique de réconciliation crash-recovery — Story 76.1 & 76.2
 
-Tests:
+Tests Story 76.1:
 - AC1: Container workflow avec étapes COMPLETED → résultat 'reattached', pas de FAILED
 - AC2: Container workflow avec prochaine vague vide (toutes étapes terminées) → COMPLETED
 - AC3a: Container workflow sans étapes COMPLETED → fallback FAILED
 - AC3b: Exécution non-workflow (pas de step_ids) → comportement actuel FAILED préservé
 - AC4 additionnel: Exception pendant la reprise → fallback FAILED + log d'erreur
 - AC3c: _is_container_workflow — cas limites (action sans execution_steps, liste vide, step_id valides)
+
+Tests Story 76.2:
+- AC1: Enfant stale seul (parent sain) → _reconcile_execution appelé normalement
+- AC3a: Enfant stale avec parent traité dans ce run → _mark_execution_failed, pas _reconcile_execution
+- AC3b: Enfant stale avec parent déjà terminal en DB → _mark_execution_failed, pas _reconcile_execution
+- AC2: Enfant stale avec parent sain → _reconcile_execution appelé normalement
+- Compteurs: total_reattached, total_failed, total_skipped reflètent les enfants
 """
 
 import pytest
@@ -17,6 +24,7 @@ from executions.tasks.reconcile import (
     _is_container_workflow,
     _reconcile_execution,
     _resume_container_workflow,
+    reconcile_stale_executions,
 )
 from tests.factories import ExecutionFactory, ExecutionStepFactory
 
@@ -311,3 +319,277 @@ class TestResumeContainerWorkflow:
         assert result == "reattached"
         mock_rt._execute_workflow_steps.assert_called_once()
         assert mock_rt._initial_wave == [STEP_ID_B]
+
+
+# ---------------------------------------------------------------------------
+# reconcile_stale_executions — Story 76.2 (exécutions enfants)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestReconcileStaleExecutionsChildren:
+    """Story 76.2 — Tests unitaires pour l'inclusion des exécutions enfants dans le réconciliateur."""
+
+    # --- Helpers ---
+
+    def _cutoff_execution(self, parent=None, status="RUNNING"):
+        """Crée une exécution avec created_at déjà ancien (stale) et le status donné."""
+        from django.utils import timezone
+        from datetime import timedelta
+        from executions.models import Execution
+        from executions.tasks.reconcile import STALE_THRESHOLD_MINUTES
+
+        exec_ = ExecutionFactory(status=status, parent_execution=parent)
+        # Forcer created_at dans le passé pour qu'elle soit stale
+        Execution.objects.filter(pk=exec_.pk).update(
+            created_at=timezone.now() - timedelta(minutes=STALE_THRESHOLD_MINUTES + 5)
+        )
+        exec_.refresh_from_db()
+        return exec_
+
+    # ------------------------------------------------------------------
+    # AC1 — Enfant stale seul (parent sain) → _reconcile_execution appelé
+    # ------------------------------------------------------------------
+
+    def test_child_alone_stale_calls_reconcile_execution(self):
+        """AC1: Enfant RUNNING stale dont le parent est sain → _reconcile_execution normal."""
+        # Parent sain (RUNNING récent, pas stale)
+        parent = ExecutionFactory(status="RUNNING")
+        child = self._cutoff_execution(parent=parent)
+
+        with patch(
+            "executions.tasks.reconcile._reconcile_execution",
+            return_value="reattached",
+        ) as mock_reconcile, patch(
+            "executions.tasks.reconcile._mark_execution_failed"
+        ) as mock_fail:
+            result = reconcile_stale_executions()
+
+        # _reconcile_execution appelé au moins une fois avec l'enfant
+        call_args_list = [c.args[0].id for c in mock_reconcile.call_args_list]
+        assert child.id in call_args_list
+        # _mark_execution_failed ne doit pas être appelé pour cet enfant
+        fail_ids = [c.args[0].id for c in mock_fail.call_args_list]
+        assert child.id not in fail_ids
+        assert result["reattached"] >= 1
+
+    # ------------------------------------------------------------------
+    # AC3a — Enfant stale + parent traité dans ce run → cascade FAILED
+    # ------------------------------------------------------------------
+
+    def test_child_stale_parent_processed_in_run_marks_failed_directly(self):
+        """AC3a: Parent traité dans ce run (processed_parent_ids) → _mark_execution_failed sur l'enfant."""
+        parent = self._cutoff_execution()  # parent aussi stale → sera traité en premier
+        child = self._cutoff_execution(parent=parent)
+
+        with patch(
+            "executions.tasks.reconcile._reconcile_execution",
+            return_value="failed",
+        ) as mock_reconcile, patch(
+            "executions.tasks.reconcile._mark_execution_failed"
+        ) as mock_fail:
+            result = reconcile_stale_executions()
+
+        # _mark_execution_failed appelé pour l'enfant avec le message cascade
+        fail_ids = [c.args[0].id for c in mock_fail.call_args_list]
+        assert child.id in fail_ids
+
+        # Vérifier que le message de cascade est utilisé pour l'enfant
+        child_fail_calls = [c for c in mock_fail.call_args_list if c.args[0].id == child.id]
+        assert len(child_fail_calls) == 1
+        assert "cascade" in child_fail_calls[0].args[1].lower()
+
+        # _reconcile_execution ne doit PAS être appelé pour l'enfant (cascade directe)
+        reconcile_ids = [c.args[0].id for c in mock_reconcile.call_args_list]
+        assert child.id not in reconcile_ids
+
+        assert result["failed"] >= 1
+
+    # ------------------------------------------------------------------
+    # AC3b — Enfant stale + parent déjà terminal en DB → cascade FAILED
+    # ------------------------------------------------------------------
+
+    def test_child_stale_parent_already_terminal_marks_failed_directly(self):
+        """AC3b: Parent déjà en état terminal en DB (FAILED) → _mark_execution_failed sur l'enfant."""
+        parent = ExecutionFactory(status="FAILED")  # parent terminal, pas stale
+        child = self._cutoff_execution(parent=parent)
+
+        with patch(
+            "executions.tasks.reconcile._reconcile_execution",
+        ) as mock_reconcile, patch(
+            "executions.tasks.reconcile._mark_execution_failed"
+        ) as mock_fail:
+            result = reconcile_stale_executions()
+
+        # _mark_execution_failed appelé pour l'enfant
+        fail_ids = [c.args[0].id for c in mock_fail.call_args_list]
+        assert child.id in fail_ids
+
+        # Vérifier le message cascade terminal
+        child_fail_calls = [c for c in mock_fail.call_args_list if c.args[0].id == child.id]
+        assert len(child_fail_calls) == 1
+        assert "terminal" in child_fail_calls[0].args[1].lower()
+
+        # _reconcile_execution ne doit PAS être appelé pour l'enfant
+        reconcile_ids = [c.args[0].id for c in mock_reconcile.call_args_list]
+        assert child.id not in reconcile_ids
+
+        assert result["failed"] >= 1
+
+    # ------------------------------------------------------------------
+    # AC2 — Enfant stale + parent sain → _reconcile_execution normal
+    # ------------------------------------------------------------------
+
+    def test_child_stale_parent_healthy_calls_reconcile_execution(self):
+        """AC2: Parent sain (RUNNING récent, non-terminal) → _reconcile_execution sur l'enfant."""
+        parent = ExecutionFactory(status="RUNNING")  # parent récent, pas stale
+        child = self._cutoff_execution(parent=parent)
+
+        with patch(
+            "executions.tasks.reconcile._reconcile_execution",
+            return_value="reattached",
+        ) as mock_reconcile, patch(
+            "executions.tasks.reconcile._mark_execution_failed"
+        ) as mock_fail:
+            result = reconcile_stale_executions()
+
+        # _reconcile_execution appelé sur l'enfant
+        reconcile_ids = [c.args[0].id for c in mock_reconcile.call_args_list]
+        assert child.id in reconcile_ids
+
+        # _mark_execution_failed ne doit pas être appelé pour l'enfant
+        fail_ids = [c.args[0].id for c in mock_fail.call_args_list]
+        assert child.id not in fail_ids
+
+        assert result["reattached"] >= 1
+
+    # ------------------------------------------------------------------
+    # Compteurs — enfants contribuent correctement à total_failed
+    # ------------------------------------------------------------------
+
+    def test_counters_reflect_child_cascade_failed(self):
+        """Compteurs: total_failed inclut les enfants traités par cascade."""
+        # Deux enfants avec parent déjà terminal
+        parent = ExecutionFactory(status="FAILED")
+        child1 = self._cutoff_execution(parent=parent)
+        child2 = self._cutoff_execution(parent=parent)
+
+        with patch(
+            "executions.tasks.reconcile._reconcile_execution",
+        ) as mock_reconcile, patch(
+            "executions.tasks.reconcile._mark_execution_failed"
+        ) as mock_fail:
+            result = reconcile_stale_executions()
+
+        # Les deux enfants doivent être marqués FAILED
+        fail_ids = [c.args[0].id for c in mock_fail.call_args_list]
+        assert child1.id in fail_ids
+        assert child2.id in fail_ids
+
+        # total_failed doit comptabiliser les deux enfants
+        assert result["failed"] >= 2
+
+        # _reconcile_execution ne doit pas être appelé pour ces enfants
+        reconcile_ids = [c.args[0].id for c in mock_reconcile.call_args_list]
+        assert child1.id not in reconcile_ids
+        assert child2.id not in reconcile_ids
+
+    # ------------------------------------------------------------------
+    # Compteurs — total_skipped reflète les enfants (AC Task 2.5)
+    # ------------------------------------------------------------------
+
+    def test_counters_reflect_child_skipped(self):
+        """Compteurs: total_skipped inclut les enfants dont _reconcile_execution retourne 'skipped'."""
+        parent = ExecutionFactory(status="RUNNING")  # parent sain, pas stale
+        child = self._cutoff_execution(parent=parent)
+
+        with patch(
+            "executions.tasks.reconcile._reconcile_execution",
+            return_value="skipped",
+        ) as mock_reconcile, patch(
+            "executions.tasks.reconcile._mark_execution_failed"
+        ) as mock_fail:
+            result = reconcile_stale_executions()
+
+        # _reconcile_execution appelé sur l'enfant
+        reconcile_ids = [c.args[0].id for c in mock_reconcile.call_args_list]
+        assert child.id in reconcile_ids
+
+        # _mark_execution_failed ne doit pas être appelé pour l'enfant
+        fail_ids = [c.args[0].id for c in mock_fail.call_args_list]
+        assert child.id not in fail_ids
+
+        assert result["skipped"] >= 1
+
+    # ------------------------------------------------------------------
+    # Compteurs — total_reattached reflète les enfants (AC Task 2.5)
+    # ------------------------------------------------------------------
+
+    def test_counters_reflect_child_reattached(self):
+        """Compteurs: total_reattached inclut les enfants dont _reconcile_execution retourne 'reattached'."""
+        parent = ExecutionFactory(status="RUNNING")  # parent sain, pas stale
+        child = self._cutoff_execution(parent=parent)
+
+        with patch(
+            "executions.tasks.reconcile._reconcile_execution",
+            return_value="reattached",
+        ) as mock_reconcile, patch(
+            "executions.tasks.reconcile._mark_execution_failed"
+        ) as mock_fail:
+            result = reconcile_stale_executions()
+
+        reconcile_ids = [c.args[0].id for c in mock_reconcile.call_args_list]
+        assert child.id in reconcile_ids
+
+        fail_ids = [c.args[0].id for c in mock_fail.call_args_list]
+        assert child.id not in fail_ids
+
+        assert result["reattached"] >= 1
+
+    # ------------------------------------------------------------------
+    # SoftTimeLimitExceeded dans la boucle enfants → retour partiel
+    # ------------------------------------------------------------------
+
+    def test_soft_time_limit_during_child_loop_returns_partial(self):
+        """SoftTimeLimitExceeded pendant le traitement des enfants → partial_timeout."""
+        from celery.exceptions import SoftTimeLimitExceeded
+
+        parent = ExecutionFactory(status="RUNNING")  # parent sain
+        self._cutoff_execution(parent=parent)
+
+        with patch(
+            "executions.tasks.reconcile._reconcile_execution",
+            side_effect=SoftTimeLimitExceeded(),
+        ):
+            result = reconcile_stale_executions()
+
+        assert result["status"] == "partial_timeout"
+        assert "reattached" in result
+        assert "failed" in result
+        assert "skipped" in result
+        assert "errors" in result
+
+    # ------------------------------------------------------------------
+    # Hiérarchie à 3 niveaux — comportement documenté (limitation 2-level)
+    # ------------------------------------------------------------------
+
+    def test_grandchild_with_stale_parent_uses_reconcile_execution(self):
+        """Limitation 2-level: un petit-enfant dont le parent (niveau 2) est traité dans ce même run
+        ne reçoit PAS la cascade FAILED directe — son parent prefetché a le statut RUNNING.
+        Il passe donc par _reconcile_execution (comportement documenté, corrigé au prochain run)."""
+        grandparent = self._cutoff_execution()  # racine stale
+        parent = self._cutoff_execution(parent=grandparent)  # enfant stale (niveau 2)
+        grandchild = self._cutoff_execution(parent=parent)   # petit-enfant stale (niveau 3)
+
+        with patch(
+            "executions.tasks.reconcile._reconcile_execution",
+            return_value="failed",
+        ) as mock_reconcile, patch(
+            "executions.tasks.reconcile._mark_execution_failed"
+        ):
+            reconcile_stale_executions()
+
+        # Le petit-enfant ne peut pas détecter que son parent vient d'être cascadé FAILED
+        # dans la même run (prefetch stale) → _reconcile_execution est appelé sur lui.
+        reconcile_ids = [c.args[0].id for c in mock_reconcile.call_args_list]
+        assert grandchild.id in reconcile_ids
