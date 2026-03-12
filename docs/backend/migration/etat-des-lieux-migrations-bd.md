@@ -9,8 +9,8 @@
 
 | Composant | Emplacement | Version actuelle | Rôle |
 |-----------|-------------|------------------|------|
-| **Flyway** | `idp-portal/database/migrations/` | V000–V118 (119 scripts) | Schéma Oracle en production |
-| **Baseline** | `idp-portal/database/baseline/baseline_schema_v088.sql` | État V116 | Nouveaux environnements vierges |
+| **Flyway** | `idp-portal/database/migrations/` | V000–V119 (120 scripts) | Schéma Oracle en production |
+| **Baseline** | `idp-portal/database/baseline/baseline_schema_v088.sql` | État V119 | Nouveaux environnements vierges |
 | **Django** | `idp-portal/django_backend/*/migrations/` | 60 migrations (8 apps) | Tests SQLite + mapping ORM Oracle |
 
 ---
@@ -19,7 +19,7 @@
 
 ### 2.1 Périmètre
 
-- **119 scripts** : `V000__create_schema_version.sql` → `V118__add_rejected_by_rejected_at_to_execution_steps.sql`
+- **120 scripts** : `V000__create_schema_version.sql` → `V119__add_correlation_id_to_executions.sql`
 - **Commande** : `flyway migrate` (via `scripts/run_migrations.sh` ou `flyway.conf`)
 - **Historique** : table `flyway_schema_history`
 
@@ -57,6 +57,7 @@
 | V116 | add_config_step_id_to_execution_steps |
 | V117 | add_missing_audit_types_align_django |
 | V118 | add_rejected_by_rejected_at_to_execution_steps |
+| V119 | add_correlation_id_to_executions |
 
 ---
 
@@ -66,11 +67,11 @@
 
 | Élément | Valeur | Note |
 |--------|--------|------|
-| Fichier | `baseline_schema_v088.sql` | Nom historique (Epic 41-2) |
-| État réel | V000–V116 | Couvert intégralement |
-| Commande Flyway | `flyway baseline -baselineVersion=116 -baselineDescription=baseline_schema_v088` | |
+| Fichier | `baseline_schema_v088.sql` | Nom historique |
+| État réel | V000–V119 | Couvert intégralement |
+| Commande Flyway | `flyway baseline -baselineVersion=119 -baselineDescription=baseline_schema_v088` | |
 
-**Incohérence** : Le nom du fichier (`v088`) ne reflète pas l’état actuel (V116). Le README du baseline précise que le script couvre V000–V116.
+**Note** : Le nom du fichier (`v088`) ne reflète pas l’état actuel (V119). Le README du baseline précise que le script couvre V000–V119.
 
 ### 3.2 Contenu baseline
 
@@ -78,14 +79,15 @@
 - **WORKFLOW_EVENTS**, **RUNNABLE_STEPS** (V113)
 - **OUTPUT_SCHEMAS** (V111), **OUTPUT_SCHEMA_ID** sur ACTIONS_CATALOG (V115)
 - **CONFIG_STEP_ID** sur EXECUTION_STEPS (V116)
+- **CORRELATION_ID** sur EXECUTIONS (V119)
 - **LAST_SYNCED_AT**, **LAST_SYNCED_HASH** sur 8 tables (V112)
 - Trigger **TRG_AUDIT_LOG_IMMUTABLE**, package **PKG_IDP_MAINTENANCE**
 
 ### 3.3 Procédure nouveaux environnements
 
 1. `sqlplus ... @database/baseline/baseline_schema_v088.sql`
-2. `flyway baseline -baselineVersion=116 -baselineDescription=baseline_schema_v088`
-3. `flyway migrate` (pour V118+ futures)
+2. `flyway baseline -baselineVersion=119 -baselineDescription=baseline_schema_v088`
+3. `flyway migrate` (pour V120+ futures)
 4. `manage.py migrate --fake-initial` — applique les migrations Django de données (ex. `reference/0004_refengine_icon_url_fix_paths`) qui corrigent les chemins `icon_url` des REF_ENGINES ; les migrations DDL sont fakées car les tables existent déjà.
 
 ---
@@ -165,8 +167,8 @@ Aucun écart ouvert restant pour ces types.
 
 | Vérification | Statut |
 |--------------|--------|
-| Baseline couvre V000–V116 | OK |
-| Nom fichier baseline vs version | Incohérence (v088 vs V116) — documentée |
+| Baseline couvre V000–V119 | OK |
+| Nom fichier baseline vs version | Note (v088 vs V119) — documentée |
 | Django migrations ↔ Flyway (schéma) | OK — V117 créée (2026-03-10) |
 | Types audit Django vs CK_AUDIT_LOG_ACTION_TYPE | OK — V117 aligne tous les types |
 | Documentation versions | OK — mise à jour 2026-03-10 |

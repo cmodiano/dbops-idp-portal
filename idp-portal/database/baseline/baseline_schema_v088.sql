@@ -2,18 +2,17 @@
 -- Baseline Schema V088 — IDP Portal
 -- ===========================================================================
 -- Date            : 2026-03-08
--- Version couverte: V000–V118 (incl. V112 IaC sync, V113 indexes+WORKFLOW_EVENTS+RUNNABLE_STEPS, V114–V118)
--- Auteur          : Agent de développement (Story 41-2)
+-- Version couverte: V000–V119 (incl. V112 IaC sync, V113 indexes+WORKFLOW_EVENTS+RUNNABLE_STEPS, V114–V119)
 --
 -- Usage           : NOUVEAUX ENVIRONNEMENTS UNIQUEMENT (base Oracle vierge)
 -- Interdit sur    : Environnements existants (dev, staging, prod) — INCHANGÉS
 --
 -- Procédure de déploiement :
 --   1. sqlplus idp_user/password@HOST:1521/XEPDB1 @database/baseline/baseline_schema_v088.sql
---   2. flyway -baselineVersion=118 -baselineDescription=baseline_schema_v088 baseline
+--   2. flyway -baselineVersion=119 -baselineDescription=baseline_schema_v088 baseline
 --
--- Ce script couvre TOUTES les migrations V000–V118. Aucune migration incrémentale
--- n'est nécessaire après application. État identique à V000→V118 sans phases intermédiaires.
+-- Ce script couvre TOUTES les migrations V000–V119. Aucune migration incrémentale
+-- n'est nécessaire après application. État identique à V000→V119 sans phases intermédiaires.
 -- ===========================================================================
 --
 -- Objets créés :
@@ -51,6 +50,16 @@ CREATE TABLE USERS (
 
 CREATE UNIQUE INDEX UK_USERS_USERNAME ON USERS(USERNAME);
 
+COMMENT ON TABLE USERS IS 'Utilisateurs de l''application (SAML, profil, etc.).';
+COMMENT ON COLUMN USERS.ID IS 'Clé primaire, colonne IDENTITY.';
+COMMENT ON COLUMN USERS.USERNAME IS 'Identifiant de connexion unique.';
+COMMENT ON COLUMN USERS.DISPLAY_NAME IS 'Nom d''affichage.';
+COMMENT ON COLUMN USERS.PROFILE IS 'Profil utilisateur (rôle).';
+COMMENT ON COLUMN USERS.SAML_SUBJECT IS 'Identifiant SAML du sujet.';
+COMMENT ON COLUMN USERS.EMAIL IS 'Adresse email.';
+COMMENT ON COLUMN USERS.CREATED_AT IS 'Date de création.';
+COMMENT ON COLUMN USERS.UPDATED_AT IS 'Date de dernière mise à jour.';
+
 -- ---------------------------------------------------------------------------
 -- AUTH_USER (V089) — django.contrib.auth pour admin Django
 -- ---------------------------------------------------------------------------
@@ -73,6 +82,19 @@ CREATE TABLE AUTH_USER (
 
 CREATE UNIQUE INDEX UK_AUTH_USER_USERNAME ON AUTH_USER(USERNAME);
 
+COMMENT ON TABLE AUTH_USER IS 'Utilisateurs Django pour l''admin (django.contrib.auth).';
+COMMENT ON COLUMN AUTH_USER.ID IS 'Clé primaire, colonne IDENTITY.';
+COMMENT ON COLUMN AUTH_USER.PASSWORD IS 'Mot de passe hashé.';
+COMMENT ON COLUMN AUTH_USER.LAST_LOGIN IS 'Dernière connexion.';
+COMMENT ON COLUMN AUTH_USER.IS_SUPERUSER IS '1 = superutilisateur.';
+COMMENT ON COLUMN AUTH_USER.USERNAME IS 'Identifiant de connexion unique.';
+COMMENT ON COLUMN AUTH_USER.FIRST_NAME IS 'Prénom.';
+COMMENT ON COLUMN AUTH_USER.LAST_NAME IS 'Nom de famille.';
+COMMENT ON COLUMN AUTH_USER.EMAIL IS 'Adresse email.';
+COMMENT ON COLUMN AUTH_USER.IS_STAFF IS '1 = accès à l''admin.';
+COMMENT ON COLUMN AUTH_USER.IS_ACTIVE IS '1 = compte actif.';
+COMMENT ON COLUMN AUTH_USER.DATE_JOINED IS 'Date d''inscription.';
+
 -- ---------------------------------------------------------------------------
 -- AUTH_GROUP (V092) — django.contrib.auth Group
 -- ---------------------------------------------------------------------------
@@ -81,6 +103,10 @@ CREATE TABLE AUTH_GROUP (
     NAME VARCHAR2(150) NOT NULL,
     CONSTRAINT UK_AUTH_GROUP_NAME UNIQUE (NAME)
 );
+
+COMMENT ON TABLE AUTH_GROUP IS 'Groupes Django (django.contrib.auth).';
+COMMENT ON COLUMN AUTH_GROUP.ID IS 'Clé primaire, colonne IDENTITY.';
+COMMENT ON COLUMN AUTH_GROUP.NAME IS 'Nom du groupe.';
 
 -- ---------------------------------------------------------------------------
 -- AUTH_USER_GROUPS (V092) — M2M auth_user ↔ auth_group
@@ -97,6 +123,11 @@ CREATE TABLE AUTH_USER_GROUPS (
 CREATE INDEX IDX_AUTH_USER_GROUPS_USER_ID  ON AUTH_USER_GROUPS(USER_ID);
 CREATE INDEX IDX_AUTH_USER_GROUPS_GROUP_ID ON AUTH_USER_GROUPS(GROUP_ID);
 
+COMMENT ON TABLE AUTH_USER_GROUPS IS 'Table de liaison many-to-many auth_user ↔ auth_group.';
+COMMENT ON COLUMN AUTH_USER_GROUPS.ID IS 'Clé primaire, colonne IDENTITY.';
+COMMENT ON COLUMN AUTH_USER_GROUPS.USER_ID IS 'FK vers AUTH_USER.';
+COMMENT ON COLUMN AUTH_USER_GROUPS.GROUP_ID IS 'FK vers AUTH_GROUP.';
+
 -- ---------------------------------------------------------------------------
 -- DJANGO_CONTENT_TYPE (V093) — django.contrib.contenttypes
 -- ---------------------------------------------------------------------------
@@ -106,6 +137,11 @@ CREATE TABLE DJANGO_CONTENT_TYPE (
     MODEL     VARCHAR2(100) NOT NULL,
     CONSTRAINT UK_DJANGO_CONTENT_TYPE_APP_MODEL UNIQUE (APP_LABEL, MODEL)
 );
+
+COMMENT ON TABLE DJANGO_CONTENT_TYPE IS 'Types de contenu Django (django.contrib.contenttypes).';
+COMMENT ON COLUMN DJANGO_CONTENT_TYPE.ID IS 'Clé primaire, colonne IDENTITY.';
+COMMENT ON COLUMN DJANGO_CONTENT_TYPE.APP_LABEL IS 'Label de l''application Django.';
+COMMENT ON COLUMN DJANGO_CONTENT_TYPE.MODEL IS 'Nom du modèle.';
 
 -- ---------------------------------------------------------------------------
 -- AUTH_PERMISSION (V093) — django.contrib.auth Permission
@@ -121,6 +157,12 @@ CREATE TABLE AUTH_PERMISSION (
 
 CREATE INDEX IDX_AUTH_PERMISSION_CONTENT_TYPE ON AUTH_PERMISSION(CONTENT_TYPE_ID);
 
+COMMENT ON TABLE AUTH_PERMISSION IS 'Permissions Django (django.contrib.auth).';
+COMMENT ON COLUMN AUTH_PERMISSION.ID IS 'Clé primaire, colonne IDENTITY.';
+COMMENT ON COLUMN AUTH_PERMISSION.NAME IS 'Nom de la permission.';
+COMMENT ON COLUMN AUTH_PERMISSION.CONTENT_TYPE_ID IS 'FK vers DJANGO_CONTENT_TYPE.';
+COMMENT ON COLUMN AUTH_PERMISSION.CODENAME IS 'Code de la permission.';
+
 -- ---------------------------------------------------------------------------
 -- AUTH_USER_USER_PERMISSIONS (V093) — M2M auth_user ↔ auth_permission
 -- ---------------------------------------------------------------------------
@@ -135,6 +177,11 @@ CREATE TABLE AUTH_USER_USER_PERMISSIONS (
 
 CREATE INDEX IDX_AUTH_USER_PERM_USER_ID       ON AUTH_USER_USER_PERMISSIONS(USER_ID);
 CREATE INDEX IDX_AUTH_USER_PERM_PERMISSION_ID ON AUTH_USER_USER_PERMISSIONS(PERMISSION_ID);
+
+COMMENT ON TABLE AUTH_USER_USER_PERMISSIONS IS 'Table de liaison many-to-many auth_user ↔ auth_permission.';
+COMMENT ON COLUMN AUTH_USER_USER_PERMISSIONS.ID IS 'Clé primaire, colonne IDENTITY.';
+COMMENT ON COLUMN AUTH_USER_USER_PERMISSIONS.USER_ID IS 'FK vers AUTH_USER.';
+COMMENT ON COLUMN AUTH_USER_USER_PERMISSIONS.PERMISSION_ID IS 'FK vers AUTH_PERMISSION.';
 
 -- ---------------------------------------------------------------------------
 -- API_KEYS (V091) — idp_auth.APIKey pour accès API par clé
@@ -156,6 +203,17 @@ CREATE TABLE API_KEYS (
 CREATE UNIQUE INDEX UK_API_KEYS_KEY_HASH ON API_KEYS(KEY_HASH);
 CREATE INDEX IDX_API_KEYS_USER_ID ON API_KEYS(USER_ID);
 
+COMMENT ON TABLE API_KEYS IS 'Clés API pour l''accès authentifié aux API.';
+COMMENT ON COLUMN API_KEYS.ID IS 'Clé primaire, colonne IDENTITY.';
+COMMENT ON COLUMN API_KEYS.USER_ID IS 'FK vers USERS.';
+COMMENT ON COLUMN API_KEYS.KEY_HASH IS 'Hash de la clé API (jamais stockée en clair).';
+COMMENT ON COLUMN API_KEYS.NAME IS 'Nom descriptif de la clé.';
+COMMENT ON COLUMN API_KEYS.SCOPE IS 'Périmètre d''utilisation.';
+COMMENT ON COLUMN API_KEYS.EXPIRES_AT IS 'Date d''expiration.';
+COMMENT ON COLUMN API_KEYS.IS_ACTIVE IS '1 = clé active.';
+COMMENT ON COLUMN API_KEYS.CREATED_AT IS 'Date de création.';
+COMMENT ON COLUMN API_KEYS.UPDATED_AT IS 'Date de dernière mise à jour.';
+
 -- ---------------------------------------------------------------------------
 -- DJANGO_SESSION (V090) — django.contrib.sessions pour login admin
 -- ---------------------------------------------------------------------------
@@ -168,6 +226,11 @@ CREATE TABLE DJANGO_SESSION (
 
 CREATE INDEX IDX_DJANGO_SESSION_EXPIRE_DATE ON DJANGO_SESSION(EXPIRE_DATE);
 
+COMMENT ON TABLE DJANGO_SESSION IS 'Sessions Django pour l''admin (django.contrib.sessions).';
+COMMENT ON COLUMN DJANGO_SESSION.SESSION_KEY IS 'Clé de session unique.';
+COMMENT ON COLUMN DJANGO_SESSION.SESSION_DATA IS 'Données de session sérialisées.';
+COMMENT ON COLUMN DJANGO_SESSION.EXPIRE_DATE IS 'Date d''expiration de la session.';
+
 -- ---------------------------------------------------------------------------
 -- TAGS (V007)
 -- ---------------------------------------------------------------------------
@@ -177,6 +240,11 @@ CREATE TABLE TAGS (
     CREATED_AT      TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
     CONSTRAINT UK_TAGS_NAME UNIQUE (NAME)
 );
+
+COMMENT ON TABLE TAGS IS 'Tags pour le catalogage des actions.';
+COMMENT ON COLUMN TAGS.ID IS 'Clé primaire, colonne IDENTITY.';
+COMMENT ON COLUMN TAGS.NAME IS 'Nom du tag.';
+COMMENT ON COLUMN TAGS.CREATED_AT IS 'Date de création.';
 
 -- ---------------------------------------------------------------------------
 -- PROFILES (V010 + V105 IS_APPROVER)
@@ -204,8 +272,18 @@ CREATE TABLE PROFILES (
 
 CREATE INDEX IDX_PROFILES_AD_GROUP ON PROFILES(AD_GROUP);
 
+COMMENT ON TABLE PROFILES IS 'Profils utilisateur (rôles, groupes AD, droits).';
+COMMENT ON COLUMN PROFILES.ID IS 'Clé primaire, colonne IDENTITY.';
+COMMENT ON COLUMN PROFILES.NAME IS 'Nom du profil.';
+COMMENT ON COLUMN PROFILES.DESCRIPTION IS 'Description du profil.';
 COMMENT ON COLUMN PROFILES.AD_GROUP IS 'Groupe AD associé au profil (ex. GRP-IDP-ASSURANCE).';
-COMMENT ON COLUMN PROFILES.IS_APPROVER IS '1 = profil éligible comme approbateur dans un step gate approval (Epic 57)';
+COMMENT ON COLUMN PROFILES.IS_ADMIN IS '1 = profil administrateur.';
+COMMENT ON COLUMN PROFILES.IS_AUDITOR IS '1 = profil auditeur.';
+COMMENT ON COLUMN PROFILES.IS_APPROVER IS '1 = profil éligible comme approbateur dans un step gate approval';
+COMMENT ON COLUMN PROFILES.CREATED_AT IS 'Date de création.';
+COMMENT ON COLUMN PROFILES.UPDATED_AT IS 'Date de dernière mise à jour.';
+COMMENT ON COLUMN PROFILES.LAST_SYNCED_AT IS 'Dernière synchronisation IaC.';
+COMMENT ON COLUMN PROFILES.LAST_SYNCED_HASH IS 'Hash de la dernière synchronisation IaC.';
 
 -- ---------------------------------------------------------------------------
 -- INTEGRATIONS (V020 + V024 + V026 + V064 + V077 + V088 + V098)
@@ -253,14 +331,25 @@ CREATE INDEX IDX_INTEGRATIONS_TYPE   ON INTEGRATIONS(TYPE);
 CREATE INDEX IDX_INTEGRATION_STATUS  ON INTEGRATIONS(STATUS);
 CREATE INDEX IDX_INTEGRATIONS_HEALTH_STATUS ON INTEGRATIONS(HEALTH_STATUS);
 
-COMMENT ON TABLE INTEGRATIONS IS 'Remote platform configuration for execution (AAP, ServiceNow, Terraform, etc.)';
-COMMENT ON COLUMN INTEGRATIONS.TYPE IS 'Integration type: free-form platform name (V024)';
-COMMENT ON COLUMN INTEGRATIONS.AUTH_FLOW IS 'Authentication flow: token, basic, basic_then_token, pat, oauth2_client_credentials, api_key (V088)';
-COMMENT ON COLUMN INTEGRATIONS.STATUS IS 'Integration validation status: valid, invalid, deprecated';
-COMMENT ON COLUMN INTEGRATIONS.SECRET_SERVICE_ID IS 'ID intégration Vault pour résoudre les secrets (NULL = Vault par défaut)';
-COMMENT ON COLUMN INTEGRATIONS.HEALTH_STATUS IS 'Health check result: ok, error, unknown (Story 51.1)';
-COMMENT ON COLUMN INTEGRATIONS.HEALTH_CHECKED_AT IS 'Last health check timestamp';
-COMMENT ON COLUMN INTEGRATIONS.HEALTH_ERROR_MESSAGE IS 'Error message when health_status=error';
+COMMENT ON TABLE INTEGRATIONS IS 'Configuration des plateformes distantes pour l''exécution (AAP, ServiceNow, Terraform, etc.)';
+COMMENT ON COLUMN INTEGRATIONS.ID IS 'Clé primaire, colonne IDENTITY.';
+COMMENT ON COLUMN INTEGRATIONS.TYPE IS 'Type d''intégration : nom libre de la plateforme';
+COMMENT ON COLUMN INTEGRATIONS.AUTH_FLOW IS 'Flux d''authentification : token, basic, basic_then_token, pat, oauth2_client_credentials, api_key';
+COMMENT ON COLUMN INTEGRATIONS.STATUS IS 'Statut de validation de l''intégration : valid, invalid, deprecated';
+COMMENT ON COLUMN INTEGRATIONS.SECRET_SERVICE_ID IS 'ID de l''intégration Vault pour résoudre les secrets (NULL = Vault par défaut)';
+COMMENT ON COLUMN INTEGRATIONS.HEALTH_STATUS IS 'Résultat du health check : ok, error, unknown';
+COMMENT ON COLUMN INTEGRATIONS.HEALTH_CHECKED_AT IS 'Horodatage du dernier health check';
+COMMENT ON COLUMN INTEGRATIONS.HEALTH_ERROR_MESSAGE IS 'Message d''erreur lorsque health_status=error';
+COMMENT ON COLUMN INTEGRATIONS.NAME IS 'Nom de l''intégration.';
+COMMENT ON COLUMN INTEGRATIONS.BASE_URL IS 'URL de base de la plateforme.';
+COMMENT ON COLUMN INTEGRATIONS.CREDENTIAL_REF IS 'Référence aux identifiants.';
+COMMENT ON COLUMN INTEGRATIONS.ICON IS 'Icône ou URL d''icône.';
+COMMENT ON COLUMN INTEGRATIONS.CREATED_AT IS 'Date de création.';
+COMMENT ON COLUMN INTEGRATIONS.UPDATED_AT IS 'Date de dernière mise à jour.';
+COMMENT ON COLUMN INTEGRATIONS.TOKEN_URL IS 'URL pour l''obtention du token.';
+COMMENT ON COLUMN INTEGRATIONS.CONFIG IS 'Configuration JSON.';
+COMMENT ON COLUMN INTEGRATIONS.LAST_SYNCED_AT IS 'Dernière synchronisation IaC.';
+COMMENT ON COLUMN INTEGRATIONS.LAST_SYNCED_HASH IS 'Hash de la dernière synchronisation IaC.';
 
 -- ---------------------------------------------------------------------------
 -- REF_ENGINES (V049 + V078)
@@ -283,8 +372,15 @@ CREATE TABLE REF_ENGINES (
 CREATE INDEX IDX_REF_ENGINES_IS_ACTIVE     ON REF_ENGINES(IS_ACTIVE);
 CREATE INDEX IDX_REF_ENGINES_DISPLAY_ORDER ON REF_ENGINES(DISPLAY_ORDER);
 
-COMMENT ON TABLE REF_ENGINES IS 'Reference table for database engines/technologies.';
-COMMENT ON COLUMN REF_ENGINES.ICON_URL IS 'URL image ou identifiant icône prédéfinie (Story 31.3). NULL = fallback vers icônes par défaut.';
+COMMENT ON TABLE REF_ENGINES IS 'Table de référence des moteurs et technologies de base de données.';
+COMMENT ON COLUMN REF_ENGINES.ID IS 'Clé primaire, colonne IDENTITY.';
+COMMENT ON COLUMN REF_ENGINES.CODE IS 'Code du moteur (ex. Oracle, SQL Server).';
+COMMENT ON COLUMN REF_ENGINES.LABEL IS 'Libellé affiché.';
+COMMENT ON COLUMN REF_ENGINES.DISPLAY_ORDER IS 'Ordre d''affichage.';
+COMMENT ON COLUMN REF_ENGINES.IS_ACTIVE IS '1 = moteur actif.';
+COMMENT ON COLUMN REF_ENGINES.ICON_URL IS 'URL de l''image ou identifiant d''icône prédéfinie. NULL = icônes par défaut.';
+COMMENT ON COLUMN REF_ENGINES.LAST_SYNCED_AT IS 'Dernière synchronisation IaC.';
+COMMENT ON COLUMN REF_ENGINES.LAST_SYNCED_HASH IS 'Hash de la dernière synchronisation IaC.';
 
 -- ---------------------------------------------------------------------------
 -- REF_CATEGORIES (V059)
@@ -301,6 +397,15 @@ CREATE TABLE REF_CATEGORIES (
 );
 
 CREATE INDEX IDX_REF_CATEGORIES_ACTIVE_ORDER ON REF_CATEGORIES(IS_ACTIVE, DISPLAY_ORDER);
+
+COMMENT ON TABLE REF_CATEGORIES IS 'Table de référence des catégories d''actions.';
+COMMENT ON COLUMN REF_CATEGORIES.ID IS 'Clé primaire, colonne IDENTITY.';
+COMMENT ON COLUMN REF_CATEGORIES.CODE IS 'Code de la catégorie.';
+COMMENT ON COLUMN REF_CATEGORIES.LABEL IS 'Libellé affiché.';
+COMMENT ON COLUMN REF_CATEGORIES.DISPLAY_ORDER IS 'Ordre d''affichage.';
+COMMENT ON COLUMN REF_CATEGORIES.IS_ACTIVE IS '1 = catégorie active.';
+COMMENT ON COLUMN REF_CATEGORIES.LAST_SYNCED_AT IS 'Dernière synchronisation IaC.';
+COMMENT ON COLUMN REF_CATEGORIES.LAST_SYNCED_HASH IS 'Hash de la dernière synchronisation IaC.';
 
 -- ---------------------------------------------------------------------------
 -- INTEGRATION_TYPE_CATALOGUE (V061 + V072)
@@ -325,8 +430,17 @@ CREATE TABLE INTEGRATION_TYPE_CATALOGUE (
 
 CREATE INDEX IDX_INTEGRATION_TYPE_CATALOGUE_IS_ACTIVE ON INTEGRATION_TYPE_CATALOGUE(IS_ACTIVE);
 
-COMMENT ON TABLE INTEGRATION_TYPE_CATALOGUE IS 'Formal catalogue of supported integration types (Story 24.1).';
-COMMENT ON COLUMN INTEGRATION_TYPE_CATALOGUE.INTEGRATION_ROLE IS 'Role: platform (execution) ou service (consommation)';
+COMMENT ON TABLE INTEGRATION_TYPE_CATALOGUE IS 'Catalogue formel des types d''intégration supportés.';
+COMMENT ON COLUMN INTEGRATION_TYPE_CATALOGUE.CODE IS 'Code du type d''intégration.';
+COMMENT ON COLUMN INTEGRATION_TYPE_CATALOGUE.NAME IS 'Nom du type.';
+COMMENT ON COLUMN INTEGRATION_TYPE_CATALOGUE.DESCRIPTION IS 'Description.';
+COMMENT ON COLUMN INTEGRATION_TYPE_CATALOGUE.VERSION IS 'Version du catalogue.';
+COMMENT ON COLUMN INTEGRATION_TYPE_CATALOGUE.IS_ACTIVE IS '1 = type actif.';
+COMMENT ON COLUMN INTEGRATION_TYPE_CATALOGUE.CREATED_AT IS 'Date de création.';
+COMMENT ON COLUMN INTEGRATION_TYPE_CATALOGUE.UPDATED_AT IS 'Date de dernière mise à jour.';
+COMMENT ON COLUMN INTEGRATION_TYPE_CATALOGUE.INTEGRATION_ROLE IS 'Rôle : plateforme (exécution) ou service (consommation)';
+COMMENT ON COLUMN INTEGRATION_TYPE_CATALOGUE.LAST_SYNCED_AT IS 'Dernière synchronisation IaC.';
+COMMENT ON COLUMN INTEGRATION_TYPE_CATALOGUE.LAST_SYNCED_HASH IS 'Hash de la dernière synchronisation IaC.';
 
 -- ---------------------------------------------------------------------------
 -- CORE_FEATURE_FLAGS (V062)
@@ -348,7 +462,16 @@ CREATE TABLE CORE_FEATURE_FLAGS (
     CONSTRAINT CK_FEATURE_FLAGS_ROLLOUT  CHECK (ROLLOUT_PERCENT BETWEEN 0 AND 100)
 );
 
-COMMENT ON TABLE CORE_FEATURE_FLAGS IS 'Feature flags for progressive rollout.';
+COMMENT ON TABLE CORE_FEATURE_FLAGS IS 'Drapeaux de fonctionnalité pour déploiement progressif.';
+COMMENT ON COLUMN CORE_FEATURE_FLAGS.ID IS 'Clé primaire, colonne IDENTITY.';
+COMMENT ON COLUMN CORE_FEATURE_FLAGS.FLAG_KEY IS 'Clé du drapeau.';
+COMMENT ON COLUMN CORE_FEATURE_FLAGS.ENABLED IS '1 = drapeau activé.';
+COMMENT ON COLUMN CORE_FEATURE_FLAGS.ROLLOUT_PERCENT IS 'Pourcentage de déploiement (0-100).';
+COMMENT ON COLUMN CORE_FEATURE_FLAGS.DESCRIPTION IS 'Description du drapeau.';
+COMMENT ON COLUMN CORE_FEATURE_FLAGS.UPDATED_AT IS 'Date de dernière mise à jour.';
+COMMENT ON COLUMN CORE_FEATURE_FLAGS.UPDATED_BY IS 'Utilisateur ayant mis à jour.';
+COMMENT ON COLUMN CORE_FEATURE_FLAGS.LAST_SYNCED_AT IS 'Dernière synchronisation IaC.';
+COMMENT ON COLUMN CORE_FEATURE_FLAGS.LAST_SYNCED_HASH IS 'Hash de la dernière synchronisation IaC.';
 
 -- ---------------------------------------------------------------------------
 -- BUSINESS_RULE_POLICIES (V076)
@@ -374,11 +497,20 @@ CREATE TABLE BUSINESS_RULE_POLICIES (
 CREATE INDEX IDX_POLICY_IS_ACTIVE  ON BUSINESS_RULE_POLICIES(IS_ACTIVE);
 CREATE INDEX IDX_POLICY_CREATED_BY ON BUSINESS_RULE_POLICIES(CREATED_BY_ID);
 
-COMMENT ON TABLE BUSINESS_RULE_POLICIES IS 'Story 28.4: Catalogue of reusable business rule policies for actions.';
-COMMENT ON COLUMN BUSINESS_RULE_POLICIES.POLICY_JSON IS 'JSON schema defining business rule policies (on_step_output structure).';
+COMMENT ON TABLE BUSINESS_RULE_POLICIES IS 'Catalogue des politiques de règles métier réutilisables pour les actions.';
+COMMENT ON COLUMN BUSINESS_RULE_POLICIES.ID IS 'Clé primaire, colonne IDENTITY.';
+COMMENT ON COLUMN BUSINESS_RULE_POLICIES.NAME IS 'Nom de la politique.';
+COMMENT ON COLUMN BUSINESS_RULE_POLICIES.DESCRIPTION IS 'Description.';
+COMMENT ON COLUMN BUSINESS_RULE_POLICIES.POLICY_JSON IS 'Schéma JSON définissant les politiques de règles métier (structure on_step_output).';
+COMMENT ON COLUMN BUSINESS_RULE_POLICIES.IS_ACTIVE IS '1 = politique active.';
+COMMENT ON COLUMN BUSINESS_RULE_POLICIES.CREATED_AT IS 'Date de création.';
+COMMENT ON COLUMN BUSINESS_RULE_POLICIES.UPDATED_AT IS 'Date de dernière mise à jour.';
+COMMENT ON COLUMN BUSINESS_RULE_POLICIES.CREATED_BY_ID IS 'FK vers USERS — créateur.';
+COMMENT ON COLUMN BUSINESS_RULE_POLICIES.LAST_SYNCED_AT IS 'Dernière synchronisation IaC.';
+COMMENT ON COLUMN BUSINESS_RULE_POLICIES.LAST_SYNCED_HASH IS 'Hash de la dernière synchronisation IaC.';
 
 -- ---------------------------------------------------------------------------
--- OUTPUT_SCHEMAS (V111) — Story 63.1 Infrastructure des Schémas d'Output
+-- OUTPUT_SCHEMAS (V111) — Infrastructure des schémas d'output
 -- ---------------------------------------------------------------------------
 CREATE TABLE OUTPUT_SCHEMAS (
     ID               NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -399,12 +531,16 @@ CREATE TABLE OUTPUT_SCHEMAS (
 
 CREATE INDEX IDX_OUTPUT_SCHEMAS_TYPE ON OUTPUT_SCHEMAS(SCHEMA_TYPE);
 
-COMMENT ON TABLE OUTPUT_SCHEMAS IS 'Declarative output schemas for workflow steps (Story 63.1)';
-COMMENT ON COLUMN OUTPUT_SCHEMAS.SCHEMA_TYPE IS 'action | integration | platform_convention';
-COMMENT ON COLUMN OUTPUT_SCHEMAS.TARGET_NAME IS 'action_name, integration_type, or convention_name';
-COMMENT ON COLUMN OUTPUT_SCHEMAS.OPERATION IS 'operation name for integration schemas (e.g. create_change), NULL for action/convention schemas';
-COMMENT ON COLUMN OUTPUT_SCHEMAS.INHERITS_FROM_ID IS 'FK self-ref for schema inheritance (resolved in Story 63.2)';
-COMMENT ON COLUMN OUTPUT_SCHEMAS.SCHEMA_JSON IS 'JSON: {output_fields: [...], template_variables: [...]}';
+COMMENT ON TABLE OUTPUT_SCHEMAS IS 'Schémas d''output déclaratifs pour les étapes de workflow.';
+COMMENT ON COLUMN OUTPUT_SCHEMAS.SCHEMA_TYPE IS 'Type : action, integration ou platform_convention';
+COMMENT ON COLUMN OUTPUT_SCHEMAS.TARGET_NAME IS 'Nom de l''action, type d''intégration ou convention';
+COMMENT ON COLUMN OUTPUT_SCHEMAS.OPERATION IS 'Nom de l''opération pour les schémas d''intégration (ex. create_change), NULL pour action/convention';
+COMMENT ON COLUMN OUTPUT_SCHEMAS.INHERITS_FROM_ID IS 'FK auto-référente pour l''héritage de schéma';
+COMMENT ON COLUMN OUTPUT_SCHEMAS.SCHEMA_JSON IS 'JSON : {output_fields: [...], template_variables: [...]}';
+COMMENT ON COLUMN OUTPUT_SCHEMAS.ID IS 'Clé primaire, colonne IDENTITY.';
+COMMENT ON COLUMN OUTPUT_SCHEMAS.NAME IS 'Nom du schéma.';
+COMMENT ON COLUMN OUTPUT_SCHEMAS.CREATED_AT IS 'Date de création.';
+COMMENT ON COLUMN OUTPUT_SCHEMAS.UPDATED_AT IS 'Date de dernière mise à jour.';
 
 -- ---------------------------------------------------------------------------
 -- ACTIONS_CATALOG (V002 + V003 + V008 + V013 + V014 + V017 + V018 + V022
@@ -414,7 +550,7 @@ COMMENT ON COLUMN OUTPUT_SCHEMAS.SCHEMA_JSON IS 'JSON: {output_fields: [...], te
 --   CHANGE_TYPE_CONFIG (V019, droppée V109), GATE_CONFIG (V081, droppée V109)
 -- Contraintes exclues (car droppées) : CK_ACTIONS_CATALOG_CATEGORY (V018),
 --   CK_ACTIONS_CATALOG_ENGINE (V050), CK_ACTIONS_CATALOG_PLATFORM (V052)
--- V018: CATEGORY rendu nullable (migration vers tags-only, Story 2.23)
+-- CATEGORY rendu nullable (migration vers tags-only)
 -- ---------------------------------------------------------------------------
 CREATE TABLE ACTIONS_CATALOG (
     ID                      NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -456,7 +592,7 @@ CREATE TABLE ACTIONS_CATALOG (
     -- V112 IaC sync tracking
     LAST_SYNCED_AT          TIMESTAMP NULL,
     LAST_SYNCED_HASH        VARCHAR2(64) NULL,
-    -- V115: FK vers OUTPUT_SCHEMAS (Story 63.9)
+    -- FK vers OUTPUT_SCHEMAS
     OUTPUT_SCHEMA_ID        NUMBER(19),
 
     -- Contraintes inline
@@ -494,22 +630,34 @@ CREATE INDEX IDX_ACTIONS_CATALOG_DELETED_AT     ON ACTIONS_CATALOG(DELETED_AT);
 CREATE INDEX IDX_ACTION_BUSINESS_RULE_POLICY    ON ACTIONS_CATALOG(BUSINESS_RULE_POLICY_ID);
 CREATE INDEX IDX_ACTION_OUTPUT_SCHEMA           ON ACTIONS_CATALOG(OUTPUT_SCHEMA_ID);
 
-COMMENT ON COLUMN ACTIONS_CATALOG.OUTPUT_SCHEMA_ID IS 'FK vers OUTPUT_SCHEMAS — schéma d''output déclaré par l''admin pour cette action (Story 63.9)';
-COMMENT ON COLUMN ACTIONS_CATALOG.PARAMETERS_SCHEMA IS 'JSON Schema (draft-07) defining action parameters.';
-COMMENT ON COLUMN ACTIONS_CATALOG.IMPACT_RULES IS 'JSON object mapping environment to impact level.';
-COMMENT ON COLUMN ACTIONS_CATALOG.EXECUTION_STEPS IS 'JSON array of execution steps (V003).';
-COMMENT ON COLUMN ACTIONS_CATALOG.DEFAULT_IMPACT_LEVEL IS 'Default impact level when no rule matches environment (V014).';
-COMMENT ON COLUMN ACTIONS_CATALOG.DOCUMENTATION_MD IS 'Markdown documentation for the action (V022).';
-COMMENT ON COLUMN ACTIONS_CATALOG.ITEM_TYPE IS 'Entry type: action or workflow (V027).';
-COMMENT ON COLUMN ACTIONS_CATALOG.REMEDIATION_RULES IS 'JSON array of remediation rule objects (V031).';
-COMMENT ON COLUMN ACTIONS_CATALOG.INTEGRATION_ID IS 'FK to INTEGRATIONS — platform integration for execution (V036).';
-COMMENT ON COLUMN ACTIONS_CATALOG.REQUIRES_TARGET IS 'Whether action requires target selection (V046).';
-COMMENT ON COLUMN ACTIONS_CATALOG.DELETED_AT IS 'When the action was soft-deleted (V056/V080). May be NULL when status=disabled: integration-deletion flow sets status only (two-phase disable, no soft-delete fields).';
-COMMENT ON COLUMN ACTIONS_CATALOG.DELETED_BY IS 'User who disabled the action (V056).';
-COMMENT ON COLUMN ACTIONS_CATALOG.DELETION_REASON IS 'Reason for deactivation (V056).';
-COMMENT ON COLUMN ACTIONS_CATALOG.BUSINESS_RULE_POLICIES IS 'Inline JSON business rule policies (V074).';
-COMMENT ON COLUMN ACTIONS_CATALOG.BUSINESS_RULE_POLICY_ID IS 'FK to BUSINESS_RULE_POLICIES catalogue (V076).';
-COMMENT ON COLUMN ACTIONS_CATALOG.NOTIFICATION_CONFIG IS 'JSON configuration des notifications (V082).';
+COMMENT ON COLUMN ACTIONS_CATALOG.OUTPUT_SCHEMA_ID IS 'FK vers OUTPUT_SCHEMAS — schéma d''output déclaré par l''admin pour cette action';
+COMMENT ON COLUMN ACTIONS_CATALOG.PARAMETERS_SCHEMA IS 'Schéma JSON (draft-07) définissant les paramètres de l''action.';
+COMMENT ON COLUMN ACTIONS_CATALOG.IMPACT_RULES IS 'Objet JSON mappant l''environnement au niveau d''impact.';
+COMMENT ON COLUMN ACTIONS_CATALOG.EXECUTION_STEPS IS 'Tableau JSON des étapes d''exécution.';
+COMMENT ON COLUMN ACTIONS_CATALOG.DEFAULT_IMPACT_LEVEL IS 'Niveau d''impact par défaut lorsqu''aucune règle ne correspond à l''environnement.';
+COMMENT ON COLUMN ACTIONS_CATALOG.DOCUMENTATION_MD IS 'Documentation Markdown de l''action.';
+COMMENT ON COLUMN ACTIONS_CATALOG.ITEM_TYPE IS 'Type d''entrée : action ou workflow.';
+COMMENT ON COLUMN ACTIONS_CATALOG.REMEDIATION_RULES IS 'Tableau JSON des objets de règles de remédiation.';
+COMMENT ON COLUMN ACTIONS_CATALOG.INTEGRATION_ID IS 'FK vers INTEGRATIONS — intégration plateforme pour l''exécution.';
+COMMENT ON COLUMN ACTIONS_CATALOG.REQUIRES_TARGET IS 'Indique si l''action requiert une sélection de cible.';
+COMMENT ON COLUMN ACTIONS_CATALOG.DELETED_AT IS 'Date de soft-delete de l''action. NULL si status=disabled sans soft-delete (flux suppression intégration).';
+COMMENT ON COLUMN ACTIONS_CATALOG.DELETED_BY IS 'Utilisateur ayant désactivé l''action.';
+COMMENT ON COLUMN ACTIONS_CATALOG.DELETION_REASON IS 'Raison de la désactivation.';
+COMMENT ON COLUMN ACTIONS_CATALOG.BUSINESS_RULE_POLICIES IS 'Politiques de règles métier inline en JSON.';
+COMMENT ON COLUMN ACTIONS_CATALOG.BUSINESS_RULE_POLICY_ID IS 'FK vers le catalogue BUSINESS_RULE_POLICIES.';
+COMMENT ON COLUMN ACTIONS_CATALOG.NOTIFICATION_CONFIG IS 'Configuration JSON des notifications.';
+COMMENT ON COLUMN ACTIONS_CATALOG.ID IS 'Clé primaire, colonne IDENTITY.';
+COMMENT ON COLUMN ACTIONS_CATALOG.NAME IS 'Nom de l''action.';
+COMMENT ON COLUMN ACTIONS_CATALOG.DESCRIPTION IS 'Description.';
+COMMENT ON COLUMN ACTIONS_CATALOG.CATEGORY IS 'Catégorie (nullable, migration vers tags).';
+COMMENT ON COLUMN ACTIONS_CATALOG.ENGINE IS 'Moteur (ex. Oracle, Workflow).';
+COMMENT ON COLUMN ACTIONS_CATALOG.PLATFORM IS 'Plateforme d''exécution.';
+COMMENT ON COLUMN ACTIONS_CATALOG.STATUS IS 'Statut : draft, published, disabled.';
+COMMENT ON COLUMN ACTIONS_CATALOG.CREATED_BY IS 'FK vers USERS — créateur.';
+COMMENT ON COLUMN ACTIONS_CATALOG.CREATED_AT IS 'Date de création.';
+COMMENT ON COLUMN ACTIONS_CATALOG.UPDATED_AT IS 'Date de dernière mise à jour.';
+COMMENT ON COLUMN ACTIONS_CATALOG.LAST_SYNCED_AT IS 'Dernière synchronisation IaC.';
+COMMENT ON COLUMN ACTIONS_CATALOG.LAST_SYNCED_HASH IS 'Hash de la dernière synchronisation IaC.';
 
 -- ===========================================================================
 -- PHASE 2 : Tables dépendantes d'ACTIONS_CATALOG et USERS
@@ -535,7 +683,14 @@ CREATE INDEX IDX_EXEC_LOG_ACTION   ON EXECUTION_LOG(ACTION_ID);
 CREATE INDEX IDX_EXEC_LOG_USER     ON EXECUTION_LOG(USER_ID);
 CREATE INDEX IDX_EXEC_LOG_STARTED  ON EXECUTION_LOG(STARTED_AT);
 
-COMMENT ON TABLE EXECUTION_LOG IS 'Tracks action executions for dashboard statistics.';
+COMMENT ON TABLE EXECUTION_LOG IS 'Suivi des exécutions d''actions pour les statistiques du tableau de bord.';
+COMMENT ON COLUMN EXECUTION_LOG.ID IS 'Clé primaire, colonne IDENTITY.';
+COMMENT ON COLUMN EXECUTION_LOG.ACTION_ID IS 'FK vers ACTIONS_CATALOG.';
+COMMENT ON COLUMN EXECUTION_LOG.USER_ID IS 'Identifiant utilisateur.';
+COMMENT ON COLUMN EXECUTION_LOG.ENVIRONMENT IS 'Environnement (DEV, QA, PROD).';
+COMMENT ON COLUMN EXECUTION_LOG.STARTED_AT IS 'Date de début.';
+COMMENT ON COLUMN EXECUTION_LOG.COMPLETED_AT IS 'Date de fin.';
+COMMENT ON COLUMN EXECUTION_LOG.STATUS IS 'Statut : running, success, failed, cancelled.';
 
 -- ---------------------------------------------------------------------------
 -- USER_PERMISSIONS (V005)
@@ -556,6 +711,13 @@ CREATE TABLE USER_PERMISSIONS (
 CREATE INDEX IDX_USER_PERM_USER   ON USER_PERMISSIONS(USER_ID);
 CREATE INDEX IDX_USER_PERM_ACTION ON USER_PERMISSIONS(ACTION_ID);
 
+COMMENT ON TABLE USER_PERMISSIONS IS 'Permissions utilisateur par action et environnement.';
+COMMENT ON COLUMN USER_PERMISSIONS.USER_ID IS 'FK vers USERS.';
+COMMENT ON COLUMN USER_PERMISSIONS.ACTION_ID IS 'FK vers ACTIONS_CATALOG.';
+COMMENT ON COLUMN USER_PERMISSIONS.ENVIRONMENT IS 'Environnement (DEV, QA, PROD).';
+COMMENT ON COLUMN USER_PERMISSIONS.GRANTED_BY IS 'FK vers USERS — utilisateur ayant accordé.';
+COMMENT ON COLUMN USER_PERMISSIONS.GRANTED_AT IS 'Date d''attribution.';
+
 -- ---------------------------------------------------------------------------
 -- ACTION_TAGS (V007 + V042)
 -- V042 ajoute ID comme clé primaire surrogate (Django ORM compatibility)
@@ -573,6 +735,11 @@ CREATE TABLE ACTION_TAGS (
 
 CREATE INDEX IDX_ACTION_TAGS_ACTION ON ACTION_TAGS(ACTION_ID);
 CREATE INDEX IDX_ACTION_TAGS_TAG    ON ACTION_TAGS(TAG_ID);
+
+COMMENT ON TABLE ACTION_TAGS IS 'Liaison many-to-many entre actions et tags.';
+COMMENT ON COLUMN ACTION_TAGS.ID IS 'Clé primaire, colonne IDENTITY.';
+COMMENT ON COLUMN ACTION_TAGS.ACTION_ID IS 'FK vers ACTIONS_CATALOG.';
+COMMENT ON COLUMN ACTION_TAGS.TAG_ID IS 'FK vers TAGS.';
 
 -- ---------------------------------------------------------------------------
 -- USER_FAVORITES (V021 + V043)
@@ -592,7 +759,11 @@ CREATE TABLE USER_FAVORITES (
 
 CREATE INDEX IDX_USER_FAVORITES_USER_ID ON USER_FAVORITES(USER_ID);
 
-COMMENT ON TABLE USER_FAVORITES IS 'Favoris utilisateur (Story 3.1 AC14).';
+COMMENT ON TABLE USER_FAVORITES IS 'Favoris utilisateur.';
+COMMENT ON COLUMN USER_FAVORITES.ID IS 'Clé primaire, colonne IDENTITY.';
+COMMENT ON COLUMN USER_FAVORITES.USER_ID IS 'FK vers USERS.';
+COMMENT ON COLUMN USER_FAVORITES.ACTION_ID IS 'FK vers ACTIONS_CATALOG.';
+COMMENT ON COLUMN USER_FAVORITES.CREATED_AT IS 'Date d''ajout aux favoris.';
 
 -- ---------------------------------------------------------------------------
 -- ACTION_MUTEX (V070)
@@ -615,7 +786,13 @@ CREATE TABLE ACTION_MUTEX (
 CREATE INDEX IDX_ACTION_MUTEX_ACTION       ON ACTION_MUTEX(ACTION_ID);
 CREATE INDEX IDX_ACTION_MUTEX_INCOMPATIBLE ON ACTION_MUTEX(INCOMPATIBLE_WITH_ID);
 
-COMMENT ON TABLE ACTION_MUTEX IS 'Mutual exclusion rules between actions (Story 25.5).';
+COMMENT ON TABLE ACTION_MUTEX IS 'Règles d''exclusion mutuelle entre les actions.';
+COMMENT ON COLUMN ACTION_MUTEX.ID IS 'Clé primaire, colonne IDENTITY.';
+COMMENT ON COLUMN ACTION_MUTEX.ACTION_ID IS 'FK vers ACTIONS_CATALOG.';
+COMMENT ON COLUMN ACTION_MUTEX.INCOMPATIBLE_WITH_ID IS 'FK vers ACTIONS_CATALOG — action incompatible.';
+COMMENT ON COLUMN ACTION_MUTEX.SAME_TARGET IS '1 = même cible requise.';
+COMMENT ON COLUMN ACTION_MUTEX.DESCRIPTION IS 'Description de l''exclusion.';
+COMMENT ON COLUMN ACTION_MUTEX.CREATED_AT IS 'Date de création.';
 
 -- ---------------------------------------------------------------------------
 -- PROFILE_ACTION_PERMISSIONS (V011)
@@ -634,7 +811,14 @@ CREATE TABLE PROFILE_ACTION_PERMISSIONS (
     CONSTRAINT CK_PROFILE_ACTION_PERM_TYPE    CHECK (PERMISSION_TYPE IN ('LIST', 'PATTERN', 'ALL'))
 );
 
+COMMENT ON TABLE PROFILE_ACTION_PERMISSIONS IS 'Permissions d''actions par profil (liste, motif ou toutes).';
 COMMENT ON COLUMN PROFILE_ACTION_PERMISSIONS.PERMISSION_TYPE IS 'LIST=actions spécifiques, PATTERN=par tags, ALL=toutes.';
+COMMENT ON COLUMN PROFILE_ACTION_PERMISSIONS.PROFILE_ID IS 'FK vers PROFILES.';
+COMMENT ON COLUMN PROFILE_ACTION_PERMISSIONS.ACTION_IDS_JSON IS 'JSON des IDs d''actions autorisées.';
+COMMENT ON COLUMN PROFILE_ACTION_PERMISSIONS.TAG_PATTERNS_JSON IS 'JSON des motifs de tags.';
+COMMENT ON COLUMN PROFILE_ACTION_PERMISSIONS.ENVIRONMENTS_JSON IS 'JSON des environnements autorisés.';
+COMMENT ON COLUMN PROFILE_ACTION_PERMISSIONS.CREATED_AT IS 'Date de création.';
+COMMENT ON COLUMN PROFILE_ACTION_PERMISSIONS.UPDATED_AT IS 'Date de dernière mise à jour.';
 
 -- ---------------------------------------------------------------------------
 -- PROFILE_TARGET_PERMISSIONS (V012 + V060 + V071)
@@ -654,8 +838,15 @@ CREATE TABLE PROFILE_TARGET_PERMISSIONS (
     CONSTRAINT CK_PROFILE_TARGET_PERM_TYPE    CHECK (PERMISSION_TYPE IN ('LIST', 'PATTERN', 'ALL'))
 );
 
-COMMENT ON COLUMN PROFILE_TARGET_PERMISSIONS.FILTER_BY_ATTRIBUTE_JSON IS 'JSON dict filtering targets by inventory attributes (V060).';
-COMMENT ON COLUMN PROFILE_TARGET_PERMISSIONS.EXCLUSION_PATTERNS_JSON IS 'JSON array of patterns to exclude from allowed targets (V071).';
+COMMENT ON TABLE PROFILE_TARGET_PERMISSIONS IS 'Permissions de cibles par profil (liste, motif ou toutes).';
+COMMENT ON COLUMN PROFILE_TARGET_PERMISSIONS.FILTER_BY_ATTRIBUTE_JSON IS 'Objet JSON filtrant les cibles par attributs d''inventaire.';
+COMMENT ON COLUMN PROFILE_TARGET_PERMISSIONS.EXCLUSION_PATTERNS_JSON IS 'Tableau JSON des motifs à exclure des cibles autorisées.';
+COMMENT ON COLUMN PROFILE_TARGET_PERMISSIONS.PROFILE_ID IS 'FK vers PROFILES.';
+COMMENT ON COLUMN PROFILE_TARGET_PERMISSIONS.PERMISSION_TYPE IS 'LIST, PATTERN ou ALL.';
+COMMENT ON COLUMN PROFILE_TARGET_PERMISSIONS.TARGET_NAMES_JSON IS 'JSON des noms de cibles autorisées.';
+COMMENT ON COLUMN PROFILE_TARGET_PERMISSIONS.TARGET_PATTERNS_JSON IS 'JSON des motifs de cibles.';
+COMMENT ON COLUMN PROFILE_TARGET_PERMISSIONS.CREATED_AT IS 'Date de création.';
+COMMENT ON COLUMN PROFILE_TARGET_PERMISSIONS.UPDATED_AT IS 'Date de dernière mise à jour.';
 
 -- ---------------------------------------------------------------------------
 -- INTEGRATION_ACTIONS (V061)
@@ -681,13 +872,24 @@ CREATE TABLE INTEGRATION_ACTIONS (
 CREATE INDEX IDX_INTEGRATION_ACTIONS_TYPE      ON INTEGRATION_ACTIONS(INTEGRATION_TYPE_CODE);
 CREATE INDEX IDX_INTEGRATION_ACTIONS_IS_ACTIVE ON INTEGRATION_ACTIONS(IS_ACTIVE);
 
-COMMENT ON TABLE INTEGRATION_ACTIONS IS 'Actions supported by each integration type (Story 24.1).';
+COMMENT ON TABLE INTEGRATION_ACTIONS IS 'Actions supportées par chaque type d''intégration.';
+COMMENT ON COLUMN INTEGRATION_ACTIONS.ID IS 'Clé primaire, colonne IDENTITY.';
+COMMENT ON COLUMN INTEGRATION_ACTIONS.INTEGRATION_TYPE_CODE IS 'FK vers INTEGRATION_TYPE_CATALOGUE.';
+COMMENT ON COLUMN INTEGRATION_ACTIONS.ACTION_CODE IS 'Code de l''action.';
+COMMENT ON COLUMN INTEGRATION_ACTIONS.ACTION_LABEL IS 'Libellé de l''action.';
+COMMENT ON COLUMN INTEGRATION_ACTIONS.DESCRIPTION IS 'Description.';
+COMMENT ON COLUMN INTEGRATION_ACTIONS.REQUIRED_PARAMS IS 'Paramètres requis (JSON).';
+COMMENT ON COLUMN INTEGRATION_ACTIONS.OPTIONAL_PARAMS IS 'Paramètres optionnels (JSON).';
+COMMENT ON COLUMN INTEGRATION_ACTIONS.RESPONSE_FORMAT IS 'Format de réponse (JSON).';
+COMMENT ON COLUMN INTEGRATION_ACTIONS.IS_ACTIVE IS '1 = action active.';
+COMMENT ON COLUMN INTEGRATION_ACTIONS.CREATED_AT IS 'Date de création.';
+COMMENT ON COLUMN INTEGRATION_ACTIONS.UPDATED_AT IS 'Date de dernière mise à jour.';
 
 -- ---------------------------------------------------------------------------
 -- AUDIT_LOG (V004 + V028 + V029 + V032 + V034 + V035 + V039 + V040
 --            + V044 + V045 + V047 + V058 + V065 + V068 + V069 + V079 + V086 + V096
---            + Story 64.x: CONFIG_SYNC_*_IMPORT actions, reference_data/tags entity types)
--- Partitionnée par TIMESTAMP (Range INTERVAL mensuel) — Story 40.4
+--            + CONFIG_SYNC_*_IMPORT actions, reference_data/tags entity types)
+-- Partitionnée par TIMESTAMP (Range INTERVAL mensuel)
 -- ---------------------------------------------------------------------------
 CREATE TABLE AUDIT_LOG (
     ID             NUMBER GENERATED BY DEFAULT ON NULL AS IDENTITY,
@@ -721,7 +923,7 @@ ALTER TABLE AUDIT_LOG ADD CONSTRAINT CK_AUDIT_LOG_ACTION_TYPE CHECK (
 
             -- Integration lifecycle
             'INTEGRATION_CREATED', 'INTEGRATION_UPDATED', 'INTEGRATION_DELETED',
-            'INTEGRATION_HEALTH_CHECK_TESTED',  -- Story 51.2: POST /admin/integrations/{id}/test-connection/ (V100)
+            'INTEGRATION_HEALTH_CHECK_TESTED',
 
             -- Integration type catalogue
             'INTEGRATION_TYPE_CREATED', 'INTEGRATION_TYPE_UPDATED',
@@ -751,9 +953,9 @@ ALTER TABLE AUDIT_LOG ADD CONSTRAINT CK_AUDIT_LOG_ACTION_TYPE CHECK (
             'SCHEDULED_EXECUTION_CREATED', 'SCHEDULED_EXECUTION_RECURRING_CREATED',
             'SCHEDULED_EXECUTION_EXECUTED', 'SCHEDULED_EXECUTION_CANCELLED',
             'SCHEDULED_EXECUTION_RECURRING_DISABLED',
-            'SCHEDULED_EXECUTION_CELERY_TRIGGERED',  -- V103: Celery Beat process_pending_scheduled_executions
+            'SCHEDULED_EXECUTION_CELERY_TRIGGERED',
 
-            -- User / Auth / Favorites (V094: API_KEY_TOKEN_EXCHANGE, SERVICE_LOGIN; V110: AUTH_DEV_BYPASS_LOGIN)
+            -- User / Auth / Favorites
             'USER_CREATED', 'USER_UPDATED', 'USER_LOGIN', 'USER_LOGOUT', 'USER_REFRESH',
             'API_KEY_TOKEN_EXCHANGE', 'FAVORITE_ADDED', 'FAVORITE_REMOVED', 'SERVICE_LOGIN',
             'AUTH_DEV_BYPASS_LOGIN',
@@ -767,13 +969,13 @@ ALTER TABLE AUDIT_LOG ADD CONSTRAINT CK_AUDIT_LOG_ACTION_TYPE CHECK (
             'EXECUTION_STEP_GATE_SATISFIED',
             'EXECUTION_STEP_GATE_TIMEOUT',
 
-            -- Story 57.15 (V110): Workflow schedule step
+            -- Workflow schedule step
             'WORKFLOW_STEP_SCHEDULE_CREATED',
 
             -- Feature flags
             'FEATURE_FLAG_CREATED', 'FEATURE_FLAG_UPDATED',
 
-            -- Story 64.x: IaC Config Sync import actions
+            -- IaC Config Sync import actions
             'CONFIG_SYNC_REFERENCE_IMPORT', 'CONFIG_SYNC_TAGS_IMPORT',
             'CONFIG_SYNC_FEATURE_FLAGS_IMPORT', 'CONFIG_SYNC_INTEGRATION_TYPE_IMPORT',
             'CONFIG_SYNC_INTEGRATION_IMPORT', 'CONFIG_SYNC_POLICY_IMPORT',
@@ -781,7 +983,7 @@ ALTER TABLE AUDIT_LOG ADD CONSTRAINT CK_AUDIT_LOG_ACTION_TYPE CHECK (
         )
 );
 
--- CK_AUDIT_LOG_ENTITY_TYPE: V045 + V096 (integration_type_catalogue, integration_action, feature_flag, business_rule_policy) + Story 64.x (reference_data, tags)
+-- CK_AUDIT_LOG_ENTITY_TYPE
 ALTER TABLE AUDIT_LOG ADD CONSTRAINT CK_AUDIT_LOG_ENTITY_TYPE CHECK (
     ENTITY_TYPE IN ('action', 'user', 'permission', 'execution', 'scheduled_execution', 'integration', 'profile', 'feature_flag', 'integration_type_catalogue', 'integration_action', 'business_rule_policy', 'reference_data', 'tags')
 );
@@ -793,10 +995,16 @@ CREATE INDEX IDX_AUDITLOG_CREATED_USER       ON AUDIT_LOG(TIMESTAMP, USER_ID) LO
 CREATE INDEX IDX_AUDIT_LOG_CREATED_ACTION    ON AUDIT_LOG(TIMESTAMP, ACTION_TYPE) LOCAL;
 CREATE INDEX IDX_AUDIT_LOG_CORRELATION       ON AUDIT_LOG(CORRELATION_ID);
 
-COMMENT ON TABLE AUDIT_LOG IS 'Append-only audit log. Range INTERVAL Partitioned by TIMESTAMP (monthly). Story 40.4. SOC1/NFR8: immutable via trigger TRG_AUDIT_LOG_IMMUTABLE.';
-COMMENT ON COLUMN AUDIT_LOG.TIMESTAMP IS 'Partition key (Range INTERVAL monthly). Auto-set to SYSTIMESTAMP on INSERT. V086.';
-COMMENT ON COLUMN AUDIT_LOG.ID IS 'Primary key, IDENTITY column (BY DEFAULT ON NULL). Backed by global unique index PK_AUDIT_LOG.';
-COMMENT ON COLUMN AUDIT_LOG.CORRELATION_ID IS 'Optional correlation ID for cross-request tracing. Indexed via IDX_AUDIT_LOG_CORRELATION (GLOBAL) for queries without date filter.';
+COMMENT ON TABLE AUDIT_LOG IS 'Journal d''audit en écriture seule. Partitionné par TIMESTAMP (mensuel). Immuable via trigger TRG_AUDIT_LOG_IMMUTABLE.';
+COMMENT ON COLUMN AUDIT_LOG.TIMESTAMP IS 'Clé de partition (mensuel). Défini automatiquement à SYSTIMESTAMP à l''INSERT.';
+COMMENT ON COLUMN AUDIT_LOG.ID IS 'Clé primaire, colonne IDENTITY (BY DEFAULT ON NULL).';
+COMMENT ON COLUMN AUDIT_LOG.CORRELATION_ID IS 'Identifiant de corrélation optionnel pour le traçage inter-requêtes.';
+COMMENT ON COLUMN AUDIT_LOG.USER_ID IS 'Identifiant utilisateur.';
+COMMENT ON COLUMN AUDIT_LOG.ACTION_TYPE IS 'Type d''action audité.';
+COMMENT ON COLUMN AUDIT_LOG.ENTITY_TYPE IS 'Type d''entité (action, user, execution, etc.).';
+COMMENT ON COLUMN AUDIT_LOG.ENTITY_ID IS 'ID de l''entité.';
+COMMENT ON COLUMN AUDIT_LOG.DETAILS IS 'Détails supplémentaires (JSON).';
+COMMENT ON COLUMN AUDIT_LOG.IP_ADDRESS IS 'Adresse IP de la requête.';
 
 -- ===========================================================================
 -- PHASE 3 : Tables executions
@@ -804,7 +1012,7 @@ COMMENT ON COLUMN AUDIT_LOG.CORRELATION_ID IS 'Optional correlation ID for cross
 
 -- ---------------------------------------------------------------------------
 -- EXECUTIONS (V023 + V030 + V033 + V048 + V057 + V084)
--- Partitionnée par CREATED_AT (Range INTERVAL mensuel) — Story 40.2
+-- Partitionnée par CREATED_AT (Range INTERVAL mensuel)
 -- Pas de CHK_EXECUTION_ENV : l'environnement est dicté par l'inventaire (validé par l'app)
 -- ---------------------------------------------------------------------------
 CREATE TABLE EXECUTIONS (
@@ -823,6 +1031,7 @@ CREATE TABLE EXECUTIONS (
     APPROVAL_COMMENT      VARCHAR2(1000),
     PARENT_EXECUTION_ID   NUMBER(19),
     ERROR_MESSAGE         CLOB,
+    CORRELATION_ID        VARCHAR2(64),
 
     CONSTRAINT PK_EXECUTIONS PRIMARY KEY (ID),
     CONSTRAINT FK_EXECUTIONS_ACTION      FOREIGN KEY (ACTION_ID)   REFERENCES ACTIONS_CATALOG(ID),
@@ -846,18 +1055,29 @@ CREATE INDEX IDX_EXECUTIONS_CREATED_USER   ON EXECUTIONS(CREATED_AT, USER_ID) LO
 CREATE INDEX IDX_EXECUTIONS_CREATED_STATUS ON EXECUTIONS(CREATED_AT, STATUS) LOCAL;
 CREATE INDEX IDX_EXECUTIONS_PARENT_ID      ON EXECUTIONS(PARENT_EXECUTION_ID);
 CREATE INDEX IDX_EXECUTIONS_PENDING_APPROVAL ON EXECUTIONS(CASE WHEN STATUS = 'PENDING_APPROVAL' THEN ID END);
+CREATE INDEX IDX_EXECUTIONS_CORRELATION ON EXECUTIONS(CORRELATION_ID);
 
-COMMENT ON TABLE EXECUTIONS IS 'Execution records for actions. Partitioned by CREATED_AT (monthly INTERVAL). Story 40.2.';
-COMMENT ON COLUMN EXECUTIONS.CREATED_AT IS 'UTC TIMESTAMP used as partition key (monthly INTERVAL partitioning). V084.';
-COMMENT ON COLUMN EXECUTIONS.ID IS 'Primary key, IDENTITY column. Backed by global unique index (PK_EXECUTIONS). V084.';
+COMMENT ON TABLE EXECUTIONS IS 'Enregistrements d''exécution des actions. Partitionné par CREATED_AT (mensuel).';
+COMMENT ON COLUMN EXECUTIONS.CREATED_AT IS 'Horodatage UTC utilisé comme clé de partition (partitionnement mensuel).';
+COMMENT ON COLUMN EXECUTIONS.ID IS 'Clé primaire, colonne IDENTITY.';
+COMMENT ON COLUMN EXECUTIONS.CORRELATION_ID IS 'Identifiant de corrélation pour le traçage sur tout le cycle d''exécution.';
+COMMENT ON COLUMN EXECUTIONS.ACTION_ID IS 'FK vers ACTIONS_CATALOG.';
+COMMENT ON COLUMN EXECUTIONS.USER_ID IS 'FK vers USERS.';
+COMMENT ON COLUMN EXECUTIONS.ENVIRONMENT IS 'Environnement (DEV, QA, PROD).';
+COMMENT ON COLUMN EXECUTIONS.PARAMETERS IS 'Paramètres d''exécution (JSON).';
+COMMENT ON COLUMN EXECUTIONS.STATUS IS 'Statut : SUBMITTED, RUNNING, COMPLETED, etc.';
+COMMENT ON COLUMN EXECUTIONS.SERVICENOW_CHANGE_ID IS 'ID du change ServiceNow si applicable.';
+COMMENT ON COLUMN EXECUTIONS.STARTED_AT IS 'Date de début.';
+COMMENT ON COLUMN EXECUTIONS.COMPLETED_AT IS 'Date de fin.';
+COMMENT ON COLUMN EXECUTIONS.APPROVED_BY IS 'FK vers USERS — approbateur.';
+COMMENT ON COLUMN EXECUTIONS.APPROVED_AT IS 'Date d''approbation.';
+COMMENT ON COLUMN EXECUTIONS.APPROVAL_COMMENT IS 'Commentaire d''approbation.';
+COMMENT ON COLUMN EXECUTIONS.PARENT_EXECUTION_ID IS 'FK vers EXECUTIONS — exécution parente (workflow).';
+COMMENT ON COLUMN EXECUTIONS.ERROR_MESSAGE IS 'Message d''erreur en cas d''échec.';
 
 -- ---------------------------------------------------------------------------
 -- EXECUTION_STEPS (V025 + V048 + V067 + V085 + V099 + V102 + V107 + V116 + V118)
--- Reference Partitioning via FK EXECUTION_ID → EXECUTIONS (Story 40.3)
--- V099: APPROVED_BY, APPROVED_AT, APPROVAL_COMMENT; CHK_STEP_TYPE + service_call, http_request, evaluation, gate (ADR-007)
--- V102: APPROVED_AT → plain TIMESTAMP (UTC convention)
--- V107: CHK_STEP_TYPE + schedule_execution (Story 57.15/57.17)
--- V118: REJECTED_BY, REJECTED_AT (gate rejection audit trail)
+-- Reference Partitioning via FK EXECUTION_ID → EXECUTIONS
 -- ---------------------------------------------------------------------------
 CREATE TABLE EXECUTION_STEPS (
     ID               NUMBER GENERATED BY DEFAULT ON NULL AS IDENTITY,
@@ -904,15 +1124,25 @@ ALTER TABLE EXECUTION_STEPS ADD CONSTRAINT CHK_STEP_TYPE
 CREATE INDEX IDX_EXEC_STEPS_EXECUTION_ID ON EXECUTION_STEPS(EXECUTION_ID) LOCAL;
 CREATE INDEX IDX_EXEC_STEPS_EXEC_STATUS  ON EXECUTION_STEPS(EXECUTION_ID, STATUS) LOCAL;
 
-COMMENT ON TABLE EXECUTION_STEPS IS 'Execution step records. Reference Partitioned by FK EXECUTION_ID → EXECUTIONS (monthly INTERVAL). Story 40.3.';
-COMMENT ON COLUMN EXECUTION_STEPS.EXECUTION_ID IS 'FK to EXECUTIONS.ID — partition key héritée (Reference Partitioning). V085.';
-COMMENT ON COLUMN EXECUTION_STEPS.ID IS 'Primary key, IDENTITY column. Backed by global unique index (PK_EXECUTION_STEPS). V085.';
-COMMENT ON COLUMN EXECUTION_STEPS.APPROVED_BY IS 'FK vers USERS(ID) — utilisateur ayant approuvé ce step (ADR-007)';
-COMMENT ON COLUMN EXECUTION_STEPS.APPROVED_AT IS 'Date/heure de l''approbation du step (ADR-007). UTC timestamp (plain TIMESTAMP). V102.';
-COMMENT ON COLUMN EXECUTION_STEPS.APPROVAL_COMMENT IS 'Commentaire d''approbation du step, max 1000 caractères (ADR-007)';
-COMMENT ON COLUMN EXECUTION_STEPS.CONFIG_STEP_ID IS 'step_id from action.execution_steps config (UUID). Used to reliably match an ExecutionStep back to its workflow definition. V116.';
-COMMENT ON COLUMN EXECUTION_STEPS.REJECTED_BY IS 'FK vers USERS(ID) — utilisateur ayant rejeté ce step (gate rejection, ADR-007). V118.';
-COMMENT ON COLUMN EXECUTION_STEPS.REJECTED_AT IS 'Date/heure du rejet du step (gate rejection). V118.';
+COMMENT ON TABLE EXECUTION_STEPS IS 'Enregistrements des étapes d''exécution. Partitionné par référence via FK EXECUTION_ID → EXECUTIONS.';
+COMMENT ON COLUMN EXECUTION_STEPS.EXECUTION_ID IS 'FK vers EXECUTIONS.ID — clé de partition héritée (partitionnement par référence).';
+COMMENT ON COLUMN EXECUTION_STEPS.ID IS 'Clé primaire, colonne IDENTITY.';
+COMMENT ON COLUMN EXECUTION_STEPS.APPROVED_BY IS 'FK vers USERS(ID) — utilisateur ayant approuvé cette étape.';
+COMMENT ON COLUMN EXECUTION_STEPS.APPROVED_AT IS 'Date et heure de l''approbation de l''étape. Horodatage UTC.';
+COMMENT ON COLUMN EXECUTION_STEPS.APPROVAL_COMMENT IS 'Commentaire d''approbation de l''étape, max 1000 caractères.';
+COMMENT ON COLUMN EXECUTION_STEPS.CONFIG_STEP_ID IS 'step_id de la config action.execution_steps (UUID). Permet de faire correspondre l''étape à sa définition workflow.';
+COMMENT ON COLUMN EXECUTION_STEPS.REJECTED_BY IS 'FK vers USERS(ID) — utilisateur ayant rejeté cette étape (gate).';
+COMMENT ON COLUMN EXECUTION_STEPS.REJECTED_AT IS 'Date et heure du rejet de l''étape (gate).';
+COMMENT ON COLUMN EXECUTION_STEPS.STEP_ORDER IS 'Ordre de l''étape dans le workflow.';
+COMMENT ON COLUMN EXECUTION_STEPS.STEP_NAME IS 'Nom de l''étape.';
+COMMENT ON COLUMN EXECUTION_STEPS.STEP_TYPE IS 'Type : vault, platform, gate, etc.';
+COMMENT ON COLUMN EXECUTION_STEPS.STATUS IS 'Statut : PENDING, RUNNING, COMPLETED, etc.';
+COMMENT ON COLUMN EXECUTION_STEPS.STARTED_AT IS 'Date de début.';
+COMMENT ON COLUMN EXECUTION_STEPS.COMPLETED_AT IS 'Date de fin.';
+COMMENT ON COLUMN EXECUTION_STEPS.OUTPUT IS 'Output de l''étape (JSON).';
+COMMENT ON COLUMN EXECUTION_STEPS.PLATFORM_JOB_ID IS 'ID du job sur la plateforme.';
+COMMENT ON COLUMN EXECUTION_STEPS.ERROR_MESSAGE IS 'Message d''erreur en cas d''échec.';
+COMMENT ON COLUMN EXECUTION_STEPS.CREATED_AT IS 'Date de création.';
 
 CREATE INDEX IDX_EXEC_STEPS_CONFIG_STEP_ID ON EXECUTION_STEPS(CONFIG_STEP_ID);
 
@@ -935,14 +1165,20 @@ CREATE TABLE EXECUTION_TARGETS (
 CREATE INDEX IDX_EXEC_TARGETS_EXEC   ON EXECUTION_TARGETS(EXECUTION_ID);
 CREATE INDEX IDX_EXEC_TARGETS_TARGET ON EXECUTION_TARGETS(TARGET_TYPE, TARGET_ID);
 
-COMMENT ON TABLE EXECUTION_TARGETS IS 'Explicit link between executions and their targets (Story 25.1).';
-COMMENT ON COLUMN EXECUTION_TARGETS.TARGET_METADATA IS 'JSON snapshot of target metadata at execution time.';
+COMMENT ON TABLE EXECUTION_TARGETS IS 'Lien explicite entre les exécutions et leurs cibles.';
+COMMENT ON COLUMN EXECUTION_TARGETS.TARGET_METADATA IS 'Snapshot JSON des métadonnées de cible au moment de l''exécution.';
+COMMENT ON COLUMN EXECUTION_TARGETS.ID IS 'Clé primaire, colonne IDENTITY.';
+COMMENT ON COLUMN EXECUTION_TARGETS.EXECUTION_ID IS 'FK vers EXECUTIONS.';
+COMMENT ON COLUMN EXECUTION_TARGETS.TARGET_TYPE IS 'Type de cible.';
+COMMENT ON COLUMN EXECUTION_TARGETS.TARGET_ID IS 'ID de la cible.';
+COMMENT ON COLUMN EXECUTION_TARGETS.TARGET_NAME IS 'Nom de la cible.';
+COMMENT ON COLUMN EXECUTION_TARGETS.CREATED_AT IS 'Date de création.';
 
 -- ---------------------------------------------------------------------------
 -- SCHEDULED_EXECUTIONS (V038 + V041 + V048 + V106)
 -- Timestamps : plain TIMESTAMP UTC (V048)
 -- CHK_SCHEDULED_ENV exclu (droppé V053)
--- V106: SOURCE_EXECUTION_ID — FK logique vers EXECUTIONS (Story 57.17)
+-- SOURCE_EXECUTION_ID — FK logique vers EXECUTIONS
 -- ---------------------------------------------------------------------------
 CREATE TABLE SCHEDULED_EXECUTIONS (
     ID           NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -957,7 +1193,7 @@ CREATE TABLE SCHEDULED_EXECUTIONS (
     -- V041
     CORRELATION_ID VARCHAR2(100),
     EXECUTION_ID   NUMBER,
-    -- V106 (Story 57.17)
+    -- SOURCE_EXECUTION_ID
     SOURCE_EXECUTION_ID NUMBER(19) DEFAULT NULL,
 
     CONSTRAINT FK_SCHEDULED_EXEC_ACTION    FOREIGN KEY (ACTION_ID)    REFERENCES ACTIONS_CATALOG(ID),
@@ -972,9 +1208,19 @@ CREATE INDEX IDX_SCHEDULED_EXEC_STATUS       ON SCHEDULED_EXECUTIONS(STATUS);
 CREATE INDEX IDX_SCHEDULED_EXEC_EXECUTION    ON SCHEDULED_EXECUTIONS(EXECUTION_ID);
 CREATE INDEX IDX_SCHEDULED_EXEC_SCHEDULED_AT ON SCHEDULED_EXECUTIONS(SCHEDULED_AT);
 
-COMMENT ON TABLE SCHEDULED_EXECUTIONS IS 'Exécutions planifiées pour le scheduler externe (Epic 11).';
-COMMENT ON COLUMN SCHEDULED_EXECUTIONS.SCHEDULED_AT IS 'UTC timestamp (plain TIMESTAMP). Convention: all timestamps in UTC.';
-COMMENT ON COLUMN SCHEDULED_EXECUTIONS.SOURCE_EXECUTION_ID IS 'FK logique vers EXECUTIONS(ID) — ID de l''exécution source ayant créé cette planification via un step schedule_execution (Story 57.17). NULL si créée manuellement.';
+COMMENT ON TABLE SCHEDULED_EXECUTIONS IS 'Exécutions planifiées pour le scheduler externe.';
+COMMENT ON COLUMN SCHEDULED_EXECUTIONS.SCHEDULED_AT IS 'Horodatage UTC. Convention : tous les timestamps en UTC.';
+COMMENT ON COLUMN SCHEDULED_EXECUTIONS.SOURCE_EXECUTION_ID IS 'FK logique vers EXECUTIONS(ID) — ID de l''exécution source ayant créé cette planification via un step schedule_execution. NULL si créée manuellement.';
+COMMENT ON COLUMN SCHEDULED_EXECUTIONS.ID IS 'Clé primaire, colonne IDENTITY.';
+COMMENT ON COLUMN SCHEDULED_EXECUTIONS.ACTION_ID IS 'FK vers ACTIONS_CATALOG.';
+COMMENT ON COLUMN SCHEDULED_EXECUTIONS.USER_ID IS 'FK vers USERS.';
+COMMENT ON COLUMN SCHEDULED_EXECUTIONS.ENVIRONMENT IS 'Environnement.';
+COMMENT ON COLUMN SCHEDULED_EXECUTIONS.PARAMETERS IS 'Paramètres (JSON).';
+COMMENT ON COLUMN SCHEDULED_EXECUTIONS.STATUS IS 'Statut : pending, executed, cancelled.';
+COMMENT ON COLUMN SCHEDULED_EXECUTIONS.CREATED_AT IS 'Date de création.';
+COMMENT ON COLUMN SCHEDULED_EXECUTIONS.UPDATED_AT IS 'Date de dernière mise à jour.';
+COMMENT ON COLUMN SCHEDULED_EXECUTIONS.CORRELATION_ID IS 'Identifiant de corrélation.';
+COMMENT ON COLUMN SCHEDULED_EXECUTIONS.EXECUTION_ID IS 'FK vers EXECUTIONS — exécution résultante.';
 
 -- ---------------------------------------------------------------------------
 -- RECURRING_PATTERNS (V038 + V048)
@@ -999,8 +1245,15 @@ CREATE TABLE RECURRING_PATTERNS (
 CREATE INDEX IDX_RECURRING_NEXT_EXEC        ON RECURRING_PATTERNS(NEXT_EXECUTION_DATE);
 CREATE INDEX IDX_RECURRING_ACTIVE_PENDING   ON RECURRING_PATTERNS(IS_ACTIVE, NEXT_EXECUTION_DATE);
 
-COMMENT ON TABLE RECURRING_PATTERNS IS 'Patterns de récurrence pour SCHEDULED_EXECUTIONS (Epic 11).';
-COMMENT ON COLUMN RECURRING_PATTERNS.NEXT_EXECUTION_DATE IS 'UTC timestamp (plain TIMESTAMP). Convention: all timestamps in UTC.';
+COMMENT ON TABLE RECURRING_PATTERNS IS 'Motifs de récurrence pour SCHEDULED_EXECUTIONS.';
+COMMENT ON COLUMN RECURRING_PATTERNS.NEXT_EXECUTION_DATE IS 'Horodatage UTC. Convention : tous les timestamps en UTC.';
+COMMENT ON COLUMN RECURRING_PATTERNS.ID IS 'Clé primaire, colonne IDENTITY.';
+COMMENT ON COLUMN RECURRING_PATTERNS.SCHEDULED_EXECUTION_ID IS 'FK vers SCHEDULED_EXECUTIONS.';
+COMMENT ON COLUMN RECURRING_PATTERNS.PATTERN_TYPE IS 'Type : one_time, daily, weekly, cron.';
+COMMENT ON COLUMN RECURRING_PATTERNS.PATTERN_CONFIG IS 'Configuration du motif (JSON).';
+COMMENT ON COLUMN RECURRING_PATTERNS.IS_ACTIVE IS '1 = motif actif.';
+COMMENT ON COLUMN RECURRING_PATTERNS.CREATED_AT IS 'Date de création.';
+COMMENT ON COLUMN RECURRING_PATTERNS.UPDATED_AT IS 'Date de dernière mise à jour.';
 
 -- ===========================================================================
 -- PHASE 4 : Trigger
@@ -1039,7 +1292,15 @@ CREATE TABLE IDP_MAINTENANCE_LOG (
 
 CREATE INDEX IDX_MAINT_LOG_EXECUTED_AT ON IDP_MAINTENANCE_LOG(EXECUTED_AT);
 
-COMMENT ON TABLE IDP_MAINTENANCE_LOG IS 'Log des opérations de maintenance (purge partitions). Story 40.5. Créée par V087.';
+COMMENT ON TABLE IDP_MAINTENANCE_LOG IS 'Journal des opérations de maintenance (purge des partitions).';
+COMMENT ON COLUMN IDP_MAINTENANCE_LOG.ID IS 'Clé primaire, colonne IDENTITY.';
+COMMENT ON COLUMN IDP_MAINTENANCE_LOG.EXECUTED_AT IS 'Date d''exécution.';
+COMMENT ON COLUMN IDP_MAINTENANCE_LOG.TABLE_NAME IS 'Nom de la table.';
+COMMENT ON COLUMN IDP_MAINTENANCE_LOG.PARTITION_NAME IS 'Nom de la partition.';
+COMMENT ON COLUMN IDP_MAINTENANCE_LOG.ACTION IS 'Action effectuée.';
+COMMENT ON COLUMN IDP_MAINTENANCE_LOG.STATUS IS 'Statut (SUCCESS, DRY_RUN, etc.).';
+COMMENT ON COLUMN IDP_MAINTENANCE_LOG.DRY_RUN IS '1 = simulation sans exécution.';
+COMMENT ON COLUMN IDP_MAINTENANCE_LOG.NOTES IS 'Notes supplémentaires.';
 
 -- ---------------------------------------------------------------------------
 -- PKG_IDP_MAINTENANCE (V087)
@@ -1336,14 +1597,14 @@ CREATE INDEX IDX_WORKFLOW_EVENTS_EXEC_CREATED ON WORKFLOW_EVENTS(EXECUTION_ID, C
 CREATE INDEX IDX_WORKFLOW_EVENTS_CREATED       ON WORKFLOW_EVENTS(CREATED_AT);
 CREATE INDEX IDX_WORKFLOW_EVENTS_ENTITY        ON WORKFLOW_EVENTS(ENTITY_TYPE, ENTITY_ID);
 
-COMMENT ON TABLE WORKFLOW_EVENTS IS 'Event sourcing table for real-time UI sync via WebSocket. Each state change produces a row. Rows purged after 7-day retention (Celery Beat: purge_old_workflow_events).';
-COMMENT ON COLUMN WORKFLOW_EVENTS.EXECUTION_ID IS 'FK to EXECUTIONS — scopes events to a single execution for WebSocket subscription.';
-COMMENT ON COLUMN WORKFLOW_EVENTS.EVENT_TYPE IS 'Discriminator for event kind (status change, output update, approval, etc.).';
-COMMENT ON COLUMN WORKFLOW_EVENTS.ENTITY_TYPE IS 'Type of entity that changed: execution, execution_step, or execution_target.';
-COMMENT ON COLUMN WORKFLOW_EVENTS.ENTITY_ID IS 'PK of the changed entity (Execution.id, ExecutionStep.id, etc.).';
-COMMENT ON COLUMN WORKFLOW_EVENTS.SEQUENCE_NUM IS 'Monotonically increasing per execution. Clients use this to detect gaps and request catch-up.';
-COMMENT ON COLUMN WORKFLOW_EVENTS.PAYLOAD IS 'JSON snapshot of the change (new status, output diff, approval details, etc.).';
-COMMENT ON COLUMN WORKFLOW_EVENTS.CREATED_AT IS 'Event timestamp. Used for retention purge (7-day default).';
+COMMENT ON TABLE WORKFLOW_EVENTS IS 'Table d''event sourcing pour la synchronisation UI en temps réel via WebSocket. Chaque changement d''état produit une ligne. Purge après 7 jours (Celery Beat).';
+COMMENT ON COLUMN WORKFLOW_EVENTS.EXECUTION_ID IS 'FK vers EXECUTIONS — limite les événements à une exécution pour l''abonnement WebSocket.';
+COMMENT ON COLUMN WORKFLOW_EVENTS.EVENT_TYPE IS 'Discriminant du type d''événement (changement de statut, mise à jour output, approbation, etc.).';
+COMMENT ON COLUMN WORKFLOW_EVENTS.ENTITY_TYPE IS 'Type d''entité modifiée : execution, execution_step ou execution_target.';
+COMMENT ON COLUMN WORKFLOW_EVENTS.ENTITY_ID IS 'Clé primaire de l''entité modifiée (Execution.id, ExecutionStep.id, etc.).';
+COMMENT ON COLUMN WORKFLOW_EVENTS.SEQUENCE_NUM IS 'Numéro de séquence croissant par exécution. Les clients l''utilisent pour détecter les gaps et demander un rattrapage.';
+COMMENT ON COLUMN WORKFLOW_EVENTS.PAYLOAD IS 'Snapshot JSON du changement (nouveau statut, diff output, détails d''approbation, etc.).';
+COMMENT ON COLUMN WORKFLOW_EVENTS.CREATED_AT IS 'Horodatage de l''événement. Utilisé pour la purge de rétention (7 jours par défaut).';
 
 -- ---------------------------------------------------------------------------
 -- V113 Part 3: RUNNABLE_STEPS — Work queue of steps ready for execution
@@ -1370,15 +1631,15 @@ CREATE TABLE RUNNABLE_STEPS (
 CREATE INDEX IDX_RUNNABLE_STEPS_UNCLAIMED ON RUNNABLE_STEPS(CLAIMED_AT, PRIORITY, ELIGIBLE_AT);
 CREATE INDEX IDX_RUNNABLE_STEPS_EXEC      ON RUNNABLE_STEPS(EXECUTION_ID);
 
-COMMENT ON TABLE RUNNABLE_STEPS IS 'Work queue of execution steps ready to run. Workers claim and process rows, then delete them. Avoids full-table scans of EXECUTION_STEPS.';
-COMMENT ON COLUMN RUNNABLE_STEPS.EXECUTION_STEP_ID IS 'FK to EXECUTION_STEPS — the step to execute. Unique: a step can only be queued once.';
-COMMENT ON COLUMN RUNNABLE_STEPS.EXECUTION_ID IS 'Denormalized FK to EXECUTIONS for fast per-execution queue queries.';
-COMMENT ON COLUMN RUNNABLE_STEPS.STEP_ORDER IS 'Denormalized from EXECUTION_STEPS for ordering without join.';
-COMMENT ON COLUMN RUNNABLE_STEPS.STEP_TYPE IS 'Denormalized from EXECUTION_STEPS for type-based worker routing.';
-COMMENT ON COLUMN RUNNABLE_STEPS.PRIORITY IS 'Higher = higher priority. Default 0. Gate steps may get elevated priority.';
-COMMENT ON COLUMN RUNNABLE_STEPS.ELIGIBLE_AT IS 'When the step became eligible. Used for FIFO ordering within same priority.';
-COMMENT ON COLUMN RUNNABLE_STEPS.CLAIMED_AT IS 'NULL = unclaimed. Set by worker to claim the step (optimistic locking).';
-COMMENT ON COLUMN RUNNABLE_STEPS.CLAIMED_BY IS 'Worker identifier that claimed this step (hostname, task_id, etc.).';
+COMMENT ON TABLE RUNNABLE_STEPS IS 'File d''attente des étapes d''exécution prêtes à être exécutées. Les workers réclament et traitent les lignes puis les suppriment.';
+COMMENT ON COLUMN RUNNABLE_STEPS.EXECUTION_STEP_ID IS 'FK vers EXECUTION_STEPS — l''étape à exécuter. Unique : une étape ne peut être en file qu''une fois.';
+COMMENT ON COLUMN RUNNABLE_STEPS.EXECUTION_ID IS 'FK dénormalisée vers EXECUTIONS pour des requêtes rapides par exécution.';
+COMMENT ON COLUMN RUNNABLE_STEPS.STEP_ORDER IS 'Dénormalisé depuis EXECUTION_STEPS pour l''ordre sans jointure.';
+COMMENT ON COLUMN RUNNABLE_STEPS.STEP_TYPE IS 'Dénormalisé depuis EXECUTION_STEPS pour le routage des workers par type.';
+COMMENT ON COLUMN RUNNABLE_STEPS.PRIORITY IS 'Plus élevé = priorité plus haute. Défaut 0. Les étapes gate peuvent avoir une priorité élevée.';
+COMMENT ON COLUMN RUNNABLE_STEPS.ELIGIBLE_AT IS 'Moment où l''étape est devenue éligible. Utilisé pour l''ordre FIFO à priorité égale.';
+COMMENT ON COLUMN RUNNABLE_STEPS.CLAIMED_AT IS 'NULL = non réclamé. Défini par le worker pour réclamer l''étape (verrouillage optimiste).';
+COMMENT ON COLUMN RUNNABLE_STEPS.CLAIMED_BY IS 'Identifiant du worker ayant réclamé cette étape (hostname, task_id, etc.).';
 
 -- ===========================================================================
 -- PHASE 5 : Données de référence
@@ -1419,9 +1680,9 @@ COMMIT;
 -- FIN DU SCRIPT BASELINE V088
 -- ===========================================================================
 -- Après application de ce script :
---   flyway baseline -baselineVersion=118 -baselineDescription=baseline_schema_v088
+--   flyway baseline -baselineVersion=119 -baselineDescription=baseline_schema_v088
 --
--- Aucune migration incrémentale requise — état identique à V000→V118.
+-- Aucune migration incrémentale requise — état identique à V000→V119.
 --
 -- Validation rapide :
 --   SELECT COUNT(*) FROM user_tables;             -- doit retourner 28 (26 + WORKFLOW_EVENTS + RUNNABLE_STEPS)
