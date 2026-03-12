@@ -318,6 +318,176 @@ async def test_dashboard_consumer_handle_authenticated_message_no_exception():
     await consumer.handle_authenticated_message({"type": "ping"})
 
 
+@pytest.mark.asyncio
+async def test_dashboard_consumer_execution_update_forwards_payload():
+    """DashboardConsumer.execution_update forwards compact payload."""
+    consumer = DashboardConsumer()
+    consumer._safe_send = AsyncMock()
+
+    await consumer.execution_update({"data": {"execution_id": 42, "status": "RUNNING"}})
+
+    consumer._safe_send.assert_called_once_with({
+        "type": "execution_update",
+        "execution_id": 42,
+        "status": "RUNNING",
+    })
+
+
+# ============================================================================
+# DashboardConsumer RBAC — dashboard permission before group_add
+# ============================================================================
+
+def _make_dashboard_consumer() -> DashboardConsumer:
+    """Helper: create DashboardConsumer with minimal attributes."""
+    consumer = DashboardConsumer()
+    consumer.group_name = "dashboard"
+    consumer.channel_name = "test_channel"
+    consumer.authenticated = False
+    consumer.user_id = None
+    consumer._group_joined = False
+    return consumer
+
+
+@pytest.mark.asyncio
+async def test_dashboard_consumer_authorized_admin_joins_group():
+    """Dashboard RBAC: Admin user → _check_dashboard_access True → group_add called."""
+    consumer = _make_dashboard_consumer()
+    mock_channel_layer = AsyncMock()
+    consumer.channel_layer = mock_channel_layer
+    consumer.close = AsyncMock()
+    consumer._safe_send = AsyncMock()
+
+    async def mock_super_receive(self_inner, **kwargs):
+        consumer.authenticated = True
+        consumer.user_id = "7"
+
+    with patch.object(consumer, '_check_dashboard_access', new=AsyncMock(return_value=True)):
+        with patch.object(AuthenticatedWebSocketConsumer, 'receive', mock_super_receive):
+            await consumer.receive(text_data='{"type":"auth","token":"tok"}')
+
+    mock_channel_layer.group_add.assert_called_once_with("dashboard", "test_channel")
+    consumer.close.assert_not_called()
+    assert consumer._group_joined is True
+
+
+@pytest.mark.asyncio
+async def test_dashboard_consumer_unauthorized_non_admin_closes_4003():
+    """Dashboard RBAC: Non-admin user → _check_dashboard_access False → close(4003), no group_add."""
+    consumer = _make_dashboard_consumer()
+    mock_channel_layer = AsyncMock()
+    consumer.channel_layer = mock_channel_layer
+    consumer.close = AsyncMock()
+
+    async def mock_super_receive(self_inner, **kwargs):
+        consumer.authenticated = True
+        consumer.user_id = "99"
+
+    with patch.object(consumer, '_check_dashboard_access', new=AsyncMock(return_value=False)):
+        with patch.object(AuthenticatedWebSocketConsumer, 'receive', mock_super_receive):
+            await consumer.receive(text_data='{"type":"auth","token":"tok"}')
+
+    consumer.close.assert_called_once_with(code=4003)
+    mock_channel_layer.group_add.assert_not_called()
+    assert consumer._group_joined is False
+
+
+@pytest.mark.asyncio
+async def test_dashboard_consumer_access_check_exception_closes_4003():
+    """Dashboard RBAC: _check_dashboard_access raises → fail-secure close(4003), no group_add."""
+    consumer = _make_dashboard_consumer()
+    mock_channel_layer = AsyncMock()
+    consumer.channel_layer = mock_channel_layer
+    consumer.close = AsyncMock()
+
+    async def mock_super_receive(self_inner, **kwargs):
+        consumer.authenticated = True
+        consumer.user_id = "7"
+
+    with patch.object(consumer, '_check_dashboard_access', new=AsyncMock(side_effect=RuntimeError("db error"))):
+        with patch.object(AuthenticatedWebSocketConsumer, 'receive', mock_super_receive):
+            await consumer.receive(text_data='{"type":"auth","token":"tok"}')
+
+    consumer.close.assert_called_once_with(code=4003)
+    mock_channel_layer.group_add.assert_not_called()
+    assert consumer._group_joined is False
+
+
+# ============================================================================
+# _check_dashboard_access — direct unit tests (real logic, patch user lookup)
+# ============================================================================
+
+@pytest.mark.asyncio
+async def test_check_dashboard_access_admin_returns_true():
+    """Admin user → _check_dashboard_access returns True (real is_admin_user, patched User)."""
+    from unittest.mock import MagicMock
+
+    consumer = _make_dashboard_consumer()
+    consumer.user_id = "7"
+
+    mock_user = MagicMock()
+    mock_user.id = 7
+    mock_user.is_authenticated = True
+    mock_user_model = MagicMock()
+    mock_user_model.objects.get = MagicMock(return_value=mock_user)
+
+    with patch('django.contrib.auth.get_user_model', return_value=mock_user_model):
+        with patch(
+            'core.permissions._resolve_user_profiles',
+            return_value=[MagicMock(is_admin_bool=True)],
+        ):
+            result = await consumer._check_dashboard_access()
+
+    assert result is True
+    mock_user_model.objects.get.assert_called_once_with(id="7")
+
+
+@pytest.mark.asyncio
+async def test_check_dashboard_access_non_admin_returns_false():
+    """Non-admin user → _check_dashboard_access returns False (real is_admin_user, patched User)."""
+    from unittest.mock import MagicMock
+
+    consumer = _make_dashboard_consumer()
+    consumer.user_id = "99"
+
+    mock_user = MagicMock()
+    mock_user.id = 99
+    mock_user_model = MagicMock()
+    mock_user_model.objects.get = MagicMock(return_value=mock_user)
+
+    with patch('django.contrib.auth.get_user_model', return_value=mock_user_model):
+        with patch(
+            'core.permissions._resolve_user_profiles',
+            return_value=[MagicMock(is_admin_bool=False)],
+        ):
+            result = await consumer._check_dashboard_access()
+
+    assert result is False
+    mock_user_model.objects.get.assert_called_once_with(id="99")
+
+
+@pytest.mark.asyncio
+async def test_check_dashboard_access_missing_user_returns_false():
+    """Missing user_id (None) → _check_dashboard_access returns False (fail-secure)."""
+    consumer = _make_dashboard_consumer()
+    consumer.user_id = None
+
+    result = await consumer._check_dashboard_access()
+
+    assert result is False
+
+
+@pytest.mark.django_db
+@pytest.mark.asyncio
+async def test_check_dashboard_access_nonexistent_user_returns_false():
+    """User.DoesNotExist (user_id not in DB) → _check_dashboard_access returns False."""
+    consumer = _make_dashboard_consumer()
+    consumer.user_id = "999999"
+
+    result = await consumer._check_dashboard_access()
+
+    assert result is False
+
+
 # ============================================================================
 # Story 59-2 — SEC-2 : vérification d'accès après auth JWT
 # ============================================================================

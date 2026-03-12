@@ -8,6 +8,7 @@ import { Link } from 'react-router';
 import { Typography, Tag, Space, Descriptions, Button, Switch } from 'antd';
 import { SyncOutlined, ClockCircleOutlined, LinkOutlined } from '@ant-design/icons';
 
+import { FormattedJson } from '../common/FormattedJson';
 import { useAuth } from '../../contexts/AuthContext';
 import { getDisplayParameters, describePatternType } from '../../utils/calendarEventUtils';
 import { getEnvironmentHexColor, getEnvironmentLabel } from '../../utils/environmentHelpers';
@@ -88,20 +89,19 @@ export function EventDetailsPopover({
         )}
         {hasDisplayParams && (
           <Descriptions.Item label="Paramètres">
-            <pre
-              style={{
-                margin: 0,
-                padding: 8,
-                fontSize: 12,
-                maxWidth: 360,
-                overflow: 'auto',
-                background: 'var(--ant-color-fill-quaternary)',
-                borderRadius: 4,
-              }}
-              data-testid="popover-parameters"
-            >
-              {JSON.stringify(displayParams, null, 2)}
-            </pre>
+            <div data-testid="popover-parameters" style={{ maxWidth: 360 }}>
+              <FormattedJson
+                value={displayParams}
+                style={{
+                  margin: 0,
+                  padding: 8,
+                  fontSize: 12,
+                  overflow: 'auto',
+                  background: 'var(--ant-color-fill-quaternary)',
+                  borderRadius: 4,
+                }}
+              />
+            </div>
           </Descriptions.Item>
         )}
         <Descriptions.Item label="Utilisateur">

@@ -20,19 +20,9 @@ import type { ExecutionFilters } from '../../types/api';
 import { useExecutionFilterOptions } from '../../hooks/useExecutionFilterOptions';
 import { useEngines } from '../../hooks/useEngines';
 import { useEnvironments } from '../../hooks/useEnvironments';
+import { EXECUTION_STATUS_FILTER_OPTIONS } from '../../utils/execution-status';
 
 const { RangePicker } = DatePicker;
-
-/** Status options with French labels. */
-const STATUS_OPTIONS = [
-  { label: 'Soumise', value: 'SUBMITTED' },
-  { label: 'En attente', value: 'PENDING_APPROVAL' },
-  { label: 'En cours', value: 'RUNNING' },
-  { label: 'Terminée', value: 'COMPLETED' },
-  { label: 'Échouée', value: 'FAILED' },
-  { label: 'Annulée', value: 'CANCELLED' },
-  { label: 'Rejetée', value: 'REJECTED' },
-];
 
 // Story 13.7: ENVIRONMENT_OPTIONS removed - use useEnvironments hook instead
 // Story 13.7: ENGINE_OPTIONS removed - use useEngines hook instead
@@ -215,7 +205,7 @@ export function ExecutionsFiltersPanel({
                 allowClear
                 value={filters.status}
                 onChange={(value) => apply({ ...filters, status: value ?? null })}
-                options={STATUS_OPTIONS}
+                options={EXECUTION_STATUS_FILTER_OPTIONS}
                 disabled={loading}
                 data-testid="filter-status"
               />

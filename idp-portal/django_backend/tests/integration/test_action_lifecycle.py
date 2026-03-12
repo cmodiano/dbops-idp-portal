@@ -14,7 +14,8 @@ from integrations.models import Integration
 from catalog.models import Action, ActionStatus, Tag, ActionTag
 from catalog.services import CatalogService
 from executions.models import Execution, ExecutionStatus
-from core.models import AuditLog
+from core.models import AuditLog, AuditActionType, AuditEntityType
+from core.services import AuditService
 
 
 @pytest.mark.django_db
@@ -52,11 +53,11 @@ class TestActionLifecycle(TestCase):
         )
         self.assertEqual(action.status, ActionStatus.DRAFT)
 
-        # Create audit entry for action creation
-        AuditLog.objects.create_entry(
+        # Create audit entry for action creation — MED-04: use AuditService (real code path)
+        AuditService.create_entry(
             user_id=str(self.user.id),
-            action_type='ACTION_CREATED',
-            entity_type='action',
+            action_type=AuditActionType.ACTION_CREATED,
+            entity_type=AuditEntityType.ACTION,
             entity_id=action.id,
             details={'name': action.name}
         )
@@ -73,13 +74,13 @@ class TestActionLifecycle(TestCase):
         action.status = ActionStatus.PUBLISHED
         action.save()
 
-        # Create audit entry for publish
-        AuditLog.objects.create_entry(
+        # Create audit entry for publish — Story 72.2: format standard changes
+        AuditService.create_entry(
             user_id=str(self.user.id),
-            action_type='ACTION_PUBLISHED',
-            entity_type='action',
+            action_type=AuditActionType.ACTION_PUBLISHED,
+            entity_type=AuditEntityType.ACTION,
             entity_id=action.id,
-            details={'previous_status': 'draft', 'new_status': 'published'}
+            details={'changes': {'status': {'old': 'draft', 'new': 'published'}}}
         )
 
         # Verify action is now in catalog
@@ -97,10 +98,10 @@ class TestActionLifecycle(TestCase):
         execution.save()
 
         # Create audit entry for execution
-        AuditLog.objects.create_entry(
+        AuditService.create_entry(
             user_id=str(self.user.id),
-            action_type='EXECUTION_SUBMITTED',
-            entity_type='execution',
+            action_type=AuditActionType.EXECUTION_SUBMITTED,
+            entity_type=AuditEntityType.EXECUTION,
             entity_id=execution.id,
             details={'action_id': action.id, 'environment': 'dev'}
         )
@@ -113,10 +114,10 @@ class TestActionLifecycle(TestCase):
         execution.status = ExecutionStatus.COMPLETED
         execution.save()
 
-        AuditLog.objects.create_entry(
+        AuditService.create_entry(
             user_id=str(self.user.id),
-            action_type='EXECUTION_COMPLETED',
-            entity_type='execution',
+            action_type=AuditActionType.EXECUTION_COMPLETED,
+            entity_type=AuditEntityType.EXECUTION,
             entity_id=execution.id,
             details={'final_status': 'COMPLETED'}
         )
@@ -171,11 +172,11 @@ class TestActionLifecycle(TestCase):
             integration=self.integration
         )
 
-        # Log creation
-        AuditLog.objects.create_entry(
+        # Log creation — MED-04: use AuditService (real code path)
+        AuditService.create_entry(
             user_id=str(self.user.id),
-            action_type='ACTION_CREATED',
-            entity_type='action',
+            action_type=AuditActionType.ACTION_CREATED,
+            entity_type=AuditEntityType.ACTION,
             entity_id=action.id
         )
 
@@ -183,24 +184,24 @@ class TestActionLifecycle(TestCase):
         action.description = 'Updated description'
         action.save()
 
-        AuditLog.objects.create_entry(
+        AuditService.create_entry(
             user_id=str(self.user.id),
-            action_type='ACTION_UPDATED',
-            entity_type='action',
+            action_type=AuditActionType.ACTION_UPDATED,
+            entity_type=AuditEntityType.ACTION,
             entity_id=action.id,
-            details={'field': 'description', 'old': 'Original description', 'new': 'Updated description'}
+            details={'changes': {'description': {'old': 'Original description', 'new': 'Updated description'}}}
         )
 
         # Update category
         action.category = 'Patching'
         action.save()
 
-        AuditLog.objects.create_entry(
+        AuditService.create_entry(
             user_id=str(self.user.id),
-            action_type='ACTION_UPDATED',
-            entity_type='action',
+            action_type=AuditActionType.ACTION_UPDATED,
+            entity_type=AuditEntityType.ACTION,
             entity_id=action.id,
-            details={'field': 'category', 'old': 'Provisioning', 'new': 'Patching'}
+            details={'changes': {'category': {'old': 'Provisioning', 'new': 'Patching'}}}
         )
 
         # Verify audit trail

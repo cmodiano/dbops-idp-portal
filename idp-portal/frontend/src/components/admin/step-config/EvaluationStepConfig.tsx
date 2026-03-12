@@ -5,17 +5,15 @@
  * éditeur input_mapping, condition.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import type { FC } from 'react';
 import { Alert, Divider, Select, Spin, Typography } from 'antd';
 import type { WorkflowStepNodeData } from '../WorkflowStepNode';
-import type { BusinessRulePolicyListItem } from '../../../types/api';
-import { getBusinessRulePolicies } from '../../../services/business_rules_service';
 import { KeyValueEditor } from './KeyValueEditor';
 import { ConditionConfig } from './ConditionConfig';
 import { MappingHelpPopover } from './MappingHelpPopover';
 import { useInputMappingWarnings } from '../../../hooks/useInputMappingWarnings';
-import logger from '../../../services/logger';
+import { useBusinessRulePoliciesActive } from '../../../hooks/useBusinessRulePoliciesAdmin';
 
 const { Text } = Typography;
 
@@ -44,27 +42,7 @@ export const EvaluationStepConfig: FC<EvaluationStepConfigProps> = ({
     filteredStepOptions,
   );
 
-  const [policies, setPolicies] = useState<BusinessRulePolicyListItem[]>([]);
-  const [loadingPolicies, setLoadingPolicies] = useState(false);
-  const [policiesError, setPoliciesError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoadingPolicies(true);
-    setPoliciesError(null);
-    getBusinessRulePolicies({ is_active: true })
-      .then((response) => {
-        if (!cancelled) setPolicies(response.data ?? []);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        const msg = err instanceof Error ? err.message : 'Erreur chargement politiques';
-        logger.error('EvaluationStepConfig: failed to load policies', { error: msg });
-        setPoliciesError(msg);
-      })
-      .finally(() => { if (!cancelled) setLoadingPolicies(false); });
-    return () => { cancelled = true; };
-  }, []);
+  const { policies, loading: loadingPolicies, error: policiesError } = useBusinessRulePoliciesActive();
 
   return (
     <div data-testid="evaluation-step-config">

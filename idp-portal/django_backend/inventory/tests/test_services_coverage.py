@@ -335,15 +335,17 @@ class TestListTargets:
         result = service.list_targets()
         assert result == ([], 0)
 
-    def test_list_targets_inventory_type_returns_api_result(self):
-        """integration.type == INVENTORY → _list_targets_from_api."""
+    def test_list_targets_inventory_type_raises_api_not_implemented(self):
+        """integration.type == INVENTORY → _list_targets_from_api raises (API not yet implemented)."""
         from integrations.models import IntegrationType
         service = _make_service()
         mock_integration = MagicMock()
         mock_integration.type = IntegrationType.INVENTORY
+        mock_integration.id = 1
+        mock_integration.base_url = "https://api.example.com"
         service.source_resolver.get_active_inventory_integration.return_value = mock_integration
-        result = service.list_targets()
-        assert result == ([], 0)  # _list_targets_from_api returns ([], 0) by design
+        with pytest.raises(InventoryServiceError, match="inventaire de type API"):
+            service.list_targets()
 
     def test_list_multi_table_with_search_and_target_type_filters(self):
         """_list_targets_from_multi_table : search et target_type appliqués."""

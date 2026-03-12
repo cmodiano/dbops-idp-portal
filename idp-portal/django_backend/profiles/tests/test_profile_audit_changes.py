@@ -126,3 +126,30 @@ class TestProfileAuditChanges:
         changes = mock_audit.call_args.kwargs['details']['changes']
         assert changes['description']['old'] == 'Old Desc'
         assert changes['description']['new'] is None
+
+    @patch('profiles.services.AuditService.create_entry')
+    def test_action_permissions_old_new_in_changes_story_72_2(self, mock_audit):
+        """Story 72.2 : action_permissions doit avoir old et new (pas {'updated': True})."""
+        profile = self._make_profile()
+        user = self._make_user()
+        # Set initial permissions
+        ProfileService().set_action_permissions(
+            profile.id, {'actions_type': 'all', 'action_ids': [], 'tag_patterns': [], 'environments': []}, user=user
+        )
+        mock_audit.reset_mock()
+        # Update via consolidated call
+        ProfileService().update_profile_with_permissions(
+            profile.id,
+            {},
+            action_permissions={'actions_type': 'list', 'action_ids': [1, 2], 'tag_patterns': [], 'environments': ['prod']},
+            target_permissions=None,
+            user=user,
+        )
+        mock_audit.assert_called_once()
+        changes = mock_audit.call_args.kwargs['details']['changes']
+        assert 'action_permissions' in changes
+        assert 'old' in changes['action_permissions']
+        assert 'new' in changes['action_permissions']
+        assert changes['action_permissions']['old']['actions_type'] == 'all'
+        assert changes['action_permissions']['new']['actions_type'] == 'list'
+        assert changes['action_permissions']['new']['action_ids'] == [1, 2]

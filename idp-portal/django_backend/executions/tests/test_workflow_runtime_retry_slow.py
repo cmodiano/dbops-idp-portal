@@ -83,8 +83,8 @@ class TestRetryWithRealCeleryDelays:
                 "order": 1,
                 "name": "Slow Retry Step",
                 "referenced_action_id": self.ref_action.id,
-                "on_success_step_id": None,
-                "on_error_step_id": None,
+                "on_success_step_ids": [],
+                "on_error_step_ids": [],
                 "retry_enabled": True,
                 "retry_max_attempts": 3,
                 "retry_interval_seconds": 0.1,  # AC3: Very small delay

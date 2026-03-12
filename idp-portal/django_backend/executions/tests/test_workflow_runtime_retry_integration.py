@@ -7,7 +7,7 @@ First attempt is synchronous; subsequent retries are scheduled as Celery tasks.
 Tests full workflow execution with retry steps:
 1. Workflow with retry step: first attempt succeeds → normal flow
 2. Workflow with retry step: first attempt fails, retry scheduled → error path
-3. Workflow with retry step: permanent error → on_error_step_id without retry
+3. Workflow with retry step: permanent error → on_error_step_ids without retry
 4. Workflow with retry step: audit trail for first attempt
 """
 
@@ -57,8 +57,8 @@ class TestWorkflowRetryIntegrationSuccessFirstAttempt:
                 "order": 1,
                 "name": "Retryable Step",
                 "referenced_action_id": self.ref_action.id,
-                "on_success_step_id": "step-final",
-                "on_error_step_id": "step-error",
+                "on_success_step_ids": ["step-final"],
+                "on_error_step_ids": ["step-error"],
                 "retry_enabled": True,
                 "retry_max_attempts": 3,
                 "retry_interval_seconds": 10,
@@ -69,16 +69,16 @@ class TestWorkflowRetryIntegrationSuccessFirstAttempt:
                 "order": 2,
                 "name": "Final Step",
                 "referenced_action_id": self.ref_action.id,
-                "on_success_step_id": None,
-                "on_error_step_id": None,
+                "on_success_step_ids": [],
+                "on_error_step_ids": [],
             },
             {
                 "step_id": "step-error",
                 "order": 3,
                 "name": "Error Handler",
                 "referenced_action_id": self.ref_action.id,
-                "on_success_step_id": None,
-                "on_error_step_id": None,
+                "on_success_step_ids": [],
+                "on_error_step_ids": [],
             },
         ]
         action.save()
@@ -134,8 +134,8 @@ class TestWorkflowRetryIntegrationFailureSchedulesCelery:
                 "order": 1,
                 "name": "Always Fail Step",
                 "referenced_action_id": self.ref_action.id,
-                "on_success_step_id": "step-ok",
-                "on_error_step_id": "step-error",
+                "on_success_step_ids": ["step-ok"],
+                "on_error_step_ids": ["step-error"],
                 "retry_enabled": True,
                 "retry_max_attempts": 3,
                 "retry_interval_seconds": 5,
@@ -146,14 +146,14 @@ class TestWorkflowRetryIntegrationFailureSchedulesCelery:
                 "order": 2,
                 "name": "Success Path",
                 "referenced_action_id": self.ref_action.id,
-                "on_success_step_id": None,
+                "on_success_step_ids": [],
             },
             {
                 "step_id": "step-error",
                 "order": 3,
                 "name": "Error Handler",
                 "referenced_action_id": self.ref_action.id,
-                "on_success_step_id": None,
+                "on_success_step_ids": [],
             },
         ]
         action.save()
@@ -202,7 +202,7 @@ class TestWorkflowRetryIntegrationFailureSchedulesCelery:
 
 @pytest.mark.django_db
 class TestWorkflowRetryIntegrationPermanentError:
-    """Integration: Permanent error → on_error_step_id without retry."""
+    """Integration: Permanent error → on_error_step_ids without retry."""
 
     def setup_method(self):
         self.user = UserFactory(username="integ_retry_perm_user")
@@ -232,8 +232,8 @@ class TestWorkflowRetryIntegrationPermanentError:
                 "order": 1,
                 "name": "Perm Fail Step",
                 "referenced_action_id": self.ref_action.id,
-                "on_success_step_id": "step-ok",
-                "on_error_step_id": "step-error",
+                "on_success_step_ids": ["step-ok"],
+                "on_error_step_ids": ["step-error"],
                 "retry_enabled": True,
                 "retry_max_attempts": 5,
                 "retry_interval_seconds": 60,
@@ -244,14 +244,14 @@ class TestWorkflowRetryIntegrationPermanentError:
                 "order": 2,
                 "name": "Success Path (skipped)",
                 "referenced_action_id": self.ref_action.id,
-                "on_success_step_id": None,
+                "on_success_step_ids": [],
             },
             {
                 "step_id": "step-error",
                 "order": 3,
                 "name": "Error Handler",
                 "referenced_action_id": self.ref_action.id,
-                "on_success_step_id": None,
+                "on_success_step_ids": [],
             },
         ]
         action.save()
@@ -334,8 +334,8 @@ class TestWorkflowRetryIntegrationAuditTrail:
                 "order": 1,
                 "name": "Retry Step",
                 "referenced_action_id": self.ref_action.id,
-                "on_success_step_id": None,
-                "on_error_step_id": None,
+                "on_success_step_ids": [],
+                "on_error_step_ids": [],
                 "retry_enabled": True,
                 "retry_max_attempts": 3,
                 "retry_interval_seconds": 10,

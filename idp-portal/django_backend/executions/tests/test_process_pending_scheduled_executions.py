@@ -27,11 +27,12 @@ from tests.factories import (
 )
 
 
-def _make_execution_mock(status='SUBMITTED'):
+def _make_execution_mock(status='SUBMITTED', is_pending_approval=False):
     """Create a mock Execution with the given status."""
     execution = MagicMock()
     execution.id = 999
     execution.status = status
+    execution.is_pending_approval = is_pending_approval
     return execution
 
 

@@ -28,14 +28,21 @@ html.dark .nav-pill {
 }
 
 .nav-pill:hover {
-  background: rgba(0, 135, 78, 0.12) !important;
+  background: rgba(24, 144, 255, 0.12);
+  background: color-mix(in srgb, var(--ant-color-primary) 12%, transparent) !important;
   color: var(--ant-color-primary) !important;
-  border-color: rgba(0, 135, 78, 0.2);
+  border-color: rgba(24, 144, 255, 0.2);
+  border-color: color-mix(in srgb, var(--ant-color-primary) 20%, transparent);
+}
+
+html.light .nav-pill:hover {
+  background: color-mix(in srgb, var(--ant-color-primary) 12%, transparent) !important;
+  border-color: color-mix(in srgb, var(--ant-color-primary) 20%, transparent) !important;
 }
 
 html.dark .nav-pill:hover {
-  background: rgba(0, 135, 78, 0.15) !important;
-  border-color: rgba(0, 135, 78, 0.25);
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: color-mix(in srgb, var(--ant-color-primary) 25%, transparent);
 }
 
 .nav-pill-active {
@@ -43,14 +50,14 @@ html.dark .nav-pill:hover {
 }
 
 html.light .nav-pill-active {
-  background: rgba(0, 135, 78, 0.14) !important;
-  border-color: rgba(0, 135, 78, 0.25);
-  box-shadow: 0 2px 8px rgba(0, 135, 78, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  background: color-mix(in srgb, var(--ant-color-primary) 14%, transparent) !important;
+  border-color: color-mix(in srgb, var(--ant-color-primary) 25%, transparent);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--ant-color-primary) 10%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 
 html.dark .nav-pill-active {
-  background: rgba(0, 135, 78, 0.18) !important;
-  border-color: rgba(0, 135, 78, 0.3);
+  background: color-mix(in srgb, var(--ant-color-primary) 18%, transparent) !important;
+  border-color: color-mix(in srgb, var(--ant-color-primary) 30%, transparent);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
@@ -94,8 +101,15 @@ html.dark .nav-icon-btn {
 }
 
 .nav-icon-btn:hover {
-  background: rgba(0, 135, 78, 0.12) !important;
-  border-color: rgba(0, 135, 78, 0.2);
+  background: rgba(24, 144, 255, 0.12);
+  background: color-mix(in srgb, var(--ant-color-primary) 12%, transparent) !important;
+  border-color: rgba(24, 144, 255, 0.2);
+  border-color: color-mix(in srgb, var(--ant-color-primary) 20%, transparent);
+}
+
+html.light .nav-icon-btn:hover {
+  background: color-mix(in srgb, var(--ant-color-primary) 12%, transparent) !important;
+  border-color: color-mix(in srgb, var(--ant-color-primary) 20%, transparent) !important;
 }
 
 html.dark .nav-icon-btn:hover {
@@ -134,9 +148,16 @@ html.dark .theme-toggle {
 }
 
 .theme-toggle:hover {
-  background: rgba(0, 135, 78, 0.12) !important;
+  background: rgba(24, 144, 255, 0.12);
+  background: color-mix(in srgb, var(--ant-color-primary) 12%, transparent) !important;
   transform: scale(1.05);
-  border-color: rgba(0, 135, 78, 0.2);
+  border-color: rgba(24, 144, 255, 0.2);
+  border-color: color-mix(in srgb, var(--ant-color-primary) 20%, transparent);
+}
+
+html.light .theme-toggle:hover {
+  background: color-mix(in srgb, var(--ant-color-primary) 12%, transparent) !important;
+  border-color: color-mix(in srgb, var(--ant-color-primary) 20%, transparent) !important;
 }
 
 html.dark .theme-toggle:hover {
@@ -165,18 +186,20 @@ html.dark .nav-profile {
 }
 
 .nav-profile:hover {
-  background: rgba(0, 135, 78, 0.1) !important;
-  border-color: rgba(0, 135, 78, 0.2);
+  background: rgba(24, 144, 255, 0.1);
+  background: color-mix(in srgb, var(--ant-color-primary) 10%, transparent) !important;
+  border-color: rgba(24, 144, 255, 0.2);
+  border-color: color-mix(in srgb, var(--ant-color-primary) 20%, transparent);
+}
+
+html.light .nav-profile:hover {
+  background: color-mix(in srgb, var(--ant-color-primary) 12%, transparent) !important;
+  border-color: color-mix(in srgb, var(--ant-color-primary) 20%, transparent) !important;
 }
 
 html.dark .nav-profile:hover {
   background: rgba(255, 255, 255, 0.1) !important;
   border-color: rgba(255, 255, 255, 0.08);
-}
-
-/* Dark mode pill adjustments */
-html.dark .nav-pill:hover {
-  background: rgba(255, 255, 255, 0.08) !important;
 }
 
 /* Smooth transitions for all interactive elements */

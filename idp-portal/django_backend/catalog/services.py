@@ -422,11 +422,11 @@ class CatalogService:
             action.remediation_rules = action_update_data['remediation_rules']
 
         action.save()
-        
+
         # Update tags if provided
         if 'tags' in action_update_data:
             self._sync_tags(action, action_update_data['tags'])
-        
+
         # Story 61.2: Construire changes pour l'audit
         changes = {}
         for field, old_val in old_values.items():
@@ -498,16 +498,15 @@ class CatalogService:
             'enable': AuditActionType.ACTION_ENABLED,
         }
         
-        # Audit
+        # Audit — format standard changes: { status: { old, new } } (Story 72.2)
+        changes = sanitize_audit_changes({'status': {'old': old_status, 'new': new_status}})
         AuditService.create_entry(
             user_id=str(user.id),
             action_type=audit_action_map[transition],
             entity_type=AuditEntityType.ACTION,
             entity_id=action.id,
             details={
-                'previous_status': old_status,
-                'new_status': new_status,
-                'transition': transition,
+                'changes': changes,
             },
             correlation_id=get_correlation_id(),
         )
@@ -648,8 +647,10 @@ class CatalogService:
         Reactivate a disabled action (Story 18.1, AC5).
         Resets status to 'published', clears soft-delete fields.
         """
+        # NEW-BE-D: select_for_update() added for consistency with update_action,
+        # delete_action, deactivate_action (RACE-2 pattern, Story 30.7).
         try:
-            action = Action.objects.get(id=action_id)
+            action = Action.objects.select_for_update().get(id=action_id)
         except Action.DoesNotExist:
             return None
 
@@ -730,9 +731,12 @@ class CatalogService:
                     break
         return result
     
+    @transaction.atomic
     def add_tags(self, action_id: int, tag_names: list[str]) -> Action | None:
         """
         Add tags to an action.
+
+        CRIT-02: @transaction.atomic ensures all tag additions are atomic.
 
         Args:
             action_id: ID of the action
@@ -752,9 +756,12 @@ class CatalogService:
 
         return action  # type: ignore[no-any-return]
 
+    @transaction.atomic
     def remove_tags(self, action_id: int, tag_names: list[str]) -> Action | None:
         """
         Remove tags from an action.
+
+        CRIT-02: @transaction.atomic ensures all tag removals are atomic.
 
         Args:
             action_id: ID of the action
@@ -882,7 +889,8 @@ class CatalogService:
                             'steps_count_after': steps_count_after,
                         }
                     }
-                }
+                },
+                correlation_id=get_correlation_id(),
             )
 
         return action  # type: ignore[no-any-return]

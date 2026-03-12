@@ -45,9 +45,27 @@ def _make_approval_step(execution, step_name="request-approval", step_order=1):
     return step
 
 
+def _make_auto_approval_gate(execution):
+    """ADR-007: Create an auto-approval-gate step (like _create_execution_atomic does)."""
+    step = ExecutionStep.objects.create(
+        execution=execution,
+        step_order=0,
+        step_name="Approval Gate",
+        config_step_id="auto-approval-gate",
+        step_type=ExecutionStepType.GATE,
+        status=ExecutionStepStatus.WAITING,
+    )
+    step.set_output({
+        "gate_conditions": [{"type": "approval_granted"}],
+        "gate_status": [{"type": "approval_granted", "satisfied": False}],
+    })
+    step.save()
+    return step
+
+
 @pytest.mark.django_db
 class TestApproveAuditContext(TestCase):
-    """AC1 : EXECUTION_APPROVED (PENDING_APPROVAL) contient action_name, targets, parameters."""
+    """AC1 : EXECUTION_APPROVED (auto-approval-gate) contient action_name, targets, parameters."""
 
     def setUp(self):
         self.client = APIClient()
@@ -57,8 +75,7 @@ class TestApproveAuditContext(TestCase):
         self.action = ActionFactory(status="published", integration=self.integration)
 
     def _approve(self, execution_id):
-        with patch("executions.views.approval_views.ExecutionService.launch_workflow"):
-            return self.client.post(f"/api/v1/executions/{execution_id}/approve/")
+        return self.client.post(f"/api/v1/executions/{execution_id}/approve/")
 
     def _get_audit(self, execution_id):
         return AuditLog.objects.filter(
@@ -67,14 +84,15 @@ class TestApproveAuditContext(TestCase):
         ).first()
 
     def test_approve_includes_targets_and_parameters(self):
-        """AC1 — targets et parameters présents dans details."""
+        """AC1 — targets et parameters presents dans details."""
         requester = UserFactory(username="req_approve_ctx_61_7", profile="DBA")
         execution = ExecutionFactory(
             action=self.action,
             user=requester,
-            status=ExecutionStatus.PENDING_APPROVAL,
+            status=ExecutionStatus.SUBMITTED,
             environment="prod",
         )
+        _make_auto_approval_gate(execution)
         ExecutionTargetFactory(
             execution=execution,
             target_type="SERVER",
@@ -89,25 +107,22 @@ class TestApproveAuditContext(TestCase):
         self.assertIsNotNone(audit)
         details = json.loads(audit.details)
 
-        # action_name déjà présent avant la story — vérifié pour non-régression
         self.assertIn("action_name", details)
         self.assertEqual(details["action_name"], self.action.name)
-
-        # Nouveaux champs AC1
         self.assertIn("targets", details)
         self.assertIn("oracle-prod-01", details["targets"])
         self.assertIn("parameters", details)
 
     def test_approve_targets_absent_when_no_targets(self):
-        """AC7 — targets absent si l'exécution n'a pas de targets."""
+        """AC7 — targets absent si l'execution n'a pas de targets."""
         requester = UserFactory(username="req_approve_notarget_61_7", profile="DBA")
         execution = ExecutionFactory(
             action=self.action,
             user=requester,
-            status=ExecutionStatus.PENDING_APPROVAL,
+            status=ExecutionStatus.SUBMITTED,
             environment="prod",
         )
-        # Aucun ExecutionTarget créé
+        _make_auto_approval_gate(execution)
 
         response = self._approve(execution.id)
         self.assertEqual(response.status_code, 200)
@@ -117,15 +132,16 @@ class TestApproveAuditContext(TestCase):
         self.assertNotIn("targets", details)
 
     def test_approve_parameters_absent_when_no_parameters(self):
-        """AC8 — parameters absent si l'exécution n'a pas de paramètres."""
+        """AC8 — parameters absent si l'execution n'a pas de parametres."""
         requester = UserFactory(username="req_approve_noparam_61_7", profile="DBA")
         execution = ExecutionFactory(
             action=self.action,
             user=requester,
-            status=ExecutionStatus.PENDING_APPROVAL,
+            status=ExecutionStatus.SUBMITTED,
             environment="prod",
             parameters=None,
         )
+        _make_auto_approval_gate(execution)
 
         response = self._approve(execution.id)
         self.assertEqual(response.status_code, 200)
@@ -137,7 +153,7 @@ class TestApproveAuditContext(TestCase):
 
 @pytest.mark.django_db
 class TestRejectAuditContext(TestCase):
-    """AC2 : EXECUTION_REJECTED (PENDING_APPROVAL) contient action_name, targets, parameters."""
+    """AC2 : EXECUTION_REJECTED (auto-approval-gate) contient action_name, targets, parameters."""
 
     def setUp(self):
         self.client = APIClient()
@@ -160,14 +176,15 @@ class TestRejectAuditContext(TestCase):
         ).first()
 
     def test_reject_includes_targets_and_parameters(self):
-        """AC2 — targets et parameters présents dans details."""
+        """AC2 — targets et parameters presents dans details."""
         requester = UserFactory(username="req_reject_ctx_61_7", profile="DBA")
         execution = ExecutionFactory(
             action=self.action,
             user=requester,
-            status=ExecutionStatus.PENDING_APPROVAL,
+            status=ExecutionStatus.SUBMITTED,
             environment="prod",
         )
+        _make_auto_approval_gate(execution)
         ExecutionTargetFactory(
             execution=execution,
             target_type="DATABASE",
@@ -175,7 +192,7 @@ class TestRejectAuditContext(TestCase):
             target_name="oracle-prod-db",
         )
 
-        response = self._reject(execution.id, reason="Fenêtre de maintenance dépassée")
+        response = self._reject(execution.id, reason="Fenetre de maintenance depassee")
         self.assertEqual(response.status_code, 200)
 
         audit = self._get_audit(execution.id)
@@ -186,8 +203,7 @@ class TestRejectAuditContext(TestCase):
         self.assertIn("targets", details)
         self.assertIn("oracle-prod-db", details["targets"])
         self.assertIn("parameters", details)
-        # rejection_reason toujours présent (non-régression)
-        self.assertEqual(details["rejection_reason"], "Fenêtre de maintenance dépassée")
+        self.assertEqual(details["rejection_reason"], "Fenetre de maintenance depassee")
 
     def test_reject_targets_absent_when_no_targets(self):
         """AC7 — targets absent si pas de targets."""
@@ -195,9 +211,10 @@ class TestRejectAuditContext(TestCase):
         execution = ExecutionFactory(
             action=self.action,
             user=requester,
-            status=ExecutionStatus.PENDING_APPROVAL,
+            status=ExecutionStatus.SUBMITTED,
             environment="prod",
         )
+        _make_auto_approval_gate(execution)
 
         response = self._reject(execution.id)
         self.assertEqual(response.status_code, 200)
@@ -207,15 +224,16 @@ class TestRejectAuditContext(TestCase):
         self.assertNotIn("targets", details)
 
     def test_reject_parameters_absent_when_no_parameters(self):
-        """AC8 — parameters absent si pas de paramètres."""
+        """AC8 — parameters absent si pas de parametres."""
         requester = UserFactory(username="req_reject_noparam_61_7", profile="DBA")
         execution = ExecutionFactory(
             action=self.action,
             user=requester,
-            status=ExecutionStatus.PENDING_APPROVAL,
+            status=ExecutionStatus.SUBMITTED,
             environment="prod",
             parameters=None,
         )
+        _make_auto_approval_gate(execution)
 
         response = self._reject(execution.id)
         self.assertEqual(response.status_code, 200)
@@ -397,7 +415,7 @@ class TestLegacyBackwardCompatAuditContext(TestCase):
         self.assertIn("targets", details)
         self.assertIn("oracle-bc-01", details["targets"])
         self.assertIn("parameters", details)
-        self.assertTrue(details.get("via_legacy_endpoint"))
+        # ADR-007: via_legacy_endpoint no longer set (no more legacy path)
 
     @patch("executions.views.approval_views._check_approver_permission", return_value=True)
     def test_reject_via_backward_compat_includes_action_name_targets_parameters(self, _mock_perm):
@@ -418,7 +436,7 @@ class TestLegacyBackwardCompatAuditContext(TestCase):
 
         response = self.client.post(
             f"/api/v1/executions/{execution.id}/reject/",
-            data={"rejection_reason": "Fenêtre de maintenance fermée"},
+            data={"rejection_reason": "Fenetre de maintenance fermee"},
             format="json",
         )
         self.assertEqual(response.status_code, 200)
@@ -435,4 +453,3 @@ class TestLegacyBackwardCompatAuditContext(TestCase):
         self.assertIn("targets", details)
         self.assertIn("oracle-bc-db", details["targets"])
         self.assertIn("parameters", details)
-        self.assertTrue(details.get("via_legacy_endpoint"))

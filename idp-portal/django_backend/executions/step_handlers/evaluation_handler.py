@@ -67,13 +67,14 @@ class EvaluationHandler:
         if policy_id is not None:
             try:
                 policy_obj = BusinessRulePolicy.objects.get(id=policy_id)
-            except Exception as _:
+            except Exception as e:  # noqa: BLE001
                 logger.error(
                     "evaluation_handler_error",
                     policy_id=policy_id,
                     artifact_type=artifact_type,
                     execution_id=execution.id,
                     correlation_id=correlation_id,
+                    error=str(e),
                     exc_info=True,
                 )
                 raise
@@ -102,13 +103,14 @@ class EvaluationHandler:
         try:
             engine = RuleEngine()
             decision = engine.evaluate(action_proxy, step_proxy, artifact)
-        except Exception as _:
+        except Exception as e:  # noqa: BLE001
             logger.error(
                 "evaluation_handler_error",
                 policy_id=policy_id,
                 artifact_type=artifact_type,
                 execution_id=execution.id,
                 correlation_id=correlation_id,
+                error=str(e),
                 exc_info=True,
             )
             raise

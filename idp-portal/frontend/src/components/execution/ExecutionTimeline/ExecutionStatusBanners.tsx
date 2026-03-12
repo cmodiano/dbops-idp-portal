@@ -13,6 +13,7 @@ import type { AutoRemediationState } from '../../../hooks/useAutoRemediationStat
 import { formatDuration } from './utils';
 import { formatUtcToLocal } from '../../../utils/dateFormat';
 import { getEnvironmentLabel } from '../../../utils/environmentHelpers';
+import { getApprovalInfoFromSteps, getRejectionInfoFromSteps } from '../../../utils/executionHelpers';
 
 const { Text } = Typography;
 
@@ -29,6 +30,9 @@ export function ExecutionStatusBanners({
   autoRemediationState,
   steps,
 }: ExecutionStatusBannersProps) {
+  const approvalInfo = getApprovalInfoFromSteps(steps);
+  const rejectionInfo = getRejectionInfoFromSteps(steps);
+
   return (
     <>
       {/* Story 19.0, AC8: Polling mode indicator */}
@@ -82,7 +86,7 @@ export function ExecutionStatusBanners({
         />
       )}
 
-      {/* Story 7.4 AC4: Bandeau refus */}
+      {/* Story 7.4 AC4: Bandeau refus (ADR-007: rejection info from steps) */}
       {execution?.status === 'REJECTED' && (
         <Alert
           type="error"
@@ -92,17 +96,17 @@ export function ExecutionStatusBanners({
           description={
             <>
               Cette exécution a été refusée par un DBA.
-              {execution.approval_comment && (
+              {rejectionInfo.rejectionReason && (
                 <>
                   <br />
-                  <strong>Motif :</strong> {execution.approval_comment}
+                  <strong>Motif :</strong> {rejectionInfo.rejectionReason}
                 </>
               )}
-              {execution.approved_at && (
+              {rejectionInfo.rejectedAt && (
                 <>
                   <br />
                   <Text type="secondary" style={{ fontSize: 12 }}>
-                    Refusé le {formatUtcToLocal(execution.approved_at)}
+                    Refusé le {formatUtcToLocal(rejectionInfo.rejectedAt)}
                   </Text>
                 </>
               )}
@@ -128,13 +132,22 @@ export function ExecutionStatusBanners({
               <Tooltip title="Bientôt disponible">
                 <span style={{ cursor: 'default', color: 'inherit', textDecoration: 'none' }}>Trace d'audit</span>
               </Tooltip>
-              {/* Story 7.4: Show approval info if was approved */}
-              {execution.approved_by && execution.approved_at && (
+              {/* Story 71.2: Show approval info from steps (ADR-007) */}
+              {approvalInfo.approvedAt && (
                 <>
                   <br />
                   <Text type="secondary" style={{ fontSize: 12 }}>
-                    Approuvé le {formatUtcToLocal(execution.approved_at)}
-                    {execution.approval_comment && <> — {execution.approval_comment}</>}
+                    Approuvé le {formatUtcToLocal(approvalInfo.approvedAt)}
+                    {approvalInfo.approvalComment && <> — {approvalInfo.approvalComment}</>}
+                  </Text>
+                </>
+              )}
+              {/* Story 72.1: correlation_id pour traçabilité */}
+              {execution?.correlation_id && (
+                <>
+                  <br />
+                  <Text type="secondary" style={{ fontSize: 11 }}>
+                    Correlation ID: <Text copyable={{ text: execution.correlation_id }} style={{ fontFamily: 'monospace' }}>{execution.correlation_id}</Text>
                   </Text>
                 </>
               )}

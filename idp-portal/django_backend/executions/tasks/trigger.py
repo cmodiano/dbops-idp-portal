@@ -11,11 +11,21 @@ from typing import Any
 
 import structlog
 from celery import shared_task  # type: ignore[import-untyped]
+from celery.exceptions import SoftTimeLimitExceeded  # type: ignore[import-untyped]
+from django.conf import settings
 
-logger = structlog.get_logger("executions.tasks")
+logger = structlog.get_logger(__name__)
+
+_LIMITS = settings.CELERY_TASK_TIME_LIMITS["trigger_platform_job"]
 
 
-@shared_task(bind=True, max_retries=0, name="executions.tasks.trigger_platform_job")
+@shared_task(
+    bind=True,
+    max_retries=0,
+    name="executions.tasks.trigger_platform_job",
+    soft_time_limit=_LIMITS["soft"],
+    time_limit=_LIMITS["hard"],
+)
 def trigger_platform_job(
     self: Any,
     execution_step_id: int,
@@ -136,6 +146,7 @@ def trigger_platform_job(
         )
 
         # Scheduler le premier poll
+        # Story 72.1 (AC2): passer correlation_id en kwarg pour propagation Celery
         if platform_job_id:
             poll_platform_job_status.apply_async(
                 args=[execution_id, platform_job_id, platform_type],
@@ -145,11 +156,47 @@ def trigger_platform_job(
                     "auth_flow": getattr(integration, "auth_flow", "token"),
                     "poll_interval": 5,
                     "retry_count": 0,
+                    "correlation_id": correlation_id,
                 },
                 queue=get_platform_queue(platform_type),
             )
 
         return {"outcome": "dispatched", "platform_job_id": platform_job_id}
+
+    except SoftTimeLimitExceeded:
+        logger.error(
+            "trigger_platform_job_soft_timeout",
+            execution_step_id=execution_step_id,
+            execution_id=execution_id,
+            integration_id=integration_id,
+            correlation_id=correlation_id,
+        )
+        # Mark step FAILED with timeout message
+        execution_step.status = ExecutionStepStatus.FAILED
+        execution_step.completed_at = tz.now()
+        execution_step.error_message = "Soft time limit exceeded in trigger_platform_job"
+        execution_step.save()
+        # Mark execution INTEGRATION_ERROR to prevent orphaned RUNNING execution
+        # (no platform_job_id stored → no polling will correct status)
+        try:
+            from executions.models import Execution, ExecutionStatus  # noqa: PLC0415
+            execution = Execution.objects.get(id=execution_id)
+            if execution.status not in (
+                ExecutionStatus.COMPLETED,
+                ExecutionStatus.FAILED,
+                ExecutionStatus.CANCELLED,
+                ExecutionStatus.REJECTED,
+            ):
+                execution.status = ExecutionStatus.INTEGRATION_ERROR
+                execution.save(update_fields=["status"])
+        except Exception:  # noqa: BLE001 — best-effort: must not mask SoftTimeLimitExceeded
+            logger.error(
+                "trigger_platform_job_timeout_execution_update_failed",
+                execution_id=execution_id,
+                correlation_id=correlation_id,
+                exc_info=True,
+            )
+        raise
 
     except Exception as exc:  # noqa: BLE001 — broad-catch-fail-fast: all adapter errors mark execution INTEGRATION_ERROR with audit trail
         logger.critical(
@@ -172,7 +219,10 @@ def trigger_platform_job(
         from core.services import AuditService  # noqa: PLC0415
         from core.models import AuditActionType, AuditEntityType  # noqa: PLC0415
         try:
+            from core.utils import sanitize_audit_changes  # noqa: PLC0415
+
             execution = Execution.objects.get(id=execution_id)
+            old_status = execution.status
             if execution.status not in (
                 ExecutionStatus.COMPLETED,
                 ExecutionStatus.FAILED,
@@ -181,6 +231,7 @@ def trigger_platform_job(
             ):
                 execution.status = ExecutionStatus.INTEGRATION_ERROR
                 execution.save(update_fields=["status"])
+            changes = sanitize_audit_changes({'status': {'old': old_status, 'new': ExecutionStatus.INTEGRATION_ERROR}})
             AuditService.create_entry(
                 user_id=str(execution.user_id),
                 action_type=AuditActionType.EXECUTION_INTEGRATION_ERROR,
@@ -191,6 +242,7 @@ def trigger_platform_job(
                     "error": str(exc),
                     "step_id": execution_step_id,
                     "adapter": "trigger_platform_job",
+                    "changes": changes,
                 },
                 correlation_id=correlation_id,
             )

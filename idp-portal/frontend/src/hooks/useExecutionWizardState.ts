@@ -16,7 +16,6 @@ import { Form, App } from 'antd';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import isoWeek from 'dayjs/plugin/isoWeek';
-dayjs.extend(isoWeek);
 import type { CatalogActionDetail } from '../services/catalog_service';
 import type { ExecutionEnvironment, ImpactLevel, RecurringPatternRequest } from '../types/api';
 import type { WizardInitialParams } from '../types/wizard';
@@ -30,7 +29,9 @@ import { useWorkflowStepActions } from './useWorkflowStepActions';
 import type { WizardExecutionContextValue } from '../contexts/WizardExecutionContext';
 import logger from '../services/logger';
 
+// NEW-FE-J: All dayjs.extend() calls grouped after all imports (was interleaved at line 19).
 dayjs.extend(utc);
+dayjs.extend(isoWeek);
 
 // === Pure functions moved from ExecutionWizard.tsx ===
 
@@ -220,7 +221,8 @@ export function useExecutionWizardState({
     /* v8 ignore stop */
   }, [targetInputMode, selectedTargets, resolvedPatternTargets, manualTargetInput]);
 
-  const selectedServerNames = useMemo((): string[] => effectiveTargetNames, [effectiveTargetNames]);
+  // NEW-FE-I: Removed trivial identity useMemo (was memoizing effectiveTargetNames → effectiveTargetNames).
+  const selectedServerNames: string[] = effectiveTargetNames;
 
   const derivedEnvironment = useMemo((): ExecutionEnvironment | null => {
     if (targetInputMode === 'list' && selectedTargets.length > 0)

@@ -18,6 +18,8 @@ interface ParallelGroupTimelineSectionProps {
   expandedId: number | null;
   onToggleExpand: (id: number) => void;
   onOpenLogs: (id: number) => void;
+  /** Story 72.1: correlation_id pour traçabilité. */
+  correlationId?: string | null;
 }
 
 export const ParallelGroupTimelineSection: FC<ParallelGroupTimelineSectionProps> = ({
@@ -26,6 +28,7 @@ export const ParallelGroupTimelineSection: FC<ParallelGroupTimelineSectionProps>
   expandedId,
   onToggleExpand,
   onOpenLogs,
+  correlationId,
 }) => {
   const runningCount = subSteps.filter((s) => s.status === 'RUNNING').length;
   const showParallelBadge = runningCount >= 2;
@@ -62,6 +65,7 @@ export const ParallelGroupTimelineSection: FC<ParallelGroupTimelineSectionProps>
             isLast={idx === subSteps.length - 1}
             onToggleExpand={() => onToggleExpand(step.id)}
             onOpenLogs={() => onOpenLogs(step.id)}
+            correlationId={correlationId}
           />
         ))}
       </div>

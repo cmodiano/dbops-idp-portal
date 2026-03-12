@@ -17,11 +17,15 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.exceptions import BadRequestError, ForbiddenError
+from core.permissions import is_auditor_user
 from core.utils import ensure_utc_isoformat
 from core.models import AuditLog, AuditEntityType, AuditActionType
 from executions.models import Execution, ExecutionStatus
+from executions.utils.workflow_parsing import (
+    enrich_workflow_step_parameters_for_display,
+    strip_step_ids_for_audit_display,
+)
 from idp_auth.models import User
-from profiles.models import Profile
 
 logger = structlog.get_logger(__name__)
 
@@ -44,30 +48,6 @@ def _parse_dt(value: str | None, *, name: str) -> datetime | None:
     if timezone.is_naive(dt):
         dt = timezone.make_aware(dt)
     return dt
-
-
-def _is_auditor(user) -> bool:
-    """
-    Determine if user is auditor based on resolved profiles.
-
-    Note (AUD-MED-03): This mirrors the auditor-check logic used in /auth/me (idp_auth).
-    The duplication is intentional to avoid a circular import between `audit` and `idp_auth`.
-    If the auditor logic changes, both places must be updated.
-    Consider extracting to `profiles.utils.is_auditor()` to consolidate in a future refactor.
-    """
-    if not user or not getattr(user, "is_authenticated", False):
-        return False
-
-    ad_groups = getattr(user, "ad_groups", None)
-    if not isinstance(ad_groups, list) or not ad_groups:
-        profile_name = getattr(user, "profile", "") or ""
-        if profile_name:
-            ad_groups = [profile_name]
-        else:
-            ad_groups = []
-
-    profiles = Profile.objects.find_by_ad_groups(ad_groups) if ad_groups else []
-    return any(getattr(p, "is_auditor", 0) == 1 for p in profiles)
 
 
 # Map audit filter value to current Execution.status (filter by execution state, not audit event type)
@@ -321,7 +301,7 @@ class AuditExecutionsView(APIView):
         ],
     )
     def get(self, request: Request):
-        if not _is_auditor(request.user):
+        if not is_auditor_user(request.user):
             logger.warning(
                 "audit.unauthorized_access",
                 view="AuditExecutionsView",
@@ -364,16 +344,38 @@ class AuditExecutionsView(APIView):
             exec_obj = exec_by_id.get(r.entity_id) if r.entity_type == AuditEntityType.EXECUTION else None
 
             if details is None and exec_obj is not None:
+                params = exec_obj.get_parameters()
+                action = getattr(exec_obj, "action", None)
+                if params and action:
+                    params = enrich_workflow_step_parameters_for_display(params, action) or params
+                    params = strip_step_ids_for_audit_display(params) or params
                 details = {
                     "action_id": exec_obj.action_id,
                     "environment": exec_obj.environment,
                     "status": exec_obj.status,
-                    "parameters": exec_obj.get_parameters(),
+                    "parameters": params,
                     "servicenow_change_id": exec_obj.servicenow_change_id,
                 }
             elif details is not None and exec_obj is not None:
                 # Always enrich with current execution status (not stale audit-time status)
                 details["status"] = exec_obj.status
+                # Story 72.3: enrich parameters with step_name, strip step_id for audit display
+                action = getattr(exec_obj, "action", None)
+                if details.get("parameters"):
+                    details["parameters"] = (
+                        enrich_workflow_step_parameters_for_display(details["parameters"], action)
+                        or details["parameters"]
+                    )
+                    details["parameters"] = (
+                        strip_step_ids_for_audit_display(details["parameters"])
+                        or details["parameters"]
+                    )
+                # workflow_step_parameters au niveau racine (ex. container workflow)
+                if details.get("workflow_step_parameters") and action:
+                    params = {"workflow_step_parameters": details["workflow_step_parameters"]}
+                    params = enrich_workflow_step_parameters_for_display(params, action) or params
+                    params = strip_step_ids_for_audit_display(params) or params
+                    details["workflow_step_parameters"] = params.get("workflow_step_parameters")
 
             # Story 43.1 T3.3: champs execution-only = None pour les entrées non-exécution
             if r.entity_type == AuditEntityType.EXECUTION:
@@ -450,7 +452,7 @@ class AuditExportView(APIView):
         ],
     )
     def get(self, request: Request):
-        if not _is_auditor(request.user):
+        if not is_auditor_user(request.user):
             logger.warning(
                 "audit.unauthorized_access",
                 view="AuditExportView",
@@ -505,16 +507,14 @@ class AuditExportView(APIView):
 
         buf = io.StringIO()
         writer = csv.writer(buf)
+        # Story 72.3: no user_id/action_id/execution_id — only readable names (user_name, action_name)
         writer.writerow(
             [
                 "id",
                 "timestamp",
-                "user_id",
                 "user_name",
                 "action_type",
                 "entity_type",          # Story 43.6
-                "execution_id",
-                "action_id",
                 "action_name",
                 "environment",
                 "status",
@@ -528,18 +528,18 @@ class AuditExportView(APIView):
             details = r.get_details() or {}
             # Story 43.1: ne récupérer l'Execution que pour les entrées de type EXECUTION
             exec_obj = exec_by_id.get(r.entity_id) if r.entity_type == AuditEntityType.EXECUTION else None
+            action_name_val = (
+                (exec_obj.action.name if exec_obj and getattr(exec_obj, "action", None) else "")
+                or details.get("action_name", "")
+            )
             writer.writerow(
                 [
                     r.id,
                     ensure_utc_isoformat(r.timestamp) or "",
-                    r.user_id or "",
                     user_name_by_id_export.get(r.user_id) or r.user_id or "",
                     r.action_type,
                     r.entity_type,          # Story 43.6
-                    ("" if r.entity_id is None else int(r.entity_id)) if r.entity_type == AuditEntityType.EXECUTION else "",
-                    (details["action_id"] if "action_id" in details else (exec_obj.action_id if exec_obj else "")),
-                    (exec_obj.action.name if exec_obj and getattr(exec_obj, "action", None) else "")
-                    or details.get("action_name", ""),      # Story 43.6 : fallback depuis details
+                    action_name_val,
                     details.get("environment") or (exec_obj.environment if exec_obj else ""),
                     (exec_obj.status if exec_obj else details.get("status") or ""),
                     details.get("servicenow_change_id") or (exec_obj.servicenow_change_id if exec_obj else ""),

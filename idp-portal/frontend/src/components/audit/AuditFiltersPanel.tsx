@@ -28,6 +28,8 @@ import { useEnvironments } from '../../hooks/useEnvironments';
 
 const { RangePicker } = DatePicker;
 
+// Statuts audit — config locale justifiée (§16.4). Domaine audit distinct (success/failed/running)
+// ≠ statuts d'exécution (SUBMITTED/RUNNING/COMPLETED…). Ne pas consolider avec execution-status.ts.
 const STATUS_OPTIONS: { value: AuditStatusFilter; label: string }[] = [
   { value: 'success', label: 'Succès' },
   { value: 'failed', label: 'Échec' },

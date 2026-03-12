@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING
 
 import structlog
 from celery import shared_task  # type: ignore[import-untyped]
+from celery.exceptions import SoftTimeLimitExceeded  # type: ignore[import-untyped]
+from django.conf import settings
 
 if TYPE_CHECKING:
     from integrations.health_check import HealthCheckResult
@@ -219,7 +221,15 @@ def _resolve_and_check_vault(integration) -> "HealthCheckResult":
     return async_to_sync(vault_svc.health_check)()
 
 
-@shared_task(bind=True, max_retries=0)
+_HC_LIMITS = settings.CELERY_TASK_TIME_LIMITS["run_integration_health_check"]
+
+
+@shared_task(
+    bind=True,
+    max_retries=0,
+    soft_time_limit=_HC_LIMITS["soft"],
+    time_limit=_HC_LIMITS["hard"],
+)
 def run_integration_health_check(self, integration_id: int) -> None:
     """Lance le health check d'une intégration et met à jour les champs santé.
 
@@ -265,6 +275,14 @@ def run_integration_health_check(self, integration_id: int) -> None:
                 checked_at=timezone.now(),
                 error_message=None,
             )
+    except SoftTimeLimitExceeded:
+        logger.error(
+            "health_check_soft_timeout",
+            integration_id=integration_id,
+            integration_type=itype,
+        )
+        # Re-raise so Celery marks the task as FAILURE and time_limit works correctly
+        raise
     except Exception as exc:  # noqa: BLE001 — resilience-boundary: tâche health check ne doit JAMAIS lever
         logger.error(
             "health_check_unexpected_error",
@@ -295,7 +313,13 @@ def run_integration_health_check(self, integration_id: int) -> None:
     )
 
 
-@shared_task
+_HC_ALL_LIMITS = settings.CELERY_TASK_TIME_LIMITS["health_check_all_integrations"]
+
+
+@shared_task(
+    soft_time_limit=_HC_ALL_LIMITS["soft"],
+    time_limit=_HC_ALL_LIMITS["hard"],
+)
 def health_check_all_integrations() -> None:
     """Lance le health check périodique de toutes les intégrations.
 
@@ -319,10 +343,18 @@ def health_check_all_integrations() -> None:
         return
 
     dispatched_count = 0
+    total = len(integration_ids)
     for integration_id in integration_ids:
         try:
             run_integration_health_check.delay(integration_id)
             dispatched_count += 1
+        except SoftTimeLimitExceeded:
+            logger.warning(
+                "health_check_all_soft_timeout",
+                dispatched=dispatched_count,
+                total=total,
+            )
+            return
         except Exception as exc:  # noqa: BLE001
             logger.exception(
                 "health_check_all_dispatch_error",
@@ -336,7 +368,13 @@ def health_check_all_integrations() -> None:
     )
 
 
-@shared_task
+_WARMUP_LIMITS = settings.CELERY_TASK_TIME_LIMITS["warmup_vault_secrets_cache"]
+
+
+@shared_task(
+    soft_time_limit=_WARMUP_LIMITS["soft"],
+    time_limit=_WARMUP_LIMITS["hard"],
+)
 def warmup_vault_secrets_cache() -> dict[str, int]:
     """Pre-load Vault secrets for all integrations into the in-memory cache.
 
@@ -357,4 +395,9 @@ def warmup_vault_secrets_cache() -> dict[str, int]:
 
     from services.vault_service import warmup_vault_cache
 
-    return warmup_vault_cache()
+    try:
+        return warmup_vault_cache()
+    except SoftTimeLimitExceeded:
+        logger.warning("warmup_vault_secrets_cache_soft_timeout")
+        # Counters unknown — warmup_vault_cache() does not expose partial progress
+        return {"total": -1, "ok": -1, "errors": -1, "skipped": -1}

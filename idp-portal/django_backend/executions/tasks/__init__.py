@@ -31,11 +31,6 @@ from executions.tasks.scheduled import (  # noqa: E402
 )
 from executions.tasks.polling import (  # noqa: E402
     poll_platform_job_status,
-    poll_aap_job_status,
-    poll_tower_job_status,
-    poll_azure_devops_run_status,
-    poll_github_actions_run_status,
-    poll_terraform_cloud_run_status,
     MAX_POLLING_RETRIES,
     _mark_execution_polling_exhausted,
     _broadcast_execution_update,
@@ -44,18 +39,15 @@ from executions.tasks.polling import (  # noqa: E402
 )
 from executions.tasks.trigger import trigger_platform_job  # noqa: E402
 from executions.tasks.cleanup import purge_old_platform_logs, purge_old_workflow_events  # noqa: E402
+from executions.tasks.reconcile import reconcile_stale_executions  # noqa: E402
 
 __all__ = [
     # Public tasks
     "retry_workflow_step",
     "evaluate_waiting_gates",
     "poll_platform_job_status",
-    "poll_aap_job_status",
-    "poll_tower_job_status",
-    "poll_azure_devops_run_status",
-    "poll_github_actions_run_status",
-    "poll_terraform_cloud_run_status",
     "trigger_platform_job",
+    "reconcile_stale_executions",
     # Constants
     "MAX_POLLING_RETRIES",
     # Story 42.1: Celery Beat task for scheduled executions

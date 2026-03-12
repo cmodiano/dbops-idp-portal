@@ -49,6 +49,8 @@ const EMPTY_PARAMS: ParameterDefinition[] = [];
 export interface ParametersEditorProps {
   value?: ParameterDefinition[];
   onChange?: (value: ParameterDefinition[]) => void;
+  /** NEW-FE-F: When true, hides the "Add" button and disables all inputs (read-only mode). */
+  disabled?: boolean;
 }
 
 const PARAM_TYPE_OPTIONS: { value: ParameterSchemaType; label: string }[] = [
@@ -89,6 +91,7 @@ interface SortableParamCardProps {
   onRemove: (index: number) => void;
   inventorySchema: InventorySchema | null;  // Story 62.5
   inventorySchemaLoading: boolean;          // Story 62.5
+  disabled?: boolean;  // NEW-FE-F: read-only mode
 }
 
 const SortableParamCard: FC<SortableParamCardProps> = ({
@@ -99,6 +102,7 @@ const SortableParamCard: FC<SortableParamCardProps> = ({
   onRemove,
   inventorySchema,
   inventorySchemaLoading,
+  disabled = false,
 }) => {
   const { token } = theme.useToken();
   const {
@@ -149,6 +153,7 @@ const SortableParamCard: FC<SortableParamCardProps> = ({
             icon={<DeleteOutlined />}
             onClick={() => onRemove(index)}
             aria-label={`Supprimer parametre ${index + 1}`}
+            disabled={disabled}
           />
         </Space>
 
@@ -171,6 +176,7 @@ const SortableParamCard: FC<SortableParamCardProps> = ({
               placeholder="Ex: pdb_name"
               style={{ width: 180 }}
               aria-label={`Nom parametre ${index + 1}`}
+              disabled={disabled}
             />
           </Form.Item>
 
@@ -181,6 +187,7 @@ const SortableParamCard: FC<SortableParamCardProps> = ({
               options={PARAM_TYPE_OPTIONS}
               style={{ width: 180 }}
               aria-label={`Type parametre ${index + 1}`}
+              disabled={disabled}
             />
           </Form.Item>
 
@@ -189,6 +196,7 @@ const SortableParamCard: FC<SortableParamCardProps> = ({
               checked={param.required}
               onChange={(v) => onParamChange(index, 'required', v)}
               aria-label={`Parametre ${index + 1} requis`}
+              disabled={disabled}
             />
           </Form.Item>
 
@@ -199,6 +207,7 @@ const SortableParamCard: FC<SortableParamCardProps> = ({
               placeholder="Optionnel"
               style={{ width: 160 }}
               aria-label={`Valeur par defaut parametre ${index + 1}`}
+              disabled={disabled}
             />
           </Form.Item>
         </Space>
@@ -309,7 +318,7 @@ const SortableParamCard: FC<SortableParamCardProps> = ({
   );
 };
 
-export const ParametersEditor: FC<ParametersEditorProps> = ({ value = EMPTY_PARAMS, onChange }) => {
+export const ParametersEditor: FC<ParametersEditorProps> = ({ value = EMPTY_PARAMS, onChange, disabled = false }) => {
   const { schema: inventorySchema, loading: inventorySchemaLoading } = useInventorySchema(); // Story 62.5
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -381,6 +390,7 @@ export const ParametersEditor: FC<ParametersEditorProps> = ({ value = EMPTY_PARA
                 onRemove={handleRemove}
                 inventorySchema={inventorySchema}
                 inventorySchemaLoading={inventorySchemaLoading}
+                disabled={disabled}
               />
             ))}
           </SortableContext>
@@ -390,9 +400,11 @@ export const ParametersEditor: FC<ParametersEditorProps> = ({ value = EMPTY_PARA
           <Text type="secondary">Aucun parametre. Ajoutez un parametre pour definir le schema.</Text>
         )}
 
-        <Button type="dashed" onClick={handleAdd} icon={<PlusOutlined />} block>
-          Ajouter un parametre
-        </Button>
+        {!disabled && (
+          <Button type="dashed" onClick={handleAdd} icon={<PlusOutlined />} block>
+            Ajouter un parametre
+          </Button>
+        )}
       </Space>
     </div>
   );

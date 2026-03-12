@@ -297,6 +297,30 @@ class TestRateLimitConfigValidation(TestCase):
                 from core.startup_checks import validate_rate_limit_config
                 validate_rate_limit_config()
 
+    def test_all_8_rate_vars_validated(self):
+        """Story 71.9: All 8 rate env vars must be validated at startup (including THROTTLE_PORTAL_LOGIN_RATE)."""
+        from core.startup_checks import validate_rate_limit_config
+        # Set all 8 to valid values — should not raise
+        env_vars = {
+            'THROTTLE_AUTH_RATE': '10/minute',
+            'THROTTLE_TOKEN_REFRESH_RATE': '20/minute',
+            'THROTTLE_EXECUTION_RATE': '30/minute',
+            'THROTTLE_API_RATE': '100/minute',
+            'THROTTLE_PUBLIC_RATE': '50/minute',
+            'THROTTLE_API_KEY_TOKEN_RATE': '10/minute',
+            'THROTTLE_SERVICE_LOGIN_RATE': '5/minute',
+            'THROTTLE_PORTAL_LOGIN_RATE': '10/minute',
+        }
+        with patch.dict('os.environ', env_vars):
+            validate_rate_limit_config()
+
+    def test_portal_login_rate_invalid_raises(self):
+        """Story 71.9: Invalid THROTTLE_PORTAL_LOGIN_RATE raises ImproperlyConfigured."""
+        from core.startup_checks import validate_rate_limit_config
+        with patch.dict('os.environ', {'THROTTLE_PORTAL_LOGIN_RATE': 'invalid'}):
+            with pytest.raises(ImproperlyConfigured, match="Invalid rate format"):
+                validate_rate_limit_config()
+
 
 class TestDRFThrottlingSettings(TestCase):
     """Tests that DRF throttling is properly configured in settings."""
@@ -307,13 +331,15 @@ class TestDRFThrottlingSettings(TestCase):
         assert 'core.throttling.GeneralAPIThrottle' in throttle_classes
 
     def test_throttle_rates_configured(self):
+        """Story 71.9: All 8 throttle scopes must be configured in settings."""
         from django.conf import settings
         rates = settings.REST_FRAMEWORK.get('DEFAULT_THROTTLE_RATES', {})
-        assert 'auth' in rates
-        assert 'token_refresh' in rates
-        assert 'execution' in rates
-        assert 'general_api' in rates
-        assert 'public' in rates
+        expected_scopes = [
+            'auth', 'token_refresh', 'execution', 'general_api',
+            'public', 'api_key_token', 'service_login', 'portal_login',
+        ]
+        for scope in expected_scopes:
+            assert scope in rates, f"Missing throttle scope: {scope}"
 
     def test_cache_configured(self):
         from django.conf import settings

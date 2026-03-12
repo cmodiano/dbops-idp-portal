@@ -120,21 +120,13 @@ class TestExecutionSerializerTimezone:
             assert value is not None, f"{field} should not be None"
             assert value.endswith("Z"), f"{field} should end with Z: {value}"
 
-    def test_execution_serializer_approved_at_timezone(self):
-        obj = _make_execution_mock(approved_at=timezone.now())
-        serializer = ExecutionSerializer()
-        data = serializer.to_representation(obj)
-
-        assert data["approved_at"].endswith("Z"), f"approved_at should end with Z: {data['approved_at']}"
-
     def test_execution_serializer_none_dates(self):
-        obj = _make_execution_mock(started_at=None, completed_at=None, approved_at=None)
+        obj = _make_execution_mock(started_at=None, completed_at=None)
         serializer = ExecutionSerializer()
         data = serializer.to_representation(obj)
 
         assert data["started_at"] is None
         assert data["completed_at"] is None
-        assert data["approved_at"] is None
 
 
 # ---------------------------------------------------------------------------

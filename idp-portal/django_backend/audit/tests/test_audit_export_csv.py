@@ -46,7 +46,7 @@ def _export_csv(rf: APIRequestFactory, query_string: str = "") -> list[dict]:
     request.user = user
     force_authenticate(request, user=user)
     view = AuditExportView.as_view()
-    with patch("audit.views._is_auditor", return_value=True):
+    with patch("audit.views.is_auditor_user", return_value=True):
         response = view(request)
     assert response.status_code == 200
     content = response.content.decode("utf-8")
@@ -102,7 +102,9 @@ class TestAuditExportCsv:
         assert rows[0]["action_type"] == AuditActionType.EXECUTION_COMPLETED
 
     def test_export_csv_execution_only_columns_empty_for_non_execution(self, rf):
-        """AC5 : pour les entrées non-exécution, execution_id/action_id/environment/status/servicenow_change_id sont vides."""
+        """AC5 : pour les entrées non-exécution, environment/status/servicenow_change_id sont vides.
+        Story 72.3 : execution_id supprimé du CSV (colonne absente).
+        """
         _create_audit_entry(
             entity_type=AuditEntityType.ACTION,
             action_type=AuditActionType.ACTION_CREATED,
@@ -112,8 +114,25 @@ class TestAuditExportCsv:
         rows = _export_csv(rf, "entity_type=action")
         assert len(rows) == 1
         row = rows[0]
-        assert not row["execution_id"]
-        assert not row["action_id"]
+        assert "execution_id" not in row
         assert row["environment"] == ""
         assert row["status"] == ""
         assert row["servicenow_change_id"] == ""
+
+    def test_export_csv_no_user_id_action_id_execution_id_columns_story_72_3(self, rf):
+        """Story 72.3 : CSV n'expose pas user_id, action_id ni execution_id — uniquement noms lisibles."""
+        _create_audit_entry(
+            entity_type=AuditEntityType.ACTION,
+            action_type=AuditActionType.ACTION_CREATED,
+            entity_id=7,
+            details={"action_name": "Test Action"},
+        )
+        rows = _export_csv(rf, "entity_type=action")
+        assert len(rows) == 1
+        headers = list(rows[0].keys())
+        assert "user_id" not in headers
+        assert "action_id" not in headers
+        assert "execution_id" not in headers
+        assert "user_name" in headers
+        assert "action_name" in headers
+        assert "correlation_id" in headers

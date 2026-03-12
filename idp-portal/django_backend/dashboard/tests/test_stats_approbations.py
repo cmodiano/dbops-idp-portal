@@ -215,33 +215,39 @@ class TestDashboardStatsApprobationsDelay:
 
     def test_avg_delay_legacy_path(self):
         """Délai = approved_at - created_at via Execution.approved_at.
-        approved_at dans le futur (> created_at auto_now_add) → delta positif.
+        approved_at 1h après created_at → delta positif (timestamps dans le passé).
         """
-        now = timezone.now()
+        from executions.models import Execution
+
         action = ActionFactory.create()
-        # created_at est auto_now_add (≈ now) donc approved_at doit être > now
-        approved = now + timedelta(seconds=3600)  # 1h après now
-        ExecutionFactory.create(
+        past_created = timezone.now() - timedelta(hours=2)
+        execution = ExecutionFactory.create(
             action=action, status='COMPLETED',
-            approved_at=approved,
+            approved_at=None,  # set after refresh
         )
+        execution.refresh_from_db()
+        Execution.objects.filter(id=execution.id).update(created_at=past_created)
+        execution.refresh_from_db()
+        approved = execution.created_at + timedelta(seconds=3600)  # 1h après created_at
+        execution.approved_at = approved
+        execution.save()
         response = self.client.get(URL)
         delay = response.data['data']['avg_approval_delay_s']
         assert delay is not None
-        assert delay >= 3600.0  # au moins 3600s (delta exact dépend de auto_now_add)
+        expected_delay = (approved - execution.created_at).total_seconds()
+        assert delay == pytest.approx(expected_delay, abs=1.0)
 
     def test_avg_delay_gate_step_path(self):
         """Délai = step.approved_at - execution.created_at via gate step ADR-007.
         step.approved_at dans le futur (> created_at auto_now_add) → delta positif.
         """
-        now = timezone.now()
         action = ActionFactory.create()
-        # created_at est auto_now_add (≈ now) donc step_approved doit être > now
-        step_approved = now + timedelta(seconds=1800)  # 30min après now
         execution = ExecutionFactory.create(
             action=action, status='COMPLETED',
             approved_at=None,  # pas de legacy
         )
+        execution.refresh_from_db()
+        step_approved = execution.created_at + timedelta(seconds=1800)  # 30min après created_at
         ExecutionStepFactory.create(
             execution=execution,
             step_type='gate',
@@ -251,7 +257,8 @@ class TestDashboardStatsApprobationsDelay:
         response = self.client.get(URL)
         delay = response.data['data']['avg_approval_delay_s']
         assert delay is not None
-        assert delay >= 1800.0  # au moins 1800s (delta exact dépend de auto_now_add)
+        expected_delay = (step_approved - execution.created_at).total_seconds()
+        assert delay == pytest.approx(expected_delay, abs=1.0)
 
     def test_avg_delay_excludes_negative_deltas(self):
         """Délai négatif (approved_at < created_at) doit être exclu.

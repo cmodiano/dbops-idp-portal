@@ -429,7 +429,7 @@ class TestWorkflowRuntimeGateConditions:
                 'name': 'Prepare',
                 'type': 'platform',
                 'referenced_action_id': ref_action1.id,
-                'on_success_step_id': 'deploy',
+                'on_success_step_ids': ['deploy'],
             },
             {
                 'order': 2,
@@ -440,7 +440,7 @@ class TestWorkflowRuntimeGateConditions:
                 'gate_conditions': [
                     {'type': 'maintenance_window', 'timeout_hours': 72}
                 ],
-                'on_success_step_id': 'verify',
+                'on_success_step_ids': ['verify'],
             },
             {
                 'order': 3,

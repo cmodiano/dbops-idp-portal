@@ -17,8 +17,9 @@ const RECONNECT_DELAY_MS = 3000;
 const WS_PROTOCOL = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 const WS_BASE = typeof window !== 'undefined' ? `${WS_PROTOCOL}//${window.location.host}` : 'ws://localhost';
 
-/** WebSocket close code for authentication failure — do not reconnect. */
+/** WebSocket close codes for authentication/authorization failure — do not reconnect. */
 const WS_AUTH_FAILED_CODE = 4001;
+const WS_AUTHZ_FAILED_CODE = 4003;
 
 export interface ExecutionUpdateMessage {
   type: 'execution_update';
@@ -185,11 +186,13 @@ export function useDashboardWebSocket(
           setConnected(false);
           setIsAuthenticated(false);
         }
-        // Story 22.13 (AC5): Do NOT reconnect on auth failure (code 4001)
-        if (event.code === WS_AUTH_FAILED_CODE) {
-          logger.error('Dashboard WebSocket authentication failed - invalid token', { code: event.code, reason: event.reason });
+        // Do NOT reconnect on authentication/authorization failures.
+        if (event.code === WS_AUTH_FAILED_CODE || event.code === WS_AUTHZ_FAILED_CODE) {
+          logger.error('Dashboard WebSocket authentication/authorization failed', { code: event.code, reason: event.reason });
           if (isMountedRef.current) {
-            setError('Échec d\'authentification WebSocket');
+            setError(event.code === WS_AUTHZ_FAILED_CODE
+              ? 'Accès non autorisé au flux WebSocket'
+              : 'Échec d\'authentification WebSocket');
           }
           return;
         }

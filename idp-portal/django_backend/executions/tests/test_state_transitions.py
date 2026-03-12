@@ -1,10 +1,13 @@
 """
-Tests for Story 22.12: PENDING_APPROVAL state transition validation.
+Tests for execution state transition validation.
+
+ADR-007: PENDING_APPROVAL is no longer used at the Execution level.
+All approvals go through ExecutionStep WAITING gates.
 
 Validates that:
-- PENDING_APPROVAL → SUBMITTED is rejected (HIGH-2 security fix)
-- PENDING_APPROVAL → RUNNING is allowed (DBA approval)
-- PENDING_APPROVAL → REJECTED is allowed (DBA rejection)
+- PENDING_APPROVAL is now a dead-end (no valid transitions in or out)
+- SUBMITTED → RUNNING, CANCELLED, FAILED, INTEGRATION_ERROR are valid
+- RUNNING → COMPLETED, FAILED, CANCELLED are valid
 """
 
 import pytest
@@ -18,7 +21,7 @@ from executions.services import ExecutionService
 
 @pytest.mark.django_db
 class TestPendingApprovalTransitions(TestCase):
-    """Story 22.12 AC#3: Validate PENDING_APPROVAL state transitions."""
+    """ADR-007: PENDING_APPROVAL is deprecated. Validate it's a dead state."""
 
     def setUp(self):
         self.user = User.objects.create(username='testuser', profile='DBA')
@@ -38,19 +41,47 @@ class TestPendingApprovalTransitions(TestCase):
             status=ExecutionStatus.PENDING_APPROVAL,
         )
 
-    def test_pending_approval_cannot_transition_to_submitted(self):
-        """AC#1: PENDING_APPROVAL → SUBMITTED is forbidden (bypass risk)."""
-        execution = self._create_pending_execution()
+    def test_pending_approval_all_transitions_forbidden(self):
+        """ADR-007: PENDING_APPROVAL is a dead state — no transitions allowed."""
+        all_statuses = [
+            ExecutionStatus.SUBMITTED,
+            ExecutionStatus.RUNNING,
+            ExecutionStatus.COMPLETED,
+            ExecutionStatus.FAILED,
+            ExecutionStatus.CANCELLED,
+            ExecutionStatus.REJECTED,
+            ExecutionStatus.INTEGRATION_ERROR,
+        ]
 
-        with pytest.raises(ValueError, match="Invalid transition from PENDING_APPROVAL to SUBMITTED"):
-            self.service.update_status(execution.id, ExecutionStatus.SUBMITTED, str(self.user.id))
+        for target_status in all_statuses:
+            execution = self._create_pending_execution()
 
-        execution.refresh_from_db()
-        assert execution.status == ExecutionStatus.PENDING_APPROVAL
+            with pytest.raises(ValueError, match="Invalid transition from PENDING_APPROVAL"):
+                self.service.update_status(execution.id, target_status, str(self.user.id))
 
-    def test_pending_approval_can_transition_to_running(self):
-        """AC#2: PENDING_APPROVAL → RUNNING is allowed (DBA approval)."""
-        execution = self._create_pending_execution()
+            execution.refresh_from_db()
+            assert execution.status == ExecutionStatus.PENDING_APPROVAL
+
+    def test_submitted_cannot_transition_to_pending_approval(self):
+        """ADR-007: SUBMITTED → PENDING_APPROVAL is no longer valid."""
+        execution = Execution.objects.create(
+            action=self.action,
+            user=self.user,
+            environment='dev',
+            status=ExecutionStatus.SUBMITTED,
+        )
+
+        with pytest.raises(ValueError, match="Invalid transition from SUBMITTED to PENDING_APPROVAL"):
+            self.service.update_status(execution.id, ExecutionStatus.PENDING_APPROVAL, str(self.user.id))
+
+    def test_submitted_can_transition_to_running(self):
+        """SUBMITTED → RUNNING is valid (normal execution start)."""
+        execution = Execution.objects.create(
+            action=self.action,
+            user=self.user,
+            environment='dev',
+            status=ExecutionStatus.SUBMITTED,
+        )
 
         updated = self.service.update_status(execution.id, ExecutionStatus.RUNNING, str(self.user.id))
 
@@ -58,35 +89,20 @@ class TestPendingApprovalTransitions(TestCase):
         assert updated.status == ExecutionStatus.RUNNING
         assert updated.started_at is not None
 
-    def test_pending_approval_can_transition_to_rejected(self):
-        """AC#2: PENDING_APPROVAL → REJECTED is allowed (DBA rejection)."""
-        execution = self._create_pending_execution()
+    def test_submitted_can_transition_to_failed(self):
+        """ADR-007: SUBMITTED → FAILED is valid (approval gate rejected)."""
+        execution = Execution.objects.create(
+            action=self.action,
+            user=self.user,
+            environment='dev',
+            status=ExecutionStatus.SUBMITTED,
+        )
 
-        updated = self.service.update_status(execution.id, ExecutionStatus.REJECTED, str(self.user.id))
+        updated = self.service.update_status(execution.id, ExecutionStatus.FAILED, str(self.user.id))
 
         assert updated is not None
-        assert updated.status == ExecutionStatus.REJECTED
+        assert updated.status == ExecutionStatus.FAILED
         assert updated.completed_at is not None
-
-    def test_pending_approval_all_other_transitions_forbidden(self):
-        """AC#2: All transitions except RUNNING and REJECTED are forbidden from PENDING_APPROVAL."""
-        forbidden_statuses = [
-            ExecutionStatus.SUBMITTED,
-            ExecutionStatus.COMPLETED,
-            ExecutionStatus.FAILED,
-            ExecutionStatus.CANCELLED,
-            ExecutionStatus.INTEGRATION_ERROR,
-        ]
-
-        for forbidden_status in forbidden_statuses:
-            execution = self._create_pending_execution()
-
-            with pytest.raises(ValueError, match=f"Invalid transition from PENDING_APPROVAL to {forbidden_status}"):
-                self.service.update_status(execution.id, forbidden_status, str(self.user.id))
-
-            # Verify status unchanged
-            execution.refresh_from_db()
-            assert execution.status == ExecutionStatus.PENDING_APPROVAL
 
     def test_submitted_can_transition_to_integration_error(self):
         """Story 18.6 regression: SUBMITTED → INTEGRATION_ERROR is allowed."""

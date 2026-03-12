@@ -881,3 +881,29 @@ development_status:
     70-2-supprimer-features-ui-import-yaml: done
     70-3-mise-a-jour-documentation-cac: done
     epic-70-retrospective: optional
+    # === Epic 71: Code Review — Points restants (post-Audit #6) ===
+    # Réf: planning-artifacts/epic-71-code-review-points-restants.md
+    # SOLID-FE-4, FE-01, MAINT-BE-9, SMELL-05, EXE-MED-*, ADRs, tests frontend, CSS tokens
+    epic-71: done
+    71-1-migration-dip-composants-restants-vers-hooks: done
+    71-2-frontend-lire-approbation-depuis-execution-steps: done
+    71-3-consolidation-status-config: done
+    71-4-css-tokens-topnav: done
+    71-5-pipeline-validation-unifie-vues-execution: done
+    71-6-refactoring-god-classes-gates-container-runtime: done
+    71-7-atomicite-container-workflow: done
+    71-8-task-soft-time-limit-celery: done
+    71-9-testabilite-throttle-deduplication-is-auditor: done
+    71-10-adrs-manquants-celery-oracle-cac-parallel: done
+    71-11-couverture-tests-frontend-services-hooks: done
+    71-12-mise-a-jour-codebase-review-statuts-finaux: done
+    epic-71-retrospective: optional
+    # === Epic 72: Audit — Améliorations traçabilité et lisibilité ===
+    # Réf: planning-artifacts/epic-72-audit-ameliorations-traçabilite.md
+    # Correlation ID, état avant/après, aucun UUID (noms lisibles), formatage JSON
+    epic-72: in-progress
+    72-1-correlation-id-sur-tout-le-cycle-execution: done # Code review adversarial 2026-03-11: 3 HIGH/MEDIUM fixes (H1 _create_status_audit_entry correlation_id, H2 ContainerWorkflowRuntime fallback execution.correlation_id, M1 _schedule_notification), test AC search by correlation_id ajouté, 14/14 propagation + 71 services tests pass
+    72-2-etat-avant-apres-pour-toutes-modifications-audit: done
+    72-3-aucun-uuid-audit-uniquement-noms-lisibles: done # Code review adversariale 2026-03-11: 5 issues corrigées (H1: referenced_action_name BLOCKED_INVALID_INTEGRATION, H2: test nom explicite, M1: correlation_id DETAIL_KEY_LABELS, M2: execution_id supprimé CSV, M3: correlation_id ALREADY_SHOWN_KEYS)
+    72-4-formatage-json-pour-lisibilite: done # Code review adversarial 2026-03-11: 6 fixes (H1 StepDetailDrawer, H2 formatParamValue, M1 EventDetailsPopover, M2-M4 FormattedJson, L1 typo)
+    epic-72-retrospective: optional

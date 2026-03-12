@@ -1,5 +1,6 @@
 /**
  * Tests for TargetSelector component (Story 13.2, Task 8.1).
+ * Updated Story 71.1 code review: mock useTargetsPaginated hook instead of apiFetchRaw.
  */
 
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
@@ -7,15 +8,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { App } from 'antd';
 import { TargetSelector, type Target } from './TargetSelector';
 
-// Mock the api_client (TargetSelector uses apiFetchRaw)
-vi.mock('../../services/api_client', () => ({
-  apiFetch: vi.fn(),
-  apiFetchRaw: vi.fn(),
+// Mock the useTargetInventory hook (TargetSelector uses useTargetsPaginated)
+const mockUseTargetsPaginated = vi.fn();
+vi.mock('../../hooks/useTargetInventory', () => ({
+  useTargetsPaginated: (...args: unknown[]) => mockUseTargetsPaginated(...args),
 }));
-
-import { apiFetchRaw } from '../../services/api_client';
-
-const mockApiFetchRaw = apiFetchRaw as ReturnType<typeof vi.fn>;
 
 // Test data
 const mockTargets: Target[] = [
@@ -26,23 +23,30 @@ const mockTargets: Target[] = [
   { name: 'db-prod-02', environment: 'prod', target_type: 'database', metadata: null },
 ];
 
-const mockTargetsResponse = {
-  items: mockTargets,
-  total: mockTargets.length,
-  page: 1,
-  page_size: 100,
-  total_pages: 1,
-};
-
 // Wrapper component for Ant Design context
 function TestWrapper({ children }: { children: React.ReactNode }) {
   return <App>{children}</App>;
 }
 
+/** Helper: configure hook to return loaded targets */
+function mockLoaded(targets: Target[] = mockTargets) {
+  mockUseTargetsPaginated.mockReturnValue({ targets, loading: false, error: null });
+}
+
+/** Helper: configure hook to return loading state */
+function mockLoading() {
+  mockUseTargetsPaginated.mockReturnValue({ targets: [], loading: true, error: null });
+}
+
+/** Helper: configure hook to return error state */
+function mockError(message: string) {
+  mockUseTargetsPaginated.mockReturnValue({ targets: [], loading: false, error: message });
+}
+
 describe('TargetSelector', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockApiFetchRaw.mockResolvedValue(mockTargetsResponse);
+    mockLoaded();
   });
 
   afterEach(() => {
@@ -50,7 +54,7 @@ describe('TargetSelector', () => {
   });
 
   describe('Rendering', () => {
-    it('renders with placeholder when no targets selected', async () => {
+    it('renders with placeholder when no targets selected', () => {
       const onChange = vi.fn();
 
       render(
@@ -59,25 +63,12 @@ describe('TargetSelector', () => {
         </TestWrapper>
       );
 
-      // Wait for targets to load
-      await waitFor(() => {
-        expect(mockApiFetchRaw).toHaveBeenCalledWith(
-          expect.stringContaining('/inventory/targets')
-        );
-      });
-
+      expect(mockUseTargetsPaginated).toHaveBeenCalled();
       expect(screen.getByText('Selectionnez une cible')).toBeInTheDocument();
     });
 
-    it('renders loading state while fetching targets', async () => {
-      // Delay the response
-      mockApiFetchRaw.mockImplementation(
-        () =>
-          new Promise((resolve) =>
-            setTimeout(() => resolve(mockTargetsResponse), 100)
-          )
-      );
-
+    it('renders loading state while fetching targets', () => {
+      mockLoading();
       const onChange = vi.fn();
 
       render(
@@ -90,8 +81,8 @@ describe('TargetSelector', () => {
       expect(screen.getByRole('combobox')).toBeInTheDocument();
     });
 
-    it('displays error message when fetch fails', async () => {
-      mockApiFetchRaw.mockRejectedValue(new Error('Network error'));
+    it('displays error message when fetch fails', () => {
+      mockError('Network error');
 
       const onChange = vi.fn();
 
@@ -101,10 +92,7 @@ describe('TargetSelector', () => {
         </TestWrapper>
       );
 
-      await waitFor(() => {
-        expect(screen.getByText('Erreur')).toBeInTheDocument();
-      });
-
+      expect(screen.getByText('Erreur')).toBeInTheDocument();
       expect(screen.getByText('Network error')).toBeInTheDocument();
     });
   });
@@ -119,11 +107,6 @@ describe('TargetSelector', () => {
         </TestWrapper>
       );
 
-      // Wait for targets to load
-      await waitFor(() => {
-        expect(mockApiFetchRaw).toHaveBeenCalled();
-      });
-
       // Open dropdown
       const select = screen.getByRole('combobox');
       fireEvent.mouseDown(select);
@@ -136,7 +119,7 @@ describe('TargetSelector', () => {
       });
     });
 
-    it('passes correct props to Select component', async () => {
+    it('passes correct props to Select component', () => {
       const selectedTarget: Target = {
         name: 'srv-dev-01',
         environment: 'dev',
@@ -150,10 +133,6 @@ describe('TargetSelector', () => {
           <TargetSelector value={[selectedTarget]} onChange={onChange} />
         </TestWrapper>
       );
-
-      await waitFor(() => {
-        expect(mockApiFetchRaw).toHaveBeenCalled();
-      });
 
       // Verify the combobox is rendered
       const selectContent = screen.getByRole('combobox');
@@ -171,10 +150,6 @@ describe('TargetSelector', () => {
         </TestWrapper>
       );
 
-      await waitFor(() => {
-        expect(mockApiFetchRaw).toHaveBeenCalled();
-      });
-
       // Open dropdown
       const select = screen.getByRole('combobox');
       fireEvent.mouseDown(select);
@@ -190,7 +165,7 @@ describe('TargetSelector', () => {
   });
 
   describe('Search/Filter', () => {
-    it('filters options based on search input', async () => {
+    it('updates search value on input', async () => {
       const onChange = vi.fn();
 
       render(
@@ -199,16 +174,13 @@ describe('TargetSelector', () => {
         </TestWrapper>
       );
 
-      await waitFor(() => {
-        expect(mockApiFetchRaw).toHaveBeenCalled();
-      });
-
       // Open dropdown and type to search
       const select = screen.getByRole('combobox');
       fireEvent.mouseDown(select);
       fireEvent.change(select, { target: { value: 'prod' } });
 
-      // Should show only prod targets
+      // Should show only prod targets (all targets are still shown since hook is mocked,
+      // but the search value is passed to the hook)
       await waitFor(() => {
         expect(screen.getByText('db-prod-01')).toBeInTheDocument();
         expect(screen.getByText('db-prod-02')).toBeInTheDocument();
@@ -217,7 +189,7 @@ describe('TargetSelector', () => {
   });
 
   describe('Disabled state', () => {
-    it('disables the selector when disabled prop is true', async () => {
+    it('disables the selector when disabled prop is true', () => {
       const onChange = vi.fn();
 
       render(
@@ -226,10 +198,6 @@ describe('TargetSelector', () => {
         </TestWrapper>
       );
 
-      await waitFor(() => {
-        expect(mockApiFetchRaw).toHaveBeenCalled();
-      });
-
       // Ant Design adds disabled class to the wrapper div, not the combobox itself
       const selectWrapper = screen.getByRole('combobox').closest('.ant-select');
       expect(selectWrapper).toHaveClass('ant-select-disabled');
@@ -237,7 +205,7 @@ describe('TargetSelector', () => {
   });
 
   describe('Accessibility', () => {
-    it('has correct aria-label', async () => {
+    it('has correct aria-label', () => {
       const onChange = vi.fn();
 
       render(
@@ -249,10 +217,6 @@ describe('TargetSelector', () => {
           />
         </TestWrapper>
       );
-
-      await waitFor(() => {
-        expect(mockApiFetchRaw).toHaveBeenCalled();
-      });
 
       expect(screen.getByLabelText('Custom aria label')).toBeInTheDocument();
     });
@@ -266,13 +230,7 @@ describe('TargetSelector', () => {
         { name: 'srv-qa-01', environment: 'qa', target_type: 'server', metadata: null },
       ];
 
-      mockApiFetchRaw.mockResolvedValue({
-        items: targetsWithNonStandard,
-        total: 3,
-        page: 1,
-        page_size: 100,
-        total_pages: 1,
-      });
+      mockLoaded(targetsWithNonStandard);
 
       const onChange = vi.fn();
 
@@ -281,10 +239,6 @@ describe('TargetSelector', () => {
           <TargetSelector value={[]} onChange={onChange} />
         </TestWrapper>
       );
-
-      await waitFor(() => {
-        expect(mockApiFetchRaw).toHaveBeenCalled();
-      });
 
       const select = screen.getByRole('combobox');
       fireEvent.mouseDown(select);
@@ -304,13 +258,7 @@ describe('TargetSelector', () => {
         { name: 'srv-lab-01', environment: 'lab', target_type: 'server', metadata: null },
       ];
 
-      mockApiFetchRaw.mockResolvedValue({
-        items: targetsWithMixed,
-        total: 4,
-        page: 1,
-        page_size: 100,
-        total_pages: 1,
-      });
+      mockLoaded(targetsWithMixed);
 
       const onChange = vi.fn();
 
@@ -319,10 +267,6 @@ describe('TargetSelector', () => {
           <TargetSelector value={[]} onChange={onChange} />
         </TestWrapper>
       );
-
-      await waitFor(() => {
-        expect(mockApiFetchRaw).toHaveBeenCalled();
-      });
 
       const select = screen.getByRole('combobox');
       fireEvent.mouseDown(select);
@@ -342,13 +286,7 @@ describe('TargetSelector', () => {
     });
 
     it('shows Empty component when targets list is empty after loading', async () => {
-      mockApiFetchRaw.mockResolvedValue({
-        items: [],
-        total: 0,
-        page: 1,
-        page_size: 100,
-        total_pages: 0,
-      });
+      mockLoaded([]);
 
       const onChange = vi.fn();
       render(
@@ -356,10 +294,6 @@ describe('TargetSelector', () => {
           <TargetSelector value={[]} onChange={onChange} />
         </TestWrapper>
       );
-
-      await waitFor(() => {
-        expect(mockApiFetchRaw).toHaveBeenCalled();
-      });
 
       // Open dropdown to see notFoundContent
       const select = screen.getByRole('combobox');
@@ -375,13 +309,7 @@ describe('TargetSelector', () => {
         { name: 'srv-lab-01', environment: 'lab', target_type: 'server', metadata: null },
       ];
 
-      mockApiFetchRaw.mockResolvedValue({
-        items: targetsWithLab,
-        total: 1,
-        page: 1,
-        page_size: 100,
-        total_pages: 1,
-      });
+      mockLoaded(targetsWithLab);
 
       const onChange = vi.fn();
 
@@ -390,10 +318,6 @@ describe('TargetSelector', () => {
           <TargetSelector value={[]} onChange={onChange} />
         </TestWrapper>
       );
-
-      await waitFor(() => {
-        expect(mockApiFetchRaw).toHaveBeenCalled();
-      });
 
       const select = screen.getByRole('combobox');
       fireEvent.mouseDown(select);
@@ -413,28 +337,25 @@ describe('TargetSelector', () => {
 describe('TargetSelector — coverage extras', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockApiFetchRaw.mockResolvedValue(mockTargetsResponse);
+    mockLoaded();
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it('handles multiple selection mode (multiple=true)', async () => {
+  it('handles multiple selection mode (multiple=true)', () => {
     const onChange = vi.fn();
     render(
       <TestWrapper>
         <TargetSelector value={[]} onChange={onChange} multiple={true} />
       </TestWrapper>
     );
-    await waitFor(() => {
-      expect(mockApiFetchRaw).toHaveBeenCalled();
-    });
     const select = screen.getByRole('combobox');
     expect(select).toBeInTheDocument();
   });
 
-  it('calls onChange with target from value when target not in fetched list', async () => {
+  it('calls onChange with target from value when target not in fetched list', () => {
     const extraTarget: Target = { name: 'extra-server', environment: 'dev', target_type: 'server', metadata: null };
     const onChange = vi.fn();
     render(
@@ -442,58 +363,54 @@ describe('TargetSelector — coverage extras', () => {
         <TargetSelector value={[extraTarget]} onChange={onChange} />
       </TestWrapper>
     );
-    await waitFor(() => expect(mockApiFetchRaw).toHaveBeenCalled());
     // Select is rendered with the extra server as the current value
     expect(screen.getByRole('combobox')).toBeInTheDocument();
   });
 
-  it('renders error message for fetch failure without message property', async () => {
-    mockApiFetchRaw.mockRejectedValue({ statusCode: 500 });
+  it('renders error message for fetch failure without message property', () => {
+    mockError('Erreur lors du chargement des cibles');
     const onChange = vi.fn();
     render(
       <TestWrapper>
         <TargetSelector value={[]} onChange={onChange} />
       </TestWrapper>
     );
-    await waitFor(() => {
-      expect(screen.getByText('Erreur')).toBeInTheDocument();
-    });
+    expect(screen.getByText('Erreur')).toBeInTheDocument();
     expect(screen.getByText('Erreur lors du chargement des cibles')).toBeInTheDocument();
   });
 
-  it('refetches when search text changes', async () => {
+  it('passes search term to hook via debounced value', async () => {
     const onChange = vi.fn();
     render(
       <TestWrapper>
         <TargetSelector value={[]} onChange={onChange} />
       </TestWrapper>
     );
-    await waitFor(() => expect(mockApiFetchRaw).toHaveBeenCalledTimes(1));
 
     // Simulate search text change (sets searchValue which triggers debouncedSearch)
     const select = screen.getByRole('combobox');
     fireEvent.mouseDown(select);
     fireEvent.change(select, { target: { value: 'srv-dev' } });
 
-    // Wait for debounce (300ms) + second fetch
+    // Wait for debounce (300ms) — hook should be called with the search term
     await waitFor(() => {
-      expect(mockApiFetchRaw).toHaveBeenCalledTimes(2);
+      const calls = mockUseTargetsPaginated.mock.calls;
+      const lastCall = calls[calls.length - 1];
+      expect(lastCall[0]).toBe('srv-dev');
     }, { timeout: 1000 });
-    expect(mockApiFetchRaw).toHaveBeenLastCalledWith(expect.stringContaining('search=srv-dev'));
   });
 
-  it('uses custom placeholder prop', async () => {
+  it('uses custom placeholder prop', () => {
     const onChange = vi.fn();
     render(
       <TestWrapper>
         <TargetSelector value={[]} onChange={onChange} placeholder="Custom placeholder" />
       </TestWrapper>
     );
-    await waitFor(() => expect(mockApiFetchRaw).toHaveBeenCalled());
     expect(screen.getByText('Custom placeholder')).toBeInTheDocument();
   });
 
-  it('handleChange is invoked when option selected from dropdown (covers lines 161-171)', async () => {
+  it('handleChange is invoked when option selected from dropdown', async () => {
     const onChange = vi.fn();
     render(
       <TestWrapper>
@@ -501,9 +418,7 @@ describe('TargetSelector — coverage extras', () => {
       </TestWrapper>
     );
 
-    await waitFor(() => expect(mockApiFetchRaw).toHaveBeenCalled());
-
-    // Open dropdown via mouseDown (confirmed working in other tests in this file)
+    // Open dropdown via mouseDown
     const select = screen.getByRole('combobox');
     fireEvent.mouseDown(select);
 

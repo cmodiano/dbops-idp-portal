@@ -219,6 +219,17 @@ describe('useActorExecutionSync', () => {
     expect(MockWebSocket.instances).toHaveLength(1);
   });
 
+  it('4.6b — fermeture serveur code 4003 (authz failure) → aucun reconnect, aucun polling', () => {
+    const onStatusUpdate = vi.fn();
+    renderHook(() => useActorExecutionSync([1], onStatusUpdate));
+    const ws = MockWebSocket.instances[0];
+    ws.close(4003);
+
+    vi.advanceTimersByTime(10000);
+    expect(mockGetExecution).not.toHaveBeenCalled();
+    expect(MockWebSocket.instances).toHaveLength(1);
+  });
+
   it('4.7 — quand un ID quitte executionIds, sa WS est fermée et aucun fallback polling ne démarre', () => {
     const onStatusUpdate = vi.fn();
     mockGetExecution.mockResolvedValue(mockExecution(1, 'RUNNING'));

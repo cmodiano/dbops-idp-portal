@@ -158,8 +158,14 @@ export async function handleAuthenticatedFetch(
       endpoint: path,
     });
 
-    // TODO: Add user-facing toast notification on first 429 (requires UI toast service)
-    // Example: toast.info(`Trop de requêtes. Nouvelle tentative dans ${Math.ceil(delay/1000)}s...`)
+    // Notify user on first 429 only (avoid notification spam on subsequent retries)
+    if (retryCount === 0) {
+      _notify('warning', {
+        title: 'Trop de requêtes',
+        description: `Nouvelle tentative dans ${Math.ceil(delay / 1000)}s…`,
+        duration: Math.ceil(delay / 1000) + 2,
+      });
+    }
 
     await sleep(delay);
     retryCount++;

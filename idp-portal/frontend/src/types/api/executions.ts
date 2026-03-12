@@ -59,12 +59,6 @@ export interface ExecutionResponse {
   started_at: string | null;
   completed_at: string | null;
   created_at: string;
-  /** Story 7.4: ID of DBA who approved/rejected. */
-  approved_by?: number | null;
-  /** Story 7.4: Timestamp of approval/rejection. */
-  approved_at?: string | null;
-  /** Story 7.4: Comment from approver. */
-  approval_comment?: string | null;
   /** Story 9.2: Parent execution ID for remediation or workflow child. */
   parent_execution_id?: number | null;
   /** Parent's action item_type: 'workflow' = workflow child, else = remediation. */
@@ -85,13 +79,15 @@ export interface ExecutionResponse {
   integration_icon?: string | null;
   /** Story 25.1/58.2: Targets sélectionnés pour cette exécution. */
   targets?: ExecutionTarget[];
+  /** Story 72.1: ID de corrélation pour traçabilité (audit, logs). */
+  correlation_id?: string | null;
 }
 
 /** Execution step status (Story 4.6, Story 58.3: WAITING ajouté). */
 export type ExecutionStepStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'SKIPPED' | 'WAITING';
 
 /** Execution step type (Story 4.6). */
-export type ExecutionStepTypeApi = 'vault' | 'servicenow' | 'platform' | 'prerequisite' | 'verification' | 'schedule_execution';
+export type ExecutionStepTypeApi = 'vault' | 'servicenow' | 'platform' | 'prerequisite' | 'verification' | 'schedule_execution' | 'gate';
 
 /** Execution step response from GET /executions/{id}/steps (Story 4.6). */
 export interface ExecutionStepResponse {
@@ -108,6 +104,15 @@ export interface ExecutionStepResponse {
   output: Record<string, unknown> | null;
   platform_job_id: string | null;
   error_message: string | null;
+  /** Gate type for gate steps (approval, maintenance_window). */
+  gate_type?: 'maintenance_window' | 'approval' | null;
+  /** ADR-007: Approval fields from ExecutionStep (source of truth since Story 57.1) */
+  approved_by_id?: number | null;
+  approved_at?: string | null;
+  approval_comment?: string | null;
+  /** ADR-007: Rejection fields for gate steps (V118) */
+  rejected_by_id?: number | null;
+  rejected_at?: string | null;
 }
 
 /** Step logs from GET /executions/{id}/steps/{step_id}/logs (Story 4.7, AC6). */

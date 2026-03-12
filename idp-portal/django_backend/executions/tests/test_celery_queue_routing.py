@@ -16,13 +16,6 @@ import pytest
 
 from adapters.registry import adapter_registry
 from executions.tasks.polling import get_platform_queue, poll_platform_job_status
-from executions.tasks import (
-    poll_aap_job_status,
-    poll_tower_job_status,
-    poll_azure_devops_run_status,
-    poll_github_actions_run_status,
-    poll_terraform_cloud_run_status,
-)
 
 
 # ---------------------------------------------------------------------------
@@ -118,90 +111,6 @@ class TestListQueues:
         assert queues.count("aap") == 1
 
 
-# ---------------------------------------------------------------------------
-# Shim backward-compat — apply_async avec la bonne queue (AC2, AC3)
-# ---------------------------------------------------------------------------
-
-
-class TestShimQueueRouting:
-    """Vérifie que les shims backward-compat déclenchent apply_async avec la bonne queue."""
-
-    @patch("executions.tasks.poll_platform_job_status.apply_async")
-    @patch("executions.tasks.get_correlation_id", return_value="test-corr")
-    def test_poll_aap_reschedule_uses_aap_queue(
-        self, mock_corr: MagicMock, mock_apply: MagicMock
-    ) -> None:
-        with patch("adapters.aap_adapter.AAPAdapter") as MockAdapter:
-            MockAdapter.side_effect = Exception("aap timeout")
-            result = poll_aap_job_status(
-                execution_id=1,
-                platform_job_id="job-aap-1",
-                retry_count=0,
-            )
-
-        assert result["outcome"] == "error"
-        mock_apply.assert_called_once()
-        assert mock_apply.call_args[1]["queue"] == "aap"
-
-    @patch("executions.tasks.poll_platform_job_status.apply_async")
-    @patch("executions.tasks.get_correlation_id", return_value="test-corr")
-    def test_poll_tower_reschedule_uses_aap_queue(
-        self, mock_corr: MagicMock, mock_apply: MagicMock
-    ) -> None:
-        with patch("adapters.tower_adapter.TowerAdapter") as MockAdapter:
-            MockAdapter.side_effect = Exception("tower error")
-            poll_tower_job_status(
-                execution_id=2,
-                platform_job_id="job-tower-1",
-                retry_count=0,
-            )
-
-        assert mock_apply.call_args[1]["queue"] == "aap"
-
-    @patch("executions.tasks.poll_platform_job_status.apply_async")
-    @patch("executions.tasks.get_correlation_id", return_value="test-corr")
-    def test_poll_azure_reschedule_uses_azure_queue(
-        self, mock_corr: MagicMock, mock_apply: MagicMock
-    ) -> None:
-        with patch("adapters.azure_devops_adapter.AzureDevOpsAdapter") as MockAdapter:
-            MockAdapter.side_effect = Exception("azure timeout 45s")
-            poll_azure_devops_run_status(
-                execution_id=3,
-                platform_job_id="run-azure-1",
-                retry_count=0,
-            )
-
-        assert mock_apply.call_args[1]["queue"] == "azure"
-
-    @patch("executions.tasks.poll_platform_job_status.apply_async")
-    @patch("executions.tasks.get_correlation_id", return_value="test-corr")
-    def test_poll_github_reschedule_uses_github_queue(
-        self, mock_corr: MagicMock, mock_apply: MagicMock
-    ) -> None:
-        with patch("adapters.github_actions_adapter.GitHubActionsAdapter") as MockAdapter:
-            MockAdapter.side_effect = Exception("github error")
-            poll_github_actions_run_status(
-                execution_id=4,
-                platform_job_id="run-gh-1",
-                retry_count=0,
-            )
-
-        assert mock_apply.call_args[1]["queue"] == "github"
-
-    @patch("executions.tasks.poll_platform_job_status.apply_async")
-    @patch("executions.tasks.get_correlation_id", return_value="test-corr")
-    def test_poll_terraform_reschedule_uses_terraform_queue(
-        self, mock_corr: MagicMock, mock_apply: MagicMock
-    ) -> None:
-        with patch("adapters.terraform_cloud_adapter.TerraformCloudAdapter") as MockAdapter:
-            MockAdapter.side_effect = Exception("terraform error")
-            poll_terraform_cloud_run_status(
-                execution_id=5,
-                platform_job_id="run-tf-1",
-                retry_count=0,
-            )
-
-        assert mock_apply.call_args[1]["queue"] == "terraform"
 
 
 # ---------------------------------------------------------------------------
@@ -408,26 +317,23 @@ class TestBulkheadIsolation:
 
 
 class TestCeleryTaskRoutesConsistency:
-    """Vérifie que CELERY_TASK_ROUTES (dynamique) est cohérent avec le registry."""
+    """Vérifie que CELERY_TASK_ROUTES est cohérent avec le registry."""
 
-    def test_celery_task_routes_shims_match_registry_queues(self) -> None:
-        """CELERY_TASK_ROUTES[shim] doit pointer vers la même queue que registry.get_queue()."""
+    def test_celery_task_routes_no_shim_entries(self) -> None:
+        """Shim task routes have been removed from CELERY_TASK_ROUTES."""
         from django.conf import settings
 
-        expected_shim_routes = {
-            "executions.tasks.poll_aap_job_status": adapter_registry.get_queue("aap"),
-            "executions.tasks.poll_tower_job_status": adapter_registry.get_queue("tower"),
-            "executions.tasks.poll_azure_devops_run_status": adapter_registry.get_queue("azure_devops"),
-            "executions.tasks.poll_github_actions_run_status": adapter_registry.get_queue("github_actions"),
-            "executions.tasks.poll_terraform_cloud_run_status": adapter_registry.get_queue("terraform_cloud"),
-        }
+        removed_shim_tasks = [
+            "executions.tasks.poll_aap_job_status",
+            "executions.tasks.poll_tower_job_status",
+            "executions.tasks.poll_azure_devops_run_status",
+            "executions.tasks.poll_github_actions_run_status",
+            "executions.tasks.poll_terraform_cloud_run_status",
+        ]
         routes = getattr(settings, "CELERY_TASK_ROUTES", {})
-        for task_name, expected_queue in expected_shim_routes.items():
-            assert task_name in routes, f"Task {task_name!r} absente de CELERY_TASK_ROUTES"
-            actual_queue = routes[task_name].get("queue")
-            assert actual_queue == expected_queue, (
-                f"{task_name}: CELERY_TASK_ROUTES='{actual_queue}' "
-                f"!= registry.get_queue()='{expected_queue}'"
+        for task_name in removed_shim_tasks:
+            assert task_name not in routes, (
+                f"Shim task {task_name!r} should have been removed from CELERY_TASK_ROUTES"
             )
 
     def test_celery_task_routes_beat_tasks_on_default(self) -> None:

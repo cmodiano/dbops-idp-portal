@@ -215,8 +215,7 @@ export function WizardStep2Automatisme({
             label="Paramètres"
             tooltip="Définissez les paramètres de l'action (extra_vars, etc.)."
           >
-            {/* TODO: Add disabled prop to ParametersEditor */}
-            <ParametersEditor value={parameterList} onChange={isReadOnly ? () => {} : setParameterList} />
+            <ParametersEditor value={parameterList} onChange={setParameterList} disabled={isReadOnly} />
           </Form.Item>
         </>
       )}

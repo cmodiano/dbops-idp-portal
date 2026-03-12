@@ -273,6 +273,15 @@ Pattern commit pour cette story : `feat(story-66-15): revue qualité du module c
 | CAT-NEW-03 | `views/action_views.py:update_remediation_rules` | Convention | MEDIUM | `update_remediation_rules` sauvegarde sans audit log — incohérent avec toutes les autres mutations du module | **Appliqué** (code review) : ajout `AuditService.create_entry()` avec `AuditActionType.ACTION_UPDATED` |
 | CAT-NEW-04 | `services_export_import.py:import_action_yaml` | Convention | LOW | `AuditService.create_entry()` sans `correlation_id` — incohérent avec les autres audits | **Appliqué** (code review) : import `get_correlation_id` + ajout `correlation_id=get_correlation_id()` |
 | CAT-NEW-05 | `views/catalog_views.py:get_queryset` | Qualité | LOW | Paramètre OpenAPI `favorites_only` déclaré (l.39) mais non implémenté dans `get_queryset()` — feature stub sans comportement | Documenté — implémentation future (hors périmètre pre-release) |
+| CR2-CRIT-01 | Story File List | Documentation | CRITICAL | 14 fichiers modifiés dans `executions/`, `core/` et `tests/integration/` non documentés dans la File List de la story | **Appliqué** (code review v1.2) : File List mise à jour avec les 21 fichiers réels |
+| CR2-HIGH-01 | `catalog/services.py:732,754` | Bug | HIGH | `add_tags()` et `remove_tags()` non atomiques — erreur mi-boucle laisse les tags dans un état incohérent | **Appliqué** (code review v1.2) : `@transaction.atomic` ajouté sur `add_tags()` et `remove_tags()` |
+| CR2-MED-01 | `executions/scheduling_service.py:106` | Bug | MEDIUM | `SchedulingService.list_all()` sans cap `MAX_PAGE_SIZE` — même pattern que BE-CAT-001, non corrigé ici | **Appliqué** (code review v1.2) : `page_size = min(page_size, MAX_PAGE_SIZE)` + import `MAX_PAGE_SIZE` |
+| CR2-MED-02 | `executions/scheduling_service.py:133` | Bug | MEDIUM | Filtre date avec JOIN `recurringpattern` produit des doublons — manque `.distinct()` | **Appliqué** (code review v1.2) : `.distinct()` ajouté sur le queryset |
+| CR2-MED-03 | `executions/scheduling_service.py:191` | Bug | MEDIUM | `hasattr(scheduled_execution, 'recurringpattern')` non fiable sur OneToOne Django — peut masquer `DoesNotExist` | **Appliqué** (code review v1.2) : remplacé par `try/except RecurringPattern.DoesNotExist` |
+| CR2-MED-04 | `tests/integration/test_action_lifecycle.py`, `test_audit_trail.py` | Test | MEDIUM | Tests d'intégration appellent `AuditLog.objects.create_entry()` directement — bypass `AuditService`, ne teste pas le vrai chemin de code | **Appliqué** (code review v1.2) : migration vers `AuditService.create_entry()` + format Story 72.2 |
+| CR2-LOW-01 | `executions/tasks/trigger.py:17` | Convention | LOW | `structlog.get_logger("executions.tasks")` hardcodé au lieu de `__name__` | **Appliqué** (code review v1.2) : `structlog.get_logger(__name__)` |
+| CR2-LOW-02 | `catalog/services.py:871` | Convention | LOW | `update_execution_steps()` audit sans `correlation_id` — incohérent avec toutes les autres méthodes | **Appliqué** (code review v1.2) : `correlation_id=get_correlation_id()` ajouté |
+| CR2-LOW-03 | `executions/scheduling_service.py:78,91` | Convention | LOW | Audits `create_scheduled_execution()` sans `correlation_id` | **Appliqué** (code review v1.2) : `correlation_id=get_correlation_id()` ajouté sur les deux appels |
 
 ### References
 
@@ -313,6 +322,7 @@ claude-sonnet-4-6
 - 5 findings LOW corrigés : `correlation_id` dans `update_status()`, suppression double `.count()` debug, pattern structlog dans `validators.py`, assertion test élargie dans `test_parallel_group_validation.py`, `correlation_id` dans `import_action_yaml`
 - 6 findings LOW documentés (hors périmètre pre-release) : validation cron schedule, bornes retry, JSON Schema Draft 7, iterator() exports, cohérence AuditService vs AuditLog, paramètre `favorites_only` non implémenté
 - Tests : 871 tests passés sans régression après corrections (re-vérifiés post code review)
+- **Code review adversarial v2 (2026-03-11)** : 1 CRITICAL (File List 14 fichiers manquants documentés), 1 HIGH (`add_tags()`/`remove_tags()` rendus atomiques), 4 MEDIUM (`MAX_PAGE_SIZE` dans `SchedulingService.list_all()`, `.distinct()` sur filtres date+JOIN, `hasattr()` OneToOne corrigé, tests intégration migrés vers `AuditService`), 3 LOW (logger `trigger.py` → `__name__`, `correlation_id` dans `update_execution_steps()` et `create_scheduled_execution()`) corrigés
 
 ### File List
 
@@ -323,6 +333,20 @@ claude-sonnet-4-6
 - `idp-portal/django_backend/catalog/views/catalog_views.py`
 - `idp-portal/django_backend/catalog/views/action_views.py`
 - `idp-portal/django_backend/catalog/tests/test_parallel_group_validation.py`
+- `idp-portal/django_backend/core/utils.py`
+- `idp-portal/django_backend/executions/container_workflow_runtime.py`
+- `idp-portal/django_backend/executions/scheduling_service.py`
+- `idp-portal/django_backend/executions/services.py`
+- `idp-portal/django_backend/executions/tasks/gates.py`
+- `idp-portal/django_backend/executions/tasks/polling.py`
+- `idp-portal/django_backend/executions/tasks/reconcile.py`
+- `idp-portal/django_backend/executions/tasks/trigger.py`
+- `idp-portal/django_backend/executions/workflow_runtime.py`
+- `idp-portal/django_backend/executions/workflow_step_executor.py`
+- `idp-portal/django_backend/executions/tests/test_scheduling_service.py`
+- `idp-portal/django_backend/executions/tests/test_services.py`
+- `idp-portal/django_backend/tests/integration/test_action_lifecycle.py`
+- `idp-portal/django_backend/tests/integration/test_audit_trail.py`
 
 ### Change Log
 
@@ -330,3 +354,4 @@ claude-sonnet-4-6
 |------|---------|-------------|--------|
 | 2026-03-09 | 1.0 | Revue qualité module catalog/ — 10 corrections appliquées (1 HIGH, 4 MEDIUM, 5 LOW) | claude-sonnet-4-6 |
 | 2026-03-09 | 1.1 | Code review adversarial — 3 MEDIUM corrigés (structlog extra= résiduel, atomicité mutex POST, audit update_remediation_rules) + 1 LOW corrigé (correlation_id import audit) | claude-sonnet-4-6 |
+| 2026-03-11 | 1.2 | Code review adversarial v2 — 1 CRITICAL (File List), 1 HIGH (add/remove_tags atomicité), 4 MEDIUM (MAX_PAGE_SIZE scheduling, distinct() doublons, hasattr OneToOne, tests AuditService), 3 LOW (logger trigger, correlation_id audits) corrigés | claude-sonnet-4-6 |

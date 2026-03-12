@@ -13,7 +13,7 @@ import { HEALTH_CONFIG } from '../../utils/healthConfig';
 import { useIntegrationValidation } from '../../hooks/useIntegrationValidation';
 import { formatLocalDate, formatLocalDateTime } from '../../utils/dateFormat';
 
-// Statut intégration (admin) — domaine distinct, config locale justifiée (SOLID-FE-10, Story 48.5 2026-02-26).
+// Statut intégration (admin) — domaine distinct, config locale justifiée (SOLID-FE-10, Story 48.5, §16.4).
 // Clés = IntegrationStatusType (valid/invalid/deprecated) ≠ statuts d'exécution (SUBMITTED/RUNNING/COMPLETED…).
 // Format { color, text } différent de { color: BadgeStatusType, label } dans execution-status.ts.
 // Seul consommateur = IntegrationsTable → extraction vers utils/integration-status.ts non justifiée.

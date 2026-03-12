@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { Form } from 'antd';
 import { WizardStep1General, type WizardStep1GeneralProps } from './WizardStep1General';
 
@@ -169,7 +170,13 @@ describe('WizardStep1General — coverage extras', () => {
           <WizardStep1General {...defaultProps} form={form} />
           <button
             type="button"
-            onClick={() => form.validateFields(['name'])}
+            onClick={async () => {
+              try {
+                await form.validateFields(['name']);
+              } catch {
+                // expected validation error when checkName returns false
+              }
+            }}
           >
             Validate
           </button>
@@ -269,6 +276,149 @@ describe('WizardStep1General — coverage extras', () => {
 
     await waitFor(() => {
       expect(mockCheckName).toHaveBeenCalledWith('UpdatedAction', 42);
+    });
+  });
+
+  it('le validateur rejette avec le message attendu quand checkName retourne false', async () => {
+    mockCheckName.mockResolvedValue(false);
+
+    function FormWrapper() {
+      const [form] = Form.useForm();
+      return (
+        <Form form={form} name="testReject">
+          <WizardStep1General {...defaultProps} form={form} />
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await form.validateFields(['name']);
+              } catch {
+                // expected validation error when checkName returns false
+              }
+            }}
+          >
+            Validate
+          </button>
+        </Form>
+      );
+    }
+
+    render(<FormWrapper />);
+    const nameInput = screen.getByRole('textbox', { name: /Nom de l'action/i });
+    await userEvent.type(nameInput, 'DuplicateAction');
+    fireEvent.blur(nameInput);
+
+    const validateBtn = screen.getByRole('button', { name: 'Validate' });
+    await userEvent.click(validateBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Une action ou un workflow avec ce nom existe déjà/i)).toBeInTheDocument();
+    });
+  });
+
+  it('Tags Select onChange appelle setSelectedTags avec un tableau', async () => {
+    const setSelectedTags = vi.fn();
+    renderWithForm({ ...defaultProps, setSelectedTags, tagsOptions: [{ value: 'tag1', label: 'tag1' }] });
+
+    const tagsSelect = screen.getByRole('combobox', { name: /Tags/i });
+    await userEvent.click(tagsSelect);
+    // In tags mode, typing and Enter adds a tag - triggers onChange with array of strings
+    await userEvent.type(tagsSelect, 'newtag{Enter}');
+
+    await waitFor(() => {
+      expect(setSelectedTags).toHaveBeenLastCalledWith(expect.arrayContaining(['newtag']));
+    });
+  });
+
+  it('Catégorie Select avec allowClear permet de vider la sélection', async () => {
+    let formInstance: ReturnType<typeof Form.useForm>[0];
+    function FormWrapper() {
+      const [form] = Form.useForm();
+      formInstance = form;
+      return (
+        <Form form={form} initialValues={{ category: 'cat1' }}>
+          <WizardStep1General
+            {...defaultProps}
+            form={form}
+            categoryOptions={[{ value: 'cat1', label: 'Cat1' }, { value: 'cat2', label: 'Cat2' }]}
+          />
+        </Form>
+      );
+    }
+
+    render(<FormWrapper />);
+    const categorySelect = screen.getByRole('combobox', { name: /Catégorie/i });
+    await userEvent.click(categorySelect);
+    // Clear the selection - antd Select shows clear icon when value is set
+    const clearBtn = document.querySelector('.ant-select-clear');
+    if (clearBtn) {
+      await userEvent.click(clearBtn as HTMLElement);
+    }
+    expect(formInstance!.getFieldValue('category')).toBeUndefined();
+  });
+
+  it('description accepte jusqu\'à 4000 caractères', async () => {
+    function FormWrapper() {
+      const [form] = Form.useForm();
+      return (
+        <Form form={form} name="testDesc">
+          <WizardStep1General {...defaultProps} form={form} />
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await form.validateFields(['description']);
+              } catch {
+                // expected validation error if description exceeds limit
+              }
+            }}
+          >
+            Validate
+          </button>
+        </Form>
+      );
+    }
+
+    render(<FormWrapper />);
+    const descInput = screen.getByRole('textbox', { name: /Description/i });
+    fireEvent.change(descInput, { target: { value: 'x'.repeat(4000) } });
+
+    const validateBtn = screen.getByRole('button', { name: 'Validate' });
+    await userEvent.click(validateBtn);
+
+    await waitFor(() => {
+      expect(screen.queryByText(/La description ne peut pas dépasser 4000 caractères/i)).not.toBeInTheDocument();
+    });
+  });
+
+  it('item_type est requis quand showTypeSelector=true', async () => {
+    function FormWrapper() {
+      const [form] = Form.useForm();
+      return (
+        <Form form={form} name="testType" initialValues={{ name: 'X', description: 'Y' }}>
+          <WizardStep1General {...defaultProps} form={form} showTypeSelector={true} />
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await form.validateFields();
+              } catch {
+                // expected validation error when item_type is required but not set
+              }
+            }}
+          >
+            Submit
+          </button>
+        </Form>
+      );
+    }
+
+    render(<FormWrapper />);
+    const submitBtn = screen.getByRole('button', { name: 'Submit' });
+    await userEvent.click(submitBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Le type est requis/i)).toBeInTheDocument();
     });
   });
 });

@@ -833,10 +833,10 @@ class TestExecutionIsPendingApproval(TestCase):
             platform='AAP'
         )
 
-    def test_is_pending_approval_true_when_status_pending_approval(self):
+    def test_is_pending_approval_false_when_status_pending_approval_no_steps(self):
         """
-        AC#6 / backward compat : is_pending_approval == True si status == PENDING_APPROVAL
-        même sans aucun ExecutionStep WAITING.
+        ADR-007: is_pending_approval is step-based only. PENDING_APPROVAL status
+        without WAITING steps returns False (legacy status is dead).
         """
         execution = Execution.objects.create(
             action=self.action,
@@ -844,7 +844,7 @@ class TestExecutionIsPendingApproval(TestCase):
             environment='production',
             status=ExecutionStatus.PENDING_APPROVAL,
         )
-        self.assertTrue(execution.is_pending_approval)
+        self.assertFalse(execution.is_pending_approval)
 
     def test_is_pending_approval_true_when_step_waiting(self):
         """

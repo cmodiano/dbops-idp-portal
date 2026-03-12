@@ -18,6 +18,8 @@ from django.test import override_settings
 from core.permissions import (
     AdminProfilePermission,
     IsAdminUser,
+    IsAuditorUser,
+    is_auditor_user,
 )
 
 
@@ -788,3 +790,136 @@ class TestOptionalUserPermission:
         permission = OptionalUserPermission()
 
         assert permission.has_permission(request, MagicMock()) is True
+
+
+# ============================================================================
+# is_auditor_user + IsAuditorUser — Story 71.9 (AC#7)
+# ============================================================================
+
+@pytest.mark.unit
+class TestIsAuditorUserFunction:
+    """Tests for is_auditor_user() function."""
+
+    def test_none_user_returns_false(self) -> None:
+        assert is_auditor_user(None) is False
+
+    def test_unauthenticated_user_returns_false(self) -> None:
+        user = _make_user(is_authenticated=False)
+        assert is_auditor_user(user) is False
+
+    def test_auditor_via_ad_groups(self) -> None:
+        """User with ad_groups resolving to auditor profile → True."""
+        user = _make_user(ad_groups=["GRP-AUDITOR"])
+        mock_profile = MagicMock()
+        mock_profile.is_auditor = 1
+        with patch(FIND_BY_AD_GROUPS, return_value=[mock_profile]):
+            assert is_auditor_user(user) is True
+
+    def test_non_auditor_via_ad_groups(self) -> None:
+        """User with ad_groups resolving to non-auditor profile → False."""
+        user = _make_user(ad_groups=["GRP-DBA"])
+        mock_profile = MagicMock()
+        mock_profile.is_auditor = 0
+        with patch(FIND_BY_AD_GROUPS, return_value=[mock_profile]):
+            assert is_auditor_user(user) is False
+
+    def test_auditor_via_profile_string(self) -> None:
+        """User with profile string resolving to auditor → True."""
+        user = _make_user(profile="AUDITOR")
+        with patch(PROFILE_FILTER) as mock_filter:
+            mock_p = MagicMock()
+            mock_p.is_auditor = 1
+            mock_filter.return_value.first.return_value = mock_p
+            assert is_auditor_user(user) is True
+
+    def test_non_auditor_via_profile_string(self) -> None:
+        """User with profile string resolving to non-auditor → False."""
+        user = _make_user(profile="DBA")
+        with patch(PROFILE_FILTER) as mock_filter:
+            mock_p = MagicMock()
+            mock_p.is_auditor = 0
+            mock_filter.return_value.first.return_value = mock_p
+            assert is_auditor_user(user) is False
+
+    def test_no_profiles_returns_false(self) -> None:
+        """User with no profiles/ad_groups/profile string → False."""
+        user = _make_user()
+        assert is_auditor_user(user) is False
+
+    def test_multiple_profiles_one_auditor(self) -> None:
+        """User with multiple profiles, one is auditor → True."""
+        user = _make_user(ad_groups=["GRP-DBA", "GRP-AUDITOR"])
+        dba = MagicMock()
+        dba.is_auditor = 0
+        auditor = MagicMock()
+        auditor.is_auditor = 1
+        with patch(FIND_BY_AD_GROUPS, return_value=[dba, auditor]):
+            assert is_auditor_user(user) is True
+
+    def test_profile_without_is_auditor_attr(self) -> None:
+        """Profile without is_auditor attribute → getattr default 0 → False."""
+        user = _make_user(ad_groups=["GRP-CUSTOM"])
+        mock_profile = MagicMock(spec=[])
+        with patch(FIND_BY_AD_GROUPS, return_value=[mock_profile]):
+            assert is_auditor_user(user) is False
+
+    def test_auditor_via_profiles_m2m(self) -> None:
+        """User with profiles M2M containing auditor → True."""
+        auditor_profile = MagicMock()
+        auditor_profile.is_auditor = 1
+        profiles_qs = MagicMock()
+        profiles_qs.all.return_value = [auditor_profile]
+        user = _make_user(profile=None, profiles=profiles_qs)
+        assert is_auditor_user(user) is True
+
+    def test_db_error_returns_false(self) -> None:
+        """OperationalError during profile resolution → fail-secure (False)."""
+        user = _make_user(ad_groups=["GRP-AUDITOR"])
+        with patch(FIND_BY_AD_GROUPS, side_effect=OperationalError("DB unavailable")):
+            assert is_auditor_user(user) is False
+
+
+@pytest.mark.unit
+class TestIsAuditorUserPermission:
+    """Tests for IsAuditorUser permission class."""
+
+    def test_has_permission_auditor(self) -> None:
+        """Auditor user → permission granted."""
+        user = _make_user(ad_groups=["GRP-AUDITOR"])
+        request = _make_request(user)
+        mock_profile = MagicMock()
+        mock_profile.is_auditor = 1
+        with patch(FIND_BY_AD_GROUPS, return_value=[mock_profile]):
+            assert IsAuditorUser().has_permission(request, None) is True
+
+    def test_has_permission_non_auditor(self) -> None:
+        """Non-auditor user → permission denied."""
+        user = _make_user(ad_groups=["GRP-DBA"])
+        request = _make_request(user)
+        mock_profile = MagicMock()
+        mock_profile.is_auditor = 0
+        with patch(FIND_BY_AD_GROUPS, return_value=[mock_profile]):
+            assert IsAuditorUser().has_permission(request, None) is False
+
+    def test_has_permission_unauthenticated(self) -> None:
+        """Unauthenticated user → permission denied."""
+        user = _make_user(is_authenticated=False)
+        request = _make_request(user)
+        assert IsAuditorUser().has_permission(request, None) is False
+
+    def test_has_permission_no_profiles(self) -> None:
+        """User without any profiles → permission denied."""
+        user = _make_user()
+        request = _make_request(user)
+        assert IsAuditorUser().has_permission(request, None) is False
+
+    def test_has_permission_multiple_profiles_one_auditor(self) -> None:
+        """Multiple profiles, one auditor → permission granted."""
+        user = _make_user(ad_groups=["GRP-DBA", "GRP-AUDITOR"])
+        request = _make_request(user)
+        dba = MagicMock()
+        dba.is_auditor = 0
+        auditor = MagicMock()
+        auditor.is_auditor = 1
+        with patch(FIND_BY_AD_GROUPS, return_value=[dba, auditor]):
+            assert IsAuditorUser().has_permission(request, None) is True

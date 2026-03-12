@@ -43,6 +43,8 @@ export interface ExecutionTimelineProps {
   onExecutionUpdate?: (execution: ExecutionResponse) => void;
   /** Story 65.6: workflow steps for parallel_group grouping in timeline (AC: #3, #6). */
   workflowSteps?: WorkflowStep[];
+  /** Story 72.1: correlation_id pour traçabilité (affiché dans chaque step). */
+  correlationId?: string | null;
 }
 
 export function ExecutionTimeline({
@@ -57,6 +59,7 @@ export function ExecutionTimeline({
   embedInWorkflowStepDrawer = false,
   onExecutionUpdate,
   workflowSteps,
+  correlationId,
 }: ExecutionTimelineProps) {
   const { steps, execution, loading, error, isPolling, useRealtime, lastMessage } = useExecutionData({
     executionId,
@@ -147,6 +150,7 @@ export function ExecutionTimeline({
         onToggleExpand={(id) => setExpandedId(expandedId === id ? null : id)}
         onOpenLogs={setLogsDrawerStepId}
         workflowSteps={workflowSteps}
+        correlationId={correlationId ?? execution?.correlation_id ?? undefined}
       />
 
       <StepLogsDrawer

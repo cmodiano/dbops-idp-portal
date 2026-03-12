@@ -39,7 +39,7 @@ class TestGateHandler:
             'gate_type': 'maintenance_window',
             'timeout_hours': 48,
             'on_timeout': 'FAIL',
-            'on_success_step_id': 'create-change',
+            'on_success_step_ids': ['create-change'],
         }
         result = self.handler.execute(
             step_config=step_config,
@@ -79,7 +79,7 @@ class TestGateHandler:
             'gate_type': 'approval',
             'timeout_hours': 72,
             'context_from': ['tf-plan', 'pre-check'],
-            'on_success_step_id': 'execute-action',
+            'on_success_step_ids': ['execute-action'],
         }
         result = self.handler.execute(
             step_config=step_config,
@@ -275,8 +275,10 @@ class TestExecuteHandlerStepWaitingProtocol:
         assert result == ExecutionStatus.RUNNING
         # parent_step.status doit être WAITING
         assert mock_step.status == ExecutionStepStatus.WAITING
-        # set_output appelé avec gate_output
-        mock_step.set_output.assert_called_once_with(gate_result['gate_output'])
+        # set_output appelé avec gate_output + gate_type (Story 72.3: ajouté par _handle_gate_waiting)
+        expected_output = dict(gate_result['gate_output'])
+        expected_output['gate_type'] = 'maintenance_window'
+        mock_step.set_output.assert_called_once_with(expected_output)
         # save appelé
         mock_step.save.assert_called()
         # completed_at NE DOIT PAS être setté
@@ -375,7 +377,7 @@ class TestResumeContainerWorkflowFromGate:
 
     @pytest.mark.django_db
     def test_step_not_found_returns_step_not_found(self):
-        """Si on_success_step_id absent de action.execution_steps → retourne step_not_found."""
+        """Si on_success_step_ids absent de action.execution_steps → retourne step_not_found."""
         from executions.tasks.gates import resume_container_workflow_from_gate
         from executions.models import Execution, ExecutionStatus, ExecutionStep
 
@@ -389,6 +391,7 @@ class TestResumeContainerWorkflowFromGate:
             with patch.object(Execution.objects, 'select_related') as mock_qs:
                 mock_qs.return_value.get.return_value = mock_execution
                 with patch.object(ExecutionStep.objects, 'filter') as mock_filter:
+                    mock_filter.return_value.exists.return_value = False  # target_steps_exist
                     mock_filter.return_value.order_by.return_value = []
                     result = resume_container_workflow_from_gate.run(execution_id=1, on_success_step_ids='missing-step')
 
@@ -433,6 +436,7 @@ class TestResumeContainerWorkflowFromGate:
             with patch.object(Execution.objects, 'select_related') as mock_qs:
                 mock_qs.return_value.get.return_value = mock_execution
                 with patch.object(ExecutionStep.objects, 'filter') as mock_filter:
+                    mock_filter.return_value.exists.return_value = False  # target_steps_exist
                     mock_filter.return_value.order_by.return_value = [mock_db_step]
                     with patch.object(ContainerWorkflowRuntime, '__init__', fake_runtime_init):
                         with patch.object(ContainerWorkflowRuntime, '_execute_workflow_steps', return_value=None):
@@ -475,7 +479,7 @@ class TestTransitionStepToRunningADR007:
 
     @pytest.mark.django_db
     def test_adr007_step_with_on_success_calls_resume_task(self):
-        """AC#6 : step ADR-007 avec on_success_step_id → resume_container_workflow_from_gate.apply_async."""
+        """AC#6 : step ADR-007 avec on_success_step_ids → resume_container_workflow_from_gate.apply_async."""
         from executions.tasks.gates import _transition_step_to_running, resume_container_workflow_from_gate
         from executions.models import ExecutionStep
 
@@ -483,7 +487,7 @@ class TestTransitionStepToRunningADR007:
             'name': 'Wait Gate',
             'step_type': 'gate',
             'gate_type': 'maintenance_window',
-            'on_success_step_id': 'next-step',
+            'on_success_step_ids': ['next-step'],
         }
         mock_step = self._make_step(step_name='Wait Gate', execution_steps=[step_def])
         gate_status = {'satisfied': True, 'conditions': []}
@@ -497,13 +501,13 @@ class TestTransitionStepToRunningADR007:
                     _transition_step_to_running(mock_step, gate_status, 'corr-123')
 
         mock_apply.assert_called_once_with(
-            args=[mock_step.execution_id, 'next-step'],
+            args=[mock_step.execution_id, ['next-step']],
             queue='default',
         )
 
     @pytest.mark.django_db
     def test_adr007_step_without_on_success_completes_execution(self):
-        """AC#6 : step ADR-007 sans on_success_step_id (gate final) → atomic update to COMPLETED."""
+        """AC#6 : step ADR-007 sans on_success_step_ids (gate final) → atomic update to COMPLETED."""
         from executions.tasks.gates import _transition_step_to_running
         from executions.models import Execution, ExecutionStep, ExecutionStatus
 
@@ -511,7 +515,7 @@ class TestTransitionStepToRunningADR007:
             'name': 'Final Gate',
             'step_type': 'gate',
             'gate_type': 'maintenance_window',
-            # pas de on_success_step_id
+            # pas de on_success_step_ids
         }
         mock_execution = MagicMock()
         mock_execution.id = 1

@@ -1,9 +1,9 @@
 """Validation du payload de création d'exécution."""
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
-from catalog.models import Action
+from catalog.models import Action, ActionStatus
 from core.exceptions import BadRequestError, NotFoundError
 
 import structlog
@@ -13,6 +13,55 @@ logger = structlog.get_logger(__name__)
 
 class ExecutionPayloadValidator:
     """Valide la structure du payload de création d'exécution."""
+
+    @staticmethod
+    def validate_action(action_id: Any) -> Action:
+        """Validate action_id and return the published Action.
+
+        Raises:
+            BadRequestError: If action_id is missing or invalid.
+            NotFoundError: If action not found or not published.
+        """
+        if not action_id:
+            raise BadRequestError(
+                code="BAD_REQUEST",
+                message="action_id est requis",
+                details={"action_id": action_id},
+            )
+        if isinstance(action_id, bool):
+            raise BadRequestError(
+                code="BAD_REQUEST",
+                message="action_id invalide (bool non accepté)",
+                details={"action_id": action_id},
+            )
+        if isinstance(action_id, float) and not action_id.is_integer():
+            raise BadRequestError(
+                code="BAD_REQUEST",
+                message="action_id invalide (float non entier)",
+                details={"action_id": action_id},
+            )
+        if isinstance(action_id, str) and not action_id.isdigit():
+            raise BadRequestError(
+                code="BAD_REQUEST",
+                message="action_id invalide (chaîne non numérique)",
+                details={"action_id": action_id},
+            )
+        try:
+            normalized_action_id = int(action_id)
+        except (ValueError, TypeError):
+            raise BadRequestError(
+                code="BAD_REQUEST",
+                message="action_id invalide",
+                details={"action_id": action_id},
+            )
+        try:
+            return cast(Action, Action.objects.get(id=normalized_action_id, status=ActionStatus.PUBLISHED))
+        except Action.DoesNotExist:
+            raise NotFoundError(
+                code="ACTION_NOT_FOUND",
+                message="Action non trouvée",
+                details={"action_id": normalized_action_id},
+            )
 
     @staticmethod
     def validate(payload: dict, request: Any) -> dict:
@@ -33,7 +82,18 @@ class ExecutionPayloadValidator:
         action_id = payload.get("action_id")
         environment = payload.get("environment")
         target_names = payload.get("target_names")
-        parameters = dict(payload.get("parameters") or {})  # CRIT-6: Copy to avoid mutation
+        raw_parameters = payload.get("parameters")
+        if raw_parameters is None:
+            parameters: dict[str, Any] = {}
+        elif isinstance(raw_parameters, dict):
+            # CRIT-6: Copy to avoid mutation
+            parameters = dict(raw_parameters)
+        else:
+            raise BadRequestError(
+                code="BAD_REQUEST",
+                message="parameters doit être un objet JSON (dictionnaire)",
+                details={"parameters_type": type(raw_parameters).__name__},
+            )
         workflow_step_parameters = payload.get("workflow_step_parameters")
         parent_execution_id = payload.get("parent_execution_id")
 
@@ -44,19 +104,7 @@ class ExecutionPayloadValidator:
             or get_correlation_id()
         )
 
-        if not action_id:
-            raise BadRequestError(
-                code="BAD_REQUEST",
-                message="action_id est requis",
-                details={"action_id": action_id},
-            )
-
-        try:
-            action = Action.objects.get(id=int(action_id), status="published")
-        except (ValueError, TypeError):
-            raise BadRequestError(code="BAD_REQUEST", message="action_id invalide", details={"action_id": action_id})
-        except Action.DoesNotExist:
-            raise NotFoundError(code="ACTION_NOT_FOUND", message="Action non trouvée", details={"action_id": action_id})
+        action = ExecutionPayloadValidator.validate_action(action_id)
 
         # Story 13.4, AC2: Validate target_names vs requires_target
         requires_target = getattr(action, 'requires_target', True)
@@ -66,13 +114,13 @@ class ExecutionPayloadValidator:
                 raise BadRequestError(
                     code="BAD_REQUEST",
                     message="target_names est requis pour cette action",
-                    details={"action_id": action_id, "requires_target": True},
+                    details={"action_id": action.id, "requires_target": True},
                 )
             if environment:
                 logger.warning(
                     "deprecated_environment_with_targets",
                     message="environment fourni avec target_names sera ignoré (dérivé du target)",
-                    action_id=action_id,
+                    action_id=action.id,
                     environment=environment,
                     correlation_id=correlation_id,
                 )
@@ -92,7 +140,7 @@ class ExecutionPayloadValidator:
 
         return {
             'action': action,
-            'action_id': action_id,
+            'action_id': action.id,
             'environment': environment,
             'target_names': target_names,
             'parameters': parameters,

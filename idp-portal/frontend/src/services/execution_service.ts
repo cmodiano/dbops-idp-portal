@@ -7,36 +7,6 @@
 
 import { apiFetch, apiFetchRaw } from './api_client';
 import logger from './logger';
-
-/** Target from inventory API (for pattern/manual resolution). */
-export interface InventoryTarget {
-  name: string;
-  environment: string;
-  target_type: string;
-  metadata: Record<string, unknown> | null;
-}
-
-/** Response from GET /inventory/targets */
-interface TargetsResponse {
-  items: InventoryTarget[];
-  total: number;
-  page: number;
-  page_size: number;
-  total_pages: number;
-}
-
-/**
- * Fetch targets from inventory API (RBAC filtered).
- * Used for pattern resolution and manual target validation.
- */
-export async function fetchInventoryTargets(search?: string): Promise<InventoryTarget[]> {
-  const params = new URLSearchParams();
-  params.set('page', '1');
-  params.set('page_size', '5000');
-  if (search) params.set('search', search);
-  const response = await apiFetchRaw<TargetsResponse>(`/inventory/targets?${params.toString()}`);
-  return response?.items ?? [];
-}
 import type {
   ExecutionCreateRequest,
   ExecutionCreateResponse,
@@ -53,6 +23,43 @@ import type {
   DashboardTimeSeriesPoint,
 } from '../types/api';
 
+/** Target from inventory API (for pattern/manual resolution). */
+export interface InventoryTarget {
+  name: string;
+  environment: string;
+  target_type: string;
+  metadata: Record<string, unknown> | null;
+}
+
+/** Response from GET /inventory/targets */
+export interface TargetsResponse {
+  items: InventoryTarget[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+/**
+ * Story 71.1, AC5: Fetch targets with pagination response for TargetSelector.
+ * DIP: Removes direct apiFetchRaw import from TargetSelector.tsx.
+ */
+export async function fetchTargetsPaginated(search?: string): Promise<TargetsResponse> {
+  const params = new URLSearchParams();
+  params.set('page', '1');
+  params.set('page_size', '5000');
+  if (search) params.set('search', search);
+  return apiFetchRaw<TargetsResponse>(`/inventory/targets?${params.toString()}`);
+}
+
+/**
+ * Fetch targets from inventory API (RBAC filtered).
+ * Used for pattern resolution and manual target validation.
+ */
+export async function fetchInventoryTargets(search?: string): Promise<InventoryTarget[]> {
+  const response = await fetchTargetsPaginated(search);
+  return response?.items ?? [];
+}
 /**
  * Submit a new execution (Story 4.1, Task 1.1; Story 9.2 remediation).
  *

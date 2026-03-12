@@ -1,7 +1,7 @@
 /**
  * Execution status renderer — Rendu de statut d'exécution pour les colonnes de tableau.
  *
- * Config LOCALE — NE PAS fusionner avec execution-status.ts (SOLID-FE-10).
+ * Config LOCALE — NE PAS fusionner avec execution-status.ts (SOLID-FE-10, §16.4).
  * Voir commentaires de STATUS_BADGE_CONFIG et STATUS_CONFIG pour les différences intentionnelles.
  *
  * Extrait de executionRenderers.tsx (Story 54.13 — MAINT-FE-3).

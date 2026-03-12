@@ -116,6 +116,8 @@ class ActionViewSet(viewsets.ModelViewSet):
         """POST /admin/actions - Create a new action."""
         serializer = ActionCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        if Action.objects.filter(name=serializer.validated_data['name']).exists():
+            raise DRFValidationError({'name': ['Une action avec ce nom existe déjà.']})
         svc = self.get_catalog_service()
         try:
             action = svc.create_action(

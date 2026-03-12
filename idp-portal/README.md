@@ -181,7 +181,7 @@ Le flag `is_business_profile` est retourné par l'API `/auth/me` et conditionne 
 ### Build individuel
 
 ```bash
-# Backend Django (Gunicorn)
+# Backend Django (Gunicorn + Uvicorn workers)
 docker build -t idp-backend:latest ./django_backend
 
 # Frontend React/Vite (Nginx)
@@ -213,7 +213,7 @@ docker compose up -d --build backend frontend
 | Service | Port local | Description |
 |---------|-----------|-------------|
 | Oracle DB | 1521 | SQL*Net |
-| Backend | 8000 | API Django (Gunicorn) |
+| Backend | 8000 | API Django (Gunicorn + Uvicorn workers) |
 | Frontend | 8080 | SPA React (Nginx) |
 
 ### Variables d'environnement (production)

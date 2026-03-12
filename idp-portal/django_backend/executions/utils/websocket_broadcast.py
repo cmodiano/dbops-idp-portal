@@ -42,6 +42,9 @@ def broadcast_step_update(execution_id: int, step: "ExecutionStep") -> None:
                     "step_order": step.step_order,
                     "step_name": step.step_name,
                     "step_type": step_type,
+                    # config_step_id links the execution step back to the workflow
+                    # config node — the frontend uses it to colour the correct graph node.
+                    "config_step_id": getattr(step, "config_step_id", None),
                     "status": step.status,
                     "started_at": (
                         step.started_at.isoformat() if step.started_at else None

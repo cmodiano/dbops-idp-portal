@@ -144,6 +144,7 @@ def validate_rate_limit_config() -> None:
         'THROTTLE_PUBLIC_RATE': os.getenv('THROTTLE_PUBLIC_RATE', '50/minute'),
         'THROTTLE_API_KEY_TOKEN_RATE': os.getenv('THROTTLE_API_KEY_TOKEN_RATE', '10/minute'),  # MEDIUM-3: scope api_key_token was unvalidated
         'THROTTLE_SERVICE_LOGIN_RATE': os.getenv('THROTTLE_SERVICE_LOGIN_RATE', '5/minute'),
+        'THROTTLE_PORTAL_LOGIN_RATE': os.getenv('THROTTLE_PORTAL_LOGIN_RATE', '10/minute'),  # Story 71.9: was missing from validation
     }
 
     invalid = []

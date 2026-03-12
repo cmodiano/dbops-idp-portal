@@ -50,8 +50,8 @@ class TestWorkflowRuntimeExceptionHandling:
                 "order": 1,
                 "name": "Test Step",
                 "referenced_action_id": self.referenced_action.id,
-                "on_success_step_id": None,
-                "on_error_step_id": None,
+                "on_success_step_ids": [],
+                "on_error_step_ids": [],
             },
         ]
         self.action.execution_steps = workflow_steps
@@ -109,8 +109,8 @@ class TestWorkflowRuntimeExceptionHandling:
             "step_id": "step-no-ref",
             "order": 1,
             "name": "No Reference Step",
-            "on_success_step_id": None,
-            "on_error_step_id": None,
+            "on_success_step_ids": [],
+            "on_error_step_ids": [],
         }
 
         with patch('executions.workflow_step_executor.logger') as mock_logger:
@@ -294,11 +294,17 @@ class TestBroadCatchJustification:
         assert bare_excepts == [], f"Found bare excepts: {bare_excepts}"
 
     def test_no_except_exception_without_as_e(self):
-        """All except Exception must capture with 'as e' for logging."""
+        """All except Exception must capture with 'as e' for logging (not bare or 'as _').
+
+        NEW-BE-I: Extended to also detect 'except Exception as _' which bypasses the
+        previous check (only grepped 'except Exception:') while still being unnamed.
+        """
         import subprocess
         from pathlib import Path
         repo_root = Path(__file__).resolve().parents[4]
-        result = subprocess.run(
+
+        # Check 1: bare except Exception: (no 'as' clause at all)
+        result_bare = subprocess.run(
             ["grep", "-rn", "except Exception:", "idp-portal/django_backend",
              "--include=*.py", "--exclude-dir=security-reports",
              "--exclude-dir=__pycache__", "--exclude-dir=.venv",
@@ -307,7 +313,24 @@ class TestBroadCatchJustification:
             cwd=str(repo_root),
         )
         without_as = [
-            line for line in result.stdout.strip().split('\n')
+            line for line in result_bare.stdout.strip().split('\n')
             if line.strip() and 'except Exception as' not in line and '# noqa' not in line
         ]
         assert without_as == [], f"Found except Exception without 'as e': {without_as}"
+
+        # Check 2: 'except Exception as _' — unnamed binding that bypasses the above check
+        result_underscore = subprocess.run(
+            ["grep", "-rn", r"except Exception as _", "idp-portal/django_backend",
+             "--include=*.py", "--exclude-dir=security-reports",
+             "--exclude-dir=__pycache__", "--exclude-dir=.venv",
+             "--exclude=test_exception_handling.py"],
+            capture_output=True, text=True,
+            cwd=str(repo_root),
+        )
+        as_underscore = [
+            line for line in result_underscore.stdout.strip().split('\n')
+            if line.strip() and '# noqa' not in line
+        ]
+        assert as_underscore == [], (
+            f"Found 'except Exception as _' (use 'as e' instead): {as_underscore}"
+        )

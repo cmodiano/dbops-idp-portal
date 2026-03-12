@@ -82,6 +82,23 @@ export const EXECUTION_STATUS_TAG_COLORS: Record<ExecutionStatusType, string> = 
   REJECTED: 'red',
 };
 
+/**
+ * Options de filtre pour les statuts d'exécution (§16.4 consolidation).
+ * Labels féminins pour accord avec "exécution".
+ * Ordre chronologique du cycle de vie d'une exécution.
+ * Source unique pour ExecutionsFiltersPanel et AdvancedFiltersPanel.
+ */
+export const EXECUTION_STATUS_FILTER_OPTIONS: { label: string; value: ExecutionStatusType }[] = [
+  { label: 'Soumise', value: 'SUBMITTED' },
+  { label: 'Approbation requise', value: 'PENDING_APPROVAL' },
+  { label: 'En cours', value: 'RUNNING' },
+  { label: 'Terminée', value: 'COMPLETED' },
+  { label: 'Échouée', value: 'FAILED' },
+  { label: 'Annulée', value: 'CANCELLED' },
+  { label: 'Rejetée', value: 'REJECTED' },
+  { label: 'Erreur intégration', value: 'INTEGRATION_ERROR' },
+];
+
 /** Display config for audit execution statuses (migrated from AuditPage.tsx). */
 export const AUDIT_STATUS_CONFIG: Record<string, { color: string; label: string }> = {
   success: { color: 'success', label: 'Succès' },

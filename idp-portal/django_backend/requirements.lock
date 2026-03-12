@@ -3,10 +3,13 @@
 amqp==5.3.1
     # via kombu
 anyio==4.12.1
-    # via httpx
+    # via
+    #   httpx
+    #   watchfiles
 asgiref==3.11.1
     # via
     #   channels
+    #   channels-redis
     #   daphne
     #   django
     #   django-cors-headers
@@ -38,6 +41,10 @@ cffi==2.0.0
     #   autobahn
     #   cryptography
 channels==4.3.2
+    # via
+    #   idp-portal-backend (pyproject.toml)
+    #   channels-redis
+channels-redis==4.3.0
     # via idp-portal-backend (pyproject.toml)
 charset-normalizer==3.4.4
     # via
@@ -49,6 +56,7 @@ click==8.3.1
     #   click-didyoumean
     #   click-plugins
     #   click-repl
+    #   uvicorn
 click-didyoumean==0.3.1
     # via celery
 click-plugins==1.1.1.2
@@ -93,9 +101,13 @@ ecdsa==0.19.1
 gunicorn==25.1.0
     # via idp-portal-backend (pyproject.toml)
 h11==0.16.0
-    # via httpcore
+    # via
+    #   httpcore
+    #   uvicorn
 httpcore==1.0.9
     # via httpx
+httptools==0.7.1
+    # via uvicorn
 httpx==0.28.1
     # via idp-portal-backend (pyproject.toml)
 hyperlink==21.0.0
@@ -132,7 +144,9 @@ lxml==6.0.2
 markupsafe==3.0.3
     # via jinja2
 msgpack==1.1.2
-    # via autobahn
+    # via
+    #   autobahn
+    #   channels-redis
 oracledb==3.4.2
     # via idp-portal-backend (pyproject.toml)
 packaging==26.0
@@ -166,7 +180,9 @@ python-dateutil==2.9.0.post0
     #   celery
     #   croniter
 python-dotenv==1.2.1
-    # via idp-portal-backend (pyproject.toml)
+    # via
+    #   idp-portal-backend (pyproject.toml)
+    #   uvicorn
 python-jose==3.5.0
     # via idp-portal-backend (pyproject.toml)
 python3-saml==1.16.0
@@ -177,9 +193,11 @@ pyyaml==6.0.3
     # via
     #   idp-portal-backend (pyproject.toml)
     #   drf-spectacular
+    #   uvicorn
 redis==6.4.0
     # via
     #   idp-portal-backend (pyproject.toml)
+    #   channels-redis
     #   kombu
 referencing==0.37.0
     # via
@@ -226,13 +244,21 @@ uritemplate==4.2.0
     # via drf-spectacular
 urllib3==2.6.3
     # via requests
+uvicorn==0.41.0
+    # via idp-portal-backend (pyproject.toml)
+uvloop==0.22.1
+    # via uvicorn
 vine==5.1.0
     # via
     #   amqp
     #   celery
     #   kombu
+watchfiles==1.1.1
+    # via uvicorn
 wcwidth==0.6.0
     # via prompt-toolkit
+websockets==16.0
+    # via uvicorn
 xmlsec==1.3.17
     # via python3-saml
 zope-interface==8.2

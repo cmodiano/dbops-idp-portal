@@ -1,18 +1,15 @@
 /**
  * Story 17.12: Feature Flags admin panel.
+ * Story 71.1, AC2: Migration DIP — utilise useFeatureFlagsAdmin au lieu d'importer directement le service.
  *
  * Displays all feature flags with inline editing (Switch for enabled, Slider for rollout).
  * Admin-only component.
  */
 
-import { useState, useEffect, useCallback } from 'react';
-import { Table, Switch, Slider, App, Tag, Typography } from 'antd';
+import { useState, useCallback } from 'react';
+import { Table, Switch, Slider, App, Tag, Typography, Alert } from 'antd';
 import type { TableProps } from 'antd';
-import {
-  fetchFeatureFlags,
-  updateFeatureFlag,
-  type FeatureFlagDetail,
-} from '../../services/feature_flag_service';
+import { useFeatureFlagsAdmin, type FeatureFlagDetail } from '../../hooks/useFeatureFlagsAdmin';
 import { useFeatureFlagContext } from '../../contexts/FeatureFlagContext';
 import logger from '../../services/logger';
 
@@ -21,34 +18,13 @@ const { Text } = Typography;
 export function FeatureFlagsPanel() {
   const { notification } = App.useApp();
   const { refresh: refreshGlobalContext } = useFeatureFlagContext();
-  const [flags, setFlags] = useState<FeatureFlagDetail[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { flags, loading, error, handleToggle, handleRolloutChange } = useFeatureFlagsAdmin();
   const [updatingKeys, setUpdatingKeys] = useState<Set<string>>(new Set());
 
-  const loadFlags = useCallback(async () => {
-    setLoading(true);
-    try {
-      const response = await fetchFeatureFlags();
-      setFlags(response.data);
-    } catch (err) {
-      logger.error('feature_flags_admin_load_error', { error: String(err) });
-      notification.error({ title: 'Erreur lors du chargement des feature flags' });
-    } finally {
-      setLoading(false);
-    }
-  }, [notification]);
-
-  useEffect(() => {
-    loadFlags();
-  }, [loadFlags]);
-
-  const handleToggle = async (flagKey: string, enabled: boolean) => {
+  const onToggle = useCallback(async (flagKey: string, enabled: boolean) => {
     setUpdatingKeys(prev => new Set(prev).add(flagKey));
     try {
-      await updateFeatureFlag(flagKey, { enabled });
-      setFlags(prev =>
-        prev.map(f => (f.flag_key === flagKey ? { ...f, enabled } : f)),
-      );
+      await handleToggle(flagKey, enabled);
       // MEDIUM-2 fix: Refresh global context to propagate change to other components
       await refreshGlobalContext();
       notification.success({ title: `Flag "${flagKey}" ${enabled ? 'activé' : 'désactivé'}` });
@@ -62,17 +38,12 @@ export function FeatureFlagsPanel() {
         return next;
       });
     }
-  };
+  }, [handleToggle, refreshGlobalContext, notification]);
 
-  const handleRolloutChange = async (flagKey: string, rolloutPercent: number) => {
+  const onRolloutChange = useCallback(async (flagKey: string, rolloutPercent: number) => {
     setUpdatingKeys(prev => new Set(prev).add(flagKey));
     try {
-      await updateFeatureFlag(flagKey, { rollout_percent: rolloutPercent });
-      setFlags(prev =>
-        prev.map(f =>
-          f.flag_key === flagKey ? { ...f, rollout_percent: rolloutPercent } : f,
-        ),
-      );
+      await handleRolloutChange(flagKey, rolloutPercent);
       // MEDIUM-2 fix: Refresh global context to propagate change to other components
       await refreshGlobalContext();
       notification.success({ title: `Rollout de "${flagKey}" mis à jour : ${rolloutPercent}%` });
@@ -86,7 +57,7 @@ export function FeatureFlagsPanel() {
         return next;
       });
     }
-  };
+  }, [handleRolloutChange, refreshGlobalContext, notification]);
 
   const columns: TableProps<FeatureFlagDetail>['columns'] = [
     {
@@ -104,7 +75,7 @@ export function FeatureFlagsPanel() {
         <Switch
           checked={enabled}
           loading={updatingKeys.has(record.flag_key)}
-          onChange={(checked) => handleToggle(record.flag_key, checked)}
+          onChange={(checked) => onToggle(record.flag_key, checked)}
         />
       ),
     },
@@ -119,7 +90,7 @@ export function FeatureFlagsPanel() {
           min={0}
           max={100}
           disabled={updatingKeys.has(record.flag_key)}
-          onChangeComplete={(value) => handleRolloutChange(record.flag_key, value)}
+          onChangeComplete={(value) => onRolloutChange(record.flag_key, value)}
           tooltip={{ formatter: (val) => `${val}%` }}
         />
       ),
@@ -145,14 +116,17 @@ export function FeatureFlagsPanel() {
   ];
 
   return (
-    <Table<FeatureFlagDetail>
-      columns={columns}
-      dataSource={flags}
-      loading={loading}
-      rowKey="flag_key"
-      size="small"
-      pagination={false}
-      locale={{ emptyText: 'Aucun feature flag configuré' }}
-    />
+    <>
+      {error && <Alert type="error" title={error} showIcon style={{ marginBottom: 16 }} />}
+      <Table<FeatureFlagDetail>
+        columns={columns}
+        dataSource={flags}
+        loading={loading}
+        rowKey="flag_key"
+        size="small"
+        pagination={false}
+        locale={{ emptyText: 'Aucun feature flag configuré' }}
+      />
+    </>
   );
 }

@@ -623,7 +623,7 @@ class TestScheduleStepAuditEntry(TransactionTestCase):
     @patch('executions.workflow_step_executor.AuditService.create_entry')
     def test_schedule_step_creates_audit_entry(self, mock_audit):
         """AC #7 — entrée audit WORKFLOW_STEP_SCHEDULE_CREATED créée."""
-        target_action = ActionFactory(status='published')
+        target_action = ActionFactory(status='published', name='Patch Oracle mensuel 72.3')
         mock_se = _make_mock_scheduled_execution(55)
 
         step = {
@@ -653,6 +653,8 @@ class TestScheduleStepAuditEntry(TransactionTestCase):
         assert mock_audit.call_args.kwargs['action_type'] == AuditActionType.WORKFLOW_STEP_SCHEDULE_CREATED
         details = mock_audit.call_args.kwargs['details']
         assert details['scheduled_execution_id'] == 55
+        # Story 72.3: referenced_action_name for readable audit (no UUID without name)
+        assert details.get('referenced_action_name') == 'Patch Oracle mensuel 72.3'
 
 
 # ---------------------------------------------------------------------------

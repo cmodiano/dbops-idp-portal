@@ -2,7 +2,7 @@
  * useActionFormState — Gestion centralisée de l'état de ActionForm (Story 33.5, Task 2).
  * Extrait de ActionForm.tsx : états, effets d'init/reset/focus/tags, et previewData.
  */
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { Form } from 'antd';
 import type { FormInstance } from 'antd';
 import type {
@@ -16,7 +16,15 @@ import type {
   ParameterDefinition,
 } from '../types/api';
 import type { RemediationRuleDefinition } from '../components/admin/RemediationRulesEditor';
-import { getTags } from '../services/admin_service';
+import {
+  getTags,
+  updateActionSteps,
+  updateActionTags,
+  updateRemediationRules,
+  checkActionNameAvailable,
+} from '../services/admin_service';
+// Story 71.1, AC8: Re-export ApiError for ActionForm error handling (DIP)
+export { ApiError } from '../services/api_client';
 import { schemaToParameterList, parameterListToSchema } from '../utils/parametersSchema';
 import { impactRulesToList } from '../utils/impactRulesSchema';
 import { integrationTypeToPlatformCode } from '../utils/integrationHelpers';
@@ -153,6 +161,24 @@ export function useActionFormState({ open, editAction, form, getIntegrationById 
     }
   }, [open, editAction, form]);
 
+  // Story 71.1, AC8: Wrapped service operations for DIP compliance
+  const handleUpdateSteps = useCallback(
+    (actionId: number, steps: ExecutionStep[]) => updateActionSteps(actionId, { steps }),
+    [],
+  );
+  const handleUpdateTags = useCallback(
+    (actionId: number, tagNames: string[]) => updateActionTags(actionId, { tag_names: tagNames }),
+    [],
+  );
+  const handleUpdateRemediationRules = useCallback(
+    (actionId: number, rules: import('../types/api').RemediationRule[] | null) => updateRemediationRules(actionId, rules),
+    [],
+  );
+  const handleCheckNameAvailable = useCallback(
+    (name: string, excludeId?: number) => checkActionNameAvailable(name, excludeId),
+    [],
+  );
+
   return {
     nameInputRef,
     stepsError,
@@ -176,5 +202,10 @@ export function useActionFormState({ open, editAction, form, getIntegrationById 
     setRemediationRules,
     watchedIntegrationId: watchedIntegrationId as number | undefined,
     previewData,
+    // Story 71.1, AC8: Service operations
+    handleUpdateSteps,
+    handleUpdateTags,
+    handleUpdateRemediationRules,
+    handleCheckNameAvailable,
   };
 }

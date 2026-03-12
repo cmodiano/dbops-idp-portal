@@ -47,7 +47,7 @@ def _get_audit(rf: APIRequestFactory, query_string: str = ""):
     request.auth = None
     force_authenticate(request, user=user)
     view = AuditExecutionsView.as_view()
-    with patch("audit.views._is_auditor", return_value=True):
+    with patch("audit.views.is_auditor_user", return_value=True):
         return view(request)
 
 

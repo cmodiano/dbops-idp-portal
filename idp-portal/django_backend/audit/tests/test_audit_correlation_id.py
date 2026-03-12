@@ -61,7 +61,7 @@ def _get_audit(rf: APIRequestFactory, query_string: str = ""):
     from rest_framework.test import force_authenticate
     force_authenticate(request, user=user)
     view = AuditExecutionsView.as_view()
-    with patch("audit.views._is_auditor", return_value=True):
+    with patch("audit.views.is_auditor_user", return_value=True):
         return view(request)
 
 
@@ -168,7 +168,7 @@ class TestAuditExportCorrelationId:
         force_authenticate(request, user=user)
 
         view = AuditExportView.as_view()
-        with patch("audit.views._is_auditor", return_value=True):
+        with patch("audit.views.is_auditor_user", return_value=True):
             response = view(request)
 
         assert response.status_code == 200

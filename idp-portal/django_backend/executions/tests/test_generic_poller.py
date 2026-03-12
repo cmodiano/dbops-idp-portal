@@ -138,10 +138,8 @@ class TestPollPlatformJobStatusExhaustion:
     """AC5: adapter lève Exception, retry_count=MAX → exhausted + _mark_exhausted appelé."""
 
     @patch("executions.tasks._mark_execution_polling_exhausted")
-    @patch("executions.tasks.get_correlation_id", return_value="test-corr-exhaust")
     def test_exhausted_when_max_retries_reached(
         self,
-        mock_corr: MagicMock,
         mock_exhausted: MagicMock,
     ) -> None:
         """retry_count >= MAX_POLLING_RETRIES + exception → outcome='exhausted'."""
@@ -155,6 +153,7 @@ class TestPollPlatformJobStatusExhaustion:
                     platform_job_id="job-exhaust-1",
                     platform_type="aap",
                     retry_count=MAX_POLLING_RETRIES,
+                    correlation_id="test-corr-exhaust",
                 )
 
         assert result["outcome"] == "exhausted"
@@ -217,109 +216,6 @@ class TestPollPlatformJobStatusExport:
         import executions.tasks as tasks_pkg
         assert "poll_platform_job_status" in tasks_pkg.__all__
 
-
-# ---------------------------------------------------------------------------
-# Test 5 — Shim backward-compat : poll_aap_job_status délègue
-# ---------------------------------------------------------------------------
-
-
-class TestPollAapShimDelegates:
-    """AC3: Le shim poll_aap_job_status délègue à poll_platform_job_status."""
-
-    @patch("executions.tasks.polling.poll_platform_job_status")
-    def test_aap_shim_delegates_with_correct_platform_type(
-        self, mock_generic: MagicMock
-    ) -> None:
-        """poll_aap_job_status transmet platform_type='aap' et les kwargs traduits.
-
-        Patch sur executions.tasks.polling.poll_platform_job_status car le shim
-        appelle la fonction par référence locale dans ce module.
-        """
-        from executions.tasks import poll_aap_job_status
-
-        mock_generic.return_value = {"outcome": "complete", "status": "COMPLETED"}
-
-        poll_aap_job_status(
-            execution_id=10,
-            platform_job_id="job-shim-1",
-            resource_type="workflow_job",
-            base_url="https://aap.example.com",
-            credential_ref="token123",
-            retry_count=0,
-            ssl_verify=False,
-        )
-
-        mock_generic.assert_called_once()
-        call_kwargs = mock_generic.call_args[1]
-        assert call_kwargs["platform_type"] == "aap"
-        assert call_kwargs["adapter_kwargs"]["ssl_verify"] is False
-        assert call_kwargs["poll_kwargs"]["resource_type"] == "workflow_job"
-
-
-# ---------------------------------------------------------------------------
-# Test 6 — Shims GitHub Actions et Terraform Cloud (AC3, M3 fix)
-# ---------------------------------------------------------------------------
-
-
-class TestPollGitHubActionsShimDelegates:
-    """AC3: Le shim poll_github_actions_run_status délègue avec owner/repo dans adapter_kwargs."""
-
-    @patch("executions.tasks.polling.poll_platform_job_status")
-    def test_github_shim_delegates_with_owner_repo(
-        self, mock_generic: MagicMock
-    ) -> None:
-        """poll_github_actions_run_status transmet owner/repo dans adapter_kwargs."""
-        from executions.tasks import poll_github_actions_run_status
-
-        mock_generic.return_value = {"outcome": "polling", "status": "RUNNING"}
-
-        poll_github_actions_run_status(
-            execution_id=20,
-            platform_job_id="run-gh-1",
-            owner="my-org",
-            repo="my-repo",
-            base_url="https://api.github.com",
-            credential_ref="ghp_token",
-            retry_count=0,
-        )
-
-        mock_generic.assert_called_once()
-        call_kwargs = mock_generic.call_args[1]
-        assert call_kwargs["platform_type"] == "github_actions"
-        assert call_kwargs["auth_flow"] == "token"
-        assert call_kwargs["adapter_kwargs"]["owner"] == "my-org"
-        assert call_kwargs["adapter_kwargs"]["repo"] == "my-repo"
-        assert call_kwargs["poll_kwargs"] == {}
-
-
-class TestPollTerraformCloudShimDelegates:
-    """AC3: Le shim poll_terraform_cloud_run_status délègue avec organization dans adapter_kwargs."""
-
-    @patch("executions.tasks.polling.poll_platform_job_status")
-    def test_terraform_shim_delegates_with_organization(
-        self, mock_generic: MagicMock
-    ) -> None:
-        """poll_terraform_cloud_run_status transmet organization dans adapter_kwargs."""
-        from executions.tasks import poll_terraform_cloud_run_status
-
-        mock_generic.return_value = {"outcome": "complete", "status": "COMPLETED"}
-
-        poll_terraform_cloud_run_status(
-            execution_id=30,
-            platform_job_id="run-tf-1",
-            organization="my-org",
-            base_url="https://app.terraform.io",
-            credential_ref="tf_token",
-            retry_count=2,
-        )
-
-        mock_generic.assert_called_once()
-        call_kwargs = mock_generic.call_args[1]
-        assert call_kwargs["platform_type"] == "terraform_cloud"
-        assert call_kwargs["auth_flow"] == "token"
-        assert call_kwargs["adapter_kwargs"]["organization"] == "my-org"
-        assert call_kwargs["poll_kwargs"] == {}
-        assert call_kwargs["retry_count"] == 2
 
 
 # ---------------------------------------------------------------------------
@@ -440,10 +336,8 @@ class TestPollTerminalCallsSplunk:
     @patch("executions.tasks._forward_platform_logs_to_splunk")
     @patch("executions.tasks._broadcast_execution_update")
     @patch("executions.tasks._update_execution_from_poll")
-    @patch("executions.tasks.get_correlation_id", return_value="test-corr-splunk")
     def test_terminal_triggers_splunk_forward(
         self,
-        mock_corr: MagicMock,
         mock_update: MagicMock,
         mock_broadcast: MagicMock,
         mock_forward: MagicMock,
@@ -461,6 +355,7 @@ class TestPollTerminalCallsSplunk:
                     execution_id=200,
                     platform_job_id="job-fwd-1",
                     platform_type="aap",
+                    correlation_id="test-corr-splunk",
                 )
 
         assert result["outcome"] == "complete"

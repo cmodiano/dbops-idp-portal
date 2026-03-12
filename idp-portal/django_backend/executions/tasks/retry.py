@@ -8,6 +8,8 @@ from typing import Any
 
 import structlog
 from celery import shared_task  # type: ignore[import-untyped]
+from celery.exceptions import SoftTimeLimitExceeded  # type: ignore[import-untyped]
+from django.conf import settings
 
 from executions.models import Execution
 from executions.workflow_runtime import StepOutcome
@@ -20,7 +22,16 @@ logger = structlog.get_logger(__name__)
 _MAX_RETRY_DELAY_SECONDS = 86400  # 24h max, prevents overflow on high attempt counts
 
 
-@shared_task(bind=True, max_retries=0, name="executions.tasks.retry_workflow_step")
+_RETRY_LIMITS = settings.CELERY_TASK_TIME_LIMITS["retry_workflow_step"]
+
+
+@shared_task(
+    bind=True,
+    max_retries=0,
+    name="executions.tasks.retry_workflow_step",
+    soft_time_limit=_RETRY_LIMITS["soft"],
+    time_limit=_RETRY_LIMITS["hard"],
+)
 def retry_workflow_step(self: Any, execution_id: int, step: dict, attempt: int) -> dict:
     """
     Retry a workflow step asynchronously after a calculated delay.
@@ -63,6 +74,8 @@ def retry_workflow_step(self: Any, execution_id: int, step: dict, attempt: int) 
 
         # Load execution and create runtime
         execution = Execution.objects.select_related('action').get(id=execution_id)
+        # Story 72.1 (AC5): récupérer correlation_id depuis Execution pour les entrées d'audit
+        correlation_id = execution.correlation_id
         from executions.workflow_runtime import WorkflowRuntime
         runtime = WorkflowRuntime(execution)
 
@@ -76,6 +89,7 @@ def retry_workflow_step(self: Any, execution_id: int, step: dict, attempt: int) 
                 execution_id=execution_id,
                 step_id=step_id,
                 attempt=attempt,
+                correlation_id=correlation_id,
             )
             AuditService.create_entry(
                 user_id=str(execution.user_id),
@@ -90,6 +104,7 @@ def retry_workflow_step(self: Any, execution_id: int, step: dict, attempt: int) 
                     'max_attempts': step.get('retry_max_attempts', 3),
                     'result': 'success',
                 },
+                correlation_id=correlation_id,
             )
             return {
                 'outcome': result.outcome.value,
@@ -104,6 +119,7 @@ def retry_workflow_step(self: Any, execution_id: int, step: dict, attempt: int) 
                 step_id=step_id,
                 attempt=attempt,
                 error=result.error_message,
+                correlation_id=correlation_id,
             )
             AuditService.create_entry(
                 user_id=str(execution.user_id),
@@ -119,6 +135,7 @@ def retry_workflow_step(self: Any, execution_id: int, step: dict, attempt: int) 
                     'reason': 'non_retryable_error',
                     'error': result.error_message,
                 },
+                correlation_id=correlation_id,
             )
             return {
                 'outcome': result.outcome.value,
@@ -134,6 +151,7 @@ def retry_workflow_step(self: Any, execution_id: int, step: dict, attempt: int) 
                 step_id=step_id,
                 attempt=attempt,
                 max_attempts=max_attempts,
+                correlation_id=correlation_id,
             )
             AuditService.create_entry(
                 user_id=str(execution.user_id),
@@ -147,6 +165,7 @@ def retry_workflow_step(self: Any, execution_id: int, step: dict, attempt: int) 
                     'max_attempts': max_attempts,
                     'final_error': result.error_message,
                 },
+                correlation_id=correlation_id,
             )
             return {
                 'outcome': result.outcome.value,
@@ -168,6 +187,7 @@ def retry_workflow_step(self: Any, execution_id: int, step: dict, attempt: int) 
             attempt=attempt,
             next_attempt=attempt + 1,
             delay_seconds=delay_seconds,
+            correlation_id=correlation_id,
         )
 
         # Audit trail for this attempt
@@ -187,6 +207,7 @@ def retry_workflow_step(self: Any, execution_id: int, step: dict, attempt: int) 
                 'next_retry_delay_seconds': delay_seconds,
                 'retry_method': 'celery',
             },
+            correlation_id=correlation_id,
         )
 
         # Schedule next attempt via Celery countdown
@@ -200,6 +221,35 @@ def retry_workflow_step(self: Any, execution_id: int, step: dict, attempt: int) 
             'next_attempt': attempt + 1,
             'delay_seconds': delay_seconds,
         }
+
+    except SoftTimeLimitExceeded:
+        logger.error(
+            "celery_retry_workflow_step_soft_timeout",
+            execution_id=execution_id,
+            step_id=step_id,
+            attempt=attempt,
+        )
+        # Mark step FAILED with timeout message
+        try:
+            from executions.models import ExecutionStep, ExecutionStepStatus  # noqa: PLC0415
+            from django.utils import timezone as tz  # noqa: PLC0415
+            ExecutionStep.objects.filter(
+                execution_id=execution_id,
+                config_step_id=step_id,
+                status=ExecutionStepStatus.RUNNING,
+            ).update(
+                status=ExecutionStepStatus.FAILED,
+                error_message="Soft time limit exceeded in retry_workflow_step",
+                completed_at=tz.now(),
+            )
+        except Exception:  # noqa: BLE001 — best-effort
+            logger.error(
+                "celery_retry_workflow_step_timeout_step_update_failed",
+                execution_id=execution_id,
+                step_id=step_id,
+                exc_info=True,
+            )
+        raise
 
     except Execution.DoesNotExist:
         logger.error(

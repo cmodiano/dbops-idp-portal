@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from datetime import timezone as dt_timezone
-from django.db.models import Q, Count
+from django.db.models import Exists, OuterRef, Q, Count
 from django.db.models.functions import TruncDate
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
@@ -18,7 +18,7 @@ from catalog.models import Action
 from core.exceptions import BadRequestError
 from core.pagination import paginate_queryset
 from core.throttling import ExecutionThrottle, GeneralAPIThrottle
-from executions.models import Execution, ExecutionStatus
+from executions.models import Execution, ExecutionStatus, ExecutionStep, ExecutionStepStatus
 from executions.serializers import ExecutionSerializer
 from executions.utils import (
     parse_int,
@@ -111,9 +111,21 @@ class ExecutionStatsView(APIView):
         completed = qs.filter(status=ExecutionStatus.COMPLETED).count()
         taux_succes_pct = round((completed / finished) * 100, 2) if finished > 0 else 0.0
 
-        executions_en_cours = qs.filter(
-            status__in=[ExecutionStatus.RUNNING, ExecutionStatus.SUBMITTED, ExecutionStatus.PENDING_APPROVAL]
-        ).count()
+        # ADR-007: PENDING_APPROVAL removed — approval is now step-based.
+        # Exclude child executions: only count top-level executions.
+        # Exclude executions where all steps are COMPLETED/FAILED (stale Execution.status
+        # when workflow finished but parent was never updated).
+        en_cours_base = qs.filter(
+            status__in=[ExecutionStatus.RUNNING, ExecutionStatus.SUBMITTED],
+            parent_execution__isnull=True,
+        )
+        has_no_steps = ~Exists(ExecutionStep.objects.filter(execution_id=OuterRef("id")))
+        has_non_terminal_step = Exists(
+            ExecutionStep.objects.filter(execution_id=OuterRef("id")).exclude(
+                status__in=[ExecutionStepStatus.COMPLETED, ExecutionStepStatus.FAILED]
+            )
+        )
+        executions_en_cours = en_cours_base.filter(has_no_steps | has_non_terminal_step).count()
         executions_en_erreur = qs.filter(status=ExecutionStatus.FAILED).count()
 
         return Response(

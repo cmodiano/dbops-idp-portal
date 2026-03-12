@@ -8,9 +8,10 @@ from typing import TYPE_CHECKING, Optional, Any, Dict
 from django.db import transaction
 from django.utils import timezone
 
-from executions.models import ExecutionStep, ExecutionStepStatus
+from executions.models import ExecutionStep, ExecutionStepStatus, ExecutionStatus
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
+from core.utils import sanitize_audit_changes
 
 if TYPE_CHECKING:
     from executions.models import Execution
@@ -198,6 +199,14 @@ class StepExecutor:
             started_at=timezone.now(),
         )
 
+        # Notify WebSocket clients that this step has started (RUNNING).
+        # Gate steps broadcast separately via their own path above; all other types go here.
+        try:
+            from executions.utils.websocket_broadcast import broadcast_step_update  # noqa: PLC0415
+            broadcast_step_update(self.execution.id, execution_step)
+        except Exception:  # noqa: BLE001 — best-effort: must never interrupt workflow execution
+            pass
+
         try:
             # Story 4.12 AC5: Load referenced action and prepare adapter payload
             referenced_action_id = step.get('referenced_action_id')
@@ -245,6 +254,7 @@ class StepExecutor:
                             'integration_name': integration.name,
                             'integration_type': integration.type,
                             'referenced_action_id': referenced_action.id,
+                            'referenced_action_name': referenced_action.name,
                         },
                         correlation_id=self.correlation_id,
                     )
@@ -420,6 +430,7 @@ class StepExecutor:
             # AC: audit trail sur toutes les transitions FAILED (story 66-16 finding HIGH-1)
             # story 66-16 review: wrapped in try/except to prevent audit failure from suppressing StepResult
             try:
+                changes = sanitize_audit_changes({'status': {'old': ExecutionStatus.RUNNING, 'new': ExecutionStatus.FAILED}})
                 AuditService.create_entry(
                     user_id=str(self.execution.user_id) if self.execution.user_id is not None else '',
                     action_type=AuditActionType.EXECUTION_FAILED,
@@ -430,6 +441,7 @@ class StepExecutor:
                         'error_type': 'validation',
                         'step_id': getattr(execution_step, 'id', None),
                         'step_name': step_name,
+                        'changes': changes,
                     },
                     correlation_id=self.correlation_id,
                 )
@@ -467,6 +479,7 @@ class StepExecutor:
             # AC: audit trail sur toutes les transitions FAILED (story 66-16 finding HIGH-2)
             # story 66-16 review: wrapped in try/except to prevent audit failure from suppressing StepResult
             try:
+                changes = sanitize_audit_changes({'status': {'old': ExecutionStatus.RUNNING, 'new': ExecutionStatus.FAILED}})
                 AuditService.create_entry(
                     user_id=str(self.execution.user_id) if self.execution.user_id is not None else '',
                     action_type=AuditActionType.EXECUTION_FAILED,
@@ -477,6 +490,7 @@ class StepExecutor:
                         'error_type': type(e).__name__,
                         'step_id': getattr(execution_step, 'id', None),
                         'step_name': step_name,
+                        'changes': changes,
                     },
                     correlation_id=self.correlation_id,
                 )
@@ -888,7 +902,7 @@ class StepExecutor:
             execution_step.set_output(step_output)
             execution_step.save()
 
-            # Audit trail
+            # Audit trail — Story 72.3: referenced_action_name for readable audit (no UUID without name)
             AuditService.create_entry(
                 user_id=str(self.execution.user_id),
                 action_type=AuditActionType.WORKFLOW_STEP_SCHEDULE_CREATED,
@@ -900,6 +914,7 @@ class StepExecutor:
                     'step_order': step_order,
                     'scheduled_execution_id': scheduled_execution.id,
                     'referenced_action_id': referenced_action_id,
+                    'referenced_action_name': target_action.name,
                     'correlation_id': self.correlation_id,
                 },
                 correlation_id=self.correlation_id,
@@ -936,6 +951,7 @@ class StepExecutor:
             # AC: audit trail sur toutes les transitions FAILED (story 66-16 finding HIGH-3)
             # story 66-16 review: wrapped in try/except to prevent audit failure from suppressing StepResult
             try:
+                changes = sanitize_audit_changes({'status': {'old': ExecutionStatus.RUNNING, 'new': ExecutionStatus.FAILED}})
                 AuditService.create_entry(
                     user_id=str(self.execution.user_id) if self.execution.user_id is not None else '',
                     action_type=AuditActionType.EXECUTION_FAILED,
@@ -947,6 +963,7 @@ class StepExecutor:
                         'step_id': getattr(execution_step, 'id', None),
                         'step_name': step_name,
                         'step_context': 'schedule_step',
+                        'changes': changes,
                     },
                     correlation_id=self.correlation_id,
                 )

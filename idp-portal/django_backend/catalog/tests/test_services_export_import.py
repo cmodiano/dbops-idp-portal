@@ -431,7 +431,7 @@ class ImportActionYamlTests(TestCase):
 
 # Valid parallel_group workflow steps (compatible with validate_workflow_steps).
 # Platform steps use referenced_action_id=1; step-apply-patch and step-rollback
-# are non-member exit points (on_success_step_id=None).
+# are non-member exit points (on_success_step_ids=[]).
 _VALID_PARALLEL_GROUP_STEPS = [
     {
         "step_id": "pg-backup",
@@ -458,14 +458,14 @@ _VALID_PARALLEL_GROUP_STEPS = [
         "step_type": "platform",
         "name": "Apply Patch",
         "referenced_action_id": 1,
-        "on_success_step_id": None,
+        "on_success_step_ids": [],
     },
     {
         "step_id": "step-rollback",
         "step_type": "platform",
         "name": "Rollback",
         "referenced_action_id": 1,
-        "on_success_step_id": None,
+        "on_success_step_ids": [],
     },
 ]
 

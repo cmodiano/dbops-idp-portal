@@ -603,12 +603,12 @@ describe('Story 58.6 — formatParamValue', () => {
     expect(formatParamValue(undefined)).toBe('—');
   });
 
-  it('formats objects as JSON', () => {
-    expect(formatParamValue({ a: 1 })).toBe('{"a":1}');
+  it('formats objects as indented JSON (Story 72.4)', () => {
+    expect(formatParamValue({ a: 1 })).toBe(JSON.stringify({ a: 1 }, null, 2));
   });
 
-  it('formats arrays as JSON', () => {
-    expect(formatParamValue([1, 2])).toBe('[1,2]');
+  it('formats arrays as indented JSON (Story 72.4)', () => {
+    expect(formatParamValue([1, 2])).toBe(JSON.stringify([1, 2], null, 2));
   });
 });
 

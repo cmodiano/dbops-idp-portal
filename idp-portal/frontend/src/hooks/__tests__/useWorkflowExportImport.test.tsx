@@ -2,12 +2,27 @@
  * Tests for useWorkflowExportImport hook — Story 26.5 AC8
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
 import React from 'react';
 import { App } from 'antd';
 import type { Node, Edge } from '@xyflow/react';
 import { useWorkflowExportImport } from '../useWorkflowExportImport';
 import { START_NODE_ID, END_NODE_ID } from '../../utils/workflowConversion';
+
+// Mock notification and modal for import tests
+const mockNotification = { error: vi.fn(), success: vi.fn() };
+const mockModal = { confirm: vi.fn(), error: vi.fn() };
+
+vi.mock('antd', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('antd')>();
+  const AppComponent = actual.App;
+  return {
+    ...actual,
+    App: Object.assign(AppComponent, {
+      useApp: () => ({ notification: mockNotification, modal: mockModal }),
+    }),
+  };
+});
 
 // Mock external modules
 vi.mock('../../utils/workflowExport', () => ({
@@ -129,7 +144,7 @@ describe('useWorkflowExportImport', () => {
   });
 
   it('handleImportFile handles invalid format', async () => {
-    vi.mocked(parseWorkflowFile).mockReturnValue({
+    vi.mocked(parseWorkflowFile).mockReturnValueOnce({
       valid: false,
       errors: ['Invalid format'],
       data: null,
@@ -173,5 +188,197 @@ describe('useWorkflowExportImport', () => {
       expect.anything(),
       expect.objectContaining({ name: 'workflow' })
     );
+  });
+
+  describe('handleImportFile — coverage extras', () => {
+    it('does nothing when no file selected', () => {
+      const { result } = renderHook(() => useWorkflowExportImport(defaultParams), { wrapper });
+
+      const event = {
+        target: { files: [], value: '' },
+      } as unknown as React.ChangeEvent<HTMLInputElement>;
+
+      act(() => {
+        result.current.handleImportFile(event);
+      });
+
+      expect(parseWorkflowFile).not.toHaveBeenCalled();
+    });
+
+    it('imports directly when workflow is empty (no confirmation)', async () => {
+      const emptyNodes: Node[] = [
+        { id: START_NODE_ID, type: 'start', position: { x: 0, y: 0 }, data: {} },
+        { id: END_NODE_ID, type: 'end', position: { x: 0, y: 300 }, data: {} },
+      ];
+      const onWorkflowLoad = vi.fn();
+      const onMetadataImport = vi.fn();
+      const params = {
+        ...defaultParams,
+        nodes: emptyNodes,
+        edges: [],
+        onWorkflowLoad,
+        onMetadataImport,
+      };
+
+      vi.mocked(parseWorkflowFile).mockReturnValueOnce({
+        valid: true,
+        errors: [],
+        data: {
+          version: '1.0',
+          workflow: {
+            name: 'Imported',
+            description: 'desc',
+            tags: ['t1'],
+            steps: [{ step_id: 's1', step_type: 'service_call', name: 'Step', referenced_action_id: 1, order: 0 }],
+          },
+        },
+      });
+
+      const { result } = renderHook(() => useWorkflowExportImport(params), { wrapper });
+      const file = new File(['{"version":"1.0"}'], 'import.json', { type: 'application/json' });
+      const event = {
+        target: { files: [file], value: 'import.json' },
+      } as unknown as React.ChangeEvent<HTMLInputElement>;
+
+      act(() => {
+        result.current.handleImportFile(event);
+      });
+
+      await waitFor(() => {
+        expect(onWorkflowLoad).toHaveBeenCalled();
+      });
+      expect(onMetadataImport).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Imported', description: 'desc', tags: ['t1'] })
+      );
+      expect(mockModal.confirm).not.toHaveBeenCalled();
+      expect(mockNotification.success).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Workflow importé avec succès' })
+      );
+    });
+
+    it('shows confirm modal when workflow has nodes, then loads on Ok', async () => {
+      let capturedOnOk: (() => void) | undefined;
+      mockModal.confirm.mockImplementationOnce((opts: { onOk?: () => void }) => {
+        capturedOnOk = opts.onOk;
+      });
+
+      vi.mocked(parseWorkflowFile).mockReturnValueOnce({
+        valid: true,
+        errors: [],
+        data: {
+          version: '1.0',
+          workflow: {
+            name: 'New',
+            description: null,
+            tags: [],
+            steps: [{ step_id: 's1', step_type: 'service_call', name: 'S', referenced_action_id: 1, order: 0 }],
+          },
+        },
+      });
+
+      const onWorkflowLoad = vi.fn();
+      const { result } = renderHook(() => useWorkflowExportImport({ ...defaultParams, onWorkflowLoad }), { wrapper });
+      const file = new File(['{}'], 'w.json', { type: 'application/json' });
+      const event = {
+        target: { files: [file], value: 'w.json' },
+      } as unknown as React.ChangeEvent<HTMLInputElement>;
+
+      act(() => {
+        result.current.handleImportFile(event);
+      });
+
+      await waitFor(() => {
+        expect(mockModal.confirm).toHaveBeenCalledWith(
+          expect.objectContaining({
+            title: 'Remplacer le workflow actuel ?',
+            okText: 'Remplacer',
+          })
+        );
+      });
+
+      act(() => {
+        capturedOnOk?.();
+      });
+
+      await waitFor(() => {
+        expect(onWorkflowLoad).toHaveBeenCalled();
+      });
+    });
+
+    it('shows error when file is empty', async () => {
+      const { result } = renderHook(() => useWorkflowExportImport(defaultParams), { wrapper });
+      const file = new File([], 'empty.json', { type: 'application/json' });
+      const event = {
+        target: { files: [file], value: 'empty.json' },
+      } as unknown as React.ChangeEvent<HTMLInputElement>;
+
+      act(() => {
+        result.current.handleImportFile(event);
+      });
+
+      await waitFor(() => {
+        expect(mockNotification.error).toHaveBeenCalledWith(
+          expect.objectContaining({ title: 'Le fichier est vide' })
+        );
+      });
+    });
+
+    it('shows error on FileReader error', async () => {
+      const OriginalFileReader = global.FileReader;
+      try {
+        global.FileReader = class MockFileReader {
+          onload: ((e: ProgressEvent<FileReader>) => void) | null = null;
+          onerror: (() => void) | null = null;
+          readAsText() {
+            queueMicrotask(() => this.onerror?.());
+          }
+        } as unknown as typeof FileReader;
+
+        const { result } = renderHook(() => useWorkflowExportImport(defaultParams), { wrapper });
+        const file = new File(['x'], 'f.json', { type: 'application/json' });
+        const event = {
+          target: { files: [file], value: 'f.json' },
+        } as unknown as React.ChangeEvent<HTMLInputElement>;
+
+        act(() => {
+          result.current.handleImportFile(event);
+        });
+
+        await waitFor(() => {
+          expect(mockNotification.error).toHaveBeenCalledWith(
+            expect.objectContaining({ title: 'Erreur lors de la lecture du fichier' })
+          );
+        });
+      } finally {
+        global.FileReader = OriginalFileReader;
+      }
+    });
+
+    it('shows modal.error when format is invalid', async () => {
+      vi.mocked(parseWorkflowFile).mockReturnValueOnce({
+        valid: false,
+        errors: ['Error 1', 'Error 2'],
+        data: null,
+      });
+
+      const { result } = renderHook(() => useWorkflowExportImport(defaultParams), { wrapper });
+      const file = new File(['invalid'], 'bad.json', { type: 'application/json' });
+      const event = {
+        target: { files: [file], value: 'bad.json' },
+      } as unknown as React.ChangeEvent<HTMLInputElement>;
+
+      act(() => {
+        result.current.handleImportFile(event);
+      });
+
+      await waitFor(() => {
+        expect(mockModal.error).toHaveBeenCalledWith(
+          expect.objectContaining({
+            title: 'Format de fichier invalide',
+            okText: 'Compris',
+          })
+        );
+      });
+    });
   });
 });

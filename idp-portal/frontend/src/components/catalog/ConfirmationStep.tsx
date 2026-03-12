@@ -24,6 +24,7 @@ import type { UseSchedulingValidationReturn } from '../../hooks/useSchedulingVal
 import type { Target } from './TargetSelector';
 import { getEnvironmentLabel, isProductionEnvironment } from '../../utils/environmentHelpers';
 import { useWizardExecutionContext } from '../../contexts/WizardExecutionContext';
+import { FormattedJson } from '../common/FormattedJson';
 
 const { Text, Title } = Typography;
 
@@ -135,11 +136,11 @@ export const ConfirmationStep = memo(function ConfirmationStep({
 
       {Object.keys(parameters).length > 0 && (
         <>
-          <Text strong>Parametres:</Text>
+          <Text strong>Paramètres:</Text>
           <Descriptions column={1} size="small" bordered style={{ marginTop: 8 }}>
             {Object.entries(parameters).map(([key, value]) => (
               <Descriptions.Item key={key} label={key}>
-                <Text code>{JSON.stringify(value)}</Text>
+                <FormattedJson value={value} />
               </Descriptions.Item>
             ))}
           </Descriptions>

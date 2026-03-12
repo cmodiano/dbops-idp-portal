@@ -15,6 +15,7 @@ import type { ExecutionResponse } from '../types/api';
 const TERMINAL_STATUSES = ['COMPLETED', 'FAILED', 'CANCELLED', 'REJECTED'];
 const FALLBACK_POLL_INTERVAL_MS = 2000;
 const WS_AUTH_FAILED_CODE = 4001;
+const WS_AUTHZ_FAILED_CODE = 4003;
 
 function buildWsUrl(path: string): string {
   const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -94,8 +95,8 @@ export function useActorExecutionSync(
       // from onmessage or explicit cleanup), skip fallback polling to avoid spurious API calls.
       const wasTracked = wsMap.current.has(id);
       wsMap.current.delete(id);
-      // 4001 = auth failure → ne pas poller
-      if (event.code === WS_AUTH_FAILED_CODE) return;
+      // 4001/4003 = auth/authz failure → ne pas poller
+      if (event.code === WS_AUTH_FAILED_CODE || event.code === WS_AUTHZ_FAILED_CODE) return;
       // Intentional close (terminal status or explicit cleanup) → no fallback needed
       if (!wasTracked) return;
       if (isMountedRef.current) startFallbackPolling(id);

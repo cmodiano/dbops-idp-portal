@@ -340,19 +340,19 @@ describe('ActionCard', () => {
       expect(techIcons).toBeInTheDocument();
     });
 
-    it('workflow shows overflow indicator "+1" when > 3 technologies', () => {
+    it('workflow shows overflow indicator when > maxVisible (2) technologies', () => {
       renderWithTheme(<ActionCard action={workflowManyTechs} />);
 
-      expect(screen.getByTestId('technology-overflow')).toHaveTextContent('+1');
+      expect(screen.getByTestId('technology-overflow')).toHaveTextContent('+2');
     });
 
-    it('workflow with exactly 3 technologies shows no overflow indicator (boundary)', () => {
-      const workflowExact3: ActionPreviewData = {
+    it('workflow with exactly 2 technologies shows no overflow indicator (boundary)', () => {
+      const workflowExact2: ActionPreviewData = {
         ...mockAction,
         item_type: 'workflow',
-        technologies: ['Oracle', 'SQL Server', 'DB2'],
+        technologies: ['Oracle', 'SQL Server'],
       };
-      renderWithTheme(<ActionCard action={workflowExact3} />);
+      renderWithTheme(<ActionCard action={workflowExact2} />);
 
       expect(screen.getByTestId('technology-icons')).toBeInTheDocument();
       expect(screen.queryByTestId('technology-overflow')).not.toBeInTheDocument();

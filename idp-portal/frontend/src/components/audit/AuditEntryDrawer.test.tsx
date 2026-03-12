@@ -68,11 +68,29 @@ const mockExecution: ExecutionResponse = {
   started_at: '2025-01-15T10:00:00Z',
   completed_at: '2025-01-15T10:30:00Z',
   created_at: '2025-01-15T09:55:00Z',
-  approved_at: '2025-01-15T09:58:00Z',
-  approval_comment: 'Approuvé avec réserves',
 };
 
 const mockSteps: ExecutionStepResponse[] = [];
+
+/** Steps with approval info for tests that need approval data (Story 71.2). */
+const mockStepsWithApproval: ExecutionStepResponse[] = [
+  {
+    id: 1,
+    execution_id: 123,
+    step_order: 1,
+    step_name: 'Approval Gate',
+    step_type: 'platform',
+    status: 'COMPLETED',
+    started_at: '2025-01-15T09:57:00Z',
+    completed_at: '2025-01-15T09:58:00Z',
+    output: null,
+    platform_job_id: null,
+    error_message: null,
+    approved_by_id: 10,
+    approved_at: '2025-01-15T09:58:00Z',
+    approval_comment: 'Approuvé avec réserves',
+  },
+];
 
 const defaultProps = {
   open: true,
@@ -93,13 +111,13 @@ describe('AuditEntryDrawer', () => {
   });
 
   it('test_drawer_shows_approval_comment_when_available — affiche le commentaire si disponible', () => {
-    render(<AuditEntryDrawer {...defaultProps} execution={mockExecution} />);
+    render(<AuditEntryDrawer {...defaultProps} execution={mockExecution} steps={mockStepsWithApproval} />);
     expect(screen.getByText('Approuvé avec réserves')).toBeInTheDocument();
   });
 
   it('test_drawer_shows_approval_date_when_available — affiche la date d\'approbation si disponible', () => {
-    render(<AuditEntryDrawer {...defaultProps} execution={mockExecution} />);
-    const expectedDate = dayjs(mockExecution.approved_at!).format('DD/MM/YYYY HH:mm');
+    render(<AuditEntryDrawer {...defaultProps} execution={mockExecution} steps={mockStepsWithApproval} />);
+    const expectedDate = dayjs(mockStepsWithApproval[0].approved_at!).format('DD/MM/YYYY HH:mm');
     expect(screen.getByText(expectedDate)).toBeInTheDocument();
   });
 
@@ -150,10 +168,43 @@ describe('AuditEntryDrawer', () => {
     expect(screen.getByText('Quand')).toBeInTheDocument();
   });
 
-  it('ne affiche pas la section Détails pour une entrée execution', () => {
-    render(<AuditEntryDrawer {...defaultProps} entry={executionEntry} />);
-    expect(screen.queryByText('Détails')).not.toBeInTheDocument();
-    expect(screen.queryByText('Nom de l\'action')).not.toBeInTheDocument();
+  it('affiche la section Détails pour une entrée execution avec champs additionnels (Story 72.3)', () => {
+    const entryWithExtraDetails: AuditExecutionEntry = {
+      ...executionEntry,
+      details: {
+        ...executionEntry.details,
+        step_order: 2,
+        step_type: 'platform',
+        referenced_action_name: 'Patch Oracle',
+      },
+    };
+    render(<AuditEntryDrawer {...defaultProps} entry={entryWithExtraDetails} />);
+    expect(screen.getByText('Détails')).toBeInTheDocument();
+    expect(screen.getByText('Ordre de l\'étape')).toBeInTheDocument();
+    expect(screen.getByText('Type d\'étape')).toBeInTheDocument();
+    expect(screen.getByText('Patch Oracle')).toBeInTheDocument();
+  });
+
+  it('Story 72.3 — step_id, execution_id, referenced_action_id ne sont pas affichés dans Détails', () => {
+    const entryWithIds: AuditExecutionEntry = {
+      ...actionEntry,
+      entity_type: 'action',
+      entity_id: 7,
+      details: {
+        step_id: 'uuid-abc-123',
+        execution_id: 88888,
+        referenced_action_id: 77777,
+        step_name: 'Étape AAP',
+        referenced_action_name: 'Patch Oracle',
+      },
+    };
+    render(<AuditEntryDrawer {...defaultProps} entry={entryWithIds} />);
+    expect(screen.getByText('Détails')).toBeInTheDocument();
+    expect(screen.getByText('Étape AAP')).toBeInTheDocument();
+    expect(screen.getByText('Patch Oracle')).toBeInTheDocument();
+    expect(screen.queryByText('uuid-abc-123')).not.toBeInTheDocument();
+    expect(screen.queryByText('88888')).not.toBeInTheDocument();
+    expect(screen.queryByText('77777')).not.toBeInTheDocument();
   });
 });
 
@@ -185,14 +236,15 @@ describe('AuditEntryDrawer — coverage extras', () => {
     expect(screen.queryByText('Détails')).not.toBeInTheDocument();
   });
 
-  it('affiche les valeurs de type objet dans la section Détails avec JSON.stringify', () => {
+  it('affiche les valeurs de type objet dans la section Détails en format tableau (Story 72.4)', () => {
     const entryWithObjectDetail: AuditExecutionEntry = {
       ...actionEntry,
       details: { action_name: 'Deploy', nested_obj: { key: 'value' } },
     };
     render(<AuditEntryDrawer {...defaultProps} entry={entryWithObjectDetail} />);
-    // Object value should be rendered with JSON.stringify inside <pre>
-    expect(screen.getByText(/"key"/)).toBeInTheDocument();
+    // Object value rendered as table (Story 72.4)
+    expect(screen.getByText('key')).toBeInTheDocument();
+    expect(screen.getByText('value')).toBeInTheDocument();
   });
 
   it('utilise user_id comme fallback dans la section Approbation quand user_name est null', () => {
@@ -321,7 +373,7 @@ describe('Story 61.9 — Section Modifications', () => {
     expect(screen.getByText('new_value')).toBeInTheDocument();
   });
 
-  it('test_object_values_rendered_as_json_pre — valeurs objets affichées en JSON dans pre (AC5)', () => {
+  it('test_object_values_rendered_as_table — valeurs objets affichées en tableau (AC5, Story 72.4)', () => {
     const objectValueEntry: AuditExecutionEntry = {
       ...integrationUpdatedEntry,
       details: {
@@ -332,8 +384,8 @@ describe('Story 61.9 — Section Modifications', () => {
     };
     render(<AuditEntryDrawer {...defaultProps} entry={objectValueEntry} />);
     expect(screen.getByText('Modifications')).toBeInTheDocument();
-    expect(screen.getByText(/"old-host"/)).toBeInTheDocument();
-    expect(screen.getByText(/"new-host"/)).toBeInTheDocument();
+    expect(screen.getByText('old-host')).toBeInTheDocument();
+    expect(screen.getByText('new-host')).toBeInTheDocument();
   });
 
   it('test_masked_values_displayed_as_is — valeurs masquées *** affichées telles quelles (AC3)', () => {
@@ -402,10 +454,11 @@ describe("Story 61.10 — Contexte d'exécution", () => {
     expect(screen.getByText('oracle-prod-01, oracle-prod-02')).toBeInTheDocument();
   });
 
-  it("test_parameters_displayed_as_json — parameters affichés en JSON indenté sous label Paramètres (AC4)", () => {
+  it("test_parameters_displayed_as_json — parameters affichés en tableau sous label Paramètres (AC4, Story 72.4)", () => {
     render(<AuditEntryDrawer {...defaultProps} entry={submittedEntry} />);
     expect(screen.getByText('Paramètres')).toBeInTheDocument();
-    expect(screen.getByText(/"patch_version"/)).toBeInTheDocument();
+    expect(screen.getByText(/patch_version/)).toBeInTheDocument();
+    expect(screen.getByText('19.21')).toBeInTheDocument();
   });
 
   it("test_section_absent_when_no_context — section absente si aucun champ présent", () => {

@@ -27,6 +27,64 @@ _AUDITED_PROFILE_FIELDS = (
 )
 
 
+def _serialize_action_permissions(perm: ProfileActionPermission) -> dict[str, Any]:
+    """Serialize ProfileActionPermission to dict for audit (Story 72.2)."""
+    type_map = {'LIST': 'list', 'PATTERN': 'pattern', 'ALL': 'all'}
+    return {
+        'actions_type': type_map.get(perm.permission_type, perm.permission_type.lower()),
+        'action_ids': perm.get_action_ids(),
+        'tag_patterns': perm.get_tag_patterns(),
+        'environments': perm.get_environments(),
+    }
+
+
+def _serialize_action_permissions_from_data(data: dict[str, Any]) -> dict[str, Any]:
+    """Serialize action_permissions input dict for audit (Story 72.2)."""
+    def _list(val: Any) -> list:
+        return val if isinstance(val, list) else []
+
+    return {
+        'actions_type': data.get('actions_type') or 'all',
+        'action_ids': _list(data.get('action_ids')),
+        'tag_patterns': _list(data.get('tag_patterns')),
+        'environments': _list(data.get('environments')),
+    }
+
+
+def _serialize_target_permissions(perm: ProfileTargetPermission) -> dict[str, Any]:
+    """Serialize ProfileTargetPermission to dict for audit (Story 72.2)."""
+    type_map = {'LIST': 'list', 'PATTERN': 'pattern', 'ALL': 'all'}
+    result: dict[str, Any] = {
+        'targets_type': type_map.get(perm.permission_type, perm.permission_type.lower()),
+        'target_names': perm.get_target_names(),
+        'target_patterns': perm.get_target_patterns(),
+    }
+    fa = perm.get_filter_by_attribute()
+    if fa:
+        result['filter_by_attribute'] = fa
+    ep = perm.get_exclusion_patterns()
+    if ep:
+        result['exclusion_patterns'] = ep
+    return result
+
+
+def _serialize_target_permissions_from_data(data: dict[str, Any]) -> dict[str, Any]:
+    """Serialize target_permissions input dict for audit (Story 72.2)."""
+    def _list(val: Any) -> list:
+        return val if isinstance(val, list) else []
+
+    result: dict[str, Any] = {
+        'targets_type': data.get('targets_type') or 'all',
+        'target_names': _list(data.get('target_names')),
+        'target_patterns': _list(data.get('target_patterns')),
+    }
+    if 'filter_by_attribute' in data and data['filter_by_attribute']:
+        result['filter_by_attribute'] = data['filter_by_attribute']
+    if 'exclusion_patterns' in data and data['exclusion_patterns']:
+        result['exclusion_patterns'] = data['exclusion_patterns']
+    return result
+
+
 class ProfileService:
     """
     Service for profile business logic.
@@ -273,19 +331,25 @@ class ProfileService:
             if old_val != new_val:
                 all_changes[field] = {"old": old_val, "new": new_val}
 
-        # 2. Action permissions (skip individual audit)
+        # 2. Action permissions (skip individual audit) — Story 72.2: store old/new for audit
         if action_permissions is not None:
+            old_ap = self.get_action_permissions(profile_id)
+            old_ap_dict = _serialize_action_permissions(old_ap) if old_ap else None
             self.set_action_permissions(
                 profile_id, action_permissions, user=user, skip_audit=True
             )
-            all_changes['action_permissions'] = {'updated': True}
+            new_ap_dict = _serialize_action_permissions_from_data(action_permissions)
+            all_changes['action_permissions'] = {"old": old_ap_dict, "new": new_ap_dict}
 
-        # 3. Target permissions (skip individual audit)
+        # 3. Target permissions (skip individual audit) — Story 72.2: store old/new for audit
         if target_permissions is not None:
+            old_tp = self.get_target_permissions(profile_id)
+            old_tp_dict = _serialize_target_permissions(old_tp) if old_tp else None
             self.set_target_permissions(
                 profile_id, target_permissions, user=user, skip_audit=True
             )
-            all_changes['target_permissions'] = {'updated': True}
+            new_tp_dict = _serialize_target_permissions_from_data(target_permissions)
+            all_changes['target_permissions'] = {"old": old_tp_dict, "new": new_tp_dict}
 
         all_changes = sanitize_audit_changes(all_changes)
 

@@ -251,6 +251,12 @@ class TestSchedulingService(TestCase):
             entity_id=se.id,
         ).first()
         self.assertIsNotNone(audit)
+        # Story 72.2: format standard changes: { status: { old, new } }
+        details = audit.get_details() or {}
+        self.assertIn('changes', details)
+        self.assertIn('status', details['changes'])
+        self.assertEqual(details['changes']['status']['old'], ScheduledExecutionStatus.PENDING)
+        self.assertEqual(details['changes']['status']['new'], ScheduledExecutionStatus.CANCELLED)
 
     # ----------------------------------------------------------------
     # Tâche 2.11 — update_status: PENDING → pas d'audit, pas d'exception

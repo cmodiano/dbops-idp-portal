@@ -20,8 +20,30 @@ import { STEP_STATUS_COLOR as STATUS_COLOR } from '../../../utils/execution-stat
 import { formatDuration } from './utils';
 import { formatUtcToLocal } from '../../../utils/dateFormat';
 import type { ExecutionStepResponse } from '../../../types/api';
+import { FormattedJson } from '../../common/FormattedJson';
 
 const { Text } = Typography;
+
+/** Résout le nom affiché : referenced_action_name, gate type (Approbation/Fenêtre maintenance), ou step_name. */
+function getStepDisplayName(step: ExecutionStepResponse): string {
+  const output = step.output as Record<string, unknown> | null | undefined;
+  const refName = output?.referenced_action_name as string | undefined;
+  if (refName) return refName;
+
+  if (step.step_type === 'gate') {
+    const gateType = output?.gate_type as string | undefined;
+    if (gateType === 'approval') return 'Approbation';
+    if (gateType === 'maintenance_window') return 'Fenêtre maintenance';
+    const conditions = output?.gate_conditions as Array<{ type?: string }> | undefined;
+    if (conditions?.length) {
+      const first = conditions[0]?.type;
+      if (first === 'approval_granted') return 'Approbation';
+      if (first === 'maintenance_window') return 'Fenêtre maintenance';
+    }
+  }
+
+  return step.step_name;
+}
 
 interface TimelineStepItemProps {
   step: ExecutionStepResponse;
@@ -29,6 +51,8 @@ interface TimelineStepItemProps {
   isLast: boolean;
   onToggleExpand: () => void;
   onOpenLogs: () => void;
+  /** Story 72.1: correlation_id pour traçabilité. */
+  correlationId?: string | null;
 }
 
 export function TimelineStepItem({
@@ -37,6 +61,7 @@ export function TimelineStepItem({
   isLast,
   onToggleExpand,
   onOpenLogs,
+  correlationId,
 }: TimelineStepItemProps) {
   const output = step.output as Record<string, unknown> | null | undefined;
   const changeNumber = output?.change_number as string | undefined;
@@ -90,7 +115,9 @@ export function TimelineStepItem({
           style={{ all: 'unset', cursor: 'pointer', width: '100%', display: 'block', textAlign: 'left' }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <Text strong>{step.step_name}</Text>
+            <Text strong>
+              {getStepDisplayName(step)}
+            </Text>
             {/* Story 19.1, AC3: "En cours" badge for RUNNING step */}
             {step.status === 'RUNNING' && <Badge status="processing" text="En cours" />}
             {/* Story 58.3, AC4: badge distinct pour WAITING gate */}
@@ -125,13 +152,19 @@ export function TimelineStepItem({
               fontSize: 13,
             }}
           >
+            {correlationId && (
+              <div style={{ marginBottom: 8, fontSize: 11 }}>
+                <Text type="secondary">Correlation ID: </Text>
+                <Text copyable={{ text: correlationId }} style={{ fontFamily: 'monospace' }}>
+                  {correlationId}
+                </Text>
+              </div>
+            )}
             {step.error_message && (
               <div style={{ color: '#EF4444', marginBottom: 8 }}>{step.error_message}</div>
             )}
             {output && typeof output === 'object' && (
-              <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12 }}>
-                {JSON.stringify(output, null, 2)}
-              </pre>
+              <FormattedJson value={output} style={{ wordBreak: 'break-word', fontSize: 12 }} />
             )}
             {changeId && (
               <a href={changeId} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12 }}>

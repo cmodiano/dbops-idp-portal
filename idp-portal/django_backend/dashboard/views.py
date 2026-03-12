@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, date
 from typing import Any
 
-from django.db.models import Q, Count, QuerySet
+from django.db.models import Exists, OuterRef, Q, Count, QuerySet
 from django.db.models.functions import TruncDate, TruncWeek
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema, OpenApiParameter
@@ -19,7 +19,7 @@ from core.exceptions import BadRequestError
 from core.middleware import get_correlation_id
 from core.models import AuditLog, AuditActionType, AuditEntityType
 from core.permissions import IsAdminUser, AdminProfilePermission
-from executions.models import Execution, ExecutionStatus, ExecutionStepType, ExecutionStepStatus, ScheduledExecution
+from executions.models import Execution, ExecutionStatus, ExecutionStep, ExecutionStepStatus, ExecutionStepType, ScheduledExecution
 
 logger = structlog.get_logger(__name__)
 
@@ -149,9 +149,20 @@ class DashboardStatsView(APIView):
         executions_jour = qs_base.filter(created_at__gte=today_start).count()
 
         # executions_en_cours: current running/pending (not period-scoped)
-        executions_en_cours = qs_base.filter(
-            status__in=[ExecutionStatus.SUBMITTED, ExecutionStatus.RUNNING, ExecutionStatus.PENDING_APPROVAL]
-        ).count()
+        # ADR-007: PENDING_APPROVAL removed — approval is now step-based.
+        # Exclude child executions and executions where all steps are COMPLETED/FAILED
+        # (stale Execution.status when workflow finished but parent was never updated).
+        en_cours_base = qs_base.filter(
+            status__in=[ExecutionStatus.SUBMITTED, ExecutionStatus.RUNNING],
+            parent_execution__isnull=True,
+        )
+        has_no_steps = ~Exists(ExecutionStep.objects.filter(execution_id=OuterRef("id")))
+        has_non_terminal_step = Exists(
+            ExecutionStep.objects.filter(execution_id=OuterRef("id")).exclude(
+                status__in=[ExecutionStepStatus.COMPLETED, ExecutionStepStatus.FAILED]
+            )
+        )
+        executions_en_cours = en_cours_base.filter(has_no_steps | has_non_terminal_step).count()
 
         # executions_en_erreur + taux_succes_pct: period-scoped
         executions_en_erreur = qs_period.filter(status=ExecutionStatus.FAILED).count()
@@ -385,13 +396,28 @@ def _compute_avg_duration_s(qs) -> float | None:
     DASH-MED-02: Extracted shared helper to avoid duplication between
     _stats_for_queryset() and DashboardStatsOperationsView.get().
     Pattern Python (compatibilité Oracle) — itération côté Python sur (started_at, completed_at).
+
+    NEW-BE-J: Added row count guard to avoid unbounded memory materialisation for large
+    datasets. When the count exceeds the threshold, a warning is logged and None is returned
+    rather than loading tens of thousands of rows into Python memory.
     """
-    durations = []
-    for started_at, completed_at in qs.filter(
+    _MAX_DURATION_ROWS = 10_000
+    completed_qs = qs.filter(
         status=ExecutionStatus.COMPLETED,
         started_at__isnull=False,
         completed_at__isnull=False,
-    ).values_list("started_at", "completed_at"):
+    )
+    row_count = completed_qs.count()
+    if row_count > _MAX_DURATION_ROWS:
+        logger.warning(
+            "dashboard_avg_duration_skipped_too_many_rows",
+            row_count=row_count,
+            threshold=_MAX_DURATION_ROWS,
+            correlation_id=get_correlation_id(),
+        )
+        return None
+    durations = []
+    for started_at, completed_at in completed_qs.values_list("started_at", "completed_at"):
         try:
             delta = (completed_at - started_at).total_seconds()
             if delta >= 0:
@@ -663,6 +689,10 @@ class DashboardStatsAdoptionView(APIView):
         )
         exec_qs = _filter_queryset_by_ownership(exec_qs, request, AdminProfilePermission)
 
+        # NEW-BE-F: user__profile is the legacy CharField on User (populated by SAML).
+        # Users authenticated via ad_groups or M2M profiles will show as "unknown".
+        # A proper fix requires storing a user_profile snapshot on Execution at creation time.
+        # Tracked as technical debt — acceptable for v1 (ad_groups auth is internal only).
         # executions_by_profile
         by_profile_rows = (
             exec_qs.values("user__profile")

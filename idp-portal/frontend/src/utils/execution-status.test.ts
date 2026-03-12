@@ -7,6 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   EXECUTION_STATUS_BADGE_CONFIG,
+  EXECUTION_STATUS_FILTER_OPTIONS,
   EXECUTION_STATUS_TAG_COLORS,
   STEP_STATUS_BADGE_CONFIG,
   STEP_STATUS_COLOR,
@@ -86,9 +87,10 @@ describe('STEP_STATUS_BADGE_CONFIG', () => {
     'FAILED',
     'SKIPPED',
     'CANCELLED',
+    'WAITING',
   ] as const;
 
-  it('couvre les 6 statuts step (dont CANCELLED défensif)', () => {
+  it('couvre les 7 statuts step (dont CANCELLED défensif, WAITING gate)', () => {
     expectedStatuses.forEach((status) => {
       expect(STEP_STATUS_BADGE_CONFIG).toHaveProperty(status);
     });
@@ -199,6 +201,57 @@ describe('STEP_STATUS_COLOR (régression — existant)', () => {
     Object.values(STEP_STATUS_COLOR).forEach((color) => {
       expect(color).toMatch(hexColorRegex);
     });
+  });
+});
+
+describe('EXECUTION_STATUS_FILTER_OPTIONS (Story 71.3 — §16.4 consolidation)', () => {
+  const expectedValues = [
+    'SUBMITTED',
+    'PENDING_APPROVAL',
+    'RUNNING',
+    'COMPLETED',
+    'FAILED',
+    'CANCELLED',
+    'REJECTED',
+    'INTEGRATION_ERROR',
+  ];
+
+  it('contient 8 options de filtre (tous les ExecutionStatusType)', () => {
+    expect(EXECUTION_STATUS_FILTER_OPTIONS).toHaveLength(8);
+  });
+
+  it('couvre les 8 statuts attendus', () => {
+    const values = EXECUTION_STATUS_FILTER_OPTIONS.map((o) => o.value);
+    expectedValues.forEach((status) => {
+      expect(values).toContain(status);
+    });
+  });
+
+  it('chaque option a un label non vide et une value non vide', () => {
+    EXECUTION_STATUS_FILTER_OPTIONS.forEach((option) => {
+      expect(typeof option.label).toBe('string');
+      expect(option.label.length).toBeGreaterThan(0);
+      expect(typeof option.value).toBe('string');
+      expect(option.value.length).toBeGreaterThan(0);
+    });
+  });
+
+  it('utilise des labels féminins (accord avec "exécution")', () => {
+    const byValue = Object.fromEntries(EXECUTION_STATUS_FILTER_OPTIONS.map((o) => [o.value, o.label]));
+    expect(byValue.SUBMITTED).toBe('Soumise');
+    expect(byValue.COMPLETED).toBe('Terminée');
+    expect(byValue.FAILED).toBe('Échouée');
+    expect(byValue.CANCELLED).toBe('Annulée');
+    expect(byValue.REJECTED).toBe('Rejetée');
+  });
+
+  it('PENDING_APPROVAL a un label explicite (pas ambigu avec PENDING)', () => {
+    const byValue = Object.fromEntries(EXECUTION_STATUS_FILTER_OPTIONS.map((o) => [o.value, o.label]));
+    expect(byValue.PENDING_APPROVAL).toBe('Approbation requise');
+  });
+
+  it('suit l\'ordre chronologique du cycle de vie (SUBMITTED en premier)', () => {
+    expect(EXECUTION_STATUS_FILTER_OPTIONS[0].value).toBe('SUBMITTED');
   });
 });
 

@@ -3,9 +3,12 @@ Root conftest for django_backend — applies to all tests (catalog, reference, i
 
 Story 56.7: Ensures Profile records exist for AdminProfilePermission so tests using
 users with profile='dbops' or 'DBOPS' can access admin endpoints.
+Story 71.9: Reusable throttle_rates fixture for DRF throttle testing.
 """
 
 import pytest
+from django.core.cache import cache
+from rest_framework.throttling import SimpleRateThrottle
 
 
 def _is_simple_test_case(request) -> bool:
@@ -116,3 +119,36 @@ def pytest_runtest_setup(item):
 
     setattr(cls, _original_key, original_setUp)
     cls.setUp = patched_setUp
+
+
+# ============================================================================
+# Throttle Rate Override Fixture (Story 71.9 — AC#1)
+# ============================================================================
+
+@pytest.fixture
+def throttle_rates():
+    """Fixture to override DRF throttle rates reliably.
+
+    DRF's SimpleRateThrottle.THROTTLE_RATES is a class attribute set at
+    import time. override_settings does NOT update it because the class
+    attribute holds a stale reference. This fixture patches THROTTLE_RATES
+    directly and clears the Django cache to avoid cross-test artifacts.
+
+    Usage::
+
+        def test_rate_limit(throttle_rates):
+            throttle_rates({'auth': '2/minute', 'execution': '3/minute'})
+            # ... test rate limiting ...
+    """
+    original = SimpleRateThrottle.THROTTLE_RATES.copy()
+    cache.clear()
+
+    def _set(rates: dict):
+        SimpleRateThrottle.THROTTLE_RATES.update(rates)
+        cache.clear()
+
+    yield _set
+
+    SimpleRateThrottle.THROTTLE_RATES.clear()
+    SimpleRateThrottle.THROTTLE_RATES.update(original)
+    cache.clear()

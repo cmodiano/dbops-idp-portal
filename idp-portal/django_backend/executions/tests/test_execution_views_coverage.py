@@ -392,6 +392,7 @@ class TestExecutionsCreateViewCoverage(TestCase):
             'parent_execution_id': None,
             'correlation_id': 'test-corr-id',
             'page_me': False,
+            'requires_target': True,
         }
         base.update(overrides)
         return base
@@ -658,7 +659,7 @@ class TestExecutionsCreateViewAdditional(TestCase):
             'action': self.action, 'action_id': self.action.id,
             'environment': 'dev', 'target_names': None, 'parameters': {},
             'workflow_step_parameters': None, 'parent_execution_id': None,
-            'correlation_id': 'corr-pending', 'page_me': False,
+            'correlation_id': 'corr-pending', 'page_me': False, 'requires_target': True,
         }
         with patch('executions.validators.payload_validator.ExecutionPayloadValidator.validate',
                    return_value=validated):
@@ -692,7 +693,7 @@ class TestExecutionsCreateViewAdditional(TestCase):
             'action': self.wf_action, 'action_id': self.wf_action.id,
             'environment': 'dev', 'target_names': None, 'parameters': {},
             'workflow_step_parameters': {'step_1': {'param': 'value'}},
-            'parent_execution_id': None, 'correlation_id': 'corr-wf', 'page_me': False,
+            'parent_execution_id': None, 'correlation_id': 'corr-wf', 'page_me': False, 'requires_target': True,
         }
         with patch('executions.validators.payload_validator.ExecutionPayloadValidator.validate',
                    return_value=validated):
@@ -728,7 +729,7 @@ class TestExecutionsCreateViewAdditional(TestCase):
             'action': self.action, 'action_id': self.action.id,
             'environment': 'dev', 'target_names': None, 'parameters': {},
             'workflow_step_parameters': None, 'parent_execution_id': None,
-            'correlation_id': 'corr-pageme', 'page_me': True,
+            'correlation_id': 'corr-pageme', 'page_me': True, 'requires_target': True,
         }
         with patch('executions.validators.payload_validator.ExecutionPayloadValidator.validate',
                    return_value=validated):

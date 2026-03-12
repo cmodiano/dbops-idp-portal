@@ -8,13 +8,17 @@ export function humanizeKey(key: string): string {
   return key.replace(/_/g, ' ').trim().replace(/^./, c => c.toUpperCase());
 }
 
-/** Format a parameter value for display. Booleans → Oui/Non, null → —, objects → JSON. */
+/** Format a parameter value for display. Booleans → Oui/Non, null → —, objects → JSON indenté (Story 72.4). */
 export function formatParamValue(value: unknown): string {
   if (value === null || value === undefined) return '—';
   if (typeof value === 'boolean') return value ? 'Oui' : 'Non';
   if (typeof value === 'string') return value;
   if (typeof value === 'number') return String(value);
-  return JSON.stringify(value);
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
 }
 
 /** Env config label mapping. */

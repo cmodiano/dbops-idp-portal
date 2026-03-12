@@ -5,11 +5,8 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
-# Ces fonctions seront ajoutées à approval_views.py
-from executions.views.approval_views import (
-    _get_user_profile_ids,
-    _check_approver_permission,
-)
+from core.permissions import get_user_profile_ids
+from executions.views.approval_views import _check_approver_permission
 
 
 def _make_user(profile_id=None, is_approver=False, profiles_m2m=None, ad_groups=None):
@@ -44,16 +41,16 @@ def _make_user(profile_id=None, is_approver=False, profiles_m2m=None, ad_groups=
 
 
 class TestGetUserProfileIds(TestCase):
-    """Tests pour _get_user_profile_ids."""
+    """Tests pour get_user_profile_ids."""
 
     def test_returns_id_from_orm_profile(self):
         user = _make_user(profile_id=42, is_approver=True)
-        result = _get_user_profile_ids(user)
+        result = get_user_profile_ids(user)
         self.assertIn(42, result)
 
     def test_returns_empty_when_no_profile(self):
         user = _make_user()
-        result = _get_user_profile_ids(user)
+        result = get_user_profile_ids(user)
         self.assertEqual(result, set())
 
     def test_returns_ids_from_m2m_profiles(self):
@@ -62,42 +59,40 @@ class TestGetUserProfileIds(TestCase):
         p2 = MagicMock()
         p2.id = 2
         user = _make_user(profile_id=None, profiles_m2m=[p1, p2])
-        result = _get_user_profile_ids(user)
+        result = get_user_profile_ids(user)
         self.assertIn(1, result)
         self.assertIn(2, result)
 
-    def test_combines_orm_and_m2m(self):
+    def test_m2m_takes_precedence_over_orm_profile(self):
+        """core.permissions uses first-match order: ad_groups > M2M > profile string > profile object.
+        When user has both profile and profiles (M2M), M2M wins and only M2M IDs are returned."""
         p_m2m = MagicMock()
         p_m2m.id = 99
         user = _make_user(profile_id=42, is_approver=True, profiles_m2m=[p_m2m])
-        result = _get_user_profile_ids(user)
-        self.assertIn(42, result)
-        self.assertIn(99, result)
+        result = get_user_profile_ids(user)
+        self.assertEqual(result, {99})
 
     def test_returns_ids_from_ad_groups(self):
-        """Chemin 3 : ad_groups → Profile.objects.find_by_ad_groups()."""
+        """ad_groups (first in resolution order) → Profile.objects.find_by_ad_groups()."""
         p_ad = MagicMock()
         p_ad.id = 7
         user = _make_user(profile_id=None, ad_groups=['CN=Approvers,OU=Groups'])
 
-        with patch('executions.views.approval_views.Profile') as mock_profile:
+        with patch('core.permissions.Profile') as mock_profile:
             mock_profile.objects.find_by_ad_groups.return_value = [p_ad]
-            result = _get_user_profile_ids(user)
+            result = get_user_profile_ids(user)
 
         self.assertIn(7, result)
         mock_profile.objects.find_by_ad_groups.assert_called_once_with(['CN=Approvers,OU=Groups'])
 
-    def test_ad_groups_none_uses_empty_list(self):
-        """ad_groups=None → find_by_ad_groups([])."""
+    def test_no_profile_sources_returns_empty(self):
+        """User with no profile, no profiles M2M, no ad_groups → empty set."""
         user = _make_user(profile_id=None)
-        user.ad_groups = None  # hasattr True, ad_groups or [] = []
+        user.ad_groups = None
 
-        with patch('executions.views.approval_views.Profile') as mock_profile:
-            mock_profile.objects.find_by_ad_groups.return_value = []
-            result = _get_user_profile_ids(user)
+        result = get_user_profile_ids(user)
 
         self.assertEqual(result, set())
-        mock_profile.objects.find_by_ad_groups.assert_called_once_with([])
 
 
 class TestCheckApproverPermission(TestCase):

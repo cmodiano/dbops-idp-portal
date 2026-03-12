@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import uuid as uuid_module
+
 from rest_framework import serializers
 from drf_spectacular.utils import extend_schema_serializer
 
@@ -33,10 +35,10 @@ class ExecutionSerializer(serializers.Serializer):
     """
     Serializer matching frontend ExecutionResponse (see frontend/src/types/api.ts).
 
-    Champs dépréciés (ADR-007, Story 57.12) :
-    - approved_by, approved_at, approval_comment : conservés en sortie pour rétrocompatibilité API,
-      mais la source de vérité est désormais ExecutionStep.approved_* depuis Story 57.1.
-      Ne plus utiliser ces champs pour de nouvelles intégrations.
+    ADR-007: approved_by, approved_at, approval_comment have been removed from the API output.
+    Source of truth is ExecutionStep.approved_by/at/approval_comment.
+    DB fields on Execution model are kept for now (Oracle CHECK constraint) but will be
+    cleaned up in a future migration.
     """
     id = serializers.IntegerField(read_only=True, help_text="Identifiant unique de l'exécution")
     action_id = serializers.IntegerField(help_text="ID de l'action exécutée")
@@ -50,9 +52,9 @@ class ExecutionSerializer(serializers.Serializer):
     started_at = serializers.DateTimeField(read_only=True, allow_null=True)
     completed_at = serializers.DateTimeField(read_only=True, allow_null=True)
     created_at = serializers.DateTimeField(read_only=True)
-    approved_by = serializers.IntegerField(read_only=True, allow_null=True)
-    approved_at = serializers.DateTimeField(read_only=True, allow_null=True)
-    approval_comment = serializers.CharField(read_only=True, allow_null=True)
+    # DEPRECATED ADR-007: approved_by, approved_at, approval_comment removed from serializer.
+    # Source of truth is now ExecutionStep.approved_by/at/approval_comment.
+    # DB fields will be cleaned up in a future migration.
     parent_execution_id = serializers.IntegerField(read_only=True, allow_null=True)
     # Distinguish workflow child (parent is workflow) vs remediation (parent is action)
     parent_item_type = serializers.CharField(read_only=True, allow_null=True)
@@ -86,11 +88,10 @@ class ExecutionSerializer(serializers.Serializer):
             "started_at": ensure_utc_isoformat(obj.started_at),
             "completed_at": ensure_utc_isoformat(obj.completed_at),
             "created_at": ensure_utc_isoformat(obj.created_at),
-            # DEPRECATED ADR-007 (Story 57.12) — conservés pour rétrocompatibilité API.
-            # Source de vérité : ExecutionStep.approved_by/at/approval_comment
-            "approved_by": obj.approved_by_id,
-            "approved_at": ensure_utc_isoformat(obj.approved_at),
-            "approval_comment": obj.approval_comment,
+            # DEPRECATED ADR-007: approved_by, approved_at, approval_comment removed.
+            # Source of truth is now ExecutionStep.approved_by/at/approval_comment.
+            # DB fields (Execution.approved_by/at/approval_comment) will be cleaned up
+            # in a future migration.
             "parent_execution_id": obj.parent_execution_id,
             "parent_item_type": (
                 obj.parent_execution
@@ -108,6 +109,8 @@ class ExecutionSerializer(serializers.Serializer):
             "integration_icon": getattr(integration, "icon", None) if integration else None,
             # Story 25.1: ExecutionTarget list
             "targets": ExecutionTargetSerializer(obj.targets.all(), many=True).data,
+            # Story 72.1: correlation_id pour traçabilité (audit, logs)
+            "correlation_id": getattr(obj, "correlation_id", None),
         }
 
 
@@ -127,11 +130,19 @@ class ExecutionStepSerializer(serializers.Serializer):
     error_message = serializers.CharField(read_only=True, allow_null=True)
 
     def to_representation(self, obj: ExecutionStep) -> dict:
+        # Story 72.3: step_name lisible — si UUID (legacy), afficher "Étape N"
+        step_name = obj.step_name
+        if step_name:
+            try:
+                uuid_module.UUID(str(step_name))
+                step_name = f"Étape {obj.step_order}"
+            except (ValueError, TypeError, AttributeError):
+                pass
         return {
             "id": obj.id,
             "execution_id": obj.execution_id,
             "step_order": obj.step_order,
-            "step_name": obj.step_name,
+            "step_name": step_name or f"Étape {obj.step_order}",
             "config_step_id": obj.config_step_id,
             "step_type": obj.step_type,
             "status": obj.status,
@@ -143,6 +154,8 @@ class ExecutionStepSerializer(serializers.Serializer):
             "approved_by_id": obj.approved_by_id,
             "approved_at": ensure_utc_isoformat(obj.approved_at),
             "approval_comment": obj.approval_comment,
+            "rejected_by_id": obj.rejected_by_id,
+            "rejected_at": ensure_utc_isoformat(obj.rejected_at),
         }
 
 

@@ -223,13 +223,18 @@ class TestCatalogService(TestCase):
 
         self.assertEqual(updated.status, ActionStatus.PUBLISHED)
 
-        # Verify audit
+        # Verify audit — Story 72.2: format standard changes: { status: { old, new } }
         audit = AuditLog.objects.filter(
             entity_type='action',
             entity_id=action.id,
             action_type='ACTION_PUBLISHED'
         ).first()
         self.assertIsNotNone(audit)
+        details = audit.get_details() or {}
+        self.assertIn('changes', details)
+        self.assertIn('status', details['changes'])
+        self.assertEqual(details['changes']['status']['old'], ActionStatus.DRAFT)
+        self.assertEqual(details['changes']['status']['new'], ActionStatus.PUBLISHED)
 
     def test_update_status_disable(self):
         """Test deactivate_action() properly disables a published action."""

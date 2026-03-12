@@ -30,7 +30,7 @@ export default defineConfig({
       reporter: ['text', 'json', 'lcov'],
       reportsDirectory: './coverage',
       reportOnFailure: true,
-      include: ['src/hooks/**/*.ts', 'src/components/**/*.tsx'],
+      include: ['src/hooks/**/*.{ts,tsx}', 'src/components/**/*.tsx', 'src/services/**/*.ts'],
       exclude: ['**/*.test.ts', '**/*.test.tsx', '**/node_modules/**', 'src/test-setup.ts'],
       thresholds: {
         statements: 90,

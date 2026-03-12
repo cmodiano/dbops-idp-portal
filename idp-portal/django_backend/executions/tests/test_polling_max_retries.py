@@ -2,7 +2,7 @@
 Tests for Story 30.7 — Polling max retries, gate timeout, and cache documentation.
 
 Covers:
-- RACE-1: MAX_POLLING_RETRIES for all 5 polling tasks
+- RACE-1: MAX_POLLING_RETRIES for poll_platform_job_status (all platform types)
 - CELERY-3: async_to_sync() usage (implicit — tasks work correctly)
 - CELERY-4: Gate timeout workflow continuation
 - CELERY-5: Gate timeout SKIPPED with error_message
@@ -16,11 +16,7 @@ from unittest.mock import patch, MagicMock, AsyncMock
 
 from executions.tasks import (
     MAX_POLLING_RETRIES,
-    poll_aap_job_status,
-    poll_tower_job_status,
-    poll_azure_devops_run_status,
-    poll_github_actions_run_status,
-    poll_terraform_cloud_run_status,
+    poll_platform_job_status,
     _mark_execution_polling_exhausted,
     _handle_gate_timeout,
 )
@@ -43,25 +39,26 @@ class TestMaxPollingRetries:
 
 
 # ---------------------------------------------------------------------------
-# poll_aap_job_status — exhaustion scenario
+# poll_platform_job_status — exhaustion scenarios per platform_type
 # ---------------------------------------------------------------------------
 
 
-class TestPollAAPExhaustion:
-    """Test poll_aap_job_status stops after MAX_POLLING_RETRIES."""
+class TestPollPlatformExhaustion:
+    """Test poll_platform_job_status stops after MAX_POLLING_RETRIES for each platform."""
 
     @patch("executions.tasks._mark_execution_polling_exhausted")
     @patch("executions.tasks.get_correlation_id", return_value="test-corr")
-    def test_exhaustion_on_adapter_error(
+    def test_aap_exhaustion_on_adapter_error(
         self, mock_corr: MagicMock, mock_exhausted: MagicMock
     ) -> None:
         """When retry_count >= MAX_POLLING_RETRIES and adapter raises, mark exhausted."""
         with patch("adapters.aap_adapter.AAPAdapter") as MockAdapter:
             MockAdapter.side_effect = Exception("connection refused")
 
-            result = poll_aap_job_status(
+            result = poll_platform_job_status(
                 execution_id=1,
                 platform_job_id="job-123",
+                platform_type="aap",
                 retry_count=MAX_POLLING_RETRIES,
             )
 
@@ -74,17 +71,14 @@ class TestPollAAPExhaustion:
     def test_reschedule_with_incremented_retry(
         self, mock_corr: MagicMock, mock_apply: MagicMock
     ) -> None:
-        """When retry_count < MAX, re-schedule with retry_count+1.
-
-        Story 34.5: Le shim poll_aap_job_status délègue à poll_platform_job_status,
-        qui est responsable du re-schedule via poll_platform_job_status.apply_async.
-        """
+        """When retry_count < MAX, re-schedule with retry_count+1."""
         with patch("adapters.aap_adapter.AAPAdapter") as MockAdapter:
             MockAdapter.side_effect = Exception("timeout")
 
-            result = poll_aap_job_status(
+            result = poll_platform_job_status(
                 execution_id=1,
                 platform_job_id="job-123",
+                platform_type="aap",
                 retry_count=5,
             )
 
@@ -105,18 +99,16 @@ class TestPollAAPExhaustion:
         mock_update: MagicMock,
         mock_broadcast: MagicMock,
     ) -> None:
-        """After a successful poll (non-terminal), retry_count resets to 0.
-
-        Story 34.5: Le re-schedule se fait via poll_platform_job_status.apply_async.
-        """
+        """After a successful poll (non-terminal), retry_count resets to 0."""
         mock_adapter = MagicMock()
         mock_adapter.get_status = AsyncMock(return_value={"status": "RUNNING", "aap_status": "running"})
         mock_adapter.get_job_logs = AsyncMock(return_value={"content": "log line", "complete": False})
 
         with patch("adapters.aap_adapter.AAPAdapter", return_value=mock_adapter):
-            result = poll_aap_job_status(
+            result = poll_platform_job_status(
                 execution_id=1,
                 platform_job_id="job-123",
+                platform_type="aap",
                 retry_count=10,
             )
 
@@ -124,103 +116,71 @@ class TestPollAAPExhaustion:
         kwargs = mock_apply.call_args[1]["kwargs"]
         assert kwargs["retry_count"] == 0
 
-
-# ---------------------------------------------------------------------------
-# poll_tower_job_status — exhaustion scenario
-# ---------------------------------------------------------------------------
-
-
-class TestPollTowerExhaustion:
-    """Test poll_tower_job_status stops after MAX_POLLING_RETRIES."""
-
     @patch("executions.tasks._mark_execution_polling_exhausted")
     @patch("executions.tasks.get_correlation_id", return_value="test-corr")
-    def test_exhaustion_on_adapter_error(
+    def test_tower_exhaustion_on_adapter_error(
         self, mock_corr: MagicMock, mock_exhausted: MagicMock
     ) -> None:
         with patch("adapters.tower_adapter.TowerAdapter") as MockAdapter:
             MockAdapter.side_effect = Exception("connection refused")
 
-            result = poll_tower_job_status(
+            result = poll_platform_job_status(
                 execution_id=1,
                 platform_job_id="job-456",
+                platform_type="tower",
                 retry_count=MAX_POLLING_RETRIES,
             )
 
         assert result["outcome"] == "exhausted"
         mock_exhausted.assert_called_once()
 
-
-# ---------------------------------------------------------------------------
-# poll_azure_devops_run_status — exhaustion scenario
-# ---------------------------------------------------------------------------
-
-
-class TestPollAzureDevOpsExhaustion:
-    """Test poll_azure_devops_run_status stops after MAX_POLLING_RETRIES."""
-
     @patch("executions.tasks._mark_execution_polling_exhausted")
     @patch("executions.tasks.get_correlation_id", return_value="test-corr")
-    def test_exhaustion_on_adapter_error(
+    def test_azure_devops_exhaustion_on_adapter_error(
         self, mock_corr: MagicMock, mock_exhausted: MagicMock
     ) -> None:
         with patch("adapters.azure_devops_adapter.AzureDevOpsAdapter") as MockAdapter:
             MockAdapter.side_effect = Exception("connection refused")
 
-            result = poll_azure_devops_run_status(
+            result = poll_platform_job_status(
                 execution_id=1,
                 platform_job_id="run-789",
+                platform_type="azure_devops",
                 retry_count=MAX_POLLING_RETRIES,
             )
 
         assert result["outcome"] == "exhausted"
         mock_exhausted.assert_called_once()
 
-
-# ---------------------------------------------------------------------------
-# poll_github_actions_run_status — exhaustion scenario
-# ---------------------------------------------------------------------------
-
-
-class TestPollGitHubActionsExhaustion:
-    """Test poll_github_actions_run_status stops after MAX_POLLING_RETRIES."""
-
     @patch("executions.tasks._mark_execution_polling_exhausted")
     @patch("executions.tasks.get_correlation_id", return_value="test-corr")
-    def test_exhaustion_on_adapter_error(
+    def test_github_actions_exhaustion_on_adapter_error(
         self, mock_corr: MagicMock, mock_exhausted: MagicMock
     ) -> None:
         with patch("adapters.github_actions_adapter.GitHubActionsAdapter") as MockAdapter:
             MockAdapter.side_effect = Exception("connection refused")
 
-            result = poll_github_actions_run_status(
+            result = poll_platform_job_status(
                 execution_id=1,
                 platform_job_id="run-101",
+                platform_type="github_actions",
                 retry_count=MAX_POLLING_RETRIES,
             )
 
         assert result["outcome"] == "exhausted"
         mock_exhausted.assert_called_once()
 
-
-# ---------------------------------------------------------------------------
-# poll_terraform_cloud_run_status — exhaustion scenario
-# ---------------------------------------------------------------------------
-
-
-class TestPollTerraformCloudExhaustion:
-    """Test poll_terraform_cloud_run_status stops after MAX_POLLING_RETRIES."""
-
     @patch("executions.tasks._mark_execution_polling_exhausted")
     @patch("executions.tasks.get_correlation_id", return_value="test-corr")
-    def test_exhaustion_on_adapter_error(
+    def test_terraform_cloud_exhaustion_on_adapter_error(
         self, mock_corr: MagicMock, mock_exhausted: MagicMock
     ) -> None:
         with patch("adapters.terraform_cloud_adapter.TerraformCloudAdapter") as MockAdapter:
             MockAdapter.side_effect = Exception("connection refused")
-            result = poll_terraform_cloud_run_status(
+            result = poll_platform_job_status(
                 execution_id=1,
                 platform_job_id="run-202",
+                platform_type="terraform_cloud",
                 retry_count=MAX_POLLING_RETRIES,
             )
 
@@ -381,7 +341,7 @@ class TestHandleGateTimeout:
                     "step_type": "gate",
                     "gate_type": "maintenance_window",
                     "order": 1,
-                    "on_success_step_id": "platform-1",
+                    "on_success_step_ids": ["platform-1"],
                 },
                 {
                     "name": "next-step",
@@ -415,7 +375,7 @@ class TestHandleGateTimeout:
         mock_resume.apply_async.assert_called_once()
         args = mock_resume.apply_async.call_args[1]["args"]
         assert args[0] == execution.id
-        assert args[1] == "platform-1"
+        assert args[1] == ["platform-1"]
         mock_retry.apply_async.assert_not_called()
 
 

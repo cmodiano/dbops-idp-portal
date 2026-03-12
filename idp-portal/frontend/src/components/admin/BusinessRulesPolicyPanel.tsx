@@ -1,8 +1,9 @@
 /**
- * Story 28.4, AC#1, AC#2: Panel Admin pour la gestion des r\u00e8gles m\u00e9tier pr\u00e9d\u00e9finies.
+ * Story 28.4, AC#1, AC#2: Panel Admin pour la gestion des règles métier prédéfinies.
+ * Story 71.1, AC3: Migration DIP — utilise useBusinessRulePoliciesAdmin au lieu d'importer directement le service.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import { Table, Button, Tag, Space, App, Select, Switch, Typography } from 'antd';
 import type { TableProps } from 'antd';
 import { PlusOutlined, ReloadOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
@@ -11,13 +12,7 @@ import type {
   BusinessRulePolicyDetail,
   BusinessRulePolicyPayload,
 } from '../../types/api';
-import {
-  getBusinessRulePolicies,
-  getBusinessRulePolicy,
-  createBusinessRulePolicy,
-  updateBusinessRulePolicy,
-  deleteBusinessRulePolicy,
-} from '../../services/business_rules_service';
+import { useBusinessRulePoliciesAdmin } from '../../hooks/useBusinessRulePoliciesAdmin';
 import { BusinessRulePolicyModal } from './BusinessRulePolicyModal';
 import logger from '../../services/logger';
 
@@ -33,33 +28,16 @@ const STEP_TYPE_OPTIONS = [
 
 export function BusinessRulesPolicyPanel() {
   const { notification, modal } = App.useApp();
-  const [policies, setPolicies] = useState<BusinessRulePolicyListItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editPolicy, setEditPolicy] = useState<BusinessRulePolicyDetail | null>(null);
   const [saving, setSaving] = useState(false);
   const [filterStepType, setFilterStepType] = useState('');
   const [filterActiveOnly, setFilterActiveOnly] = useState(false);
 
-  const fetchPolicies = useCallback(async () => {
-    setLoading(true);
-    try {
-      const response = await getBusinessRulePolicies({
-        step_type: filterStepType || undefined,
-        is_active: filterActiveOnly ? true : undefined,
-      });
-      setPolicies(response.data ?? []);
-    } catch (err) {
-      logger.error('business_rule_policies_load_error', { error: String(err) });
-      notification.error({ title: 'Erreur lors du chargement des r\u00e8gles m\u00e9tier' });
-    } finally {
-      setLoading(false);
-    }
-  }, [notification, filterStepType, filterActiveOnly]);
-
-  useEffect(() => {
-    fetchPolicies();
-  }, [fetchPolicies]);
+  const { policies, loading, fetchPolicies, getOne, create, update, remove } = useBusinessRulePoliciesAdmin({
+    step_type: filterStepType || undefined,
+    is_active: filterActiveOnly ? true : undefined,
+  });
 
   const handleCreate = () => {
     setEditPolicy(null);
@@ -68,29 +46,28 @@ export function BusinessRulesPolicyPanel() {
 
   const handleEdit = async (record: BusinessRulePolicyListItem) => {
     try {
-      const detail = await getBusinessRulePolicy(record.id);
+      const detail = await getOne(record.id);
       setEditPolicy(detail);
       setModalOpen(true);
     } catch (err) {
-      notification.error({ title: 'Erreur lors du chargement de la r\u00e8gle' });
+      notification.error({ message: 'Erreur lors du chargement de la règle' });
       logger.error('business_rule_policy_load_error', { error: String(err) });
     }
   };
 
   const handleDelete = (record: BusinessRulePolicyListItem) => {
     modal.confirm({
-      title: 'Supprimer la r\u00e8gle m\u00e9tier',
-      content: `\u00cates-vous s\u00fbr de vouloir supprimer la r\u00e8gle \u00ab ${record.name} \u00bb ? Les actions associ\u00e9es n'auront plus de r\u00e8gle.`,
+      title: 'Supprimer la règle métier',
+      content: `Êtes-vous sûr de vouloir supprimer la règle « ${record.name} » ? Les actions associées n'auront plus de règle.`,
       okText: 'Supprimer',
       okType: 'danger',
       cancelText: 'Annuler',
       onOk: async () => {
         try {
-          await deleteBusinessRulePolicy(record.id);
-          notification.success({ title: `R\u00e8gle \u00ab ${record.name} \u00bb supprim\u00e9e` });
-          fetchPolicies();
+          await remove(record.id);
+          notification.success({ message: `Règle « ${record.name} » supprimée` });
         } catch (err) {
-          notification.error({ title: 'Erreur lors de la suppression' });
+          notification.error({ message: 'Erreur lors de la suppression' });
           logger.error('business_rule_policy_delete_error', { error: String(err) });
         }
       },
@@ -101,15 +78,14 @@ export function BusinessRulesPolicyPanel() {
     setSaving(true);
     try {
       if (editPolicy) {
-        await updateBusinessRulePolicy(editPolicy.id, payload);
-        notification.success({ title: `R\u00e8gle \u00ab ${payload.name} \u00bb mise \u00e0 jour` });
+        await update(editPolicy.id, payload);
+        notification.success({ message: `Règle « ${payload.name} » mise à jour` });
       } else {
-        await createBusinessRulePolicy(payload);
-        notification.success({ title: `R\u00e8gle \u00ab ${payload.name} \u00bb cr\u00e9\u00e9e` });
+        await create(payload);
+        notification.success({ message: `Règle « ${payload.name} » créée` });
       }
       setModalOpen(false);
       setEditPolicy(null);
-      fetchPolicies();
     } finally {
       setSaving(false);
     }
@@ -127,7 +103,7 @@ export function BusinessRulesPolicyPanel() {
       dataIndex: 'description',
       key: 'description',
       ellipsis: true,
-      render: (val: string | null) => val || <Text type="secondary">\u2014</Text>,
+      render: (val: string | null) => val || <Text type="secondary">—</Text>,
     },
     {
       title: 'Type',
@@ -135,7 +111,7 @@ export function BusinessRulesPolicyPanel() {
       key: 'step_type',
       width: 150,
       render: (val: string | null) =>
-        val ? <Tag>{val}</Tag> : <Text type="secondary">\u2014</Text>,
+        val ? <Tag>{val}</Tag> : <Text type="secondary">—</Text>,
     },
     {
       title: 'Actif',
@@ -146,7 +122,7 @@ export function BusinessRulesPolicyPanel() {
         val ? <Tag color="green">Oui</Tag> : <Tag color="red">Non</Tag>,
     },
     {
-      title: 'Modifi\u00e9',
+      title: 'Modifié',
       dataIndex: 'updated_at',
       key: 'updated_at',
       width: 160,
@@ -189,7 +165,7 @@ export function BusinessRulesPolicyPanel() {
             onChange={setFilterStepType}
             options={STEP_TYPE_OPTIONS}
             style={{ width: 180 }}
-            placeholder="Type d'\u00e9tape"
+            placeholder="Type d'étape"
             aria-label="Filtre par type"
           />
           <Space size="small">
@@ -202,7 +178,7 @@ export function BusinessRulesPolicyPanel() {
           </Space>
         </Space>
         <Space>
-          <Button icon={<ReloadOutlined />} onClick={fetchPolicies} loading={loading}>
+          <Button icon={<ReloadOutlined />} onClick={() => fetchPolicies()} loading={loading}>
             Actualiser
           </Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>

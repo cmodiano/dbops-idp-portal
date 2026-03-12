@@ -1,10 +1,10 @@
 /**
- * Tests pour useOutputSchemas hook (Story 63.3).
+ * Tests pour useOutputSchemas hook (Story 63.3) et useOutputSchemasList (Story 71.1, AC1).
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
-import { useOutputSchemas } from './useOutputSchemas';
+import { useOutputSchemas, useOutputSchemasList } from './useOutputSchemas';
 import * as service from '../services/output_schema_service';
 
 vi.mock('../services/output_schema_service');
@@ -114,5 +114,52 @@ describe('useOutputSchemas', () => {
 
     // After unmount, state is frozen at initial value (no update happened yet)
     expect(result.current.availableVariables).toEqual([]);
+  });
+});
+
+// Story 71.1, AC1: Tests pour useOutputSchemasList
+const mockSchemaItem = {
+  id: 1,
+  name: 'Action Output',
+  schema_type: 'action',
+  schema_json: { output_fields: [{ name: 'result', type: 'string' }] },
+};
+
+describe('useOutputSchemasList', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('charge les schemas quand enabled=true', async () => {
+    vi.mocked(service.fetchOutputSchemasList).mockResolvedValue([mockSchemaItem]);
+
+    const { result } = renderHook(() => useOutputSchemasList('action', true));
+
+    expect(result.current.loading).toBe(true);
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.schemas).toHaveLength(1);
+    expect(result.current.schemas[0].name).toBe('Action Output');
+    expect(result.current.error).toBeNull();
+    expect(service.fetchOutputSchemasList).toHaveBeenCalledWith('action');
+  });
+
+  it('ne charge pas quand enabled=false', () => {
+    const { result } = renderHook(() => useOutputSchemasList('action', false));
+
+    expect(result.current.loading).toBe(false);
+    expect(result.current.schemas).toEqual([]);
+    expect(service.fetchOutputSchemasList).not.toHaveBeenCalled();
+  });
+
+  it('gère les erreurs', async () => {
+    vi.mocked(service.fetchOutputSchemasList).mockRejectedValue(new Error('Network'));
+
+    const { result } = renderHook(() => useOutputSchemasList('action'));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.schemas).toEqual([]);
+    expect(result.current.error).toBe('Impossible de charger les schémas d\'output.');
   });
 });

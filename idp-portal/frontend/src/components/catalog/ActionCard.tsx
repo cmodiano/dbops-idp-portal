@@ -85,11 +85,14 @@ interface TechnologyIconsProps {
   iconSize?: number;
 }
 
-function TechnologyIcons({ technologies, maxVisible = 3, iconSize = 32 }: TechnologyIconsProps) {
+function TechnologyIcons({ technologies, maxVisible = 2, iconSize = 36 }: TechnologyIconsProps) {
   const visible = technologies.slice(0, maxVisible);
   const overflow = technologies.length - maxVisible;
+  const tooltipTitle = technologies.length > 1
+    ? `Technologies : ${technologies.join(', ')}`
+    : undefined;
 
-  return (
+  const content = (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }} data-testid="technology-icons">
       {visible.map((tech, i) => (
         <span key={`${tech}-${i}`} style={{ display: 'inline-flex', flexShrink: 0 }}>
@@ -112,6 +115,12 @@ function TechnologyIcons({ technologies, maxVisible = 3, iconSize = 32 }: Techno
         </span>
       )}
     </span>
+  );
+
+  return tooltipTitle ? (
+    <Tooltip title={tooltipTitle}>{content}</Tooltip>
+  ) : (
+    content
   );
 }
 
@@ -212,7 +221,7 @@ export const ActionCard = memo(function ActionCard({
   // Story 5.7, AC3; Story 18.2: Use shared iconHelpers for workflow, engine-specific SVG for actions
   const workflowTechnologies = action.technologies?.filter((t) => t && t.trim() !== '') || [];
   const icon = isWorkflow && workflowTechnologies.length > 0
-    ? <TechnologyIcons technologies={workflowTechnologies} maxVisible={3} iconSize={32} />
+    ? <TechnologyIcons technologies={workflowTechnologies} maxVisible={2} iconSize={36} />
     : isWorkflow
       ? getItemTypeIcon('workflow', null, { withTooltip: true, fontSize: STYLE_TOKENS.engineIconSize }).icon
       : (action.engine ? getEngineIcon(action.engine) : null);

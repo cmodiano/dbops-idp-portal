@@ -98,10 +98,6 @@ def get_workflow_entry_step_ids(steps: list | None) -> list[str]:
                 for sid in ids:
                     if isinstance(sid, str) and sid.strip():
                         all_targets.add(sid.strip())
-        for key in ('on_success_step_id', 'on_error_step_id'):
-            sid = step.get(key)
-            if isinstance(sid, str) and sid.strip():
-                all_targets.add(sid.strip())
     entry_ids: list[str] = []
     for step in steps:
         if not isinstance(step, dict):
@@ -253,6 +249,33 @@ def enrich_workflow_step_parameters_for_display(
             step_name = step_names_by_id.get(key, key if isinstance(key, str) else str(key))
         wsp_copy[key] = {**entry, "step_name": step_name}
     result["workflow_step_parameters"] = wsp_copy
+    return result
+
+
+def strip_step_ids_for_audit_display(parameters: dict | None) -> dict | None:
+    """
+    Story 72.3: For audit display, workflow_step_parameters shows step_name + parameters.
+    Exclut step_id. Format: {order: {step_name, parameters: {param: value}}}.
+    """
+    if not parameters:
+        return parameters
+    wsp = parameters.get("workflow_step_parameters")
+    if not isinstance(wsp, dict):
+        return parameters
+    result = dict(parameters)
+    wsp_audit: dict[str, dict] = {}
+    for key, entry in wsp.items():
+        if isinstance(entry, dict):
+            name = entry.get("step_name")
+            step_name = str(name) if name is not None else f"Étape {key}"
+            params = entry.get("parameters")
+            if isinstance(params, dict):
+                wsp_audit[key] = {"step_name": step_name, "parameters": params}
+            else:
+                wsp_audit[key] = {"step_name": step_name, "parameters": {}}
+        else:
+            wsp_audit[key] = {"step_name": str(entry), "parameters": {}}
+    result["workflow_step_parameters"] = wsp_audit
     return result
 
 

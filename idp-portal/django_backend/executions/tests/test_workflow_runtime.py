@@ -2,8 +2,8 @@
 Unit tests for WorkflowRuntime - Story 16.3
 
 Tests AC1-AC5:
-- AC1: Branching on success (on_success_step_id)
-- AC2: Branching on error (on_error_step_id)
+- AC1: Branching on success (on_success_step_ids)
+- AC2: Branching on error (on_error_step_ids)
 - AC4: Convergence (same next step from success/error)
 - AC5: Loop detection (max 100 transitions)
 
@@ -127,14 +127,14 @@ class TestWorkflowRuntimeResolveNextStep:
         self.runtime = WorkflowRuntime(self.execution)
 
     def test_resolve_next_step_on_success(self):
-        """AC1: Follow on_success_step_id on success."""
+        """AC1: Follow on_success_step_ids on success."""
         step = self.runtime.steps_by_id["step-1"]
         next_step_id = self.runtime._resolve_next_step(step, StepOutcome.SUCCESS)
 
         assert next_step_id == "step-2"
 
     def test_resolve_next_step_on_error(self):
-        """AC2: Follow on_error_step_id on error."""
+        """AC2: Follow on_error_step_ids on error."""
         step = self.runtime.steps_by_id["step-1"]
         next_step_id = self.runtime._resolve_next_step(step, StepOutcome.ERROR)
 
@@ -168,7 +168,7 @@ class TestWorkflowRuntimeResolveNextStep:
 
     def test_resolve_next_step_linear_without_branches(self):
         """Linear workflow without branch fields uses order."""
-        # Create linear workflow (no on_success_step_id/on_error_step_id)
+        # Create linear workflow (no on_success_step_ids/on_error_step_ids)
         linear_action = ActionFactory(
             name="Linear Workflow",
             category="Administration",

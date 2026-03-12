@@ -75,7 +75,8 @@ export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggest
   }, [onClose, redirectOnClose]);
 
   // AC8: Elapsed or total duration
-  const getDuration = () => {
+  // NEW-FE-K: Computed once and stored to avoid calling Date.now() twice with different snapshots.
+  const duration = (() => {
     if (!execution?.started_at) return null;
     const start = new Date(execution.started_at).getTime();
     const end = execution.completed_at ? new Date(execution.completed_at).getTime() : Date.now();
@@ -84,7 +85,7 @@ export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggest
     const m = Math.floor(s / 60);
     const r = s % 60;
     return r ? `${m}m ${r}s` : `${m}m`;
-  };
+  })();
 
   const envBadge = ENV_BADGE[execution?.environment ?? 'dev'] ?? ENV_BADGE.dev;
   const statusCfg = EXECUTION_STATUS_BADGE_CONFIG[execution?.status ?? 'SUBMITTED'] ?? { color: 'default', label: execution?.status ?? 'SUBMITTED' };
@@ -177,10 +178,10 @@ export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggest
                 <Text type="secondary" style={{ color: '#595959' }}>Initiateur:</Text>
                 <Text style={{ color: '#262626' }}>{execution.user_display_name ?? `User #${execution.user_id}`}</Text>
               </Space>
-              {getDuration() && (
+              {duration && (
                 <Space size={4}>
                   <Text type="secondary" style={{ color: '#595959' }}>{isTerminal ? 'Durée:' : 'Temps écoulé:'}</Text>
-                  <Text style={{ color: '#262626' }}>{getDuration()}</Text>
+                  <Text style={{ color: '#262626' }}>{duration}</Text>
                 </Space>
               )}
             </Space>

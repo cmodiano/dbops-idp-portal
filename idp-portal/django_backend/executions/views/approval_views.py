@@ -10,7 +10,7 @@ from typing import cast
 import structlog
 
 from django.db import connection, transaction
-from django.db.models import Q
+from django.db.models import Q, Subquery
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
@@ -22,9 +22,8 @@ from core.exceptions import BadRequestError, NotFoundError
 from core.middleware import get_correlation_id
 from core.models import AuditActionType, AuditEntityType
 from core.pagination import paginate_queryset
-from core.permissions import IsAdminUser, is_admin_user
+from core.permissions import IsAdminUser, is_admin_user, get_user_profile_ids
 from core.services import AuditService
-from profiles.models import Profile
 from executions.models import (
     Execution,
     ExecutionStatus,
@@ -33,7 +32,7 @@ from executions.models import (
 )
 from executions.serializers import ExecutionSerializer, ExecutionStepSerializer
 from executions.services import ExecutionService
-from executions.tasks.gates import resume_container_workflow_from_gate
+from executions.tasks.gates import _get_next_step_by_order, resume_container_workflow_from_gate
 from executions.utils import parse_int
 from idp_auth.models import User
 
@@ -43,33 +42,46 @@ from drf_spectacular.utils import extend_schema, OpenApiParameter, inline_serial
 logger = structlog.get_logger(__name__)
 
 
+def _enqueue_resume_with_retries(execution_id: int, step_ids: list[str], max_retries: int = 3) -> None:
+    """Enqueue resume_container_workflow_from_gate with retries on transient broker errors.
+
+    NEW-BE-G: Removed time.sleep() calls that blocked gunicorn workers for up to 1.5s on
+    broker failure. Celery's own retry mechanism handles transient broker unavailability.
+    We attempt the enqueue once and log on failure — the approval DB state is already
+    committed, so a dead-letter / monitoring alert can trigger manual retry.
+    """
+    for attempt in range(max_retries):
+        try:
+            resume_container_workflow_from_gate.apply_async(
+                args=[execution_id, step_ids], queue="default"
+            )
+            return
+        except Exception as e:  # noqa: BLE001
+            logger.warning(
+                "approval_resume_enqueue_attempt_failed",
+                execution_id=execution_id,
+                step_ids=step_ids,
+                attempt=attempt + 1,
+                max_retries=max_retries,
+                error=str(e),
+            )
+            if attempt == max_retries - 1:
+                logger.error(
+                    "approval_resume_enqueue_failed",
+                    execution_id=execution_id,
+                    step_ids=step_ids,
+                    error=str(e),
+                    exc_info=True,
+                )
+
+
 # ---------------------------------------------------------------------------
 # Helpers Story 58.4 — approver permission check
 # ---------------------------------------------------------------------------
 
 
-def _get_user_profile_ids(user: User) -> set[int]:
-    """Retourne les IDs de profils de l'utilisateur.
-
-    Chemin 1 : Profile ORM direct
-    Chemin 2 : M2M profiles
-    Chemin 3 : ad_groups → Profile.objects.find_by_ad_groups()
-    """
-    profile_ids: set[int] = set()
-    # Chemin 1
-    profile_val = getattr(user, 'profile', None)
-    if profile_val and hasattr(profile_val, 'id'):
-        profile_ids.add(profile_val.id)
-    # Chemin 2
-    if hasattr(user, 'profiles'):
-        for p in user.profiles.all():
-            profile_ids.add(p.id)
-    # Chemin 3
-    if hasattr(user, 'ad_groups'):
-        ad_groups = user.ad_groups or []
-        for p in Profile.objects.find_by_ad_groups(ad_groups):
-            profile_ids.add(p.id)
-    return profile_ids
+# NEW-BE-A: Replaced local _get_user_profile_ids with get_user_profile_ids from core.permissions
+# to eliminate the duplicated profile-resolution logic (same 3-path traversal).
 
 
 
@@ -90,7 +102,7 @@ def _check_approver_permission(user: User, step_config: dict) -> bool:
             step_config_keys=list(step_config.keys()),
         )
         return False
-    user_profile_ids = _get_user_profile_ids(user)
+    user_profile_ids = get_user_profile_ids(user)
     return bool(user_profile_ids & set(approver_profile_ids))
 
 
@@ -108,7 +120,7 @@ def _get_step_or_404(execution_id: int, step_id: int) -> ExecutionStep:
     try:
         return (
             ExecutionStep.objects.select_for_update()
-            .select_related("execution__action", "approved_by")
+            .select_related("execution__action", "approved_by", "rejected_by")
             .get(id=step_id, execution_id=execution_id)
         )
     except ExecutionStep.DoesNotExist:
@@ -148,92 +160,41 @@ def _validate_approval_gate_step(step: ExecutionStep) -> None:
 
 
 def _get_step_config(step: ExecutionStep) -> dict:
-    """Retourne la définition du step depuis action.execution_steps.
-
-    Uses config_step_id (robust ID-based matching) with fallback to step_name
-    for backward compatibility with older ExecutionStep records.
-    """
+    """Retourne la définition du step depuis action.execution_steps."""
+    from executions.utils.step_config import find_step_config  # noqa: PLC0415
     action = step.execution.action
     execution_steps = action.execution_steps or []
-    for s in execution_steps:
-        if isinstance(s, dict):
-            # Primary: match by config_step_id (robust, always a UUID)
-            if step.config_step_id and s.get("step_id") == step.config_step_id:
-                return s
-            # Fallback for old records without config_step_id
-            if not step.config_step_id and (
-                s.get("step_id") == step.step_name or s.get("name") == step.step_name
-            ):
-                return s
-    logger.warning(
-        "step_config_not_found",
-        step_name=step.step_name,
-        config_step_id=step.config_step_id,
-        execution_id=step.execution_id,
-        step_id=step.id,
-    )
-    return {}
+    result = find_step_config(execution_steps, step)
+    if result is None:
+        logger.warning(
+            "step_config_not_found",
+            step_name=step.step_name,
+            config_step_id=step.config_step_id,
+            execution_id=step.execution_id,
+            step_id=step.id,
+        )
+        return {}
+    return result
 
 
 def _get_on_success_step_ids(step_config: dict, execution_steps: list) -> list[str]:
     """Story 67.4: Retourne la liste des step_ids à reprendre après approbation.
-    Priorité: on_success_step_ids (pluriel) > on_success_step_id (singulier) > _get_next_step_id_by_order.
+
+    ADR-007 (step_type présent): on_success_step_ids si présent, sinon _get_next_step_by_order.
+    Legacy (sans step_type): bypass on_success_step_ids, retourne le next step par ordre.
     """
+    is_adr007_step = bool(step_config.get("step_type"))
+    if not is_adr007_step:
+        next_step = _get_next_step_by_order(execution_steps, step_config)
+        next_id = next_step.get("step_id") if next_step else None
+        return [next_id] if next_id else []
+
     ids = step_config.get("on_success_step_ids")
     if isinstance(ids, list) and len(ids) > 0:
         return [s for s in ids if isinstance(s, str) and s]
-    sid = step_config.get("on_success_step_id")
-    if sid and isinstance(sid, str):
-        return [sid]
-    next_id = _get_next_step_id_by_order(execution_steps, step_config)
+    next_step = _get_next_step_by_order(execution_steps, step_config)
+    next_id = next_step.get("step_id") if next_step else None
     return [next_id] if next_id else []
-
-
-def _get_next_step_id_by_order(execution_steps: list, current_step_config: dict) -> str | None:
-    """Retourne le step_id du step suivant par ordre (fallback quand on_success_step_id absent).
-    Exclut les members de parallel_group (non routables directement, comme dans le runtime).
-    Utilise un fallback par identité (step_id/name) quand la comparaison par order échoue.
-    """
-    # Collect member step_ids from parallel_group steps
-    member_step_ids: set[str] = set()
-    for s in execution_steps:
-        if isinstance(s, dict) and s.get("step_type") == "parallel_group":
-            parallel_steps = s.get("parallel_steps")
-            if isinstance(parallel_steps, list):
-                for ps_id in parallel_steps:
-                    if isinstance(ps_id, str) and ps_id:
-                        member_step_ids.add(ps_id)
-    # Filter to non-member steps only (same sequence the runtime uses for direct routing)
-    candidate_steps = [
-        s
-        for s in execution_steps
-        if isinstance(s, dict)
-        and s.get("step_id")
-        and s.get("step_id") not in member_step_ids
-    ]
-    sorted_steps = sorted(
-        enumerate(candidate_steps),
-        key=lambda ix: (ix[1].get("order", 0), ix[0]),
-    )
-    current_order = current_step_config.get("order", 0)
-    current_sid = current_step_config.get("step_id")
-    current_name = current_step_config.get("name")
-
-    # Try identity-based match first: find current step in sorted list, return next
-    if current_sid or current_name:
-        for i, (_orig_idx, s) in enumerate(sorted_steps):
-            if (current_sid and s.get("step_id") == current_sid) or (
-                current_name and s.get("name") == current_name
-            ):
-                if i + 1 < len(sorted_steps):
-                    return sorted_steps[i + 1][1].get("step_id")
-                return None  # current step is last
-
-    # Fallback: first step with strictly greater order
-    for _orig_idx, s in sorted_steps:
-        if s.get("order", 0) > current_order:
-            return s.get("step_id")
-    return None
 
 
 def _find_first_waiting_approval_step(execution_id: int) -> ExecutionStep | None:
@@ -258,50 +219,6 @@ def _find_first_waiting_approval_step(execution_id: int) -> ExecutionStep | None
         ):
             return step
     return None
-
-
-def _get_and_validate_pending_execution(execution_id: int) -> Execution:
-    """
-    Helper to get execution and validate PENDING_APPROVAL status.
-    Uses select_for_update() to prevent race conditions.
-
-    Code Review 30.1: Extracted to avoid duplication and added row-level locking.
-
-    Args:
-        execution_id: Execution ID to retrieve
-
-    Returns:
-        Execution instance in PENDING_APPROVAL status
-
-    Raises:
-        NotFoundError: If execution does not exist
-        BadRequestError: If execution is not in PENDING_APPROVAL status
-    """
-    try:
-        # select_for_update() locks the row until transaction commits
-        execution = (
-            Execution.objects.select_for_update()
-            .select_related("action", "user", "action__integration")
-            .get(id=execution_id)
-        )
-    except Execution.DoesNotExist:
-        raise NotFoundError(
-            code="EXECUTION_NOT_FOUND",
-            message="Exécution non trouvée",
-            details={"execution_id": execution_id},
-        )
-
-    if execution.status != ExecutionStatus.PENDING_APPROVAL:
-        raise BadRequestError(
-            code="INVALID_STATUS",
-            message=f"Impossible de modifier une exécution en statut '{execution.status}'",
-            details={
-                "current_status": execution.status,
-                "expected_status": ExecutionStatus.PENDING_APPROVAL,
-            },
-        )
-
-    return execution
 
 
 def _get_execution_audit_context(execution: Execution) -> dict:
@@ -342,6 +259,10 @@ class PendingApprovalsView(APIView):
         # Pattern catalog/services._find_workflows_referencing_action: Oracle CLOB ne supporte
         # pas __contains dans JOIN/DISTINCT (ORA-22848). Sous-requête Exists + extra() pour Oracle.
         count_only = (request.query_params.get("count_only") or "").lower() == "true"
+        # ADR-007: Approval gate steps can exist on SUBMITTED or RUNNING executions.
+        # SUBMITTED: auto-approval-gate created by _create_execution_atomic (requires_approval).
+        # RUNNING: workflow mid-execution approval gates.
+        active_statuses = [ExecutionStatus.SUBMITTED, ExecutionStatus.RUNNING]
         if connection.vendor == "oracle":
             # Sous-requête IN (pas EXISTS) pour éviter ORA-22848 : le CLOB reste dans
             # la sous-requête qui retourne uniquement execution_id (scalaire).
@@ -356,21 +277,25 @@ class PendingApprovalsView(APIView):
                 )
                 .values_list("execution_id", flat=True)
             )
-            run_filter = Q(status=ExecutionStatus.RUNNING) & Q(
+            run_filter = Q(status__in=active_statuses) & Q(
                 pk__in=approval_exec_ids
             )
         else:
-            run_filter = Q(
-                status=ExecutionStatus.RUNNING,
-                executionstep__status=ExecutionStepStatus.WAITING,
-                executionstep__output__contains="approval_granted",
+            # Subquery to avoid duplicate Execution rows when multiple WAITING approval steps exist
+            approval_exec_ids_subquery = ExecutionStep.objects.filter(
+                status=ExecutionStepStatus.WAITING,
+                output__contains="approval_granted",
+            ).values("execution_id")
+            run_filter = Q(status__in=active_statuses) & Q(
+                pk__in=Subquery(approval_exec_ids_subquery)
             )
+        # ADR-007: PENDING_APPROVAL status is no longer used. Only step-based filter.
         # Pas de .distinct() : Oracle ORA-22848 avec CLOB (Action.execution_steps, etc.)
         # Le filtre pk__in=Subquery ne produit pas de doublons.
         qs = (
             Execution.objects.select_related("action", "user", "action__integration")
             .prefetch_related("targets")  # Story 58.2: évite N+1 pour ExecutionTargetSerializer
-            .filter(Q(status=ExecutionStatus.PENDING_APPROVAL) | run_filter)
+            .filter(run_filter)
             .order_by("-created_at")
         )
 
@@ -396,10 +321,12 @@ class PendingApprovalsView(APIView):
 class ApproveExecutionView(APIView):
     """POST /executions/{id}/approve — Approuver une exécution en attente.
 
+    ADR-007: All approvals go through ExecutionStep WAITING gates.
+    The legacy PENDING_APPROVAL execution-level path has been removed.
+
     Story 33.4 (DIP): uses _execution_service_class + get_execution_service() so
     tests can override the service class without monkey-patching.
-    Story 58.4 AC3/AC5: permission granulaire — admin requis pour PENDING_APPROVAL,
-    _check_approver_permission pour step gate.
+    Story 58.4 AC3: permission granulaire via _check_approver_permission for step gate.
     """
 
     permission_classes = [IsAuthenticated]  # Story 58.4: permission vérifiée en interne
@@ -423,173 +350,185 @@ class ApproveExecutionView(APIView):
                 ),
             },
         ),
-        responses={200: ExecutionSerializer},
+        responses={200: ExecutionStepSerializer},
     )
-    @transaction.atomic
     def post(self, request: Request, execution_id: int) -> Response:
-        # Code Review 30.1: Atomic transaction + row-level locking to prevent race conditions
-        # ADR-007 backward compat (Story 57.8): if execution not PENDING_APPROVAL, try step gate
-        try:
-            execution = _get_and_validate_pending_execution(execution_id)
-        except BadRequestError:
+        # Return 404 when the Execution does not exist
+        if not Execution.objects.filter(id=execution_id).exists():
+            raise NotFoundError(
+                code="NOT_FOUND",
+                message="Exécution introuvable",
+                details={"execution_id": execution_id},
+            )
+        # ADR-007: Only step-based approval path. Find the first WAITING approval step.
+        # select_for_update requires an atomic transaction.
+        with transaction.atomic():
             step = _find_first_waiting_approval_step(execution_id)
-            if step is not None:
-                _validate_approval_gate_step(step)
+            if step is None:
+                raise BadRequestError(
+                    code="NO_PENDING_APPROVAL",
+                    message="Aucun step d'approbation en attente pour cette exécution",
+                    details={"execution_id": execution_id},
+                )
+
+            _validate_approval_gate_step(step)
+
+            # ADR-007: For auto-approval-gate (created by _create_execution_atomic),
+            # require admin permission (same as legacy PENDING_APPROVAL).
+            # For workflow step gates, use granular approver_profile_ids check.
+            is_auto_gate = step.config_step_id == 'auto-approval-gate'
+            if is_auto_gate:
+                if not is_admin_user(request.user):
+                    raise PermissionDenied("Seuls les administrateurs peuvent approuver cette exécution")
+                step_config = _get_step_config(step)
+            else:
                 # Story 58.4 AC3: check approver permission for step gate path
                 step_config = _get_step_config(step)
                 if not _check_approver_permission(cast(User, request.user), step_config):
                     raise PermissionDenied("Vous n'avez pas les permissions pour approuver ce step")
-                correlation_id = get_correlation_id()
-                user_id = (
-                    str(request.user.id)
-                    if request.user and hasattr(request.user, "id")
-                    else "unknown"
-                )
-                step.approved_by = cast(User, request.user)
-                step.approved_at = timezone.now()
-                step.approval_comment = ""
-                step.status = ExecutionStepStatus.COMPLETED
-                step.completed_at = timezone.now()
-                # Update output so gate_status reflects approval (UI shows correct state)
-                output = step.get_output() or {}
-                gate_status = output.get("gate_status", [])
-                for gs in gate_status:
-                    if isinstance(gs, dict) and gs.get("type") == "approval_granted":
-                        gs["satisfied"] = True
-                        gs["reason"] = f"Approuvé par utilisateur {user_id}"
-                        break
-                output["gate_status"] = gate_status
-                step.set_output(output)
-                step.save()
-                # V113: Durable approval event + dequeue runnable step
-                from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
-                from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
-                WorkflowEventService.emit_approval_granted(execution_id, step, approved_by=user_id)
-                RunnableStepService.delete(step.id)
-                execution_steps = step.execution.action.execution_steps or []
-                on_success_step_ids = _get_on_success_step_ids(step_config, execution_steps)
-                if on_success_step_ids:
-                    _eid, _sids = execution_id, on_success_step_ids
-                    transaction.on_commit(
-                        lambda: resume_container_workflow_from_gate.apply_async(
-                            args=[_eid, _sids], queue="default"
-                        )
-                    )
-                else:
-                    exec_ = step.execution
-                    if exec_.status == ExecutionStatus.RUNNING:
-                        exec_.status = ExecutionStatus.COMPLETED
-                        exec_.completed_at = timezone.now()
-                        exec_.save()
-                AuditService.create_entry(
-                    user_id=user_id,
-                    action_type=AuditActionType.EXECUTION_APPROVED,
-                    entity_type=AuditEntityType.EXECUTION,
-                    entity_id=execution_id,
-                    details={
-                        "step_id": step.id,
-                        "step_name": step.step_name,
-                        "on_success_step_ids": on_success_step_ids,
-                        "via_legacy_endpoint": True,
-                        "action_name": step.execution.action.name if step.execution.action else None,
-                        **_get_execution_audit_context(step.execution),
-                    },
-                    correlation_id=correlation_id,
-                )
-                logger.info(
-                    "step_approved_via_legacy_endpoint",
-                    step_id=step.id,
-                    execution_id=execution_id,
-                    user_id=user_id,
-                    correlation_id=correlation_id,
-                )
-                return Response({"data": ExecutionStepSerializer(step).data})
-            raise  # Re-raise original BadRequestError si aucun step WAITING trouvé
 
-        # AC5: Legacy PENDING_APPROVAL → conserver la restriction admin (Story 58.4)
-        if not is_admin_user(request.user):
-            raise PermissionDenied("Seuls les administrateurs peuvent approuver une exécution PENDING_APPROVAL")
-
-        old_status = execution.status
-        correlation_id = get_correlation_id()
-        # Code Review: capture optional approval comment for audit trail (parity with reject)
-        approval_comment = (request.data or {}).get("comment", "") or ""
-        user_id = (
-            str(request.user.id)
-            if request.user and hasattr(request.user, "id")
-            else "unknown"
-        )
-
-        # State machine: PENDING_APPROVAL → RUNNING (Story 7.4). Transition then launch workflow.
-        execution_service = self.get_execution_service()
-        updated = execution_service.update_status(
-            execution.id, ExecutionStatus.RUNNING, user_id
-        )
-        if not updated:
-            raise NotFoundError(
-                code="EXECUTION_NOT_FOUND",
-                message="Exécution introuvable",
-                details={"execution_id": execution_id},
+            correlation_id = get_correlation_id()
+            user_id = (
+                str(request.user.id)
+                if request.user and hasattr(request.user, "id")
+                else "unknown"
             )
-        execution = updated
+            step.approved_by = cast(User, request.user)
+            step.approved_at = timezone.now()
+            step.approval_comment = (request.data or {}).get("comment", "") or ""
+            step.status = ExecutionStepStatus.COMPLETED
+            step.completed_at = timezone.now()
 
-        AuditService.create_entry(
-            user_id=user_id,
-            action_type=AuditActionType.EXECUTION_APPROVED,
-            entity_type=AuditEntityType.EXECUTION,
-            entity_id=execution.id,
-            details={
-                "action_id": execution.action_id,
-                "action_name": execution.action.name if execution.action else None,
-                "previous_status": old_status,
-                "new_status": ExecutionStatus.RUNNING,
-                "approval_comment": approval_comment or None,
-                **_get_execution_audit_context(execution),
-            },
-            correlation_id=correlation_id,
-        )
+            # Update output so gate_status reflects approval (UI shows correct state)
+            output = step.get_output() or {}
+            gate_status = output.get("gate_status", [])
+            for gs in gate_status:
+                if isinstance(gs, dict) and gs.get("type") == "approval_granted":
+                    gs["satisfied"] = True
+                    gs["reason"] = f"Approuvé par utilisateur {user_id}"
+                    break
+            output["gate_status"] = gate_status
+            step.set_output(output)
+            step.save()
+
+            # Notify WebSocket clients that the gate step is now COMPLETED.
+            try:
+                from executions.utils.websocket_broadcast import broadcast_step_update  # noqa: PLC0415
+                broadcast_step_update(execution_id, step)
+            except Exception:  # noqa: BLE001 — best-effort: must not fail the approval
+                pass
+
+            # V113: Durable approval event + dequeue runnable step (deferred to on_commit)
+            from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
+            from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
+            _eid, _step_id, _user_id_val = execution_id, step.id, user_id
+
+            def _emit_approval_and_dequeue() -> None:
+                WorkflowEventService.emit_approval_granted(_eid, step, approved_by=_user_id_val)
+                RunnableStepService.delete(_step_id)
+
+            execution_steps = step.execution.action.execution_steps or []
+            on_success_step_ids = _get_on_success_step_ids(step_config, execution_steps)
+
+            execution = step.execution
+            transaction.on_commit(_emit_approval_and_dequeue)
+
+            # ADR-007: Check is_auto_gate FIRST. The auto-approval-gate is a synthetic step
+            # not in action.execution_steps, so find_step_config returns None and
+            # _get_on_success_step_ids falls through to _get_next_step_by_order, returning
+            # the first workflow step. That would incorrectly trigger resume_container_workflow_from_gate,
+            # which exits early (execution is SUBMITTED, not RUNNING). We must launch the workflow.
+            if is_auto_gate:
+                # Auto-approval-gate: launch runs synchronously AFTER this block commits
+                # (see below) so we can return HTTP 400 on failure for actionable user feedback.
+                pass
+            elif on_success_step_ids:
+                _eid, _sids = execution_id, on_success_step_ids
+                transaction.on_commit(lambda: _enqueue_resume_with_retries(_eid, _sids))
+            else:
+                if execution.status == ExecutionStatus.RUNNING:
+                    execution.status = ExecutionStatus.COMPLETED
+                    execution.completed_at = timezone.now()
+                    execution.save()
+
+            AuditService.create_entry(
+                user_id=user_id,
+                action_type=AuditActionType.EXECUTION_APPROVED,
+                entity_type=AuditEntityType.EXECUTION,
+                entity_id=execution_id,
+                details={
+                    "step_id": step.id,
+                    "step_name": step.step_name,
+                    "on_success_step_ids": on_success_step_ids,
+                    "action_name": step.execution.action.name if step.execution.action else None,
+                    **_get_execution_audit_context(step.execution),
+                },
+                correlation_id=correlation_id,
+            )
+
+        # Auto-approval-gate: launch synchronously after commit so we can return HTTP 400
+        # on failure. Previously launch ran in on_commit; failures were only logged and
+        # the execution stayed stuck in SUBMITTED with no actionable feedback.
+        if is_auto_gate:
+            try:
+                exec_obj = Execution.objects.select_related('action').get(id=execution_id)
+                self.get_execution_service().launch_workflow(exec_obj, correlation_id)
+            except Exception as e:  # noqa: BLE001
+                logger.error(
+                    "integration_error_on_approval_launch",
+                    execution_id=execution_id,
+                    error_type=type(e).__name__,
+                    error_message=str(e),
+                    correlation_id=correlation_id,
+                    exc_info=True,
+                )
+                try:
+                    self.get_execution_service().update_status(
+                        execution_id,
+                        ExecutionStatus.INTEGRATION_ERROR,
+                        user_id,
+                    )
+                except ValueError as ve:
+                    logger.error(
+                        "unexpected_state_machine_error_after_approval_launch",
+                        execution_id=execution_id,
+                        error=str(ve),
+                        correlation_id=correlation_id,
+                    )
+                    fallback_exec = Execution.objects.get(id=execution_id)
+                    fallback_exec.status = ExecutionStatus.INTEGRATION_ERROR
+                    if not fallback_exec.completed_at:
+                        fallback_exec.completed_at = timezone.now()
+                    fallback_exec.save(update_fields=["status", "completed_at"])
+
+                Execution.objects.filter(id=execution_id).update(error_message=str(e))
+
+                raise BadRequestError(
+                    code="INTEGRATION_ERROR",
+                    message="Échec du lancement du workflow après approbation",
+                    details={"error": str(e), "execution_id": execution_id},
+                )
 
         logger.info(
-            "execution_approved",
-            execution_id=execution.id,
+            "step_approved",
+            step_id=step.id,
+            execution_id=execution_id,
             user_id=user_id,
             correlation_id=correlation_id,
         )
 
-        # Launch the workflow (same as post-execution create when not PENDING_APPROVAL)
-        try:
-            ExecutionService.launch_workflow(execution, correlation_id)
-        except Exception as e:  # noqa: BLE001 — catch-all-mark-failed: approval launch failure marks execution INTEGRATION_ERROR
-            logger.error(
-                "integration_error_on_approval_launch",
-                execution_id=execution.id,
-                error_type=type(e).__name__,
-                error_message=str(e),
-                correlation_id=correlation_id,
-                exc_info=True,
-            )
-            execution_service.update_status(
-                execution.id,
-                ExecutionStatus.INTEGRATION_ERROR,
-                user_id,
-            )
-            execution.refresh_from_db()
-            raise BadRequestError(
-                code="LAUNCH_FAILED",
-                message=f"L'exécution a été approuvée mais le lancement a échoué : {e!s}",
-                details={"execution_id": execution_id},
-            )
-
-        return Response({"data": ExecutionSerializer(execution).data})
+        return Response({"data": ExecutionStepSerializer(step).data})
 
 
 class RejectExecutionView(APIView):
     """POST /executions/{id}/reject — Rejeter une exécution en attente.
 
+    ADR-007: All rejections go through ExecutionStep WAITING gates.
+    The legacy PENDING_APPROVAL execution-level path has been removed.
+
     Story 33.4 (DIP): uses _execution_service_class + get_execution_service() so
     tests can override the service class without monkey-patching.
-    Story 58.4 AC3/AC5: permission granulaire — admin requis pour PENDING_APPROVAL,
-    _check_approver_permission pour step gate.
+    Story 58.4 AC3: permission granulaire via _check_approver_permission for step gate.
     """
 
     permission_classes = [IsAuthenticated]  # Story 58.4: permission vérifiée en interne
@@ -617,129 +556,102 @@ class RejectExecutionView(APIView):
     )
     @transaction.atomic
     def post(self, request: Request, execution_id: int) -> Response:
-        # Code Review 30.1: Atomic transaction + row-level locking to prevent race conditions
-        # ADR-007 backward compat (Story 58.1): if execution not PENDING_APPROVAL, try step gate
-        try:
-            execution = _get_and_validate_pending_execution(execution_id)
-        except BadRequestError:
-            step = _find_first_waiting_approval_step(execution_id)
-            if step is not None:
-                _validate_approval_gate_step(step)
-                # Story 58.4 AC3: check approver permission for step gate path
-                step_config = _get_step_config(step)
-                if not _check_approver_permission(cast(User, request.user), step_config):
-                    raise PermissionDenied("Vous n'avez pas les permissions pour rejeter ce step")
-                rejection_reason = (request.data or {}).get("rejection_reason", "")
-                correlation_id = get_correlation_id()
-                user_id = (
-                    str(request.user.id)
-                    if request.user and hasattr(request.user, "id")
-                    else "unknown"
-                )
-                step.status = ExecutionStepStatus.FAILED
-                step.completed_at = timezone.now()
-                step.approval_comment = rejection_reason or ""
-                step.save()
-                # V113: Durable rejection event + dequeue runnable step
-                from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
-                from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
-                WorkflowEventService.emit_approval_rejected(execution_id, step, rejected_by=user_id)
-                RunnableStepService.delete(step.id)
-                on_error_step_id = step_config.get("on_error_step_id")
-                if on_error_step_id:
-                    _eid, _eid_err = execution_id, on_error_step_id
-                    transaction.on_commit(
-                        lambda eid=_eid, sid=_eid_err: resume_container_workflow_from_gate.apply_async(  # type: ignore[misc]
-                            args=[eid, sid], queue="default"
-                        )
-                    )
-                else:
-                    exec_ = step.execution
-                    if exec_.status == ExecutionStatus.RUNNING:
-                        exec_.status = ExecutionStatus.FAILED
-                        exec_.completed_at = timezone.now()
-                        exec_.error_message = rejection_reason or "Step approval rejected"
-                        exec_.save()
-                AuditService.create_entry(
-                    user_id=user_id,
-                    action_type=AuditActionType.EXECUTION_REJECTED,
-                    entity_type=AuditEntityType.EXECUTION,
-                    entity_id=execution_id,
-                    details={
-                        "step_id": step.id,
-                        "step_name": step.step_name,
-                        "on_error_step_id": on_error_step_id,
-                        "rejection_reason": rejection_reason or None,
-                        "via_legacy_endpoint": True,
-                        "action_name": step.execution.action.name if step.execution.action else None,
-                        **_get_execution_audit_context(step.execution),
-                    },
-                    correlation_id=correlation_id,
-                )
-                logger.info(
-                    "step_rejected_via_legacy_endpoint",
-                    step_id=step.id,
-                    execution_id=execution_id,
-                    user_id=user_id,
-                    correlation_id=correlation_id,
-                )
-                execution = step.execution
-                execution.refresh_from_db()
-                return Response({"data": ExecutionSerializer(execution).data})
-            raise  # Re-raise original BadRequestError si aucun step WAITING trouvé
+        # Return 404 when the Execution does not exist
+        if not Execution.objects.filter(id=execution_id).exists():
+            raise NotFoundError(
+                code="NOT_FOUND",
+                message="Exécution introuvable",
+                details={"execution_id": execution_id},
+            )
+        # ADR-007: Only step-based rejection path. Find the first WAITING approval step.
+        step = _find_first_waiting_approval_step(execution_id)
+        if step is None:
+            raise BadRequestError(
+                code="NO_PENDING_APPROVAL",
+                message="Aucun step d'approbation en attente pour cette exécution",
+                details={"execution_id": execution_id},
+            )
 
-        # AC5: Legacy PENDING_APPROVAL → conserver la restriction admin (Story 58.4)
-        if not is_admin_user(request.user):
-            raise PermissionDenied("Seuls les administrateurs peuvent rejeter une exécution PENDING_APPROVAL")
+        _validate_approval_gate_step(step)
+
+        # ADR-007: For auto-approval-gate, require admin permission.
+        # For workflow step gates, use granular approver_profile_ids check.
+        is_auto_gate = step.config_step_id == 'auto-approval-gate'
+        if is_auto_gate:
+            if not is_admin_user(request.user):
+                raise PermissionDenied("Seuls les administrateurs peuvent rejeter cette exécution")
+            step_config = _get_step_config(step)
+        else:
+            # Story 58.4 AC3: check approver permission for step gate path
+            step_config = _get_step_config(step)
+            if not _check_approver_permission(cast(User, request.user), step_config):
+                raise PermissionDenied("Vous n'avez pas les permissions pour rejeter ce step")
 
         rejection_reason = (request.data or {}).get("rejection_reason", "")
-
-        old_status = execution.status
-        # State machine: PENDING_APPROVAL → REJECTED (Story 7.4)
-        execution_service = self.get_execution_service()
-        updated = execution_service.update_status(
-            execution.id, ExecutionStatus.REJECTED, str(request.user.id)
-        )
-        if updated:
-            execution = updated
-            execution.error_message = rejection_reason or "Execution rejected by user"
-            execution.save(update_fields=["error_message"])
-        else:
-            execution.status = ExecutionStatus.REJECTED
-            execution.error_message = rejection_reason or "Execution rejected by user"
-            execution.save(update_fields=["status", "error_message"])
-
         correlation_id = get_correlation_id()
         user_id = (
             str(request.user.id)
             if request.user and hasattr(request.user, "id")
             else "unknown"
         )
+        step.status = ExecutionStepStatus.FAILED
+        step.completed_at = timezone.now()
+        step.approval_comment = rejection_reason or ""
+        step.rejected_by = cast(User, request.user)
+        step.rejected_at = timezone.now()
+        step.save()
+
+        # V113: Durable rejection event + dequeue runnable step (deferred to on_commit)
+        from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
+        from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
+        _eid_rej, _step_id_rej, _user_id_rej = execution_id, step.id, user_id
+
+        def _emit_rejection_and_dequeue() -> None:
+            WorkflowEventService.emit_approval_rejected(_eid_rej, step, rejected_by=_user_id_rej)
+            RunnableStepService.delete(_step_id_rej)
+
+        transaction.on_commit(_emit_rejection_and_dequeue)
+
+        on_error_step_ids = step_config.get("on_error_step_ids") or []
+        execution = step.execution
+
+        if on_error_step_ids:
+            _eid, _sids_err = execution_id, on_error_step_ids
+            transaction.on_commit(lambda: _enqueue_resume_with_retries(_eid, _sids_err))
+        else:
+            # ADR-007: For auto-approval-gate rejection, mark execution as FAILED
+            # (it was never launched, so it's in SUBMITTED status).
+            if execution.status in (ExecutionStatus.RUNNING, ExecutionStatus.SUBMITTED):
+                execution.status = ExecutionStatus.FAILED
+                execution.completed_at = timezone.now()
+                execution.error_message = rejection_reason or "Step approval rejected"
+                execution.save()
 
         AuditService.create_entry(
             user_id=user_id,
             action_type=AuditActionType.EXECUTION_REJECTED,
             entity_type=AuditEntityType.EXECUTION,
-            entity_id=execution.id,
+            entity_id=execution_id,
             details={
-                "action_id": execution.action_id,
-                "action_name": execution.action.name if execution.action else None,
-                "previous_status": old_status,
-                "new_status": ExecutionStatus.REJECTED,
+                "step_id": step.id,
+                "step_name": step.step_name,
+                "on_error_step_ids": on_error_step_ids,
                 "rejection_reason": rejection_reason or None,
-                **_get_execution_audit_context(execution),
+                "action_name": step.execution.action.name if step.execution.action else None,
+                **_get_execution_audit_context(step.execution),
             },
             correlation_id=correlation_id,
         )
 
         logger.info(
-            "execution_rejected",
-            execution_id=execution.id,
+            "step_rejected",
+            step_id=step.id,
+            execution_id=execution_id,
             user_id=user_id,
-            rejection_reason=rejection_reason or None,
             correlation_id=correlation_id,
         )
 
+        execution.refresh_from_db()
         return Response({"data": ExecutionSerializer(execution).data})
 
 
@@ -803,6 +715,13 @@ class ApproveStepView(APIView):
         step.set_output(output)
 
         step.save()
+
+        # Notify WebSocket clients that the gate step is now COMPLETED.
+        try:
+            from executions.utils.websocket_broadcast import broadcast_step_update  # noqa: PLC0415
+            broadcast_step_update(execution_id, step)
+        except Exception:  # noqa: BLE001 — best-effort: must not fail the approval
+            pass
 
         # V113: Durable approval event + dequeue runnable step
         from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
@@ -894,6 +813,8 @@ class RejectStepView(APIView):
         step.status = ExecutionStepStatus.FAILED
         step.completed_at = timezone.now()
         step.approval_comment = request.data.get("comment", "") or ""
+        step.rejected_by = cast(User, request.user)
+        step.rejected_at = timezone.now()
         step.save()
 
         # V113: Durable rejection event + dequeue runnable step
@@ -902,15 +823,11 @@ class RejectStepView(APIView):
         WorkflowEventService.emit_approval_rejected(execution_id, step, rejected_by=user_id)
         RunnableStepService.delete(step.id)
 
-        on_error_step_id = step_config.get("on_error_step_id")
+        on_error_step_ids = step_config.get("on_error_step_ids") or []
 
-        if on_error_step_id:
-            _eid, _eid_err = execution_id, on_error_step_id
-            transaction.on_commit(
-                lambda eid=_eid, sid=_eid_err: resume_container_workflow_from_gate.apply_async(  # type: ignore[misc]
-                    args=[eid, sid], queue="default"
-                )
-            )
+        if on_error_step_ids:
+            _eid, _sids_err = execution_id, on_error_step_ids
+            transaction.on_commit(lambda: _enqueue_resume_with_retries(_eid, _sids_err))
         else:
             execution = step.execution
             if execution.status == ExecutionStatus.RUNNING:
@@ -927,7 +844,7 @@ class RejectStepView(APIView):
             details={
                 "step_id": step.id,
                 "step_name": step.step_name,
-                "on_error_step_id": on_error_step_id,
+                "on_error_step_ids": on_error_step_ids,
                 "rejection_reason": step.approval_comment or None,
                 "action_name": step.execution.action.name if step.execution.action else None,
                 **_get_execution_audit_context(step.execution),
@@ -941,7 +858,7 @@ class RejectStepView(APIView):
             step_name=step.step_name,
             execution_id=execution_id,
             user_id=user_id,
-            on_error_step_id=on_error_step_id,
+            on_error_step_ids=on_error_step_ids,
             correlation_id=correlation_id,
         )
 

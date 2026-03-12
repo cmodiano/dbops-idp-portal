@@ -3,6 +3,8 @@ from .target_validator import TargetValidator
 from .env_config_resolver import EnvironmentConfigResolver
 from .mutex_validator import MutexValidator
 from .workflow_validator import WorkflowValidator
+from .result import ExecutionValidationResult
+from .pipeline import ExecutionValidationPipeline
 
 __all__ = [
     'ExecutionPayloadValidator',
@@ -10,4 +12,6 @@ __all__ = [
     'EnvironmentConfigResolver',
     'MutexValidator',
     'WorkflowValidator',
+    'ExecutionValidationResult',
+    'ExecutionValidationPipeline',
 ]

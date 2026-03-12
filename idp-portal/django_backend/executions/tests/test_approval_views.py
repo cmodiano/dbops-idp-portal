@@ -11,7 +11,7 @@ Story 59.1 (SEC-1) :
 from __future__ import annotations
 
 import structlog.testing
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from django.test import TestCase
@@ -91,14 +91,29 @@ class TestPendingApprovalsViewExtra(TestCase):
         self.assertEqual(response.status_code, 403)
 
     # Story 58.2: AC5 — targets présents dans la réponse sérialisée (prefetch_related)
+    # ADR-007: Use SUBMITTED + approval gate step instead of PENDING_APPROVAL status
     def test_list_response_includes_targets(self):
         """Vérifier que targets est présent dans la réponse sérialisée (AC5 Story 58.2)."""
         execution = ExecutionFactory(
             action=self.action,
             user=self.admin,
-            status=ExecutionStatus.PENDING_APPROVAL,
+            status=ExecutionStatus.SUBMITTED,
             environment="prod",
         )
+        # Create approval gate step so it appears in pending approvals
+        step = ExecutionStep.objects.create(
+            execution=execution,
+            step_order=0,
+            step_name="Approval Gate",
+            step_type=ExecutionStepType.GATE,
+            status=ExecutionStepStatus.WAITING,
+            config_step_id='auto-approval-gate',
+        )
+        step.set_output({
+            "gate_conditions": [{"type": "approval_granted"}],
+            "gate_status": [{"type": "approval_granted", "satisfied": False}],
+        })
+        step.save()
         ExecutionTargetFactory(
             execution=execution,
             target_type="SERVER",
@@ -155,12 +170,12 @@ class TestPendingApprovalsViewExtra(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# ApproveExecutionView — POST (branches manquantes)
+# ApproveExecutionView — POST (ADR-007: step-based only)
 # ---------------------------------------------------------------------------
 
 @pytest.mark.django_db
 class TestApproveExecutionViewExtra(TestCase):
-    """Branches launch failure et update_status=None."""
+    """ADR-007: Test step-based approval path (legacy PENDING_APPROVAL removed)."""
 
     def setUp(self):
         self.client = APIClient()
@@ -168,69 +183,35 @@ class TestApproveExecutionViewExtra(TestCase):
         self.integration = IntegrationFactory(type="aap", name="Test AAP Approve")
         self.action = ActionFactory(status="published", integration=self.integration)
         self.client.force_authenticate(user=self.admin)
-        # Réinitialiser _execution_service_class
         ApproveExecutionView._execution_service_class = ExecutionService
 
     def tearDown(self):
         ApproveExecutionView._execution_service_class = ExecutionService
 
-    # 3.5 launch_workflow échoue → INTEGRATION_ERROR → 400 (LAUNCH_FAILED)
-    def test_approve_launch_failure_returns_400_launch_failed(self):
-        """Si launch_workflow lève une exception → INTEGRATION_ERROR → 400 LAUNCH_FAILED."""
-        requester = UserFactory(username="requester_lf_extra", profile="DBA")
+    def test_approve_no_waiting_step_returns_400(self):
+        """ADR-007: Approve with no WAITING approval step returns 400."""
+        requester = UserFactory(username="requester_no_step", profile="DBA")
         execution = ExecutionFactory(
             action=self.action,
             user=requester,
-            status=ExecutionStatus.PENDING_APPROVAL,
+            status=ExecutionStatus.SUBMITTED,
             environment="production",
         )
 
-        # Utiliser une classe mock (pas un lambda — évite le binding de self)
-        class _MockSvcLaunchFail:
-            def update_status(self_svc, *args, **kwargs):
-                return execution
-
-        ApproveExecutionView._execution_service_class = _MockSvcLaunchFail
-
-        with patch(
-            "executions.views.approval_views.ExecutionService.launch_workflow",
-            side_effect=RuntimeError("adapter down"),
-        ):
-            response = self.client.post(f"/api/v1/executions/{execution.id}/approve/")
-
+        response = self.client.post(f"/api/v1/executions/{execution.id}/approve/")
         self.assertEqual(response.status_code, 400)
         body = response.json()
         code = body.get("code", "") or body.get("error", {}).get("code", "")
-        self.assertIn("LAUNCH_FAILED", code)
-
-    # 3.6 update_status retourne None → 404
-    def test_approve_update_status_returns_none_gives_404(self):
-        """Si update_status retourne None → NotFoundError → 404."""
-        requester = UserFactory(username="requester_none_extra", profile="DBA")
-        execution = ExecutionFactory(
-            action=self.action,
-            user=requester,
-            status=ExecutionStatus.PENDING_APPROVAL,
-            environment="production",
-        )
-
-        class _MockSvcUpdateNone:
-            def update_status(self_svc, *args, **kwargs):
-                return None  # Simule retour None
-
-        ApproveExecutionView._execution_service_class = _MockSvcUpdateNone
-
-        response = self.client.post(f"/api/v1/executions/{execution.id}/approve/")
-        self.assertEqual(response.status_code, 404)
+        self.assertIn("NO_PENDING_APPROVAL", code)
 
 
 # ---------------------------------------------------------------------------
-# RejectExecutionView — POST (branche else)
+# RejectExecutionView — POST (ADR-007: step-based only)
 # ---------------------------------------------------------------------------
 
 @pytest.mark.django_db
 class TestRejectExecutionViewExtra(TestCase):
-    """Branche update_status None → direct save."""
+    """ADR-007: Test step-based rejection path (legacy PENDING_APPROVAL removed)."""
 
     def setUp(self):
         self.client = APIClient()
@@ -243,32 +224,25 @@ class TestRejectExecutionViewExtra(TestCase):
     def tearDown(self):
         RejectExecutionView._execution_service_class = ExecutionService
 
-    # 3.7 update_status retourne None → branche else (direct save)
-    def test_reject_update_status_none_uses_direct_save(self):
-        """Si update_status retourne None → branche else : direct save sur l'objet."""
-        requester = UserFactory(username="requester_reject_none", profile="DBA")
+    def test_reject_no_waiting_step_returns_400(self):
+        """ADR-007: Reject with no WAITING approval step returns 400."""
+        requester = UserFactory(username="requester_reject_no_step", profile="DBA")
         execution = ExecutionFactory(
             action=self.action,
             user=requester,
-            status=ExecutionStatus.PENDING_APPROVAL,
+            status=ExecutionStatus.SUBMITTED,
             environment="production",
         )
 
-        class _MockSvcRejectNone:
-            def update_status(self_svc, *args, **kwargs):
-                return None  # Simule retour None → branche else
-
-        RejectExecutionView._execution_service_class = _MockSvcRejectNone
-
         response = self.client.post(
             f"/api/v1/executions/{execution.id}/reject/",
-            data={"rejection_reason": "Branche else test"},
+            data={"rejection_reason": "Test rejection"},
             format="json",
         )
-        self.assertEqual(response.status_code, 200)
-        execution.refresh_from_db()
-        self.assertEqual(execution.status, ExecutionStatus.REJECTED)
-        self.assertEqual(execution.error_message, "Branche else test")
+        self.assertEqual(response.status_code, 400)
+        body = response.json()
+        code = body.get("code", "") or body.get("error", {}).get("code", "")
+        self.assertIn("NO_PENDING_APPROVAL", code)
 
 
 # ---------------------------------------------------------------------------

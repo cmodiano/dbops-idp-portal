@@ -22,6 +22,9 @@ from integrations.models import Integration, IntegrationTypeCatalogue, Integrati
 # Story 62.4: Dynamic inventory column validation via DIP factory
 # No circular import: inventory does not import from catalog
 from inventory.services import InventoryService, InventoryServiceError as _InventoryServiceError
+import structlog
+
+logger = structlog.get_logger(__name__)
 
 # Story 31.9: Alias mapping for legacy platform codes → catalogue codes
 # Canonical source — also used by business_rule_views.py
@@ -97,6 +100,7 @@ def _validate_platform_integration_consistency(
         integration_type_cat = IntegrationTypeCatalogue.objects.get(code=integration.type)
     except IntegrationTypeCatalogue.DoesNotExist:
         # If type not in catalogue, skip validation (backward compatibility)
+        logger.warning("integration_type_not_in_catalogue", integration_type=integration.type, integration_id=integration.id)
         return
 
     # Only validate if integration is a platform (not a service)
@@ -329,6 +333,15 @@ class ActionFieldValidationMixin:
                 f"Invalid category '{value}'. Must be one of: {', '.join(active_categories)}"
             )
         return value
+
+
+# Step type → fields to copy from config (Audit #5 — 5c)
+_STEP_TYPE_FIELDS: dict[str, tuple[str, ...]] = {
+    'gate': ('gate_type', 'on_timeout', 'context_from', 'approver_profile_ids', 'timeout'),
+    'service_call': ('integration_type', 'operation', 'input_mapping', 'output_mapping'),
+    'evaluation': ('policy_id', 'input_mapping'),
+    'http_request': ('url', 'method', 'headers', 'request_timeout', 'input_mapping', 'output_mapping'),
+}
 
 
 @extend_schema_serializer(
@@ -569,27 +582,8 @@ class ActionSerializer(WorkflowEnrichmentMixin, ActionFieldValidationMixin, seri
 
             # Story 57.13: Type-specific fields
             # Story 58.4: approver_profile_ids for gate type=approval
-            if step_type == 'gate':
-                workflow_step['gate_type'] = step.get('gate_type')
-                workflow_step['on_timeout'] = step.get('on_timeout')
-                workflow_step['context_from'] = step.get('context_from')
-                workflow_step['approver_profile_ids'] = step.get('approver_profile_ids')
-                workflow_step['timeout'] = step.get('timeout')
-            elif step_type == 'service_call':
-                workflow_step['integration_type'] = step.get('integration_type')
-                workflow_step['operation'] = step.get('operation')
-                workflow_step['input_mapping'] = step.get('input_mapping')
-                workflow_step['output_mapping'] = step.get('output_mapping')
-            elif step_type == 'evaluation':
-                workflow_step['policy_id'] = step.get('policy_id')
-                workflow_step['input_mapping'] = step.get('input_mapping')
-            elif step_type == 'http_request':
-                workflow_step['url'] = step.get('url')
-                workflow_step['method'] = step.get('method')
-                workflow_step['headers'] = step.get('headers')
-                workflow_step['request_timeout'] = step.get('request_timeout')
-                workflow_step['input_mapping'] = step.get('input_mapping')
-                workflow_step['output_mapping'] = step.get('output_mapping')
+            for field in _STEP_TYPE_FIELDS.get(step_type, ()):
+                workflow_step[field] = step.get(field)
             if step.get('condition'):
                 workflow_step['condition'] = step['condition']
 
@@ -598,19 +592,12 @@ class ActionSerializer(WorkflowEnrichmentMixin, ActionFieldValidationMixin, seri
                 workflow_step['step_id'] = step['step_id']
 
             # Story 67.1: Expose on_success_step_ids / on_error_step_ids (arrays).
-            # Convert singular on_success_step_id if present in DB (retrocompat).
             success_ids = step.get('on_success_step_ids')
-            if success_ids is None and 'on_success_step_id' in step:
-                v = step['on_success_step_id']
-                success_ids = [v] if v else []
-            if success_ids is not None or 'on_success_step_ids' in step or 'on_success_step_id' in step:
+            if success_ids is not None or 'on_success_step_ids' in step:
                 workflow_step['on_success_step_ids'] = success_ids if success_ids is not None else []
 
             error_ids = step.get('on_error_step_ids')
-            if error_ids is None and 'on_error_step_id' in step:
-                v = step['on_error_step_id']
-                error_ids = [v] if v else []
-            if error_ids is not None or 'on_error_step_ids' in step or 'on_error_step_id' in step:
+            if error_ids is not None or 'on_error_step_ids' in step:
                 workflow_step['on_error_step_ids'] = error_ids if error_ids is not None else []
 
             # Story 67.3: join_policy (optional) — all_success | one_success | all_done
@@ -859,6 +846,8 @@ class ActionMutexCreateSerializer(serializers.ModelSerializer):
         """
         # action_id is passed via context from the view
         action_id = self.context.get('action_id')
+        if not action_id:
+            raise serializers.ValidationError("action_id required in context")
         incompatible_with_id = data.get('incompatible_with_id')
         
         if action_id == incompatible_with_id:
@@ -879,7 +868,7 @@ class ActionMutexCreateSerializer(serializers.ModelSerializer):
         # Check for duplicate rule
         from catalog.models import ActionMutex
         existing = ActionMutex.objects.filter(
-            action_id=int(action_id),  # type: ignore[arg-type]
+            action_id=int(action_id),
             incompatible_with_id=incompatible_with_id
         ).first()
         

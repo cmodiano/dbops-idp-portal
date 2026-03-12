@@ -12,7 +12,7 @@
  * Story 46.7: Filtres extraits dans AuditFiltersPanel — harmonisation pattern FilterOutlined.
  */
 
-import { Typography, Alert, Badge, Button, Dropdown, Tabs } from 'antd';
+import { Typography, Alert, Button, Dropdown, Tabs } from 'antd';
 import type { MenuProps } from 'antd';
 import { DownloadOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
@@ -135,18 +135,12 @@ export default function AuditPage() {
     <div style={{ padding: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <Title level={2} style={{ marginBottom: 0 }}>Journal d'audit</Title>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           {pagination && (
-            <Badge
-              count={pagination.total}
-              overflowCount={99999}
-              style={{ backgroundColor: '#1890ff' }}
-              showZero
-            >
-              <Text type="secondary" style={{ marginLeft: 8 }}>
-                résultats
-              </Text>
-            </Badge>
+            <Text type="secondary" style={{ whiteSpace: 'nowrap' }}>
+              <span style={{ fontWeight: 600, color: '#1890ff', marginRight: 6 }}>{pagination.total}</span>
+              résultats
+            </Text>
           )}
           {/* Export button (AC7) */}
           <Dropdown menu={{ items: exportMenuItems }} trigger={['click']}>

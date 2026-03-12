@@ -204,6 +204,9 @@ class SimulationService:
                 step.started_at = timezone.now()
                 step.save(update_fields=['status', 'started_at'])
 
+                # Broadcast so WebSocket clients see the status change in real time
+                cls._broadcast_step(execution.id, step)
+
                 # Generate logs progressively
                 logs = cls._get_logs_for_step(step.step_name, execution_id)
                 accumulated = []
@@ -223,10 +226,12 @@ class SimulationService:
                     step.output = (step.output or "") + "\n[ERROR] Échec de l'exécution (simulation)"
                     step.completed_at = timezone.now()
                     step.save(update_fields=['status', 'output', 'completed_at'])
+                    cls._broadcast_step(execution.id, step)
 
                     execution.status = ExecutionStatus.FAILED
                     execution.completed_at = timezone.now()
                     execution.save(update_fields=['status', 'completed_at'])
+                    cls._broadcast_terminal(execution)
                     logger.info(
                         "simulation_completed",
                         execution_id=execution_id,
@@ -237,11 +242,13 @@ class SimulationService:
                     step.status = ExecutionStepStatus.COMPLETED
                     step.completed_at = timezone.now()
                     step.save(update_fields=['status', 'completed_at'])
+                    cls._broadcast_step(execution.id, step)
 
             # All steps completed successfully
             execution.status = ExecutionStatus.COMPLETED
             execution.completed_at = timezone.now()
             execution.save(update_fields=['status', 'completed_at'])
+            cls._broadcast_terminal(execution)
 
             logger.info(
                 "simulation_completed",
@@ -285,6 +292,47 @@ class SimulationService:
         Do NOT use in production code - use start_simulation() instead.
         """
         cls._run_simulation(execution_id)
+
+    @classmethod
+    def _broadcast_step(cls, execution_id: int, step: ExecutionStep) -> None:
+        """Broadcast step_update via WebSocket (best-effort, never interrupts simulation)."""
+        try:
+            from executions.utils.websocket_broadcast import broadcast_step_update  # noqa: PLC0415
+            broadcast_step_update(execution_id, step)
+        except Exception:  # noqa: BLE001 — best-effort: must not interrupt simulation
+            pass
+
+    @classmethod
+    def _broadcast_terminal(cls, execution: Execution) -> None:
+        """Broadcast execution_complete or execution_failed via WebSocket (best-effort)."""
+        try:
+            from channels.layers import get_channel_layer  # noqa: PLC0415
+            from asgiref.sync import async_to_sync  # noqa: PLC0415
+
+            channel_layer = get_channel_layer()
+            if channel_layer is None:
+                return
+
+            event_type = (
+                "execution_complete" if execution.status == ExecutionStatus.COMPLETED
+                else "execution_failed"
+            )
+            async_to_sync(channel_layer.group_send)(
+                f"execution_{execution.id}",
+                {
+                    "type": event_type,
+                    "data": {
+                        "execution_id": execution.id,
+                        "status": execution.status,
+                        "finished": (
+                            execution.completed_at.isoformat()
+                            if execution.completed_at else None
+                        ),
+                    },
+                },
+            )
+        except Exception:  # noqa: BLE001 — best-effort: must not interrupt simulation
+            pass
 
     @classmethod
     def _get_logs_for_step(cls, step_name: str, execution_id: int) -> list[str]:

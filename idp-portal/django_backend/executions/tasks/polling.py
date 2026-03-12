@@ -3,18 +3,17 @@ executions/tasks/polling.py — Responsabilité unique : surveillance asynchrone
 sur les plateformes externes.
 
 Story 34.5 (SOLID-BE-3): OCP — une seule tâche générique `poll_platform_job_status`
-délègue à l'AdapterRegistry (Story 33.1). Les 5 tâches nommées sont des shims
-backward-compatibles (≤ 15 lignes chacun). Ajouter une plateforme ne nécessite
+délègue à l'AdapterRegistry (Story 33.1). Ajouter une plateforme ne nécessite
 aucune modification de ce fichier.
 
-Expose : poll_platform_job_status (générique), poll_aap_job_status, poll_tower_job_status,
-         poll_azure_devops_run_status, poll_github_actions_run_status,
-         poll_terraform_cloud_run_status, MAX_POLLING_RETRIES
+Expose : poll_platform_job_status (générique), MAX_POLLING_RETRIES
 """
 from typing import Any
 
 import structlog
 from celery import shared_task  # type: ignore[import-untyped]
+from celery.exceptions import SoftTimeLimitExceeded  # type: ignore[import-untyped]
+from django.conf import settings
 from django.utils import timezone
 
 from executions.models import (
@@ -23,6 +22,7 @@ from executions.models import (
 )
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
+from core.utils import sanitize_audit_changes
 
 logger = structlog.get_logger(__name__)
 
@@ -66,6 +66,7 @@ def _mark_execution_polling_exhausted(
         execution = Execution.objects.get(id=execution_id)
         terminal_statuses = {ExecutionStatus.COMPLETED, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED}
 
+        old_status = execution.status
         if execution.status not in terminal_statuses:
             execution.status = ExecutionStatus.FAILED
             execution.completed_at = timezone.now()
@@ -84,6 +85,7 @@ def _mark_execution_polling_exhausted(
             platform_step.completed_at = timezone.now()
             platform_step.save()
 
+        changes = sanitize_audit_changes({'status': {'old': old_status, 'new': ExecutionStatus.FAILED}})
         AuditService.create_entry(
             user_id=str(execution.user_id),
             action_type=AuditActionType.EXECUTION_POLLING_EXHAUSTED,
@@ -94,6 +96,7 @@ def _mark_execution_polling_exhausted(
                 'retry_count': retry_count,
                 'max_retries': MAX_POLLING_RETRIES,
                 'last_error': error,
+                'changes': changes,
             },
             correlation_id=correlation_id,
         )
@@ -120,7 +123,17 @@ def _broadcast_execution_update(
     is_terminal: bool,
     correlation_id: str | None = None,
 ) -> None:
-    """Broadcast status and log updates to the execution's WebSocket group."""
+    """Broadcast status and log updates to the execution's WebSocket group.
+
+    Story 30.7: This helper is intentionally minimal and only sends:
+    - status_update
+    - log_update
+    - terminal event (execution_complete or execution_failed)
+
+    Dashboard-level aggregation (if any) is handled elsewhere to keep this
+    function's behavior aligned with unit tests that expect exactly 2 or 3
+    messages to be sent.
+    """
     try:
         from channels.layers import get_channel_layer
         from asgiref.sync import async_to_sync
@@ -219,7 +232,7 @@ def _update_execution_from_poll(
                     correlation_id=correlation_id,
                 )
 
-        # Update platform step logs and output fields
+        # Update platform step logs, output fields, and terminal status
         platform_step = (
             ExecutionStep.objects.filter(
                 execution_id=execution_id,
@@ -233,9 +246,39 @@ def _update_execution_from_poll(
             # Stocker les champs AAP standard si fournis
             if output_fields:
                 output.update(output_fields)
-            if logs_content or output_fields:
+
+            # Update step status when the platform job reaches a terminal state.
+            # The step is created as RUNNING in workflow_step_executor and stays RUNNING
+            # until polling detects completion — update it here so DB and UI stay correct.
+            _TERMINAL_STEP_STATUS: dict[str, ExecutionStepStatus] = {
+                "COMPLETED": ExecutionStepStatus.COMPLETED,
+                "FAILED": ExecutionStepStatus.FAILED,
+                "CANCELLED": ExecutionStepStatus.FAILED,
+            }
+            new_step_status = _TERMINAL_STEP_STATUS.get(idp_status)
+            step_status_changed = False
+            if new_step_status and platform_step.status not in {
+                ExecutionStepStatus.COMPLETED, ExecutionStepStatus.FAILED
+            }:
+                platform_step.status = new_step_status
+                platform_step.completed_at = timezone.now()
+                step_status_changed = True
+
+            if logs_content or output_fields or step_status_changed:
                 platform_step.set_output(output)
                 platform_step.save()
+
+            # Notify WebSocket clients so the workflow visualiser updates in real time.
+            if step_status_changed:
+                try:
+                    from executions.utils.websocket_broadcast import broadcast_step_update  # noqa: PLC0415
+                    broadcast_step_update(execution_id, platform_step)
+                except Exception:  # noqa: BLE001 — best-effort: must never interrupt polling
+                    logger.debug(
+                        "poll_broadcast_step_update_failed",
+                        execution_id=execution_id,
+                        step_id=platform_step.id,
+                    )
 
     except Execution.DoesNotExist:
         logger.warning(
@@ -315,7 +358,16 @@ def _forward_platform_logs_to_splunk(
 # Story 34.5 (SOLID-BE-3): Tâche Celery générique — OCP poller
 # ---------------------------------------------------------------------------
 
-@shared_task(bind=True, max_retries=0, name="executions.tasks.poll_platform_job_status")
+_POLL_LIMITS = settings.CELERY_TASK_TIME_LIMITS["poll_platform_job_status"]
+
+
+@shared_task(
+    bind=True,
+    max_retries=0,
+    name="executions.tasks.poll_platform_job_status",
+    soft_time_limit=_POLL_LIMITS["soft"],
+    time_limit=_POLL_LIMITS["hard"],
+)
 def poll_platform_job_status(
     self: Any,
     execution_id: int,
@@ -328,6 +380,7 @@ def poll_platform_job_status(
     retry_count: int = 0,
     adapter_kwargs: dict | None = None,
     poll_kwargs: dict | None = None,
+    correlation_id: str | None = None,
 ) -> dict:
     """
     Story 34.5 (SOLID-BE-3): Tâche de polling générique OCP.
@@ -352,6 +405,8 @@ def poll_platform_job_status(
         adapter_kwargs: Kwargs spécifiques à l'adapter (ssl_verify, owner, etc.).
         poll_kwargs: Kwargs transmis à get_status() et get_job_logs()
             (resource_type, pipeline_id, etc.).
+        correlation_id: Story 72.1 (AC4) — ID de corrélation passé depuis trigger_platform_job
+            ou récupéré depuis Execution.correlation_id si absent.
 
     Returns:
         dict avec outcome: 'complete' | 'polling' | 'error' | 'exhausted'.
@@ -359,7 +414,14 @@ def poll_platform_job_status(
     from asgiref.sync import async_to_sync  # noqa: PLC0415
     import executions.tasks as _tasks  # noqa: PLC0415
 
-    correlation_id = _tasks.get_correlation_id()
+    # Story 72.1 (AC4): Priorité au kwarg passé depuis trigger_platform_job.
+    # Fallback : récupérer depuis Execution.correlation_id (workers Celery sans contexte HTTP).
+    if not correlation_id:
+        try:
+            _exec = Execution.objects.only('correlation_id').get(id=execution_id)
+            correlation_id = _exec.correlation_id
+        except Execution.DoesNotExist:
+            pass
 
     logger.info(
         "poll_platform_job_status_start",
@@ -393,6 +455,25 @@ def poll_platform_job_status(
             correlation_id=correlation_id,
             **(poll_kwargs or {}),
         )
+    except SoftTimeLimitExceeded:
+        logger.error(
+            "poll_platform_job_soft_timeout",
+            execution_id=execution_id,
+            platform_job_id=platform_job_id,
+            platform_type=platform_type,
+            retry_count=retry_count,
+            correlation_id=correlation_id,
+        )
+        # Mark step/execution in error
+        _tasks._mark_execution_polling_exhausted(
+            execution_id=execution_id,
+            platform_job_id=platform_job_id,
+            retry_count=retry_count,
+            error="Soft time limit exceeded in poll_platform_job_status",
+            correlation_id=correlation_id,
+        )
+        raise
+
     except Exception as e:  # noqa: BLE001 — resilience-boundary: adapter error logged, polling returns error outcome
         logger.error(
             "poll_platform_job_status_adapter_error",
@@ -426,6 +507,7 @@ def poll_platform_job_status(
                 "retry_count": retry_count + 1,
                 "adapter_kwargs": adapter_kwargs,
                 "poll_kwargs": poll_kwargs,
+                "correlation_id": correlation_id,
             },
             countdown=poll_interval,
             queue=get_platform_queue(platform_type),
@@ -508,6 +590,7 @@ def poll_platform_job_status(
         return {"outcome": "complete", "status": idp_status}
 
     # Re-schedule next poll (reset retry_count on success)
+    # Story 72.1 (AC4): propager correlation_id dans le re-schedule
     poll_platform_job_status.apply_async(
         args=[execution_id, platform_job_id, platform_type],
         kwargs={
@@ -518,6 +601,7 @@ def poll_platform_job_status(
             "retry_count": 0,
             "adapter_kwargs": adapter_kwargs,
             "poll_kwargs": poll_kwargs,
+            "correlation_id": correlation_id,
         },
         countdown=poll_interval,
         queue=get_platform_queue(platform_type),
@@ -533,145 +617,3 @@ def poll_platform_job_status(
     )
 
     return {"outcome": "polling", "status": idp_status}
-
-
-# ---------------------------------------------------------------------------
-# Backward-compat shims (Story 34.5 AC3) — ≤ 15 lignes chacun
-# Les noms Celery sont inchangés ; chaque shim traduit ses paramètres
-# spécifiques et délègue directement à poll_platform_job_status (synchrone).
-# ---------------------------------------------------------------------------
-
-@shared_task(bind=True, max_retries=0, name="executions.tasks.poll_aap_job_status")
-def poll_aap_job_status(
-    self: Any,
-    execution_id: int,
-    platform_job_id: str,
-    resource_type: str = "job_template",
-    base_url: str = "",
-    credential_ref: str = "",
-    auth_flow: str = "token",
-    poll_interval: int = 5,
-    retry_count: int = 0,
-    ssl_verify: bool = True,
-    ca_bundle_path: str | None = None,
-) -> Any:
-    """Story 34.5: Shim backward-compat — délègue à poll_platform_job_status."""
-    return poll_platform_job_status(
-        execution_id=execution_id,
-        platform_job_id=platform_job_id,
-        platform_type="aap",
-        base_url=base_url,
-        credential_ref=credential_ref,
-        auth_flow=auth_flow,
-        poll_interval=poll_interval,
-        retry_count=retry_count,
-        adapter_kwargs={"ssl_verify": ssl_verify, "ca_bundle_path": ca_bundle_path},
-        poll_kwargs={"resource_type": resource_type},
-    )
-
-
-@shared_task(bind=True, max_retries=0, name="executions.tasks.poll_tower_job_status")
-def poll_tower_job_status(
-    self: Any,
-    execution_id: int,
-    platform_job_id: str,
-    resource_type: str = "job_template",
-    base_url: str = "",
-    credential_ref: str = "",
-    auth_flow: str = "token",
-    poll_interval: int = 5,
-    retry_count: int = 0,
-) -> Any:
-    """Story 34.5: Shim backward-compat — délègue à poll_platform_job_status."""
-    return poll_platform_job_status(
-        execution_id=execution_id,
-        platform_job_id=platform_job_id,
-        platform_type="tower",
-        base_url=base_url,
-        credential_ref=credential_ref,
-        auth_flow=auth_flow,
-        poll_interval=poll_interval,
-        retry_count=retry_count,
-        adapter_kwargs={},
-        poll_kwargs={"resource_type": resource_type},
-    )
-
-
-@shared_task(bind=True, max_retries=0, name="executions.tasks.poll_azure_devops_run_status")
-def poll_azure_devops_run_status(
-    self: Any,
-    execution_id: int,
-    platform_job_id: str,
-    pipeline_id: str = "",
-    base_url: str = "",
-    credential_ref: str = "",
-    auth_flow: str = "basic",
-    poll_interval: int = 5,
-    retry_count: int = 0,
-) -> Any:
-    """Story 34.5: Shim backward-compat — délègue à poll_platform_job_status."""
-    return poll_platform_job_status(
-        execution_id=execution_id,
-        platform_job_id=platform_job_id,
-        platform_type="azure_devops",
-        base_url=base_url,
-        credential_ref=credential_ref,
-        auth_flow=auth_flow,
-        poll_interval=poll_interval,
-        retry_count=retry_count,
-        adapter_kwargs={},
-        poll_kwargs={"pipeline_id": pipeline_id},
-    )
-
-
-@shared_task(bind=True, max_retries=0, name="executions.tasks.poll_github_actions_run_status")
-def poll_github_actions_run_status(
-    self: Any,
-    execution_id: int,
-    platform_job_id: str,
-    owner: str = "",
-    repo: str = "",
-    base_url: str = "",
-    credential_ref: str = "",
-    poll_interval: int = 60,
-    retry_count: int = 0,
-) -> Any:
-    """Story 34.5: Shim backward-compat — délègue à poll_platform_job_status."""
-    return poll_platform_job_status(
-        execution_id=execution_id,
-        platform_job_id=platform_job_id,
-        platform_type="github_actions",
-        base_url=base_url,
-        credential_ref=credential_ref,
-        auth_flow="token",
-        poll_interval=poll_interval,
-        retry_count=retry_count,
-        adapter_kwargs={"owner": owner, "repo": repo},
-        poll_kwargs={},
-    )
-
-
-@shared_task(bind=True, max_retries=0, name="executions.tasks.poll_terraform_cloud_run_status")
-def poll_terraform_cloud_run_status(
-    self: Any,
-    execution_id: int,
-    platform_job_id: str,
-    organization: str = "",
-    base_url: str = "",
-    credential_ref: str = "",
-    poll_interval: int = 60,
-    retry_count: int = 0,
-) -> Any:
-    """Story 34.5: Shim backward-compat — délègue à poll_platform_job_status."""
-    return poll_platform_job_status(
-        execution_id=execution_id,
-        platform_job_id=platform_job_id,
-        platform_type="terraform_cloud",
-        base_url=base_url,
-        credential_ref=credential_ref,
-        auth_flow="token",
-        poll_interval=poll_interval,
-        retry_count=retry_count,
-        adapter_kwargs={"organization": organization},
-        poll_kwargs={},
-    )

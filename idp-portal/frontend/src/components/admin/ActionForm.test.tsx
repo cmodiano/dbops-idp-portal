@@ -57,6 +57,20 @@ vi.mock('../../hooks/usePlatformIntegrations', () => ({
   }),
 }));
 
+const { mockExportYaml } = vi.hoisted(() => ({
+  mockExportYaml: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock('../../hooks/useEntityExport', () => ({
+  useEntityExport: () => ({ exportYaml: mockExportYaml, loading: false }),
+}));
+
+vi.mock('../../hooks/useEngines', () => ({
+  useEngines: () => ({
+    engineOptions: [{ value: 'Oracle', label: 'Oracle' }],
+    loading: false,
+  }),
+}));
+
 const mockOnSubmit = vi.fn().mockResolvedValue({ id: 1 });
 const mockOnCancel = vi.fn();
 const mockOnSuccess = vi.fn();
@@ -700,4 +714,73 @@ describe('ActionForm — coverage extension', () => {
       expect(screen.getByText('Enregistrer')).toBeInTheDocument();
     });
   });
+
+  it('Export YAML button calls exportYaml in edit mode', async () => {
+    const mockEditAction: ActionDetail = {
+      id: 1,
+      name: 'Export Action',
+      description: 'Desc',
+      item_type: 'action',
+      engine: 'Oracle',
+      platform: 'AAP',
+      integration_id: 1,
+      parameters_schema: null,
+      impact_rules: null,
+      default_impact_level: null,
+      status: 'draft',
+      created_by: 1,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: null,
+      execution_steps: null,
+      workflow_steps: null,
+      tags: [],
+    };
+
+    await act(async () => {
+      render(<ActionForm {...defaultProps} editAction={mockEditAction} />);
+    });
+
+    const user = userEvent.setup();
+    const exportBtn = screen.getByRole('button', { name: /Exporter en YAML/i });
+    await user.click(exportBtn);
+
+    await waitFor(() => {
+      expect(mockExportYaml).toHaveBeenCalled();
+    });
+  });
+
+  it('handleFinish shows validation error when edit mode has no steps', async () => {
+    const user = userEvent.setup();
+    const editActionNoSteps: ActionDetail = {
+      id: 1,
+      name: 'No Steps',
+      description: 'Desc',
+      item_type: 'action',
+      engine: 'Oracle',
+      platform: 'AAP',
+      integration_id: 1,
+      parameters_schema: null,
+      impact_rules: null,
+      default_impact_level: null,
+      status: 'draft',
+      created_by: 1,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: null,
+      execution_steps: [],
+      workflow_steps: null,
+      tags: [],
+    };
+
+    await act(async () => {
+      render(<ActionForm {...defaultProps} editAction={editActionNoSteps} />);
+    });
+
+    await user.click(screen.getByText('Enregistrer'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Au moins une étape est requise/i)).toBeInTheDocument();
+    });
+    expect(mockOnSubmit).not.toHaveBeenCalled();
+  });
+
 });

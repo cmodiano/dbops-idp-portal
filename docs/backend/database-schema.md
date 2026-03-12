@@ -2,7 +2,7 @@
 
 ## Vue d'ensemble
 
-Le portail IDP utilise **Oracle Database** avec **13 tables principales** organisées en **6 domaines fonctionnels**. Le schéma est géré par **Flyway** (45 migrations: V000 à V044) avec cohabitation Django ORM.
+Le portail IDP utilise **Oracle Database** avec **28 tables** organisées en **6 domaines fonctionnels**. Le schéma est géré par **Flyway** (119 migrations: V000 à V118) avec cohabitation Django ORM.
 
 ### Caractéristiques techniques
 
@@ -18,6 +18,8 @@ Le portail IDP utilise **Oracle Database** avec **13 tables principales** organi
 ---
 
 ## Diagramme ER Complet
+
+Représentation des 28 tables principales (schéma V000 à V118).
 
 ```
                                        ┌──────────────────────┐
@@ -71,6 +73,8 @@ Le portail IDP utilise **Oracle Database** avec **13 tables principales** organi
            │                       │ OUTPUT (CLOB)        │  │  │
            │                       │ PLATFORM_JOB_ID      │  │  │
            │                       │ ERROR_MESSAGE (CLOB) │  │  │
+           │                       │ REJECTED_BY (FK)     │  │  │
+           │                       │ REJECTED_AT          │  │  │
            │                       │ CREATED_AT           │  │  │
            │                       └──────────────────────┘  │  │
            │                                                 │  │
@@ -91,8 +95,7 @@ Le portail IDP utilise **Oracle Database** avec **13 tables principales** organi
 │ PARAMETERS_SCHEMA (CLOB)        │              │ AUTH_FLOW            │
 │ IMPACT_RULES (CLOB)             │              │ TOKEN_URL            │
 │ EXECUTION_STEPS (CLOB)          │              │ CONFIG (CLOB)        │
-│ CHANGE_TYPE_CONFIG (CLOB)       │              │ CREATED_AT           │
-│ DOCUMENTATION_MD (CLOB)         │              │ UPDATED_AT           │
+│ DOCUMENTATION_MD (CLOB)         │              │ CREATED_AT           │
 │ REMEDIATION_RULES (CLOB)        │              └──────────────────────┘
 │ DEFAULT_IMPACT_LEVEL            │
 │ STATUS                          │
@@ -304,7 +307,6 @@ Table principale du catalogue d'actions.
 | PARAMETERS_SCHEMA | CLOB | NULL | JSON Schema des paramètres |
 | IMPACT_RULES | CLOB | NULL | Règles d'impact JSON |
 | EXECUTION_STEPS | CLOB | NULL | Étapes d'exécution JSON |
-| CHANGE_TYPE_CONFIG | CLOB | NULL | Config changement par env (V019) |
 | DOCUMENTATION_MD | CLOB | NULL | Documentation Markdown (V022) |
 | REMEDIATION_RULES | CLOB | NULL | Règles de remédiation (V031) |
 | DEFAULT_IMPACT_LEVEL | VARCHAR2(20) | NULL, CHECK (...) | Niveau d'impact par défaut (V014) |
@@ -490,7 +492,7 @@ SELECT * FROM EXECUTIONS WHERE ACTION_ID = 42 ORDER BY CREATED_AT DESC;
 
 ---
 
-#### EXECUTION_STEPS (V025)
+#### EXECUTION_STEPS (V025, V118)
 
 Table des étapes d'une exécution.
 
@@ -507,11 +509,13 @@ Table des étapes d'une exécution.
 | OUTPUT | CLOB | NULL | Sortie (JSON) |
 | PLATFORM_JOB_ID | VARCHAR2(255) | NULL | ID du job sur la plateforme |
 | ERROR_MESSAGE | CLOB | NULL | Message d'erreur |
+| REJECTED_BY | NUMBER | NULL, FK → USERS.ID ON DELETE SET NULL | Utilisateur ayant rejeté ce step (gate rejection, V118) |
+| REJECTED_AT | TIMESTAMP | NULL | Date/heure du rejet du step (V118) |
 | CREATED_AT | TIMESTAMP | DEFAULT SYSTIMESTAMP | Date de création |
 
 **Valeurs CHECK:**
-- `STEP_TYPE`: 'vault', 'servicenow', 'platform', 'prerequisite', 'verification'
-- `STATUS`: 'PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'SKIPPED'
+- `STEP_TYPE`: 'vault', 'servicenow', 'platform', 'prerequisite', 'verification', 'service_call', 'http_request', 'evaluation', 'gate', 'schedule_execution'
+- `STATUS`: 'PENDING', 'WAITING', 'RUNNING', 'COMPLETED', 'FAILED', 'SKIPPED'
 
 **Contrainte:** `UK_EXECUTION_STEPS (EXECUTION_ID, STEP_ORDER)` - unicité
 
@@ -694,7 +698,7 @@ SELECT a.NAME FROM ACTIONS_CATALOG a WHERE a.INTEGRATION_ID = 1;
 
 ### 6. Domaine Audit (core)
 
-#### AUDIT_LOG (V004, V028-V035, V039-V041, V044)
+#### AUDIT_LOG (V004, V028-V035, V039-V041, V044-V117)
 
 Table d'audit **APPEND-ONLY** pour la conformité SOC1.
 
@@ -823,7 +827,7 @@ Le système utilise un **scheduler externe** (Control-M ou Django scheduler) pou
 | V010-V013 | RBAC | PROFILES, permissions action/target, suppression rbac_policies |
 | V014 | Catalog | DEFAULT_IMPACT_LEVEL |
 | V015-V016 | Cleanup | Suppression SCHEMA_VERSION et séquences |
-| V017-V019 | Catalog | Change model code, change_type_config par env |
+| V017-V019 | Catalog | Change model code (CHANGE_TYPE_CONFIG migré vers EXECUTION_STEPS en V108, colonne supprimée V109) |
 | V020-V026 | Integrations | INTEGRATIONS, auth_flow, token_url, config |
 | V021 | Catalog | USER_FAVORITES |
 | V022 | Catalog | DOCUMENTATION_MD (markdown) |
@@ -837,6 +841,8 @@ Le système utilise un **scheduler externe** (Control-M ou Django scheduler) pou
 | V038-V041 | Scheduling | SCHEDULED_EXECUTIONS, RECURRING_PATTERNS |
 | V042-V043 | Catalog | ID ajouté à ACTION_TAGS et USER_FAVORITES (Django ORM) |
 | V044 | Audit | Types auth et admin étendus |
+| V045-V117 | Various | 73 migrations (EXECUTION_TARGETS, gates, feature flags, business rules, API keys, output schemas, etc.) |
+| V118 | Executions | REJECTED_BY, REJECTED_AT sur EXECUTION_STEPS (gate rejection, ADR-007) |
 
 ### Migrations par domaine
 
@@ -864,7 +870,7 @@ V018__drop_category_column.sql
   → CATEGORY rendue nullable, contrainte/index supprimés (colonne conservée) ; migration des données vers TAGS
 
 V019__change_type_config_per_env.sql
-  → CHANGE_TYPE_CONFIG (JSON par environnement)
+  → CHANGE_TYPE_CONFIG (migré vers EXECUTION_STEPS en V108, colonne supprimée V109)
 
 V021__create_user_favorites.sql
   → Création table USER_FAVORITES
@@ -909,7 +915,7 @@ V013__drop_rbac_policies_from_actions.sql
   → Suppression ancien RBAC, migration vers profils
 ```
 
-#### Exécutions (V003, V006, V008, V023, V025, V030, V033, V038-V041)
+#### Exécutions (V003, V006, V008, V023, V025, V030, V033, V038-V041, V118)
 ```
 V003__add_execution_steps.sql
   → Ajout étapes d'exécution (legacy)
@@ -937,6 +943,9 @@ V038__add_scheduled_executions.sql
 
 V041__add_correlation_id_execution_id_to_scheduled_executions.sql
   → CORRELATION_ID et EXECUTION_ID pour traçabilité
+
+V118__add_rejected_by_rejected_at_to_execution_steps.sql
+  → REJECTED_BY et REJECTED_AT sur EXECUTION_STEPS (gate rejection, ADR-007)
 ```
 
 #### Intégrations (V020, V024, V026)
@@ -951,7 +960,7 @@ V026__integrations_token_url_config.sql
   → TOKEN_URL, CONFIG (JSON Schema)
 ```
 
-#### Audit (V004, V028-V035, V039-V040, V044)
+#### Audit (V004, V028-V035, V039-V040, V044-V117)
 ```
 V004__create_audit_log.sql
   → Création AUDIT_LOG
@@ -979,17 +988,22 @@ V040__add_scheduled_execution_cancelled_audit_type.sql
 
 V044__extend_audit_log_action_types_for_auth_and_admin.sql
   → Types auth (LOGIN, LOGOUT, REFRESH) et admin
+
+V045-V117
+  → 73 migrations supplémentaires (types audit étendus, EXECUTION_TARGETS, gates, feature flags, etc.)
 ```
 
 ---
 
 ## Guide de migration de schéma
 
+Les exemples ci-dessous utilisent le placeholder `V<next_version>` pour le numéro de migration (remplacer par le prochain numéro disponible, ex. V119, V120) afin d'éviter les collisions avec les migrations réelles.
+
 ### Ajouter une nouvelle table
 
 1. **Créer la migration Flyway:**
 ```sql
--- idp-portal/database/migrations/V045__create_new_table.sql
+-- idp-portal/database/migrations/V<next_version>__create_new_table.sql
 CREATE TABLE NEW_TABLE (
     ID NUMBER GENERATED BY DEFAULT ON NULL AS IDENTITY PRIMARY KEY,
     NAME VARCHAR2(255) NOT NULL,
@@ -1025,7 +1039,7 @@ python manage.py makemigrations app_name --empty --name create_new_table
 
 1. **Migration Flyway:**
 ```sql
--- V046__alter_column.sql
+-- V<next_version>__alter_column.sql
 ALTER TABLE ACTIONS_CATALOG MODIFY DESCRIPTION VARCHAR2(8000);
 ```
 
@@ -1037,7 +1051,7 @@ description = models.CharField(max_length=8000, ...)  # Était 4000
 ### Ajouter un index ou une contrainte
 
 ```sql
--- V047__add_index.sql
+-- V<next_version>__add_index.sql
 CREATE INDEX IDX_EXECUTIONS_ENV_STATUS ON EXECUTIONS(ENVIRONMENT, STATUS);
 
 -- Contrainte CHECK
@@ -1112,7 +1126,7 @@ Importer le schéma Oracle pour visualisation graphique.
 | `idp-portal/django_backend/core/models.py` | AuditLog, AuditActionType, AuditEntityType |
 | `idp-portal/django_backend/integrations/models.py` | Integration |
 | `idp-portal/django_backend/idp_auth/models.py` | User |
-| `idp-portal/database/migrations/` | 45 migrations Flyway (V000-V044) |
+| `idp-portal/database/migrations/` | 119 migrations Flyway (V000-V118) |
 
 ### Documentation connexe
 

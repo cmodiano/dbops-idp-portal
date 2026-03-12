@@ -18,8 +18,8 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from catalog.models import Action, ActionStatus
 from core.exceptions import BadRequestError, NotFoundError, ForbiddenError, InvalidStateError
+from executions.validators.payload_validator import ExecutionPayloadValidator
 from core.pagination import paginate_queryset
 from core.middleware import get_correlation_id
 from core.utils import ensure_utc_isoformat
@@ -196,12 +196,15 @@ class ScheduledExecutionsView(APIView):
                 details={},
             )
 
-        if action_id is None or environment is None:
+        if environment is None:
             raise BadRequestError(
                 code="BAD_REQUEST",
-                message="action_id et environment sont requis",
+                message="environment est requis",
                 details={"action_id": action_id, "environment": environment},
             )
+
+        # Story 71.5: Reuse shared action validation (eliminates duplicated action fetch)
+        action = ExecutionPayloadValidator.validate_action(action_id)
 
         validate_environment_against_inventory(environment, user_id=request.user.id)
 
@@ -217,13 +220,6 @@ class ScheduledExecutionsView(APIView):
                 message="scheduled_at ou recurring_pattern est requis",
                 details={},
             )
-
-        try:
-            action = Action.objects.get(id=int(action_id), status=ActionStatus.PUBLISHED)
-        except (ValueError, TypeError):
-            raise BadRequestError(code="BAD_REQUEST", message="action_id invalide", details={"action_id": action_id})
-        except Action.DoesNotExist:
-            raise NotFoundError(code="ACTION_NOT_FOUND", message="Action non trouvée", details={"action_id": action_id})
 
         correlation_id = get_correlation_id()
 

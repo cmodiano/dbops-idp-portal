@@ -10,30 +10,17 @@
  * - Derives environment from selected targets
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Select, Badge, Alert, Spin, Empty } from 'antd';
 import type { SelectProps } from 'antd';
 
-import { apiFetchRaw } from '../../services/api_client';
+import { useTargetsPaginated } from '../../hooks/useTargetInventory';
+import type { InventoryTarget } from '../../hooks/useTargetInventory';
 import { useDebounce } from '../../hooks/useDebounce';
 import { getEnvironmentLabel, getEnvironmentColor, sortEnvironments } from '../../utils/environmentHelpers';
 
 /** Target from inventory API */
-export interface Target {
-  name: string;
-  environment: string;
-  target_type: string;
-  metadata: Record<string, unknown> | null;
-}
-
-/** Response from GET /api/v1/inventory/targets */
-interface TargetsResponse {
-  items: Target[];
-  total: number;
-  page: number;
-  page_size: number;
-  total_pages: number;
-}
+export type Target = InventoryTarget;
 
 export interface TargetSelectorProps {
   /** Whether to allow multiple target selection */
@@ -53,24 +40,6 @@ export interface TargetSelectorProps {
   inputRef?: React.Ref<any>;
 }
 
-/**
- * Fetch targets from inventory API.
- *
- * @param search Optional search query
- * @returns Promise with targets response
- */
-async function fetchTargets(search?: string): Promise<TargetsResponse> {
-  const params = new URLSearchParams();
-  params.set('page', '1');
-  params.set('page_size', '100'); // Load enough for dropdown
-  if (search) {
-    params.set('search', search);
-  }
-
-  // Inventory API returns { items, total, page, ... } directly (no data wrapper)
-  return apiFetchRaw<TargetsResponse>(`/inventory/targets?${params.toString()}`);
-}
-
 export function TargetSelector({
   multiple = false,
   value,
@@ -80,39 +49,9 @@ export function TargetSelector({
   ariaLabel = 'Selection de cible',
   inputRef,
 }: TargetSelectorProps) {
-  const [targets, setTargets] = useState<Target[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [searchValue, setSearchValue] = useState('');
   const debouncedSearch = useDebounce(searchValue.trim(), 300);
-
-  // Load targets: initial load and when server-side search term changes
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    fetchTargets(debouncedSearch || undefined)
-      .then((response) => {
-        if (!cancelled) {
-          setTargets(response?.items ?? []);
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setError(err.message || 'Erreur lors du chargement des cibles');
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [debouncedSearch]);
+  const { targets, loading, error } = useTargetsPaginated(debouncedSearch || undefined);
 
   // Group targets by environment for dropdown display
   const groupedOptions = useMemo((): NonNullable<SelectProps['options']> => {

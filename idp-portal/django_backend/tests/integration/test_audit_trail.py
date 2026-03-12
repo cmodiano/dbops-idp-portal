@@ -17,6 +17,7 @@ from integrations.models import Integration
 from profiles.models import Profile
 from executions.models import Execution, ExecutionStatus
 from core.models import AuditLog, AuditActionType, AuditEntityType
+from core.services import AuditService
 
 
 @pytest.mark.django_db
@@ -49,7 +50,8 @@ class TestAuditTrailCRUD(TestCase):
             integration=self.integration
         )
 
-        AuditLog.objects.create_entry(
+        # MED-04: use AuditService (real code path) — also fixes LOW-05 (Story 72.2 format)
+        AuditService.create_entry(
             user_id=str(self.user.id),
             action_type=AuditActionType.ACTION_CREATED,
             entity_type=AuditEntityType.ACTION,
@@ -62,12 +64,12 @@ class TestAuditTrailCRUD(TestCase):
         action.description = 'Updated description'
         action.save()
 
-        AuditLog.objects.create_entry(
+        AuditService.create_entry(
             user_id=str(self.user.id),
             action_type=AuditActionType.ACTION_UPDATED,
             entity_type=AuditEntityType.ACTION,
             entity_id=action.id,
-            details={'field': 'description', 'new_value': 'Updated description'},
+            details={'changes': {'description': {'old': None, 'new': 'Updated description'}}},
             correlation_id='update-001'
         )
 
@@ -75,12 +77,12 @@ class TestAuditTrailCRUD(TestCase):
         action.status = ActionStatus.PUBLISHED
         action.save()
 
-        AuditLog.objects.create_entry(
+        AuditService.create_entry(
             user_id=str(self.user.id),
             action_type=AuditActionType.ACTION_PUBLISHED,
             entity_type=AuditEntityType.ACTION,
             entity_id=action.id,
-            details={'previous_status': 'draft'},
+            details={'changes': {'status': {'old': 'draft', 'new': 'published'}}},
             correlation_id='publish-001'
         )
 
@@ -107,7 +109,7 @@ class TestAuditTrailCRUD(TestCase):
             is_admin=0
         )
 
-        AuditLog.objects.create_entry(
+        AuditService.create_entry(
             user_id=str(self.user.id),
             action_type=AuditActionType.PROFILE_CREATED,
             entity_type=AuditEntityType.PROFILE,
@@ -119,7 +121,7 @@ class TestAuditTrailCRUD(TestCase):
         profile.description = 'Updated description'
         profile.save()
 
-        AuditLog.objects.create_entry(
+        AuditService.create_entry(
             user_id=str(self.user.id),
             action_type=AuditActionType.PROFILE_UPDATED,
             entity_type=AuditEntityType.PROFILE,
@@ -138,7 +140,7 @@ class TestAuditTrailCRUD(TestCase):
             base_url='https://snow.example.com'
         )
 
-        AuditLog.objects.create_entry(
+        AuditService.create_entry(
             user_id=str(self.user.id),
             action_type=AuditActionType.INTEGRATION_CREATED,
             entity_type=AuditEntityType.INTEGRATION,
@@ -150,12 +152,12 @@ class TestAuditTrailCRUD(TestCase):
         integration.base_url = 'https://new-snow.example.com'
         integration.save()
 
-        AuditLog.objects.create_entry(
+        AuditService.create_entry(
             user_id=str(self.user.id),
             action_type=AuditActionType.INTEGRATION_UPDATED,
             entity_type=AuditEntityType.INTEGRATION,
             entity_id=integration.id,
-            details={'field': 'base_url'}
+            details={'changes': {'base_url': {'updated': True}}}
         )
 
         # Verify
@@ -194,8 +196,8 @@ class TestAuditTrailExecution(TestCase):
             status=ExecutionStatus.SUBMITTED
         )
 
-        # SUBMITTED
-        AuditLog.objects.create_entry(
+        # SUBMITTED — MED-04: use AuditService (real code path)
+        AuditService.create_entry(
             user_id=str(self.user.id),
             action_type=AuditActionType.EXECUTION_SUBMITTED,
             entity_type=AuditEntityType.EXECUTION,
@@ -208,7 +210,7 @@ class TestAuditTrailExecution(TestCase):
         execution.started_at = timezone.now()
         execution.save()
 
-        AuditLog.objects.create_entry(
+        AuditService.create_entry(
             user_id=str(self.user.id),
             action_type=AuditActionType.EXECUTION_RUNNING,
             entity_type=AuditEntityType.EXECUTION,
@@ -220,7 +222,7 @@ class TestAuditTrailExecution(TestCase):
         execution.completed_at = timezone.now()
         execution.save()
 
-        AuditLog.objects.create_entry(
+        AuditService.create_entry(
             user_id=str(self.user.id),
             action_type=AuditActionType.EXECUTION_COMPLETED,
             entity_type=AuditEntityType.EXECUTION,
@@ -251,7 +253,7 @@ class TestAuditTrailExecution(TestCase):
         execution.completed_at = timezone.now()
         execution.save()
 
-        AuditLog.objects.create_entry(
+        AuditService.create_entry(
             user_id=str(self.user.id),
             action_type=AuditActionType.EXECUTION_FAILED,
             entity_type=AuditEntityType.EXECUTION,
@@ -281,7 +283,7 @@ class TestAuditTrailExecution(TestCase):
         )
 
         # PENDING_APPROVAL
-        AuditLog.objects.create_entry(
+        AuditService.create_entry(
             user_id=str(self.user.id),
             action_type=AuditActionType.EXECUTION_PENDING_APPROVAL,
             entity_type=AuditEntityType.EXECUTION,
@@ -295,7 +297,7 @@ class TestAuditTrailExecution(TestCase):
         execution.approval_comment = 'Missing change window'
         execution.save()
 
-        AuditLog.objects.create_entry(
+        AuditService.create_entry(
             user_id=str(approver.id),
             action_type=AuditActionType.EXECUTION_REJECTED,
             entity_type=AuditEntityType.EXECUTION,

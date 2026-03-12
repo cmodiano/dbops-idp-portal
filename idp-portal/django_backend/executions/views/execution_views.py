@@ -14,7 +14,6 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from core.auth_utils import get_user_ad_groups
 from core.exceptions import BadRequestError, NotFoundError, ForbiddenError, ServiceUnavailableError
 from core.middleware import get_correlation_id, get_client_ip
 from core.throttling import ExecutionThrottle, GeneralAPIThrottle
@@ -28,11 +27,7 @@ from core.permissions import IsAdminUser
 from executions.utils import (
     detect_request_source,
 )
-from executions.validators.payload_validator import ExecutionPayloadValidator
-from executions.validators.target_validator import TargetValidator
-from executions.validators.env_config_resolver import EnvironmentConfigResolver
-from executions.validators.mutex_validator import MutexValidator
-from executions.validators.workflow_validator import WorkflowValidator
+from executions.validators.pipeline import ExecutionValidationPipeline
 
 from drf_spectacular.utils import extend_schema, inline_serializer
 import structlog
@@ -167,122 +162,51 @@ class ExecutionsCreateView(APIView):
         Story 13.4: target_names is REQUIRED for actions with requires_target=True.
                    environment is ALWAYS derived from target(s), never passed directly.
         """
-        # Step 1: Validate payload
-        validated = ExecutionPayloadValidator.validate(request.data, request)
-        action = validated['action']
-        action_id = validated['action_id']
-        environment = validated['environment']
-        target_names = validated['target_names']
-        parameters = validated['parameters']
-        workflow_step_parameters = validated['workflow_step_parameters']
-        parent_execution_id = validated['parent_execution_id']
-        correlation_id = validated['correlation_id']
-
-        # Step 2: Validate targets (if applicable)
-        validated_targets: list[dict[str, Any]] = []
-        if target_names:
-            ad_groups = get_user_ad_groups(request.user)
-            validated_targets, environment = TargetValidator.validate_targets(
-                target_names=target_names,
-                action_id=action_id,
-                user=request.user,
-                ad_groups=ad_groups,
-                correlation_id=correlation_id,
-            )
-            parameters = parameters.copy() if parameters else {}
-            parameters['_targets'] = target_names
-
-            exec_logger.info(
-                "execution_with_targets",
-                user_id=request.user.id,
-                action_id=action_id,
-                target_count=len(target_names),
-                derived_environment=environment,
-                correlation_id=correlation_id,
-            )
-
-        # Step 3: Resolve environment config
-        env_config = EnvironmentConfigResolver.resolve(
-            action=action,
-            environment=environment,
-            correlation_id=correlation_id,
-        )
-
-        # Store environment config in parameters
-        parameters = parameters.copy() if parameters else {}
-        parameters['_env_config'] = {
-            'change_required': env_config['change_required'],
-            'change_model_code': env_config['change_model_code'],
-            'impact_level': env_config['impact_level'],
-            'requires_maintenance_window': env_config['requires_maintenance_window'],
-            'requires_approval': env_config['requires_approval'],
-        }
-
-        # Step 4: Detect source and IP
+        # Step 1: Detect source and IP (context HTTP, pas validation)
         source = detect_request_source(request)
         ip_address = get_client_ip(request)
 
-        # Step 5: Validate workflow (if applicable)
-        delegated_referenced_action_ids: list[int] | None = None
-        if action.item_type == "workflow":
-            delegated_referenced_action_ids = WorkflowValidator.validate_referenced_actions(
-                workflow_action=action,
-                correlation_id=correlation_id,
-                user_id=request.user.id,
-                ip_address=ip_address,
-            )
-        else:
-            WorkflowValidator.reject_step_parameters_for_non_workflow(action, workflow_step_parameters)
+        # Step 2: Run unified validation pipeline
+        result = ExecutionValidationPipeline.validate(
+            request_data=request.data,
+            request=request,
+            user=request.user,
+            ip_address=ip_address,
+        )
 
-        if action.item_type == "workflow" and workflow_step_parameters is not None:
-            normalized_wsp = WorkflowValidator.validate_step_parameters(
-                workflow_action=action,
-                workflow_step_parameters=workflow_step_parameters,
-            )
-            parameters = parameters.copy() if parameters else {}
-            parameters["workflow_step_parameters"] = normalized_wsp
-
-        # Step 5b (Story 31.8): Inject page_me parameters if requested
-        page_me = validated.get('page_me', False)
-        if page_me:
-            parameters = parameters.copy() if parameters else {}
+        # Step 3 (Story 31.8): Inject page_me parameters if requested
+        parameters = result.parameters
+        if result.page_me:
+            parameters = (parameters.copy() if parameters else {})
             parameters['__page_me'] = True
             parameters['__page_me_user_id'] = str(request.user.username)
             parameters['__page_me_user_name'] = getattr(
                 request.user, 'display_name', str(request.user.username)
             )
 
-        # Step 6: Validate mutex
-        target_ids_for_mutex = [t['name'] for t in validated_targets] if validated_targets else []
-        MutexValidator.validate(
-            action=action,
-            target_ids=target_ids_for_mutex,
-            correlation_id=correlation_id,
-            user_id=str(request.user.id),
-        )
-
-        # Step 7: Create execution
+        # Step 4: Create execution
         exec_req = ExecutionRequest(
             user=request.user,  # type: ignore[arg-type]
-            action=action,
-            environment=env_config['env_str'],
+            action=result.action,
+            environment=result.environment,
             parameters=parameters if parameters else None,
-            parent_execution_id=parent_execution_id,
-            correlation_id=correlation_id,
+            parent_execution_id=result.parent_execution_id,
+            correlation_id=result.correlation_id,
             source=source,
             ip_address=ip_address,
-            targets=target_names if target_names else None,
-            delegated_referenced_action_ids=delegated_referenced_action_ids,
-            validated_targets=validated_targets if target_names else None,
+            targets=result.target_names if result.target_names else None,
+            delegated_referenced_action_ids=result.delegated_referenced_action_ids,
+            validated_targets=result.validated_targets if result.target_names else None,
         )
         execution = self.get_execution_service().create_execution(exec_req)
 
-        # Step 8: Launch execution (skip when requires_approval → PENDING_APPROVAL; DBA will launch via /approve)
-        if execution.status != ExecutionStatus.PENDING_APPROVAL:
-            self._launch_execution(execution, action, correlation_id, request)
+        # Step 5: Launch execution (skip when requires_approval → approval gate step created;
+        # DBA will launch via /approve after gate approval). ADR-007: check step-based.
+        if not execution.is_pending_approval:
+            self._launch_execution(execution, result.action, result.correlation_id or "", request)
 
-        # Step 9: Build response
-        return ExecutionResponseBuilder.build(execution, action)
+        # Step 6: Build response
+        return ExecutionResponseBuilder.build(execution, result.action)
 
     def _launch_execution(self, execution: Any, action: Any, correlation_id: str, request: Request) -> None:
         """Launch the execution via the appropriate runtime."""
@@ -380,7 +304,7 @@ class ExecutionCancelView(APIView):
     @extend_schema(tags=['executions'], summary='Annuler une exécution', responses={200: ExecutionSerializer})
     def patch(self, request: Request, execution_id: int) -> Response:
         try:
-            execution = Execution.objects.select_related("action", "user", "action__integration").get(id=execution_id)
+            execution = Execution.objects.select_related("action", "user", "action__integration").prefetch_related("targets").get(id=execution_id)
         except Execution.DoesNotExist:
             raise NotFoundError(code="NOT_FOUND", message="Execution non trouvée", details={"execution_id": execution_id})
 

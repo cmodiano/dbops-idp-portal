@@ -32,6 +32,8 @@ interface TimelineListProps {
   onOpenLogs: (id: number) => void;
   /** Story 65.6: workflow steps for parallel_group grouping (optional, AC: #3, #6). */
   workflowSteps?: WorkflowStep[];
+  /** Story 72.1: correlation_id pour traçabilité (affiché dans chaque step). */
+  correlationId?: string | null;
 }
 
 export function TimelineList({
@@ -43,6 +45,7 @@ export function TimelineList({
   onToggleExpand,
   onOpenLogs,
   workflowSteps,
+  correlationId,
 }: TimelineListProps) {
   // Story 65.6: Build parallel group data structures when workflowSteps is available.
   // Fallback (AC: #6): if workflowSteps absent or empty, render classically without grouping.
@@ -138,6 +141,7 @@ export function TimelineList({
                   expandedId={expandedId}
                   onToggleExpand={onToggleExpand}
                   onOpenLogs={onOpenLogs}
+                  correlationId={correlationId}
                 />
               );
             }
@@ -153,6 +157,7 @@ export function TimelineList({
             isLast={idx === steps.length - 1}
             onToggleExpand={() => onToggleExpand(step.id)}
             onOpenLogs={() => onOpenLogs(step.id)}
+            correlationId={correlationId}
           />
         );
       })}

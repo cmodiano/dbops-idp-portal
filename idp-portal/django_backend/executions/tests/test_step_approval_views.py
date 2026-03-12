@@ -49,8 +49,8 @@ class TestApproveStepView(TestCase):
                 "name": "request-approval",
                 "step_type": "gate",
                 "gate_type": "approval",
-                "on_success_step_id": "execute-action",
-                "on_error_step_id": "notify-rejected",
+                "on_success_step_ids": ["execute-action"],
+                "on_error_step_ids": ["notify-rejected"],
             }]
         )
         self.execution = ExecutionFactory(
@@ -63,7 +63,7 @@ class TestApproveStepView(TestCase):
     @patch('executions.views.approval_views._check_approver_permission', return_value=True)
     @patch('executions.views.approval_views.resume_container_workflow_from_gate')
     def test_approve_step_success_with_successor(self, mock_resume, mock_perm):
-        """AC#1 : approve → COMPLETED + resume vers on_success_step_id."""
+        """AC#1 : approve → COMPLETED + resume vers on_success_step_ids."""
         with self.captureOnCommitCallbacks(execute=True):
             response = self.client.post(
                 f"/api/v1/executions/{self.execution.id}/steps/{self.step.id}/approve/",
@@ -95,13 +95,13 @@ class TestApproveStepView(TestCase):
     @patch('executions.views.approval_views._check_approver_permission', return_value=True)
     @patch('executions.views.approval_views.resume_container_workflow_from_gate')
     def test_approve_step_success_last_step_completes_execution(self, mock_resume, mock_perm):
-        """AC#1 : approve sans on_success_step_id → execution COMPLETED, aucun resume."""
+        """AC#1 : approve sans on_success_step_ids → execution COMPLETED, aucun resume."""
         self.action.execution_steps = [{
             "step_id": "request-approval",
             "name": "request-approval",
             "step_type": "gate",
             "gate_type": "approval",
-            # pas de on_success_step_id
+            # pas de on_success_step_ids
         }]
         self.action.save()
 
@@ -183,8 +183,8 @@ class TestRejectStepView(TestCase):
                 "name": "request-approval",
                 "step_type": "gate",
                 "gate_type": "approval",
-                "on_success_step_id": "execute-action",
-                "on_error_step_id": "notify-rejected",
+                "on_success_step_ids": ["execute-action"],
+                "on_error_step_ids": ["notify-rejected"],
             }]
         )
         self.execution = ExecutionFactory(
@@ -197,7 +197,7 @@ class TestRejectStepView(TestCase):
     @patch('executions.views.approval_views._check_approver_permission', return_value=True)
     @patch('executions.views.approval_views.resume_container_workflow_from_gate')
     def test_reject_step_success_with_error_path(self, mock_resume, mock_perm):
-        """AC#2 : reject avec on_error_step_id → step FAILED, resume appelée."""
+        """AC#2 : reject avec on_error_step_ids → step FAILED, resume appelée."""
         with self.captureOnCommitCallbacks(execute=True):
             response = self.client.post(
                 f"/api/v1/executions/{self.execution.id}/steps/{self.step.id}/reject/",
@@ -217,20 +217,20 @@ class TestRejectStepView(TestCase):
 
         # Vérifie que la tâche Celery de resume est déclenchée avec le chemin d'erreur
         mock_resume.apply_async.assert_called_once_with(
-            args=[self.execution.id, "notify-rejected"],
+            args=[self.execution.id, ["notify-rejected"]],
             queue="default",
         )
 
     @patch('executions.views.approval_views._check_approver_permission', return_value=True)
     @patch('executions.views.approval_views.resume_container_workflow_from_gate')
     def test_reject_step_no_error_path_fails_execution(self, mock_resume, mock_perm):
-        """AC#2 : reject sans on_error_step_id → execution FAILED, aucun resume."""
+        """AC#2 : reject sans on_error_step_ids → execution FAILED, aucun resume."""
         self.action.execution_steps = [{
             "step_id": "request-approval",
             "name": "request-approval",
             "step_type": "gate",
             "gate_type": "approval",
-            # pas de on_error_step_id
+            # pas de on_error_step_ids
         }]
         self.action.save()
 
@@ -274,26 +274,22 @@ class TestApproveExecutionBackwardCompat(TestCase):
                 "name": "request-approval",
                 "step_type": "gate",
                 "gate_type": "approval",
-                "on_success_step_id": "execute-action",
+                "on_success_step_ids": ["execute-action"],
             }]
         )
 
-    def test_backward_compat_pending_approval_existing_path(self):
-        """AC#4 : exécution PENDING_APPROVAL → comportement existant inchangé (→ RUNNING)."""
+    def test_no_waiting_step_returns_400(self):
+        """ADR-007: execution without WAITING approval step -> 400 NO_PENDING_APPROVAL."""
         execution = ExecutionFactory(
             action=self.action,
             user=self.admin,
-            status=ExecutionStatus.PENDING_APPROVAL,
+            status=ExecutionStatus.SUBMITTED,
         )
-        with patch('executions.views.approval_views.ExecutionService.launch_workflow'):
-            response = self.client.post(
-                f"/api/v1/executions/{execution.id}/approve/",
-                format='json',
-            )
-        # Le chemin original PENDING_APPROVAL → RUNNING doit être utilisé
-        self.assertEqual(response.status_code, 200)
-        execution.refresh_from_db()
-        self.assertEqual(execution.status, ExecutionStatus.RUNNING)
+        response = self.client.post(
+            f"/api/v1/executions/{execution.id}/approve/",
+            format='json',
+        )
+        self.assertEqual(response.status_code, 400)
 
     @patch('executions.views.approval_views._check_approver_permission', return_value=True)
     @patch('executions.views.approval_views.resume_container_workflow_from_gate')
@@ -330,20 +326,34 @@ class TestApproveExecutionBackwardCompat(TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
-    def test_pending_approval_non_admin_is_forbidden(self):
-        """Story 58.4 AC5 : PENDING_APPROVAL + user non-admin → 403 Forbidden."""
+    def test_auto_approval_gate_non_admin_is_forbidden(self):
+        """ADR-007: auto-approval-gate + user non-admin -> 403 Forbidden."""
         non_admin = UserFactory(username="non_admin_approve_58_4", profile="READ_ONLY")
         self.client.force_authenticate(user=non_admin)
         execution = ExecutionFactory(
             action=self.action,
             user=non_admin,
-            status=ExecutionStatus.PENDING_APPROVAL,
+            status=ExecutionStatus.SUBMITTED,
         )
-        with patch('executions.views.approval_views.ExecutionService.launch_workflow'):
-            response = self.client.post(
-                f"/api/v1/executions/{execution.id}/approve/",
-                format='json',
-            )
+        # Create auto-approval-gate step
+        step = ExecutionStep.objects.create(
+            execution=execution,
+            step_order=0,
+            step_name="Approval Gate",
+            config_step_id="auto-approval-gate",
+            step_type=ExecutionStepType.GATE,
+            status=ExecutionStepStatus.WAITING,
+        )
+        step.set_output({
+            "gate_conditions": [{"type": "approval_granted"}],
+            "gate_status": [{"type": "approval_granted", "satisfied": False}],
+        })
+        step.save()
+
+        response = self.client.post(
+            f"/api/v1/executions/{execution.id}/approve/",
+            format='json',
+        )
         self.assertEqual(response.status_code, 403)
 
     def test_step_gate_non_approver_is_forbidden(self):
@@ -382,15 +392,15 @@ class TestRejectExecutionBackwardCompat(TestCase):
                 "name": "request-approval",
                 "step_type": "gate",
                 "gate_type": "approval",
-                "on_success_step_id": "execute-action",
-                "on_error_step_id": "notify-rejected",
+                "on_success_step_ids": ["execute-action"],
+                "on_error_step_ids": ["notify-rejected"],
             }]
         )
 
     @patch('executions.views.approval_views._check_approver_permission', return_value=True)
     @patch('executions.views.approval_views.resume_container_workflow_from_gate')
     def test_running_execution_with_waiting_step_reject_with_error_path(self, mock_resume, mock_perm):
-        """AC#1 : RUNNING + step WAITING + on_error_step_id → step FAILED, resume appelée."""
+        """AC#1 : RUNNING + step WAITING + on_error_step_ids → step FAILED, resume appelée."""
         execution = ExecutionFactory(
             action=self.action,
             user=self.admin,
@@ -413,19 +423,19 @@ class TestRejectExecutionBackwardCompat(TestCase):
 
         data = response.json()
         self.assertIn("data", data)
-        # Avec on_error_step_id, l'exécution reste RUNNING (reprise vers le step d'erreur)
+        # Avec on_error_step_ids, l'exécution reste RUNNING (reprise vers le step d'erreur)
         self.assertEqual(data["data"]["status"], ExecutionStatus.RUNNING)
 
         # Vérifie que la tâche Celery de resume est déclenchée avec le chemin d'erreur
         mock_resume.apply_async.assert_called_once_with(
-            args=[execution.id, "notify-rejected"],
+            args=[execution.id, ["notify-rejected"]],
             queue="default",
         )
 
     @patch('executions.views.approval_views._check_approver_permission', return_value=True)
     @patch('executions.views.approval_views.resume_container_workflow_from_gate')
     def test_running_execution_with_waiting_step_reject_no_error_path(self, mock_resume, mock_perm):
-        """AC#1 : RUNNING + step WAITING sans on_error_step_id → step FAILED, execution FAILED."""
+        """AC#1 : RUNNING + step WAITING sans on_error_step_ids → step FAILED, execution FAILED."""
         self.action.execution_steps = [{
             "step_id": "request-approval",
             "name": "request-approval",
@@ -457,7 +467,7 @@ class TestRejectExecutionBackwardCompat(TestCase):
         mock_resume.apply_async.assert_not_called()
 
     def test_running_execution_no_waiting_step_returns_400(self):
-        """AC#4 : RUNNING sans step WAITING approval_granted → 400 original (INVALID_STATUS)."""
+        """AC#4 : RUNNING sans step WAITING approval_granted -> 400 NO_PENDING_APPROVAL."""
         execution = ExecutionFactory(
             action=self.action,
             user=self.admin,
@@ -470,29 +480,7 @@ class TestRejectExecutionBackwardCompat(TestCase):
             format='json',
         )
         self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.data.get("error", {}).get("code"), "INVALID_STATUS")
-
-    def test_legacy_pending_approval_reject_unaffected(self):
-        """AC#3 : PENDING_APPROVAL → comportement existant inchangé (→ REJECTED)."""
-        execution = ExecutionFactory(
-            action=self.action,
-            user=self.admin,
-            status=ExecutionStatus.PENDING_APPROVAL,
-        )
-
-        response = self.client.post(
-            f"/api/v1/executions/{execution.id}/reject/",
-            {"rejection_reason": "Non approuvé"},
-            format='json',
-        )
-        self.assertEqual(response.status_code, 200)
-        execution.refresh_from_db()
-        self.assertEqual(execution.status, ExecutionStatus.REJECTED)
-        self.assertEqual(execution.error_message, "Non approuvé")
-        # Le chemin legacy ne doit pas modifier les steps (pas de step WAITING ici)
-        self.assertFalse(
-            execution.executionstep_set.filter(status=ExecutionStepStatus.FAILED).exists()
-        )
+        self.assertEqual(response.data.get("error", {}).get("code"), "NO_PENDING_APPROVAL")
 
     @patch('executions.views.approval_views._check_approver_permission', return_value=True)
     @patch('executions.views.approval_views.resume_container_workflow_from_gate')
@@ -516,15 +504,29 @@ class TestRejectExecutionBackwardCompat(TestCase):
         step.refresh_from_db()
         self.assertEqual(step.approval_comment, "Audit requis")
 
-    def test_pending_approval_non_admin_is_forbidden_reject(self):
-        """Story 58.4 AC5 : PENDING_APPROVAL + user non-admin → 403 Forbidden (reject)."""
+    def test_auto_approval_gate_non_admin_is_forbidden_reject(self):
+        """ADR-007: auto-approval-gate + user non-admin -> 403 Forbidden (reject)."""
         non_admin = UserFactory(username="non_admin_reject_58_4", profile="READ_ONLY")
         self.client.force_authenticate(user=non_admin)
         execution = ExecutionFactory(
             action=self.action,
             user=non_admin,
-            status=ExecutionStatus.PENDING_APPROVAL,
+            status=ExecutionStatus.SUBMITTED,
         )
+        step = ExecutionStep.objects.create(
+            execution=execution,
+            step_order=0,
+            step_name="Approval Gate",
+            config_step_id="auto-approval-gate",
+            step_type=ExecutionStepType.GATE,
+            status=ExecutionStepStatus.WAITING,
+        )
+        step.set_output({
+            "gate_conditions": [{"type": "approval_granted"}],
+            "gate_status": [{"type": "approval_granted", "satisfied": False}],
+        })
+        step.save()
+
         response = self.client.post(
             f"/api/v1/executions/{execution.id}/reject/",
             format='json',

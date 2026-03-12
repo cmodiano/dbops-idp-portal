@@ -794,6 +794,49 @@ describe('detectTargetsMode — coverage extras', () => {
   });
 });
 
+describe('ProfileForm — unknownEnvironments coverage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseEnvironments.mockReturnValue({
+      environments: ['dev', 'staging', 'prod'],
+      environmentOptions: [
+        { value: 'dev', label: 'Développement' },
+        { value: 'staging', label: 'Staging' },
+        { value: 'prod', label: 'Production' },
+      ],
+      loading: false,
+      error: null,
+    });
+    vi.mocked(profilesService.getProfileTargets).mockResolvedValue({
+      targets_type: 'all',
+      target_names: [],
+      target_patterns: [],
+      filter_by_attribute: null,
+      exclusion_patterns: [],
+    });
+    vi.mocked(profilesService.putProfileTargets).mockResolvedValue({ targets_type: 'all', target_names: [], target_patterns: [] });
+    vi.mocked(profilesService.putProfileActions).mockResolvedValue({ actions_type: 'all', action_ids: [], tag_patterns: [], environments: [] });
+    vi.mocked(adminService.getAdminActions).mockResolvedValue({ data: [], pagination: { page: 1, page_size: 10, total: 0, total_pages: 0 } });
+    vi.mocked(adminService.getTags).mockResolvedValue([]);
+  });
+
+  it('shows warning when selected environments are not in inventory (Story 21.6 AC6)', async () => {
+    vi.mocked(profilesService.getProfileActions).mockResolvedValue({
+      actions_type: 'all',
+      action_ids: [],
+      tag_patterns: [],
+      environments: ['UNKNOWN', 'DEV'],
+    });
+
+    render(<ProfileForm {...defaultProps} editProfile={editProfile} />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/environnements non reconnus/i)).toBeInTheDocument();
+      expect(screen.getByText(/Les environnements suivants ne sont pas dans l'inventaire : UNKNOWN/)).toBeInTheDocument();
+    });
+  });
+});
+
 describe('ProfileForm — exclusion patterns validator', () => {
   beforeEach(() => {
     vi.clearAllMocks();

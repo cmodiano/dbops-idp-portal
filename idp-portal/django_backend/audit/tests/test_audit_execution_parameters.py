@@ -192,9 +192,9 @@ class TestAuditDetailsParameters(TestCase):
         assert details["parameters"]["db_name"] == "PROD01"
         assert details["parameters"]["target"] == "server1.example.com"
 
-    # T3.2
-    def test_audit_details_includes_parameters_on_pending_approval(self):
-        """AC2 : EXECUTION_PENDING_APPROVAL contient details.parameters."""
+    # T3.2 — Audit #5: requires_approval now creates SUBMITTED + approval gate step (no more PENDING_APPROVAL)
+    def test_audit_details_includes_parameters_on_requires_approval(self):
+        """AC2 : requires_approval → EXECUTION_SUBMITTED with approval gate step."""
         params = {
             "db_name": "PROD02",
             "_env_config": {"requires_approval": True},
@@ -205,8 +205,8 @@ class TestAuditDetailsParameters(TestCase):
             environment="production",
             parameters=params,
         )
-        self.service._create_execution_atomic(req)
-        entry = _last_audit(AuditActionType.EXECUTION_PENDING_APPROVAL)
+        execution = self.service._create_execution_atomic(req)
+        entry = _last_audit(AuditActionType.EXECUTION_SUBMITTED)
         assert entry is not None
         details = entry.get_details()
         assert details is not None
@@ -214,6 +214,13 @@ class TestAuditDetailsParameters(TestCase):
         assert details["parameters"]["db_name"] == "PROD02"
         # _env_config doit être exclu
         assert "_env_config" not in details["parameters"]
+        # Verify approval gate step was created
+        from executions.models import ExecutionStep, ExecutionStepStatus
+        gate_step = ExecutionStep.objects.filter(
+            execution=execution, config_step_id='auto-approval-gate'
+        ).first()
+        assert gate_step is not None
+        assert gate_step.status == ExecutionStepStatus.WAITING
 
     # T3.3
     def test_audit_details_excludes_sensitive_fields(self):

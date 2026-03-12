@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 import os
 from pathlib import Path
+from typing import Any
 from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
@@ -472,6 +473,16 @@ CORS_ALLOWED_ORIGINS = [
     os.getenv('CORS_ORIGIN', 'http://localhost:5173'),
 ]
 
+# WebSocket origin allowlist (Channels ASGI handshake hardening).
+# Defaults to CORS origins for same frontend origins.
+_ws_origins_env = os.getenv('WEBSOCKET_ALLOWED_ORIGINS', '')
+WEBSOCKET_ALLOWED_ORIGINS = (
+    [o.strip() for o in _ws_origins_env.split(',') if o.strip()]
+    if _ws_origins_env
+    else CORS_ALLOWED_ORIGINS
+)
+del _ws_origins_env
+
 # Allow credentials (cookies) for httpOnly refresh token
 CORS_ALLOW_CREDENTIALS = True
 
@@ -699,21 +710,9 @@ CELERY_TASK_EAGER_PROPAGATES = True
 import adapters as _adapters_pkg  # noqa: F401,E402 — déclenche l'enregistrement des adapters
 from adapters.registry import adapter_registry as _adapter_registry  # noqa: E402
 
-# Mapping shim task name → platform_type (pour les routes des shims backward-compat).
-# Les nouvelles plateformes sans shim utilisent poll_platform_job_status directement.
-_SHIM_PLATFORM_MAP = {
-    'executions.tasks.poll_aap_job_status': 'aap',
-    'executions.tasks.poll_tower_job_status': 'tower',
-    'executions.tasks.poll_azure_devops_run_status': 'azure_devops',
-    'executions.tasks.poll_github_actions_run_status': 'github_actions',
-    'executions.tasks.poll_terraform_cloud_run_status': 'terraform_cloud',
-}
-
+# poll_platform_job_status utilise get_platform_queue() au runtime pour résoudre
+# la queue via l'AdapterRegistry — pas besoin de route statique ici.
 CELERY_TASK_ROUTES = {
-    task: {'queue': _adapter_registry.get_queue(platform)}
-    for task, platform in _SHIM_PLATFORM_MAP.items()
-}
-CELERY_TASK_ROUTES.update({
     # Tasks Beat restent sur default
     'executions.tasks.evaluate_waiting_gates': {'queue': 'default'},
     'executions.tasks.process_pending_scheduled_executions': {'queue': 'default'},
@@ -722,19 +721,64 @@ CELERY_TASK_ROUTES.update({
     'executions.tasks.trigger_platform_job': {'queue': 'default'},
     # Story 57.7 — Reprise workflow après gate (approbation) — doit être sur default (worker écoute cette queue)
     'executions.tasks.resume_container_workflow_from_gate': {'queue': 'default'},
-})
+}
 
-del _adapters_pkg, _adapter_registry, _SHIM_PLATFORM_MAP  # nettoyer le namespace settings
+del _adapters_pkg, _adapter_registry  # nettoyer le namespace settings
+
+# ============================================================================
+# Celery task time limits (seconds) — Story 71.8
+# soft_time_limit: raises SoftTimeLimitExceeded for graceful cleanup
+# time_limit: hard kill after soft + 30s margin
+# ============================================================================
+CELERY_TASK_TIME_LIMITS = {
+    "trigger_platform_job": {"soft": 600, "hard": 630},                    # 10min — external API call
+    "poll_platform_job_status": {"soft": 300, "hard": 330},                # 5min — single poll cycle
+    "process_pending_scheduled_executions": {"soft": 300, "hard": 330},    # 5min — batch
+    "retry_workflow_step": {"soft": 600, "hard": 630},                     # 10min — step execution
+    "purge_old_platform_logs": {"soft": 900, "hard": 930},                 # 15min — bulk delete
+    "purge_old_workflow_events": {"soft": 300, "hard": 330},               # 5min — bulk delete
+    "evaluate_waiting_gates": {"soft": 300, "hard": 330},                  # 5min — batch eval
+    "resume_container_workflow_from_gate": {"soft": 600, "hard": 630},     # 10min — workflow resume
+    "run_integration_health_check": {"soft": 120, "hard": 150},            # 2min — single HC
+    "health_check_all_integrations": {"soft": 300, "hard": 330},           # 5min — dispatch
+    "warmup_vault_secrets_cache": {"soft": 120, "hard": 150},              # 2min — cache warmup
+    "reconcile_stale_executions": {"soft": 120, "hard": 150},              # 2min — startup reconciliation
+}
 
 # ============================================================================
 # Django Channels / WebSocket Configuration (Story 22.13)
 # ============================================================================
-# Uses InMemoryChannelLayer for development; switch to Redis for production.
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels.layers.InMemoryChannelLayer",
-    },
-}
+# Default: inmemory for non-production, redis for production (override via CHANNEL_LAYER_BACKEND env)
+_channel_backend_raw = os.getenv('CHANNEL_LAYER_BACKEND')
+CHANNEL_LAYER_BACKEND = (
+    _channel_backend_raw if _channel_backend_raw
+    else ('redis' if APP_ENV.lower() == 'production' else 'inmemory')
+).lower()
+CHANNEL_REDIS_URL = os.getenv('CHANNEL_REDIS_URL', os.getenv('REDIS_URL', 'redis://localhost:6379/2'))
+CHANNEL_REDIS_CAPACITY = int(os.getenv('CHANNEL_REDIS_CAPACITY', '5000'))
+CHANNEL_REDIS_EXPIRY = int(os.getenv('CHANNEL_REDIS_EXPIRY', '10'))
+CHANNEL_LAYERS: dict[str, dict[str, Any]]
+
+if CHANNEL_LAYER_BACKEND in {'inmemory', 'memory', 'in_memory'}:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer",
+        },
+    }
+else:
+    # Default to Redis for non-test multi-process reliability.
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {
+                "hosts": [CHANNEL_REDIS_URL],
+                # Higher capacity absorbs bursty workflow fan-out.
+                "capacity": CHANNEL_REDIS_CAPACITY,
+                # Shorter expiry reduces stale queued messages.
+                "expiry": CHANNEL_REDIS_EXPIRY,
+            },
+        },
+    }
 
 # ============================================================================
 # Workflow Retry Configuration (Story 20.3)
@@ -779,3 +823,8 @@ INVENTORY_FALLBACK_SCHEMA = os.getenv('INVENTORY_FALLBACK_SCHEMA', 'DBOPS_INVENT
 # Story 65.2 — fan-out ThreadPoolExecutor max workers
 # Utilisé par ContainerWorkflowRuntime._execute_fan_out() (Story 67.2).
 PARALLEL_GROUP_MAX_WORKERS = int(os.environ.get('PARALLEL_GROUP_MAX_WORKERS', '5'))
+
+# Timeout par step dans as_completed() du fan-out (secondes).
+# Évite un hang silencieux si un thread fils accroche alors que SoftTimeLimitExceeded est reçu
+# dans le thread principal — doit être inférieur au soft_time_limit Celery de la tâche (600s).
+PARALLEL_GROUP_STEP_TIMEOUT_S = int(os.environ.get('PARALLEL_GROUP_STEP_TIMEOUT_S', '300'))

@@ -9,6 +9,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { ExecutionStep, WorkflowStep, ActionCreate } from '../types/api';
+// Story 71.1, AC9: Re-export ApiError for DIP compliance in ActionWizard
+export { ApiError } from '../services/api_client';
 import {
   getTags,
   updateActionTags,

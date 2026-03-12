@@ -1,12 +1,12 @@
-# Baseline Schema V116 — IDP Portal
+# Baseline Schema V118 — IDP Portal
 
 ## Contexte (Epic 41 — Consolidation des migrations BD)
 
-Ce dossier contient le script de **baseline** du schéma Oracle de l'IDP Portal. Il consolide les migrations Flyway V000–V116 en un seul script d'initialisation pour les **nouveaux environnements**.
+Ce dossier contient le script de **baseline** du schéma Oracle de l'IDP Portal. Il consolide les migrations Flyway V000–V118 en un seul script d'initialisation pour les **nouveaux environnements**.
 
 | Fichier | Description |
 |---------|-------------|
-| `baseline_schema_v088.sql` | Script DDL+DML : tables, indexes, contraintes, trigger, package PKG_IDP_MAINTENANCE, données de référence (état V116) |
+| `baseline_schema_v088.sql` | Script DDL+DML : tables, indexes, contraintes, trigger, package PKG_IDP_MAINTENANCE, données de référence (état V118) |
 | `README.md` | Ce fichier — procédure de déploiement et validation |
 
 > **⚠️ IMPORTANT** : Ce script s'applique **UNIQUEMENT** sur une base Oracle vierge.
@@ -25,19 +25,19 @@ sqlplus idp_user/password@NEW_ENV:1521/XEPDB1 @database/baseline/baseline_schema
 
 > Le script crée les 25 tables (dont EXECUTIONS, EXECUTION_STEPS, AUDIT_LOG partitionnées), indexes, contraintes, le trigger d'immutabilité, le package PKG_IDP_MAINTENANCE et insère les données de référence (REF_ENGINES, REF_CATEGORIES).
 
-### Étape 2 : Déclarer la base au niveau V116 (commande Flyway `baseline`)
+### Étape 2 : Déclarer la base au niveau V118 (commande Flyway `baseline`)
 
 ```bash
 flyway \
   -url=jdbc:oracle:thin:@NEW_ENV:1521/XEPDB1 \
   -user=idp_user \
   -password=password \
-  -baselineVersion=116 \
+  -baselineVersion=118 \
   -baselineDescription=baseline_schema_v088 \
   baseline
 ```
 
-> Cette commande enregistre une ligne dans `flyway_schema_history` indiquant que la base est déjà au niveau V116 (success=true). Flyway ne re-jouera pas V000–V116. **Aucune migration incrémentale n'est nécessaire pour V000–V116.** Les migrations futures (V117 et au-delà) devront toutefois être appliquées via `flyway migrate` lorsqu'elles seront disponibles — ne pas les ignorer.
+> Cette commande enregistre une ligne dans `flyway_schema_history` indiquant que la base est déjà au niveau V118 (success=true). Flyway ne re-jouera pas V000–V118. **Aucune migration incrémentale n'est nécessaire pour V000–V118.** Les migrations futures (V119 et au-delà) devront être appliquées via `flyway migrate`.
 
 ### Étape 3 : Vérifier le résultat
 
@@ -55,7 +55,7 @@ Le résultat attendu :
 +------------+---------+-------------------------------+--------+---------------------+----------+
 | Category   | Version | Description                   | Type   | Installed On        | State    |
 +------------+---------+-------------------------------+--------+---------------------+----------+
-| Versioned  | 116     | baseline schema v088          | BASELN | ...                 | Baseline |
+| Versioned  | 118     | baseline schema v088          | BASELN | ...                 | Baseline |
 +------------+---------+-------------------------------+--------+---------------------+----------+
 ```
 
@@ -68,7 +68,7 @@ Le résultat attendu :
 flyway migrate  # Applique uniquement les nouvelles migrations (V117+ futures)
 ```
 
-Les environnements existants ont déjà V000–V116 dans `flyway_schema_history`. Ce script ne les affecte pas.
+Les environnements existants ont déjà V000–V116 (ou V117) dans `flyway_schema_history`. Ce script ne les affecte pas. Ils appliquent V117 et V118 via `flyway migrate`.
 
 ---
 
@@ -105,6 +105,7 @@ Les environnements existants ont déjà V000–V116 dans `flyway_schema_history`
 | CONFIG_SYNC_* audit types, reference_data/tags entity types | V114 — IaC Config Sync |
 | `OUTPUT_SCHEMA_ID` sur ACTIONS_CATALOG | V115 — Story 63.9 |
 | `CONFIG_STEP_ID` sur EXECUTION_STEPS | V116 |
+| `REJECTED_BY`, `REJECTED_AT` sur EXECUTION_STEPS | V118 — gate rejection audit trail |
 
 ### Éléments exclus (neutralisés par les migrations V000–V116)
 
@@ -140,7 +141,7 @@ flyway -url=jdbc:oracle:thin:@oracle-a:1521/XEPDB1 migrate
 # 3. Sur oracle-b : appliquer le baseline uniquement
 sqlplus idp_user/password@oracle-b:1521/XEPDB1 @database/baseline/baseline_schema_v088.sql
 flyway -url=jdbc:oracle:thin:@oracle-b:1521/XEPDB1 \
-       -baselineVersion=116 \
+       -baselineVersion=118 \
        -baselineDescription=baseline_schema_v088 \
        baseline
 

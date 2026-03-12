@@ -8,7 +8,7 @@ Couvre:
 - AC4: Thread-safety (_step_outputs_lock, _step_lock)
 - AC5: Suppression parallel_group — workflows avec cette structure ne doivent plus être supportés
 - AC6: Join implicite (fan-in) — step D exécuté une seule fois si B et C pointent vers D
-- AC7: Rétrocompatibilité singulier (on_success_step_id, on_error_step_id)
+- AC7: Rétrocompatibilité (on_success_step_ids, on_error_step_ids)
 - AC8: Tests fan-out succès, per-branch routing, on_error fan-out, rétrocompat, fan-in
 Story 67.3:
 - AC1: Routage par branche indépendant — B échoue, C continue
@@ -500,7 +500,7 @@ class TestFanInJoinImplicit:
 
 @pytest.mark.django_db(transaction=True)
 class TestRetroCompatSingular:
-    """AC7: Rétrocompatibilité on_success_step_id/on_error_step_id (singulier)."""
+    """AC7: Rétrocompatibilité on_success_step_ids/on_error_step_ids (pluriel)."""
 
     def setup_method(self):
         self.user = UserFactory(username="retrocompat_user")
@@ -512,7 +512,7 @@ class TestRetroCompatSingular:
             name="Action B", status=ActionStatus.PUBLISHED,
             item_type=ActionItemType.ACTION, created_by=self.user,
         )
-        # Workflow avec on_success_step_id singulier (ancien format)
+        # Workflow avec on_success_step_ids (format pluriel)
         self.workflow_action = ActionFactory(
             name="Retrocompat Workflow",
             status=ActionStatus.PUBLISHED,
@@ -524,7 +524,7 @@ class TestRetroCompatSingular:
                     "step_type": "platform",
                     "name": "Action A",
                     "referenced_action_id": self.action_a.id,
-                    "on_success_step_id": "step-b",  # singulier
+                    "on_success_step_ids": ["step-b"],
                 },
                 {
                     "order": 2,
@@ -538,8 +538,8 @@ class TestRetroCompatSingular:
         )
 
     @patch('executions.container_workflow_runtime.AuditService')
-    def test_singular_on_success_step_id_works(self, mock_audit):
-        """AC7: on_success_step_id singulier → A exécuté, puis B séquentiellement."""
+    def test_singular_on_success_step_ids_works(self, mock_audit):
+        """AC7: on_success_step_ids → A exécuté, puis B séquentiellement."""
         execution = Execution.objects.create(
             action=self.workflow_action,
             user=self.user,
@@ -553,7 +553,33 @@ class TestRetroCompatSingular:
         assert len(runtime.child_executions) == 2
 
         children_b = Execution.objects.filter(action=self.action_b, parent_execution=execution)
-        assert children_b.count() == 1, "Action B exécutée via on_success_step_id singulier"
+        assert children_b.count() == 1, "Action B exécutée via on_success_step_ids"
+
+
+@pytest.mark.django_db(transaction=True)
+class TestPartialBranchesLinearFallbackOnSuccess:
+    """Step with only on_error_step_ids must use linear fallback on success (not terminate)."""
+
+    def test_get_next_step_ids_only_on_error_uses_linear_fallback_on_success(self):
+        """Step with only on_error_step_ids + COMPLETED → linear fallback, not []."""
+        execution = Execution.objects.create(
+            action=ActionFactory(name="W", status=ActionStatus.PUBLISHED, item_type=ActionItemType.WORKFLOW),
+            user=UserFactory(),
+            environment="dev",
+            status=ExecutionStatus.SUBMITTED,
+        )
+        runtime = ContainerWorkflowRuntime(execution)
+        runtime.workflow_steps = [
+            {"step_id": "step-1", "order": 1, "on_error_step_ids": ["step-err"]},
+            {"step_id": "step-2", "order": 2},
+            {"step_id": "step-err", "order": 99},
+        ]
+        runtime._step_lookup_by_id = {s["step_id"]: s for s in runtime.workflow_steps}
+
+        step = runtime.workflow_steps[0]
+        next_ids = runtime._get_next_step_ids(step, ExecutionStatus.COMPLETED)
+
+        assert next_ids == ["step-2"], "Linear fallback to next step by order (not [] from premature routing)"
 
 
 @pytest.mark.django_db(transaction=True)

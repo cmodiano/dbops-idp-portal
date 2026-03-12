@@ -21,17 +21,16 @@ from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.exceptions import BadRequestError
 from core.middleware import get_correlation_id
+from core.utils import sanitize_audit_changes, SENSITIVE_PARAM_KEYS
 from executions.dtos import ExecutionRequest
 from integrations.models import IntegrationStatus
 
 logger = structlog.get_logger(__name__)
 
 
-# Story 43.2: Clés sensibles à exclure des paramètres d'audit (case-insensitive)
-_SENSITIVE_PARAM_KEYS = frozenset({
-    'password', 'secret', 'api_key', 'token', 'private_key',
-    'credential', '_env_config'
-})
+# NEW-BE-B: Use canonical SENSITIVE_PARAM_KEYS from core.utils (single source of truth).
+# Previously defined locally as _SENSITIVE_PARAM_KEYS — now imported from core.utils.
+_SENSITIVE_PARAM_KEYS = SENSITIVE_PARAM_KEYS
 
 
 def _sanitize_list(lst: list) -> list:
@@ -68,17 +67,8 @@ def _sanitize_parameters(parameters: dict | None) -> dict | None:
                 sanitized[k] = sanitized_v
             # dict imbriqué entièrement sensible → clé exclue (pas incluse comme None)
         elif isinstance(v, list):
-            out: list = []
-            for item in v:
-                if isinstance(item, dict):
-                    sanitized_item = _sanitize_parameters(item)
-                    if sanitized_item is not None:
-                        out.append(sanitized_item)
-                elif isinstance(item, list):
-                    out.append(_sanitize_list(item))
-                else:
-                    out.append(item)
-            sanitized[k] = out
+            # NEW-BE-H: Delegate to _sanitize_list instead of duplicating the loop logic.
+            sanitized[k] = _sanitize_list(v)
         else:
             sanitized[k] = v
     return sanitized if sanitized else None
@@ -197,15 +187,15 @@ class ExecutionService:
     @transaction.atomic
     def _create_execution_atomic(self, request: ExecutionRequest) -> Execution:
         """Internal atomic execution creation (after integration validation).
-        Story 25.4 / 7.4: If requires_approval for this environment, create as PENDING_APPROVAL
-        so the execution waits for DBA approval before being launched.
+
+        Legacy PENDING_APPROVAL status is no longer set. When requires_approval is true,
+        the execution is created as SUBMITTED and an ExecutionStep WAITING gate is created
+        so the approval goes through the step-based gate mechanism (ADR-007).
         """
         requires_approval = bool(
             (request.parameters or {}).get("_env_config", {}).get("requires_approval", False)
         )
-        initial_status = (
-            ExecutionStatus.PENDING_APPROVAL if requires_approval else ExecutionStatus.SUBMITTED
-        )
+        initial_status = ExecutionStatus.SUBMITTED
 
         execution = Execution.objects.create(
             action=request.action,
@@ -213,7 +203,25 @@ class ExecutionService:
             environment=request.environment,
             status=initial_status,
             parent_execution_id=request.parent_execution_id,
+            correlation_id=request.correlation_id,
         )
+
+        # ADR-007: Create an approval gate step instead of PENDING_APPROVAL status
+        if requires_approval:
+            from executions.models import ExecutionStepType  # noqa: PLC0415
+            step = ExecutionStep.objects.create(
+                execution=execution,
+                step_order=0,
+                step_name='Approval Gate',
+                config_step_id='auto-approval-gate',
+                step_type=ExecutionStepType.GATE,
+                status=ExecutionStepStatus.WAITING,
+            )
+            step.set_output({
+                'gate_conditions': [{'type': 'approval_granted'}],
+                'gate_status': [{'type': 'approval_granted', 'satisfied': False}],
+            })
+            step.save()
 
         # Set parameters if provided
         if request.parameters:
@@ -289,12 +297,8 @@ class ExecutionService:
             audit_details['referenced_action_ids'] = request.delegated_referenced_action_ids
             audit_details['validation_result'] = 'success'
 
-        # Audit (Story 25.4: PENDING_APPROVAL when requires_approval for env)
-        audit_action = (
-            AuditActionType.EXECUTION_PENDING_APPROVAL
-            if initial_status == ExecutionStatus.PENDING_APPROVAL
-            else AuditActionType.EXECUTION_SUBMITTED
-        )
+        # Audit: always SUBMITTED now (approval is step-based, not status-based)
+        audit_action = AuditActionType.EXECUTION_SUBMITTED
         AuditService.create_entry(
             user_id=str(request.user.id),
             action_type=audit_action,
@@ -350,10 +354,14 @@ class ExecutionService:
             targets=targets,
         )
 
+        # NEW-BE-C: Use a single transaction.atomic() block covering both execution creation
+        # and steps creation. Previously _create_execution_atomic was called from inside
+        # a second with transaction.atomic(), creating double-nesting (risky on Oracle
+        # due to savepoint emulation). The @transaction.atomic decorator is kept on
+        # _create_execution_atomic so create_execution() remains self-contained.
         with transaction.atomic():
             execution = self._create_execution_atomic(exec_req)
-
-            # Create steps if provided
+            # Steps creation shares the same outer transaction via Django's savepoint merging
             if steps_data:
                 for step_data in steps_data:
                     ExecutionStep.objects.create(
@@ -434,7 +442,7 @@ class ExecutionService:
         """
         Start the workflow runtime for an execution (Story 7.4 / 25.4).
         Runtime dispatch via RuntimeRegistry (Story 34.4 — SOLID-BE-7).
-        Used after creation (when not PENDING_APPROVAL) and after DBA approval.
+        Used after creation (when no approval gate) and after DBA approval via step gate.
         """
         # Late import to avoid circular dependency:
         # runtime_registry → adapter modules → executions.models → executions.services
@@ -462,10 +470,9 @@ class ExecutionService:
 
         State machine: valid transitions for execution status.
 
-        SECURITY (Story 22.12): PENDING_APPROVAL → SUBMITTED is explicitly FORBIDDEN.
-          Allowing it would let executions bypass the DBA approval workflow,
-          violating SOC1 compliance. An execution that requires approval must
-          go through RUNNING (after DBA approval) or REJECTED (if DBA refuses).
+        ADR-007: PENDING_APPROVAL is no longer used at the Execution level.
+        Approvals are handled via ExecutionStep WAITING gates.
+        The PENDING_APPROVAL enum value is kept for DB CHECK constraint compatibility.
 
         Valid transitions by state (with business rationale):
         ┌─────────────────────┬────────────────────────────────────────────────────────┐
@@ -473,11 +480,8 @@ class ExecutionService:
         ├─────────────────────┼────────────────────────────────────────────────────────┤
         │ SUBMITTED           │ → RUNNING: Normal execution start                      │
         │                     │ → CANCELLED: User cancels before start                 │
-        │                     │ → PENDING_APPROVAL: Elevation to approval required     │
+        │                     │ → FAILED: Approval gate rejected (ADR-007)             │
         │                     │ → INTEGRATION_ERROR: Platform integration failed       │
-        ├─────────────────────┼────────────────────────────────────────────────────────┤
-        │ PENDING_APPROVAL    │ → RUNNING: DBA approves (via /approve endpoint)        │
-        │                     │ → REJECTED: DBA rejects (via /reject endpoint)         │
         ├─────────────────────┼────────────────────────────────────────────────────────┤
         │ RUNNING             │ → COMPLETED: Execution succeeded                       │
         │                     │ → FAILED: Execution failed                             │
@@ -490,9 +494,11 @@ class ExecutionService:
         │ INTEGRATION_ERROR   │ (terminal state - Story 18.6)                          │
         └─────────────────────┴────────────────────────────────────────────────────────┘
         """
+        # PENDING_APPROVAL transitions removed (ADR-007): approval is now step-based.
+        # PENDING_APPROVAL status is kept in the enum for DB CHECK constraint compatibility
+        # but is no longer reachable. Any attempt to transition to/from it will raise ValueError.
         valid_transitions = {
-            ExecutionStatus.SUBMITTED: [ExecutionStatus.RUNNING, ExecutionStatus.CANCELLED, ExecutionStatus.PENDING_APPROVAL, ExecutionStatus.INTEGRATION_ERROR],
-            ExecutionStatus.PENDING_APPROVAL: [ExecutionStatus.RUNNING, ExecutionStatus.REJECTED],
+            ExecutionStatus.SUBMITTED: [ExecutionStatus.RUNNING, ExecutionStatus.CANCELLED, ExecutionStatus.FAILED, ExecutionStatus.INTEGRATION_ERROR],
             ExecutionStatus.RUNNING: [ExecutionStatus.COMPLETED, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED],
             ExecutionStatus.COMPLETED: [],
             ExecutionStatus.FAILED: [],
@@ -537,7 +543,7 @@ class ExecutionService:
             ExecutionStatus.COMPLETED: AuditActionType.EXECUTION_COMPLETED,
             ExecutionStatus.FAILED: AuditActionType.EXECUTION_FAILED,
             ExecutionStatus.CANCELLED: AuditActionType.EXECUTION_CANCELLED,
-            ExecutionStatus.PENDING_APPROVAL: AuditActionType.EXECUTION_PENDING_APPROVAL,
+            # PENDING_APPROVAL audit mapping removed (ADR-007): approval is step-based.
             ExecutionStatus.REJECTED: AuditActionType.EXECUTION_REJECTED,
         }
         audit_action_type = status_to_audit_type.get(new_status)  # type: ignore[call-overload]
@@ -552,6 +558,7 @@ class ExecutionService:
                 f"Unknown execution status for audit: {new_status}"
             )
 
+        changes = sanitize_audit_changes({'status': {'old': old_status, 'new': new_status}})
         AuditService.create_entry(
             user_id=user_id,
             action_type=audit_action_type,
@@ -560,9 +567,9 @@ class ExecutionService:
             details={
                 'action_id': execution.action_id,
                 'action_name': execution.action.name if execution.action else None,
-                'previous_status': old_status,
-                'new_status': new_status,
-            }
+                'changes': changes,
+            },
+            correlation_id=execution.correlation_id or get_correlation_id(),
         )
 
     @staticmethod
@@ -584,7 +591,7 @@ class ExecutionService:
             page_me = bool(params.get('__page_me', False))
             page_me_user_id = params.get('__page_me_user_id')
             page_me_user_name = params.get('__page_me_user_name')
-            _correlation_id = get_correlation_id()
+            _correlation_id = execution.correlation_id or get_correlation_id()
             _execution_id_snap = execution.id
 
             def _send_notifications() -> None:
@@ -749,10 +756,18 @@ class ExecutionService:
         if user_id:
             queryset = queryset.filter(user_id=user_id)
 
-        total = queryset.count()
-        completed = queryset.filter(status=ExecutionStatus.COMPLETED).count()
-        failed = queryset.filter(status=ExecutionStatus.FAILED).count()
-        running = queryset.filter(status=ExecutionStatus.RUNNING).count()
+        # NEW-BE-L: Single aggregate() call instead of 4 separate .count() queries.
+        # Same pattern as get_action_stats() which already uses conditional aggregation.
+        agg = queryset.aggregate(
+            total=Count('id'),
+            completed=Count('id', filter=Q(status=ExecutionStatus.COMPLETED)),
+            failed=Count('id', filter=Q(status=ExecutionStatus.FAILED)),
+            running=Count('id', filter=Q(status=ExecutionStatus.RUNNING)),
+        )
+        total = agg['total'] or 0
+        completed = agg['completed'] or 0
+        failed = agg['failed'] or 0
+        running = agg['running'] or 0
 
         # Calculate success rate
         success_rate = (completed / total * 100) if total > 0 else 0

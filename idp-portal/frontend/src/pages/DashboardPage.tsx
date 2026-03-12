@@ -13,11 +13,21 @@
  */
 
 import { Typography } from 'antd';
+import { useState } from 'react';
 import { ReportingDashboard } from '../components/dashboard/reporting/ReportingDashboard';
+import { useDashboardWebSocket } from '../hooks/useDashboardWebSocket';
+import type { DashboardRecentExecution } from '../types/api';
 
 const { Title } = Typography;
 
 export default function DashboardPage() {
+  const [recentExecutions, setRecentExecutions] = useState<DashboardRecentExecution[]>([]);
+
+  useDashboardWebSocket({
+    recentExecutions,
+    onExecutionsUpdate: setRecentExecutions,
+  });
+
   return (
     <div style={{ padding: 24 }}>
       {/* Story 9.10: Renamed from Dashboard to Analytics */}
@@ -25,7 +35,7 @@ export default function DashboardPage() {
 
       {/* Story 8.3: Reporting dashboard with statistics and charts */}
       {/* Story 9.4: StatCards moved to ExecutionsPage */}
-      <ReportingDashboard />
+      <ReportingDashboard recentExecutions={recentExecutions} />
     </div>
   );
 }

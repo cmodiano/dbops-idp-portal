@@ -194,6 +194,7 @@ class ExecutionConsumer(AuthenticatedWebSocketConsumer):
                     "step_order": step.step_order,
                     "step_name": step.step_name,
                     "step_type": step_type,
+                    "config_step_id": getattr(step, "config_step_id", None),
                     "status": step.status,
                     "started_at": (
                         step.started_at.isoformat() if step.started_at else None
@@ -405,5 +406,117 @@ class DashboardConsumer(AuthenticatedWebSocketConsumer):
     for the dashboard.
     """
 
+    async def connect(self) -> None:
+        self.group_name = "dashboard"
+        self._group_joined = False
+        await super().connect()
+
+    async def _check_dashboard_access(self) -> bool:
+        """Check if user has dashboard permission (admin profile per dashboard RBAC).
+
+        Same logic as HTTP dashboard views: _filter_queryset_by_ownership uses IsAdminUser.
+        Only users with admin profile can join the shared dashboard group (broadcasts
+        execution_update to all clients — no per-user filtering).
+        """
+        user_id = self.user_id
+        if not user_id:
+            return False
+
+        def _check_sync() -> bool:
+            from django.contrib.auth import get_user_model
+
+            from core.permissions import is_admin_user
+
+            User = get_user_model()
+            try:
+                user = User.objects.get(id=user_id)
+            except User.DoesNotExist:
+                return False
+            return is_admin_user(user)
+
+        return await sync_to_async(_check_sync)()
+
+    async def receive(self, text_data: str | None = None, bytes_data: bytes | None = None) -> None:
+        was_authenticated = self.authenticated
+        await super().receive(text_data=text_data, bytes_data=bytes_data)
+
+        if not was_authenticated and self.authenticated:
+            # Dashboard RBAC: same check as HTTP dashboard views (IsAdminUser)
+            try:
+                authorized = await self._check_dashboard_access()
+            except Exception as e:  # noqa: BLE001 — fail-secure: any unexpected error → deny
+                logger.error(
+                    "ws_dashboard_access_check_failed",
+                    group_name=self.group_name,
+                    user_id=self.user_id,
+                    error=str(e),
+                    error_type=type(e).__name__,
+                    exc_info=True,
+                )
+                self._group_joined = False
+                await self.close(code=4003)
+                return
+            if not authorized:
+                logger.warning(
+                    "ws_dashboard_authorization_failed",
+                    group_name=self.group_name,
+                    user_id=self.user_id,
+                )
+                self._group_joined = False
+                await self.close(code=4003)
+                return
+            if hasattr(self, "channel_layer") and self.channel_layer is not None:
+                try:
+                    await self.channel_layer.group_add(self.group_name, self.channel_name)
+                    self._group_joined = True
+                    await self._safe_send({"type": "connection_ack"})
+                    logger.info(
+                        "ws_dashboard_group_joined",
+                        group_name=self.group_name,
+                        user_id=self.user_id,
+                    )
+                except Exception as e:  # noqa: BLE001
+                    logger.error(
+                        "ws_dashboard_group_add_failed",
+                        group_name=self.group_name,
+                        user_id=self.user_id,
+                        error=str(e),
+                        error_type=type(e).__name__,
+                        exc_info=True,
+                    )
+                    self._group_joined = False
+                    await self.close()
+
     async def handle_authenticated_message(self, message: dict) -> None:
-        pass
+        # Dashboard channel is push-only for now.
+        logger.debug("ws_dashboard_authenticated_message_ignored", message_type=message.get("type"))
+
+    async def _safe_send(self, payload: dict) -> None:
+        try:
+            await self.send(text_data=json.dumps(payload))
+        except StopConsumer:
+            return
+        except Exception as e:  # noqa: BLE001
+            logger.debug("ws_dashboard_send_failed", error=str(e), error_type=type(e).__name__)
+
+    async def execution_update(self, event: dict) -> None:
+        await self._safe_send({"type": "execution_update", **event.get("data", {})})
+
+    async def disconnect(self, code: int) -> None:
+        group_joined = getattr(self, "_group_joined", False)
+        if (
+            group_joined
+            and hasattr(self, "channel_layer")
+            and self.channel_layer is not None
+        ):
+            try:
+                await self.channel_layer.group_discard(self.group_name, self.channel_name)
+            except Exception as e:  # noqa: BLE001
+                logger.warning(
+                    "ws_dashboard_group_discard_failed",
+                    group_name=self.group_name,
+                    error=str(e),
+                    error_type=type(e).__name__,
+                    exc_info=True,
+                )
+        await super().disconnect(code)

@@ -1,5 +1,6 @@
 /**
  * AdminPlatformSection — Section "Utilisation de la plateforme" (Story 60.3).
+ * Story 71.1, AC7: Migration DIP — utilise useAdminPlatformStats au lieu d'importer directement dashboard_service.
  *
  * Displays catalogue and adoption StatCards:
  * - "Actions publiées" : count of published actions (stats-catalogue, DBOPS only)
@@ -11,15 +12,10 @@
  * Loading state shows Skeleton inside each StatCard.
  */
 
-import { useState, useEffect } from 'react';
 import { Row, Col, Alert, Typography, Divider } from 'antd';
 import { StatCard } from '../StatCard';
-import { ApiError } from '../../../services/api_client';
-import {
-  fetchStatsCatalogue,
-  fetchStatsAdoption,
-} from '../../../services/dashboard_service';
-import type { DashboardFilters, StatsCatalogueData, StatsAdoptionData } from '../../../types/api';
+import { useAdminPlatformStats } from '../../../hooks/useDashboardStats';
+import type { DashboardFilters } from '../../../types/api';
 import { CatalogueItemTypeChart } from './CatalogueItemTypeChart';
 import { CatalogueEvolutionChart } from './CatalogueEvolutionChart';
 import { AdoptionByProfileChart } from './AdoptionByProfileChart';
@@ -31,61 +27,14 @@ export interface AdminPlatformSectionProps {
 }
 
 export function AdminPlatformSection({ filters }: AdminPlatformSectionProps) {
-  const [catalogueData, setCatalogueData] = useState<StatsCatalogueData | null>(null);
-  const [adoptionData, setAdoptionData] = useState<StatsAdoptionData | null>(null);
-  const [sectionLoading, setSectionLoading] = useState(true);
-  const [sectionError, setSectionError] = useState<string | null>(null);
-  const [catalogueForbidden, setCatalogueForbidden] = useState(false);
-
-  // Use JSON.stringify as dependency to avoid infinite re-renders (filters object re-created on each render)
-  const filtersKey = JSON.stringify(filters);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadData() {
-      setSectionLoading(true);
-      setSectionError(null);
-      setCatalogueForbidden(false);
-
-      const [catalogueResult, adoptionResult] = await Promise.allSettled([
-        fetchStatsCatalogue(filters),
-        fetchStatsAdoption(filters),
-      ]);
-
-      if (cancelled) return;
-
-      if (catalogueResult.status === 'fulfilled') {
-        setCatalogueData(catalogueResult.value);
-      } else {
-        const err = catalogueResult.reason;
-        if (err instanceof ApiError && err.status === 403) {
-          setCatalogueForbidden(true); // Masquer silencieusement
-        } else {
-          setSectionError(err instanceof Error ? err.message : 'Erreur de chargement');
-        }
-      }
-
-      if (adoptionResult.status === 'fulfilled') {
-        setAdoptionData(adoptionResult.value);
-      } else {
-        const err = adoptionResult.reason;
-        // Only set section error if not already set by catalogue error
-        setSectionError((prev) =>
-          prev ? prev : err instanceof Error ? err.message : 'Erreur de chargement'
-        );
-      }
-
-      setSectionLoading(false);
-    }
-
-    loadData();
-
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtersKey]);
+  const {
+    catalogueData,
+    adoptionData,
+    loading: sectionLoading,
+    error: sectionError,
+    setError: setSectionError,
+    catalogueForbidden,
+  } = useAdminPlatformStats(filters);
 
   const publishedCount =
     catalogueData?.by_status.find((s) => s.status === 'published')?.count ?? 0;

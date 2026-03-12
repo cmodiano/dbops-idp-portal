@@ -180,10 +180,10 @@ class TestExecutionService(TestCase):
         self.assertIsNotNone(audit)
 
     # ----------------------------------------------------------------
-    # Tâche 1.4 — create_execution: requires_approval=True → PENDING_APPROVAL
+    # Tâche 1.4 — create_execution: requires_approval=True → SUBMITTED + approval gate step (ADR-007)
     # ----------------------------------------------------------------
-    def test_create_execution_requires_approval_creates_pending_approval(self):
-        """1.4: requires_approval=True via _env_config → PENDING_APPROVAL + audit."""
+    def test_create_execution_requires_approval_creates_approval_gate_step(self):
+        """1.4: requires_approval=True via _env_config → SUBMITTED + approval gate step."""
         req = ExecutionRequest(
             user=self.user,
             action=self.action,
@@ -191,10 +191,30 @@ class TestExecutionService(TestCase):
             parameters={'_env_config': {'requires_approval': True}},
         )
         execution = self.service.create_execution(req)
-        self.assertEqual(execution.status, ExecutionStatus.PENDING_APPROVAL)
+        # ADR-007: execution is SUBMITTED, not PENDING_APPROVAL
+        self.assertEqual(execution.status, ExecutionStatus.SUBMITTED)
 
+        # Verify an approval gate step was created
+        from executions.models import ExecutionStep, ExecutionStepType, ExecutionStepStatus
+        gate_step = ExecutionStep.objects.filter(
+            execution=execution,
+            step_type=ExecutionStepType.GATE,
+            status=ExecutionStepStatus.WAITING,
+            config_step_id='auto-approval-gate',
+        ).first()
+        self.assertIsNotNone(gate_step)
+        self.assertEqual(gate_step.step_name, 'Approval Gate')
+        output = gate_step.get_output()
+        self.assertIn('gate_conditions', output)
+        self.assertEqual(output['gate_conditions'][0]['type'], 'approval_granted')
+
+        # Verify is_pending_approval returns True (step-based)
+        self.assertTrue(execution.is_pending_approval)
+
+        # Verify audit is SUBMITTED (not PENDING_APPROVAL)
+        from core.models import AuditLog
         audit = AuditLog.objects.filter(
-            action_type='EXECUTION_PENDING_APPROVAL',
+            action_type='EXECUTION_SUBMITTED',
             entity_id=execution.id,
         ).first()
         self.assertIsNotNone(audit)
@@ -378,24 +398,31 @@ class TestExecutionService(TestCase):
         self.assertIsNotNone(updated.completed_at)
 
     # ----------------------------------------------------------------
-    # Tâche 1.15 — update_status: PENDING_APPROVAL → REJECTED : audit EXECUTION_REJECTED
+    # Tâche 1.15 — update_status: SUBMITTED → FAILED : audit EXECUTION_FAILED (ADR-007)
+    # Legacy PENDING_APPROVAL → REJECTED transition removed.
     # ----------------------------------------------------------------
-    def test_update_status_pending_approval_to_rejected_creates_audit(self):
-        """1.15: PENDING_APPROVAL → REJECTED → audit EXECUTION_REJECTED created."""
+    def test_update_status_submitted_to_failed_creates_audit(self):
+        """1.15: SUBMITTED → FAILED → audit EXECUTION_FAILED created (ADR-007)."""
         execution = Execution.objects.create(
             action=self.action, user=self.user, environment='dev',
-            status=ExecutionStatus.PENDING_APPROVAL,
+            status=ExecutionStatus.SUBMITTED,
         )
         updated = self.service.update_status(
-            execution.id, ExecutionStatus.REJECTED, str(self.user.id)
+            execution.id, ExecutionStatus.FAILED, str(self.user.id)
         )
-        self.assertEqual(updated.status, ExecutionStatus.REJECTED)
+        self.assertEqual(updated.status, ExecutionStatus.FAILED)
 
         audit = AuditLog.objects.filter(
-            action_type='EXECUTION_REJECTED',
+            action_type='EXECUTION_FAILED',
             entity_id=execution.id,
         ).first()
         self.assertIsNotNone(audit)
+        # Story 72.2: format standard changes: { status: { old, new } }
+        details = audit.get_details() or {}
+        self.assertIn('changes', details)
+        self.assertIn('status', details['changes'])
+        self.assertEqual(details['changes']['status']['old'], ExecutionStatus.SUBMITTED)
+        self.assertEqual(details['changes']['status']['new'], ExecutionStatus.FAILED)
 
     # ----------------------------------------------------------------
     # Tâche 1.16/1.17 — list_by_user: offset < 0 et limit <= 0

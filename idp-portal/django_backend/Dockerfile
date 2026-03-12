@@ -68,18 +68,27 @@ RUN SECRET_KEY=build-only-not-used \
 # Switch to non-root user
 USER idp
 
-# Expose Gunicorn port
+# Expose ASGI server port
 EXPOSE 8000
 
 # Healthcheck (with trailing slash for Django APPEND_SLASH compatibility)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8000/api/v1/health/ || exit 1
 
-# Start Gunicorn
-CMD ["gunicorn", "idp_backend.wsgi:application", \
+# Start Gunicorn with Uvicorn ASGI workers for HTTP + WebSocket support
+# Uvicorn workers provide mature WebSocket handling and full Django Channels
+# channel layer compatibility (background receive loop for group_send).
+# Gunicorn's native --worker-class asgi has known issues:
+#   - RFC 6455 close code 1005 violation (see gunicorn-websocket-close-1005-bug.md)
+#   - Channel layer messages not delivered to consumers (breaks real-time updates)
+CMD ["gunicorn", "idp_backend.asgi:application", \
+    "--worker-class", "uvicorn.workers.UvicornWorker", \
+    "--workers", "6", \
     "--bind", "0.0.0.0:8000", \
-    "--workers", "4", \
     "--timeout", "60", \
+    "--graceful-timeout", "30", \
+    "--keep-alive", "5", \
     "--access-logfile", "-", \
     "--error-logfile", "-", \
-    "--log-level", "info"]
+    "--capture-output", \
+    "--enable-stdio-inheritance"]
