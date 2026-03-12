@@ -288,6 +288,7 @@ class TestEvaluationHandler:
             artifact_type='aap',
             execution_id=5,
             correlation_id='corr-err',
+            error='boom',
             exc_info=True,
         )
 
@@ -315,5 +316,6 @@ class TestEvaluationHandler:
             artifact_type='terraform_cloud',
             execution_id=9,
             correlation_id='corr-db',
+            error='Not found',
             exc_info=True,
         )

@@ -275,8 +275,10 @@ class TestExecuteHandlerStepWaitingProtocol:
         assert result == ExecutionStatus.RUNNING
         # parent_step.status doit être WAITING
         assert mock_step.status == ExecutionStepStatus.WAITING
-        # set_output appelé avec gate_output
-        mock_step.set_output.assert_called_once_with(gate_result['gate_output'])
+        # set_output appelé avec gate_output + gate_type (Story 72.3: ajouté par _handle_gate_waiting)
+        expected_output = dict(gate_result['gate_output'])
+        expected_output['gate_type'] = 'maintenance_window'
+        mock_step.set_output.assert_called_once_with(expected_output)
         # save appelé
         mock_step.save.assert_called()
         # completed_at NE DOIT PAS être setté
@@ -389,6 +391,7 @@ class TestResumeContainerWorkflowFromGate:
             with patch.object(Execution.objects, 'select_related') as mock_qs:
                 mock_qs.return_value.get.return_value = mock_execution
                 with patch.object(ExecutionStep.objects, 'filter') as mock_filter:
+                    mock_filter.return_value.exists.return_value = False  # target_steps_exist
                     mock_filter.return_value.order_by.return_value = []
                     result = resume_container_workflow_from_gate.run(execution_id=1, on_success_step_ids='missing-step')
 
@@ -433,6 +436,7 @@ class TestResumeContainerWorkflowFromGate:
             with patch.object(Execution.objects, 'select_related') as mock_qs:
                 mock_qs.return_value.get.return_value = mock_execution
                 with patch.object(ExecutionStep.objects, 'filter') as mock_filter:
+                    mock_filter.return_value.exists.return_value = False  # target_steps_exist
                     mock_filter.return_value.order_by.return_value = [mock_db_step]
                     with patch.object(ContainerWorkflowRuntime, '__init__', fake_runtime_init):
                         with patch.object(ContainerWorkflowRuntime, '_execute_workflow_steps', return_value=None):
