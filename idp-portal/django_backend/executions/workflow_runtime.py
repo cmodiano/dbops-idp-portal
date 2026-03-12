@@ -5,21 +5,24 @@ Orchestrateur pur : boucle principale run(), résolution de branche _resolve_nex
 délégation à RetryHandler (workflow_retry.py) et StepExecutor (workflow_step_executor.py).
 
 Architecture:
-- StepOutcome, StepResult: types partagés (importés par executions/tasks/retry.py)
-- WorkflowExecutionState: état runtime (step courant, visites, outcome)
+- StepOutcome, StepResult, WorkflowExecutionState: from workflow_types (shared)
 - WorkflowRuntime: orchestrateur < 500 lignes (SRP Story 34.7)
 """
 
 import structlog
-from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, List
-from enum import Enum
 
 from django.db import transaction
 from django.utils import timezone
 
 from executions.models import Execution, ExecutionStatus
 from executions.utils.workflow_parsing import get_workflow_entry_step_ids
+from executions.workflow_types import (
+    MAX_STEP_TRANSITIONS,
+    StepOutcome,
+    StepResult,
+    WorkflowExecutionState,
+)
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.middleware import get_correlation_id
@@ -27,92 +30,8 @@ from core.utils import sanitize_audit_changes
 
 logger = structlog.get_logger(__name__)
 
-# Maximum number of step transitions to prevent infinite loops (AC5)
-MAX_STEP_TRANSITIONS = 100
-
-
-class StepOutcome(str, Enum):
-    """Outcome of a step execution."""
-    SUCCESS = "success"
-    ERROR = "error"
-    WAITING = "waiting"  # Story 25.2: step blocked by gate_conditions
-
-
-@dataclass
-class StepResult:
-    """
-    Result of executing a single workflow step.
-
-    Attributes:
-        outcome: SUCCESS or ERROR
-        output: Optional output data from the step
-        error_message: Error message if outcome is ERROR
-        error_details: Additional error context
-    """
-    outcome: StepOutcome
-    output: Optional[Dict[str, Any]] = None
-    error_message: Optional[str] = None
-    error_details: Optional[Dict[str, Any]] = None
-
-    @property
-    def is_success(self) -> bool:
-        """Check if step succeeded."""
-        return self.outcome == StepOutcome.SUCCESS
-
-    @property
-    def is_error(self) -> bool:
-        """Check if step failed."""
-        return self.outcome == StepOutcome.ERROR
-
-    @property
-    def is_waiting(self) -> bool:
-        """Check if step is waiting for gate conditions (Story 25.2)."""
-        return self.outcome == StepOutcome.WAITING
-
-
-@dataclass
-class WorkflowExecutionState:
-    """
-    Runtime state for workflow execution.
-
-    Tracks current position in workflow graph, visited steps count (for loop detection),
-    and last execution outcome for audit/debug.
-
-    Attributes:
-        execution_id: ID of the Execution being run
-        current_step_id: Current step_id being executed (from workflow JSON)
-        visited_counts: Map of step_id -> visit count (for loop detection)
-        transition_count: Total number of step transitions (for loop detection)
-        last_step_outcome: Outcome of last executed step (success|error)
-        last_error: Last error details if any
-    """
-    execution_id: int
-    current_step_id: Optional[str] = None
-    visited_counts: Dict[str, int] = field(default_factory=dict)
-    transition_count: int = 0
-    last_step_outcome: Optional[StepOutcome] = None
-    last_error: Optional[Dict[str, Any]] = None
-    # Trace of the execution path for audit/debug (AC4)
-    path_trace: List[Dict[str, Any]] = field(default_factory=list)
-
-    def visit_step(self, step_id: str) -> None:
-        """
-        Record a visit to a step.
-
-        Args:
-            step_id: The step_id being visited
-        """
-        self.visited_counts[step_id] = self.visited_counts.get(step_id, 0) + 1
-        self.transition_count += 1
-
-    def has_exceeded_max_transitions(self) -> bool:
-        """
-        Check if workflow has exceeded maximum transitions (loop detection).
-
-        Returns:
-            True if transition_count >= MAX_STEP_TRANSITIONS
-        """
-        return self.transition_count >= MAX_STEP_TRANSITIONS
+# Re-export for backward compatibility (imports from workflow_runtime)
+__all__ = ['StepOutcome', 'StepResult', 'WorkflowExecutionState', 'MAX_STEP_TRANSITIONS', 'WorkflowRuntime']
 
 
 class WorkflowRuntime:

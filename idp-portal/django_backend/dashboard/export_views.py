@@ -21,7 +21,7 @@ from rest_framework.views import APIView
 from core.exceptions import BadRequestError
 from core.middleware import get_correlation_id
 from core.permissions import IsAdminUser
-from dashboard.views import _parse_date  # DASH-MED-01: shared helper, removed local duplicate
+from dashboard.utils import parse_date  # DASH-MED-01: shared helper, removed local duplicate
 from executions.models import Execution, ExecutionStatus
 
 logger = structlog.get_logger(__name__)
@@ -45,8 +45,8 @@ def _build_export_queryset(request: Request) -> QuerySet:
     qs, _effective_scope = apply_scope_filter(qs, user=request.user, scope=scope)
 
     # Date filters
-    start_date = _parse_date(request.query_params.get("start_date"), name="start_date")
-    end_date = _parse_date(request.query_params.get("end_date"), name="end_date")
+    start_date = parse_date(request.query_params.get("start_date"), name="start_date")
+    end_date = parse_date(request.query_params.get("end_date"), name="end_date")
 
     if start_date:
         start_dt = timezone.make_aware(datetime.combine(start_date, datetime.min.time()))

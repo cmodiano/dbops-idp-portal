@@ -212,7 +212,7 @@ class TestDashboardExceptionHandling:
 
     def test_stats_queryset_logs_invalid_timestamps(self):
         """Invalid timestamps in duration calculation are logged."""
-        from dashboard.views import _stats_for_queryset
+        from dashboard.utils import stats_for_queryset
 
         # Create mock queryset with invalid timestamp data
         mock_qs = MagicMock()
@@ -220,8 +220,8 @@ class TestDashboardExceptionHandling:
         mock_qs.filter.return_value = mock_qs
         mock_qs.values_list.return_value = [(None, "not_a_datetime")]
 
-        with patch('dashboard.views.logger') as mock_logger:
-            _stats_for_queryset(mock_qs)
+        with patch('dashboard.utils.logger') as mock_logger:
+            stats_for_queryset(mock_qs)
 
             # Should have logged the invalid timestamp
             debug_calls = [c for c in mock_logger.debug.call_args_list

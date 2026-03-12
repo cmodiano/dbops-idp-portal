@@ -48,6 +48,9 @@ from executions.step_handlers.service_call_handler import ServiceCallHandler
 from executions.step_handlers.http_request_handler import HttpRequestHandler
 from executions.step_handlers.evaluation_handler import EvaluationHandler
 from executions.step_handlers.gate_handler import GateHandler
+from executions.container_routing import get_next_step_ids as _routing_get_next_step_ids
+from executions.container_routing import get_linear_next_step_ids as _routing_get_linear_next_step_ids
+from executions.container_parallel import apply_join_policy as _parallel_apply_join_policy
 
 logger = structlog.get_logger(__name__)
 
@@ -439,125 +442,20 @@ class ContainerWorkflowRuntime:
         return self._execute_handler_step(step, resolved_params, step_name, step_id, step_type, handler, parallel_context)
 
     def _get_next_step_ids(self, step: dict, outcome: ExecutionStatus) -> list[str]:
-        """Retourne les step_id cibles selon l'outcome, avec rétrocompat singulier.
-
-        Si aucun champ de routing n'est présent (ancien mode linéaire), retourne
-        le step suivant par ordre (rétrocompat workflows sans routing explicite).
-
-        Story 67.2 — AC1, AC2, AC7.
-        """
-        if outcome == ExecutionStatus.COMPLETED:
-            # Opt out of linear fallback only if step defines explicit success routing.
-            # Steps with only on_error_step_ids must use linear fallback on success.
-            # Note: on_success_step_id (singular) is legacy; no active code uses it (RC-02).
-            has_routing = 'on_success_step_ids' in step
-            if not has_routing:
-                # Mode linéaire sans routing explicite — fallback sur step suivant par ordre
-                return self._get_linear_next_step_ids(step)
-            ids = step.get('on_success_step_ids')
-            return ids or []
-        else:  # FAILED, CANCELLED, etc.
-            ids = step.get('on_error_step_ids')
-            return ids or []
+        """Retourne les step_id cibles selon l'outcome (delegates to container_routing)."""
+        return _routing_get_next_step_ids(step, outcome, self.workflow_steps)
 
     def _get_linear_next_step_ids(self, step: dict) -> list[str]:
-        """Retourne le step suivant par ordre (mode linéaire sans routing explicite).
-
-        Rétrocompatibilité pour les workflows créés avant le support multi-cibles.
-        """
-        current_order = step.get('order', 0)
-        next_steps = [
-            s for s in self.workflow_steps
-            if s.get('order', 0) > current_order and s.get('step_id')
-        ]
-        if next_steps:
-            next_step = min(next_steps, key=lambda s: s.get('order', 0))
-            return [next_step['step_id']]
-        return []  # exit point
+        """Retourne le step suivant par ordre (delegates to container_routing)."""
+        return _routing_get_linear_next_step_ids(step, self.workflow_steps)
 
     def _apply_join_policy(
         self,
         wave_steps: list[dict],
         results: dict[str, tuple[ExecutionStatus, list[str]]],
     ) -> list[str]:
-        """
-        Construit la prochaine vague en appliquant join_policy pour les steps convergents.
-
-        Pour chaque step cible candidat :
-        - Si 1 seul prédécesseur dans la vague → inclus inconditionnellement
-        - Si 2+ prédécesseurs dans la vague → apply join_policy du step cible (défaut all_success)
-
-        Limitation connue : join_policy s'applique uniquement aux prédécesseurs de la vague COURANTE.
-        Les convergences cross-waves (prédécesseurs dans des vagues BFS différentes) ne sont pas
-        gérées dans cette story.
-
-        Story 67.3 — AC: #1, #5, #6, #7, #8.
-        Story 67.8 — all_failed (tous les prédécesseurs en échec) | one_failed (au moins un en échec).
-
-        Note : join_policy n'est évaluée que si le step cible a 2+ prédécesseurs dans la vague courante.
-        Si 1 seul prédécesseur, le step est inclus inconditionnellement (politique ignorée).
-        """
-        # Build: target_step_id → [(source_step_id, source_outcome)]
-        # Considère TOUS les targets possibles de la vague (success ET error paths)
-        target_preds: dict[str, list[tuple[str, ExecutionStatus]]] = {}
-        for step in wave_steps:
-            sid = step.get('step_id', '')
-            if not sid:
-                continue
-            status, _ = results.get(sid, (ExecutionStatus.FAILED, []))
-            all_targets: set[str] = set()
-            for t in (step.get('on_success_step_ids') or []):
-                if t:
-                    all_targets.add(t)
-            for t in (step.get('on_error_step_ids') or []):
-                if t:
-                    all_targets.add(t)
-            for target_id in all_targets:
-                target_preds.setdefault(target_id, []).append((sid, status))
-
-        # Collecter les candidats : union déduplicée des next_ids per-branch (déjà routés)
-        candidate_ids: list[str] = []
-        for _, (_, next_ids) in results.items():
-            for nid in next_ids:
-                if nid not in candidate_ids:
-                    candidate_ids.append(nid)
-
-        # Appliquer join_policy pour chaque candidat
-        result: list[str] = []
-        for target_id in candidate_ids:
-            preds = target_preds.get(target_id, [])
-            if len(preds) <= 1:
-                # Prédécesseur unique → inclure sans condition
-                result.append(target_id)
-                continue
-
-            target_step = self._step_lookup_by_id.get(target_id)
-            join_policy = (target_step or {}).get('join_policy', 'all_success')
-            pred_statuses = [s for _, s in preds]
-
-            if join_policy == 'all_success':
-                if all(s == ExecutionStatus.COMPLETED for s in pred_statuses):
-                    result.append(target_id)
-            elif join_policy == 'one_success':
-                if any(s == ExecutionStatus.COMPLETED for s in pred_statuses):
-                    result.append(target_id)
-            elif join_policy == 'all_done':
-                # Tous terminés par définition dans le contexte fan-out
-                result.append(target_id)
-            elif join_policy == 'all_failed':
-                # Story 67.8: D runs only if ALL predecessors failed
-                if all(s == ExecutionStatus.FAILED for s in pred_statuses):
-                    result.append(target_id)
-            elif join_policy == 'one_failed':
-                # Story 67.8: D runs if at least one predecessor failed
-                if any(s == ExecutionStatus.FAILED for s in pred_statuses):
-                    result.append(target_id)
-            else:
-                # Politique inconnue → all_success par défaut (défensif)
-                if all(s == ExecutionStatus.COMPLETED for s in pred_statuses):
-                    result.append(target_id)
-
-        return result
+        """Construit la prochaine vague (delegates to container_parallel)."""
+        return _parallel_apply_join_policy(wave_steps, results, self._step_lookup_by_id)
 
     def _execute_fan_out(
         self, step_ids: list[str]

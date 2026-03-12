@@ -658,7 +658,7 @@ class TestValidateParametersSchemaInventory(TestCase):
             'inventory_type': 'servers',
             'inventory_value_column': 'region',
         }}}
-        with patch.object(serializers_module, '_catalog_inventory_service_factory', return_value=mock_service):
+        with patch.object(serializers_module.validators, '_catalog_inventory_service_factory', return_value=mock_service):
             result = self._call(value)
         self.assertEqual(result, value)
 
@@ -672,7 +672,7 @@ class TestValidateParametersSchemaInventory(TestCase):
         }
         mock_service._get_inventory_mapper.return_value = mock_mapper
 
-        with patch.object(serializers_module, '_catalog_inventory_service_factory', return_value=mock_service):
+        with patch.object(serializers_module.validators, '_catalog_inventory_service_factory', return_value=mock_service):
             with self.assertRaises(serializers.ValidationError) as cm:
                 self._call({'properties': {'p1': {
                     'source': 'inventory',
@@ -691,7 +691,7 @@ class TestValidateParametersSchemaInventory(TestCase):
             'inventory_type': 'servers',
             'inventory_value_column': 'name',
         }}}
-        with patch.object(serializers_module, '_catalog_inventory_service_factory', return_value=mock_service):
+        with patch.object(serializers_module.validators, '_catalog_inventory_service_factory', return_value=mock_service):
             result = self._call(value)
         self.assertEqual(result, value)
 
@@ -700,7 +700,7 @@ class TestValidateParametersSchemaInventory(TestCase):
         mock_service = MagicMock()
         mock_service._get_inventory_mapper.return_value = None
 
-        with patch.object(serializers_module, '_catalog_inventory_service_factory', return_value=mock_service):
+        with patch.object(serializers_module.validators, '_catalog_inventory_service_factory', return_value=mock_service):
             with self.assertRaises(serializers.ValidationError) as cm:
                 self._call({'properties': {'p1': {
                     'source': 'inventory',
@@ -719,7 +719,7 @@ class TestValidateParametersSchemaInventory(TestCase):
             'inventory_type': 'servers',
             'inventory_value_column': 'name',
         }}}
-        with patch.object(serializers_module, '_catalog_inventory_service_factory', return_value=mock_service):
+        with patch.object(serializers_module.validators, '_catalog_inventory_service_factory', return_value=mock_service):
             result = self._call(value)
         self.assertEqual(result, value)
 
@@ -735,7 +735,7 @@ class TestValidateParametersSchemaInventory(TestCase):
             'inventory_type': 'servers',
             'inventory_value_column': 'name',
         }}}
-        with patch.object(serializers_module, '_catalog_inventory_service_factory', return_value=mock_service):
+        with patch.object(serializers_module.validators, '_catalog_inventory_service_factory', return_value=mock_service):
             result = self._call(value)
         self.assertEqual(result, value)
 
@@ -752,7 +752,7 @@ class TestValidateParametersSchemaInventory(TestCase):
             'inventory_type': 'servers',
             'inventory_value_column': 'name',
         }}}
-        with patch.object(serializers_module, '_catalog_inventory_service_factory', return_value=mock_service):
+        with patch.object(serializers_module.validators, '_catalog_inventory_service_factory', return_value=mock_service):
             result = self._call(value)
         self.assertEqual(result, value)
 
@@ -972,7 +972,7 @@ class TestActionCreateSerializerValidateIntegration(TestCase):
             base_url='https://aap.test.com',
         )
         s = ActionCreateSerializer()
-        with patch('catalog.serializers._validate_platform_integration_consistency') as mock_helper:
+        with patch('catalog.serializers.action.validate_platform_integration_consistency') as mock_helper:
             s.validate({
                 'name': 'Test Workflow',
                 'item_type': ActionItemType.WORKFLOW,
