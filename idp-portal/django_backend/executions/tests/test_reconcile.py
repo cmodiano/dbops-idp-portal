@@ -1,5 +1,5 @@
 """
-Tests unitaires pour la logique de réconciliation crash-recovery — Story 76.1 & 76.2
+Tests unitaires pour la logique de réconciliation crash-recovery — Story 76.1, 76.2, 76.3, 76.4
 
 Tests Story 76.1:
 - AC1: Container workflow avec étapes COMPLETED → résultat 'reattached', pas de FAILED
@@ -15,6 +15,17 @@ Tests Story 76.2:
 - AC3b: Enfant stale avec parent déjà terminal en DB → _mark_execution_failed, pas _reconcile_execution
 - AC2: Enfant stale avec parent sain → _reconcile_execution appelé normalement
 - Compteurs: total_reattached, total_failed, total_skipped reflètent les enfants
+
+Tests Story 76.4:
+- AC1: Documentation du comportement (vérifiée via les tests AC2 et AC3)
+- AC2/Task 2.1: _is_child_execution_id — détection correcte (child existant, non-child, non-numérique)
+- AC2/Task 2.2: _reconcile_schedule_step — child COMPLETED → step COMPLETED, retourne True
+- AC2/Task 2.2: _reconcile_schedule_step — child FAILED → step FAILED, retourne False
+- AC2/Task 2.2: _reconcile_schedule_step — child RUNNING stale → child + step FAILED, retourne False
+- AC2/Task 2.2: _reconcile_schedule_step — child introuvable → step FAILED, retourne False
+- AC3/Task 3.1: Action simple RUNNING avec platform_job_id réel → _reattach_poll appelé
+- AC3/Task 3.2: Step schedule_execution avec platform_job_id = child_id → _reconcile_schedule_step appelé
+- AC3/Task 3.3: platform_job_id numérique qui n'est pas un child → reattach normal
 """
 
 import pytest
@@ -22,8 +33,10 @@ from unittest.mock import patch, MagicMock
 
 from executions.tasks.reconcile import (
     _build_stale_filter,
+    _is_child_execution_id,
     _is_container_workflow,
     _reconcile_execution,
+    _reconcile_schedule_step,
     _resume_container_workflow,
     reconcile_stale_executions,
 )
@@ -726,3 +739,295 @@ class TestReconcileStaleDetection:
         assert exec_.id not in result_ids, (
             "Une exécution sans updated_at et created_at récent ne doit pas être considérée stale"
         )
+
+
+# ---------------------------------------------------------------------------
+# Story 76.4 — Vérification du polling pour actions individuelles RUNNING
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestIsChildExecutionId:
+    """Story 76.4 — Task 2.1 : _is_child_execution_id détecte correctement les child IDs."""
+
+    def test_numeric_string_matching_child_returns_true(self):
+        """platform_job_id = str(child.id) avec child.parent_execution_id = parent.id → True."""
+        parent = ExecutionFactory(status="RUNNING")
+        child = ExecutionFactory(status="RUNNING", parent_execution=parent)
+
+        assert _is_child_execution_id(parent, str(child.id)) is True
+
+    def test_numeric_string_not_a_child_returns_false(self):
+        """platform_job_id numérique mais pas un enfant de cette exécution → False.
+
+        AC3/Task 3.3 : un job ID numérique valide sur certaines plateformes (ex. Tower)
+        ne doit pas être confondu avec un child execution ID.
+        """
+        parent = ExecutionFactory(status="RUNNING")
+        other_exec = ExecutionFactory(status="RUNNING")  # pas un enfant de parent
+
+        assert _is_child_execution_id(parent, str(other_exec.id)) is False
+
+    def test_non_numeric_string_returns_false(self):
+        """platform_job_id non numérique (ex. 'job-aap-123') → False."""
+        parent = ExecutionFactory(status="RUNNING")
+
+        assert _is_child_execution_id(parent, "job-aap-123") is False
+
+    def test_empty_string_returns_false(self):
+        """platform_job_id vide → False."""
+        parent = ExecutionFactory(status="RUNNING")
+
+        assert _is_child_execution_id(parent, "") is False
+
+    def test_nonexistent_id_returns_false(self):
+        """platform_job_id numérique mais aucune Execution avec cet ID → False."""
+        parent = ExecutionFactory(status="RUNNING")
+
+        assert _is_child_execution_id(parent, "999999999") is False
+
+
+@pytest.mark.django_db
+class TestReconcileScheduleStep:
+    """Story 76.4 — Task 2.2 : _reconcile_schedule_step gère les différents états du child."""
+
+    def _make_step_with_child(self, parent_status="RUNNING", child_status="RUNNING"):
+        """Crée un parent avec un step RUNNING dont platform_job_id = child.id."""
+        parent = ExecutionFactory(status=parent_status)
+        child = ExecutionFactory(status=child_status, parent_execution=parent)
+        step = ExecutionStepFactory(
+            execution=parent,
+            status="RUNNING",
+            platform_job_id=str(child.id),
+        )
+        return parent, child, step
+
+    def test_child_completed_marks_step_completed_returns_true(self):
+        """Child COMPLETED → step mis à COMPLETED avec output, retourne True."""
+        from executions.models import ExecutionStepStatus
+
+        parent, child, step = self._make_step_with_child(child_status="COMPLETED")
+
+        result = _reconcile_schedule_step(parent, step)
+
+        assert result is True
+        step.refresh_from_db()
+        assert step.status == ExecutionStepStatus.COMPLETED
+        assert step.completed_at is not None
+        # AC2 Task 2.2: output must be set for _resume_container_workflow
+        output = step.get_output()
+        assert output is not None
+        assert output.get("child_execution_id") == child.id
+        assert output.get("child_status") == "COMPLETED"
+
+    def test_child_failed_marks_step_failed_returns_false(self):
+        """Child FAILED → step marqué FAILED, retourne False."""
+        from executions.models import ExecutionStepStatus
+
+        parent, child, step = self._make_step_with_child(child_status="FAILED")
+
+        result = _reconcile_schedule_step(parent, step)
+
+        assert result is False
+        step.refresh_from_db()
+        assert step.status == ExecutionStepStatus.FAILED
+        assert step.error_message is not None
+
+    def test_child_cancelled_marks_step_failed_returns_false(self):
+        """Child CANCELLED → step marqué FAILED, retourne False."""
+        from executions.models import ExecutionStepStatus
+
+        parent, child, step = self._make_step_with_child(child_status="CANCELLED")
+
+        result = _reconcile_schedule_step(parent, step)
+
+        assert result is False
+        step.refresh_from_db()
+        assert step.status == ExecutionStepStatus.FAILED
+
+    def test_child_running_stale_marks_both_failed_returns_false(self):
+        """Child RUNNING (stale) → child + step marqués FAILED, retourne False."""
+        from executions.models import ExecutionStatus, ExecutionStepStatus
+
+        parent, child, step = self._make_step_with_child(child_status="RUNNING")
+
+        result = _reconcile_schedule_step(parent, step)
+
+        assert result is False
+        step.refresh_from_db()
+        assert step.status == ExecutionStepStatus.FAILED
+
+        child.refresh_from_db()
+        assert child.status == ExecutionStatus.FAILED
+
+    def test_child_not_found_marks_step_failed_returns_false(self):
+        """Child introuvable (ID invalide) → step marqué FAILED, retourne False."""
+        from executions.models import ExecutionStepStatus
+
+        parent = ExecutionFactory(status="RUNNING")
+        step = ExecutionStepFactory(
+            execution=parent,
+            status="RUNNING",
+            platform_job_id="999999999",  # ID inexistant
+        )
+
+        result = _reconcile_schedule_step(parent, step)
+
+        assert result is False
+        step.refresh_from_db()
+        assert step.status == ExecutionStepStatus.FAILED
+
+
+@pytest.mark.django_db
+class TestReconcileExecutionWithScheduleStep:
+    """Story 76.4 — Task 3 : Tests d'intégration dans _reconcile_execution."""
+
+    def _cutoff_execution(self, parent=None, status="RUNNING"):
+        """Crée une exécution stale."""
+        from django.utils import timezone
+        from datetime import timedelta
+        from executions.models import Execution
+        from executions.tasks.reconcile import STALE_THRESHOLD_MINUTES
+
+        exec_ = ExecutionFactory(status=status, parent_execution=parent)
+        Execution.objects.filter(pk=exec_.pk).update(
+            created_at=timezone.now() - timedelta(minutes=STALE_THRESHOLD_MINUTES + 5)
+        )
+        exec_.refresh_from_db()
+        return exec_
+
+    def test_ac3_task3_1_simple_action_calls_reattach_poll(self):
+        """AC3/Task 3.1 : Action simple RUNNING avec platform_job_id réel (non-child) → _reattach_poll appelé.
+
+        platform_job_id = 'job-aap-123' (non numérique) → _is_child_execution_id retourne False
+        → _reattach_poll est appelé avec l'intégration de l'action.
+        """
+        execution = ExecutionFactory(status="RUNNING")
+        ExecutionStepFactory(
+            execution=execution,
+            status="RUNNING",
+            platform_job_id="job-aap-123",  # vrai ID de job AAP (non numérique)
+        )
+
+        with patch(
+            "executions.tasks.reconcile._reattach_poll",
+            return_value=True,
+        ) as mock_reattach, patch(
+            "executions.tasks.reconcile._reconcile_schedule_step",
+        ) as mock_schedule:
+            result = _reconcile_execution(execution)
+
+        # _reattach_poll doit être appelé (pas _reconcile_schedule_step)
+        assert mock_reattach.call_count == 1
+        mock_schedule.assert_not_called()
+        assert result == "reattached"
+
+    def test_simple_action_poll_platform_job_status_called_with_correct_args(self):
+        """AC3/Task 3.1 (MEDIUM): poll_platform_job_status.apply_async appelé avec bons arguments."""
+        execution = ExecutionFactory(status="RUNNING")
+        ExecutionStepFactory(
+            execution=execution,
+            status="RUNNING",
+            platform_job_id="job-aap-123",
+        )
+
+        with patch(
+            "executions.tasks.polling.poll_platform_job_status.apply_async",
+        ) as mock_apply:
+            with patch(
+                "executions.tasks.polling.get_platform_queue",
+                return_value="platform-aap",
+            ):
+                _reconcile_execution(execution)
+
+        mock_apply.assert_called_once()
+        call_kwargs = mock_apply.call_args[1]
+        assert call_kwargs["args"][0] == execution.id
+        assert call_kwargs["args"][1] == "job-aap-123"
+        assert call_kwargs["queue"] == "platform-aap"
+
+    def test_ac3_task3_2_schedule_step_calls_reconcile_schedule_step(self):
+        """AC3/Task 3.2 : Step schedule_execution avec platform_job_id = child_id → _reconcile_schedule_step appelé."""
+        parent = ExecutionFactory(status="RUNNING")
+        child = ExecutionFactory(status="RUNNING", parent_execution=parent)
+        step = ExecutionStepFactory(
+            execution=parent,
+            status="RUNNING",
+            platform_job_id=str(child.id),
+        )
+
+        with patch(
+            "executions.tasks.reconcile._reconcile_schedule_step",
+            return_value=True,
+        ) as mock_schedule, patch(
+            "executions.tasks.reconcile._reattach_poll",
+        ) as mock_reattach:
+            result = _reconcile_execution(parent)
+
+        mock_schedule.assert_called_once_with(parent, step)
+        mock_reattach.assert_not_called()
+        assert result == "reattached"
+
+    def test_ac3_task3_3_numeric_non_child_calls_reattach_poll(self):
+        """AC3/Task 3.3 : platform_job_id numérique qui n'est pas un child → reattach normal.
+
+        Cas : Tower job IDs sont des entiers. Si l'ID numérique ne correspond pas à un
+        child de cette exécution, _is_child_execution_id retourne False et on doit appeler
+        _reattach_poll normalement (pas _reconcile_schedule_step).
+        """
+        execution = ExecutionFactory(status="RUNNING")
+        # ID numérique mais pas un child de cette exécution (aucun Execution avec cet ID
+        # et parent_execution_id=execution.id n'existe)
+        ExecutionStepFactory(
+            execution=execution,
+            status="RUNNING",
+            platform_job_id="999888777",  # numérique, mais pas un child
+        )
+
+        with patch(
+            "executions.tasks.reconcile._reattach_poll",
+            return_value=True,
+        ) as mock_reattach, patch(
+            "executions.tasks.reconcile._reconcile_schedule_step",
+        ) as mock_schedule:
+            result = _reconcile_execution(execution)
+
+        # _reattach_poll doit être appelé (pas _reconcile_schedule_step)
+        assert mock_reattach.call_count == 1
+        mock_schedule.assert_not_called()
+        assert result == "reattached"
+
+    def test_schedule_step_child_completed_triggers_resume_container_workflow(self):
+        """MEDIUM: Schedule step child COMPLETED → step COMPLETED with output → _resume_container_workflow appelé."""
+        parent = ExecutionFactory(status="RUNNING")
+        parent.action.execution_steps = CONTAINER_STEPS
+        parent.action.save(update_fields=["execution_steps"])
+        child = ExecutionFactory(status="COMPLETED", parent_execution=parent)
+        step = ExecutionStepFactory(
+            execution=parent,
+            status="RUNNING",
+            platform_job_id=str(child.id),
+            config_step_id=STEP_ID_B,
+            step_order=1,
+        )
+        # Step A already COMPLETED so resume has something to work with
+        ExecutionStepFactory(
+            execution=parent,
+            status="COMPLETED",
+            config_step_id=STEP_ID_A,
+            step_order=0,
+        )
+
+        with patch(
+            "executions.tasks.reconcile._resume_container_workflow",
+            return_value="reattached",
+        ) as mock_resume:
+            result = _reconcile_execution(parent)
+
+        assert result == "reattached"
+        step.refresh_from_db()
+        assert step.status == "COMPLETED"
+        assert step.get_output() is not None
+        assert step.get_output().get("child_execution_id") == child.id
+        # AC2: workflow continuation triggered immediately
+        mock_resume.assert_called_once_with(parent, correlation_id="")

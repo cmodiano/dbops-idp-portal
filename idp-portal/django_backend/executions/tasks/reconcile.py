@@ -20,6 +20,34 @@ updated_at at each BFS wave / sequential step (heartbeat), so long-running but h
 are never incorrectly marked stale. Executions without updated_at (pre-76.3) fall back to created_at.
 Note: gate steps (Story 57.7) do not emit heartbeats while waiting; a gate held longer than the
 stale threshold may be incorrectly reconciled (pre-existing limitation).
+
+Story 76.4 — Deux types de platform_job_id :
+===============================================
+
+1. **Action simple** (non-workflow) :
+   L'action est une action plateforme (AAP, Tower, Azure DevOps, GitHub, Terraform, etc.).
+   ``trigger_platform_job`` stocke ``platform_job_id = adapter_result.get("platform_job_id")``
+   (ex. ``"job-123"`` pour AAP, ``"42"`` pour Tower, ``"run-abc"`` pour Terraform).
+   Le polling interroge la plateforme via ``adapter.get_status(platform_job_id)``.
+   → **Reattach fonctionne** : l'adapter reçoit un vrai ID de job plateforme.
+
+2. **Step schedule_execution (container workflow)** :
+   Le parent exécute un workflow ; une étape référence une action (workflow ou action simple).
+   ``ContainerWorkflowRuntime._create_and_run_child_execution`` crée une exécution enfant et
+   stocke ``parent_step.platform_job_id = str(child_execution.id)`` (ligne ~654).
+   Il n'y a pas de job AAP/TC à interroger — ``platform_job_id`` est un ID d'exécution IDP.
+   → **Reattach naïf échoue** : l'adapter recevrait un entier numérique qui n'est pas un job
+   plateforme valide, causant un échec ou un comportement indéfini.
+
+Stratégie implémentée (Option A — Story 76.4) :
+  - ``_is_child_execution_id(execution, platform_job_id)`` : détecte si ``platform_job_id``
+    correspond à un ``Execution.id`` enfant de l'exécution courante.
+  - ``_reconcile_schedule_step(execution, step)`` : au lieu de ``_reattach_poll``, vérifie le
+    statut du child directement en DB :
+      * child terminal (COMPLETED/FAILED/CANCELLED) → met à jour le parent step et continue.
+      * child RUNNING et stale → marque child FAILED (cascade), puis marque parent step FAILED.
+  - Intégration dans ``_reconcile_execution`` : avant d'appeler ``_reattach_poll``, si
+    ``_is_child_execution_id`` est vrai → appelle ``_reconcile_schedule_step`` à la place.
 """
 from __future__ import annotations
 
@@ -308,6 +336,132 @@ def _resume_container_workflow(execution: Any, correlation_id: str = "") -> str:
     return "reattached"
 
 
+def _is_child_execution_id(execution: Any, platform_job_id: str) -> bool:
+    """Return True if platform_job_id is the ID of a child Execution of this execution.
+
+    Story 76.4 — Task 2.1:
+    Detects the case where a schedule_execution step stored the child execution's ID
+    as platform_job_id (ContainerWorkflowRuntime line ~654).
+
+    Conditions:
+      1. platform_job_id is a numeric string (can be cast to int).
+      2. An Execution with id=int(platform_job_id) and parent_execution_id=execution.id exists.
+
+    Edge case: a numeric platform_job_id that is NOT a child execution (e.g. Tower job IDs
+    are integers) is NOT matched because condition 2 requires parent_execution_id to match.
+    """
+    from executions.models import Execution  # noqa: PLC0415
+
+    try:
+        candidate_id = int(platform_job_id)
+    except (ValueError, TypeError):
+        return False
+
+    return Execution.objects.filter(
+        id=candidate_id,
+        parent_execution_id=execution.id,
+    ).exists()
+
+
+def _reconcile_schedule_step(execution: Any, step: Any) -> bool:
+    """Handle reconciliation for a schedule_execution step whose platform_job_id is a child execution ID.
+
+    Story 76.4 — Task 2.2:
+    Instead of calling _reattach_poll (which would send a child execution ID to a platform
+    adapter), this function checks the child execution status directly in the DB:
+
+    - child terminal (COMPLETED/FAILED/CANCELLED):
+        Update the parent step status to match the child outcome and return True.
+    - child RUNNING and stale:
+        Mark the child FAILED (cascade), then mark the parent step FAILED. Return False.
+    - child not found (deleted or inconsistent):
+        Mark the parent step FAILED with an explicit error. Return False.
+
+    Returns True if the step was successfully resolved (child terminal), False otherwise.
+    """
+    from executions.models import Execution, ExecutionStatus, ExecutionStepStatus  # noqa: PLC0415
+
+    child_id = int(step.platform_job_id)
+    execution_id = execution.id
+
+    try:
+        child = Execution.objects.select_related("action").get(
+            id=child_id, parent_execution_id=execution_id
+        )
+    except Execution.DoesNotExist:
+        logger.error(
+            "reconcile_schedule_step_child_not_found",
+            execution_id=execution_id,
+            step_id=step.id,
+            child_id=child_id,
+        )
+        _mark_step_failed(
+            step,
+            f"schedule_execution step: child execution {child_id} not found — marked FAILED by reconciliation.",
+        )
+        return False
+
+    terminal_statuses = {ExecutionStatus.COMPLETED, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED}
+
+    if child.status in terminal_statuses:
+        # Child already finished — sync parent step status
+        if child.status == ExecutionStatus.COMPLETED:
+            if step.status not in (ExecutionStepStatus.COMPLETED, ExecutionStepStatus.FAILED):
+                step.status = ExecutionStepStatus.COMPLETED
+                step.completed_at = child.completed_at or timezone.now()
+                # AC2 Task 2.2: set output so _resume_container_workflow can rebuild _step_outputs
+                referenced_action = getattr(child, "action", None)
+                step.set_output({
+                    "child_execution_id": child.id,
+                    "referenced_action_id": referenced_action.id if referenced_action else None,
+                    "referenced_action_name": getattr(referenced_action, "name", None) if referenced_action else None,
+                    "child_status": child.status,
+                    "parameters_injected": False,  # unknown in reconcile context
+                })
+                step.save(update_fields=["status", "completed_at", "output"])
+                # Touch execution.updated_at to avoid immediate re-stale (Story 76.3 heartbeat)
+                Execution.objects.filter(id=execution_id).update(updated_at=timezone.now())
+            logger.info(
+                "reconcile_schedule_step_child_completed",
+                execution_id=execution_id,
+                step_id=step.id,
+                child_id=child_id,
+                child_status=child.status,
+            )
+            return True
+        else:
+            # Child FAILED or CANCELLED → mark parent step FAILED
+            _mark_step_failed(
+                step,
+                f"schedule_execution step: child execution {child_id} is {child.status} — marked FAILED by reconciliation.",
+            )
+            logger.info(
+                "reconcile_schedule_step_child_terminal_failed",
+                execution_id=execution_id,
+                step_id=step.id,
+                child_id=child_id,
+                child_status=child.status,
+            )
+            return False
+
+    # Child is still RUNNING (and stale, since the parent is stale) → cascade FAILED
+    logger.warning(
+        "reconcile_schedule_step_child_still_running",
+        execution_id=execution_id,
+        step_id=step.id,
+        child_id=child_id,
+    )
+    _mark_execution_failed(
+        child,
+        f"Child execution {child_id} still RUNNING while parent {execution_id} is stale — marked FAILED by cascade reconciliation.",
+    )
+    _mark_step_failed(
+        step,
+        f"schedule_execution step: child execution {child_id} was stale RUNNING — cascade FAILED by reconciliation.",
+    )
+    return False
+
+
 def _reconcile_execution(execution: Any) -> str:
     """
     Reconcile a single stale RUNNING execution.
@@ -374,7 +528,15 @@ def _reconcile_execution(execution: Any) -> str:
             )
             continue
 
-        # Step has a platform_job_id — try to reattach polling
+        # Step has a platform_job_id — check if it's a child execution ID (schedule_execution step)
+        # Story 76.4: platform_job_id may be a child Execution.id rather than a real platform job ID.
+        if _is_child_execution_id(execution, step.platform_job_id):
+            if _reconcile_schedule_step(execution, step):
+                reattached_any = True
+            # If False: step was marked FAILED inside _reconcile_schedule_step
+            continue
+
+        # Step has a real platform_job_id — try to reattach polling
         try:
             integration = execution.action.integration
         except Exception:  # noqa: BLE001 — action or integration may be deleted
@@ -400,6 +562,30 @@ def _reconcile_execution(execution: Any) -> str:
                 step,
                 "Failed to reattach polling task at startup — marked FAILED by reconciliation.",
             )
+
+    # AC2 Task 2.2: if schedule step(s) were resolved (child COMPLETED), there may be no
+    # RUNNING steps left — trigger workflow continuation immediately instead of waiting
+    # for the next reconcile run.
+    if reattached_any and _is_container_workflow(execution):
+        remaining_running = ExecutionStep.objects.filter(
+            execution_id=execution_id,
+            status=ExecutionStepStatus.RUNNING,
+        ).exists()
+        if not remaining_running:
+            try:
+                result = _resume_container_workflow(
+                    execution,
+                    correlation_id=getattr(execution, "correlation_id", "") or "",
+                )
+                return result
+            except Exception as exc:  # noqa: BLE001
+                logger.error(
+                    "reconcile_schedule_step_resume_failed",
+                    execution_id=execution_id,
+                    error=str(exc),
+                    exc_info=True,
+                )
+                # Fall through — we still return "reattached" since we resolved the step
 
     if not reattached_any:
         # All steps either had no platform_job_id or failed to reattach
