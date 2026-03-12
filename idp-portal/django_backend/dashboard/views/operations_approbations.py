@@ -67,7 +67,7 @@ class DashboardStatsOperationsView(APIView):
         # 2. Top N actions les plus exécutées
         top_actions_rows = (
             qs.values("action_id", "action__name")
-            .annotate(execution_count=Count("id"))
+            .annotate(execution_count=Count("id", distinct=True))
             .order_by("-execution_count")[:top_n]
         )
         top_actions_by_execution = [
@@ -83,7 +83,7 @@ class DashboardStatsOperationsView(APIView):
         top_failures_rows = (
             qs.filter(status=ExecutionStatus.FAILED)
             .values("action_id", "action__name")
-            .annotate(failure_count=Count("id"))
+            .annotate(failure_count=Count("id", distinct=True))
             .order_by("-failure_count")[:top_n]
         )
         top_actions_by_failure = [
@@ -98,7 +98,7 @@ class DashboardStatsOperationsView(APIView):
         # 4. Répartition par plateforme
         by_platform_rows = (
             qs.values("action__platform")
-            .annotate(count=Count("id"))
+            .annotate(count=Count("id", distinct=True))
             .order_by("action__platform")
         )
         by_platform = [

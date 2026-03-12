@@ -1251,6 +1251,11 @@ class ContainerWorkflowRuntime:
 
         return current_wave if current_wave else None
 
+    def _touch_heartbeat(self) -> None:
+        """Story 76.3: Update updated_at only when execution is RUNNING (avoid unconditional writes)."""
+        if self.execution.status == ExecutionStatus.RUNNING:
+            Execution.objects.filter(id=self.execution.id).update(updated_at=timezone.now())
+
     def _execute_workflow_steps(self) -> ExecutionStatus:
         """
         Execute workflow steps via BFS-wave graph traversal (Story 67.2).
@@ -1277,7 +1282,7 @@ class ContainerWorkflowRuntime:
 
         while current_wave:
             # Story 76.3: Heartbeat — mise à jour de updated_at à chaque vague pour éviter faux positifs staleness
-            Execution.objects.filter(id=self.execution.id).update(updated_at=timezone.now())
+            self._touch_heartbeat()
 
             # Check cancellation avant chaque vague (AC4)
             if self._check_cancelled():
@@ -1458,7 +1463,7 @@ class ContainerWorkflowRuntime:
 
         for step in self.workflow_steps:
             # Story 76.3: Heartbeat — mise à jour de updated_at à chaque step (chemin séquentiel)
-            Execution.objects.filter(id=self.execution.id).update(updated_at=timezone.now())
+            self._touch_heartbeat()
 
             if self._check_cancelled():
                 logger.info(

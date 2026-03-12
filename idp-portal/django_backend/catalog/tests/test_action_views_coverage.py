@@ -1189,6 +1189,10 @@ class TestMutexRules:
 
         # Reversed pair (A→B) is rejected when B→A already exists
         assert response.status_code == 400
+        body = response.json() if hasattr(response, 'json') else response.data
+        raw = body.get('incompatible_with_id', body.get('detail', body))
+        detail = raw[0] if isinstance(raw, list) else str(raw)
+        assert 'mutex' in detail.lower() or 'existe' in detail.lower() or 'règle' in detail.lower()
         assert ActionMutex.objects.count() == 1
 
     def test_mutex_rules_post_invalid_data_returns_400(self):

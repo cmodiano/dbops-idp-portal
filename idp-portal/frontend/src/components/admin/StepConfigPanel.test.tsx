@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { StepConfigPanel } from './StepConfigPanel';
 import type { Node } from '@xyflow/react';
 
@@ -583,13 +583,18 @@ describe('StepConfigPanel — platform input/output mapping (Story 63.12)', () =
         onNodeDelete={vi.fn()}
       />,
     );
-    // Cliquer sur "Ajouter une entrée" dans l'éditeur input_mapping
-    const addButtons = screen.getAllByText('Ajouter une entrée');
-    fireEvent.click(addButtons[0]);
-    // Saisir une clé pour déclencher onChange
-    const keyInputs = screen.getAllByPlaceholderText('Paramètre');
-    fireEvent.change(keyInputs[0], { target: { value: 'my_param' } });
-    expect(onNodeUpdate).toHaveBeenCalled();
+    // Scope to the input_mapping KeyValueEditor (platform has both input and output mapping editors)
+    const inputMappingEditor = screen.getByTestId('platform-input-mapping-editor');
+    const addButton = within(inputMappingEditor).getByText('Ajouter une entrée');
+    fireEvent.click(addButton);
+    const keyInput = within(inputMappingEditor).getByPlaceholderText('Paramètre');
+    fireEvent.change(keyInput, { target: { value: 'my_param' } });
+    expect(onNodeUpdate).toHaveBeenCalledWith(
+      'step-1',
+      expect.objectContaining({
+        input_mapping: expect.objectContaining({ my_param: expect.anything() }),
+      }),
+    );
   });
 
   it('n\'affiche pas le bouton "Ajouter une entrée" quand disabled=true', () => {

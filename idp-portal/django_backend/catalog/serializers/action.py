@@ -19,8 +19,10 @@ from catalog.serializers.validators import (
 )
 
 # Step type → fields to copy from config (Audit #5 — 5c)
+# Story 63.12: platform steps support input_mapping/output_mapping
 _STEP_TYPE_FIELDS: dict[str, tuple[str, ...]] = {
     'gate': ('gate_type', 'on_timeout', 'context_from', 'approver_profile_ids', 'timeout'),
+    'platform': ('input_mapping', 'output_mapping'),
     'service_call': ('integration_type', 'operation', 'input_mapping', 'output_mapping'),
     'evaluation': ('policy_id', 'input_mapping'),
     'http_request': ('url', 'method', 'headers', 'request_timeout', 'input_mapping', 'output_mapping'),

@@ -79,8 +79,11 @@ export const StepConfigPanel: FC<StepConfigPanelProps> = ({
     [availableStepOptions, node?.id],
   );
 
+  // Normalize input_mapping: null instead of undefined for consistent handling (matches output_mapping)
+  const normalizedInputMapping = data?.input_mapping ?? null;
+
   const platformInputMappingWarnings = useInputMappingWarnings(
-    stepType === 'platform' ? (data?.input_mapping as Record<string, string> | null) : null,
+    stepType === 'platform' ? (normalizedInputMapping as Record<string, string> | null) : null,
     filteredStepOptionsForPlatform,
   );
 
@@ -287,7 +290,7 @@ export const StepConfigPanel: FC<StepConfigPanelProps> = ({
               <KeyValueEditor
                 label="Mapping d'entrée (input_mapping)"
                 helpContent={<MappingHelpPopover type="input" availableSteps={filteredStepOptionsForPlatform} />}
-                value={data.input_mapping as Record<string, string> | null}
+                value={normalizedInputMapping as Record<string, string> | null}
                 onChange={(v) => handleUpdate({ input_mapping: v })}
                 disabled={disabled}
                 keyPlaceholder="Paramètre"

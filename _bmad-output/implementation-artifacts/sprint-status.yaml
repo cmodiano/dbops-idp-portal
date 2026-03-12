@@ -916,10 +916,10 @@ development_status:
     76-2-inclusion-executions-enfants-reconciliateur: done
     76-3-amelioration-detection-staleness: done
     76-4-verification-polling-actions-individuelles-running: done # Code review 2026-03-12: 5 fixes (2 HIGH + 3 MEDIUM) — step.output, reprise immédiate, updated_at, 2 tests — 41/41 tests pass
-    76-5-retry-etapes-non-platform-service-call-http-eval: backlog
+    76-5-retry-etapes-non-platform-service-call-http-eval: review
     epic-76-retrospective: optional
     # === Epic 77: Renforcer le moteur de workflow pour une base durable et fiable ===
-    # Réf: planning-artifacts/epics-workflow-engine-durability.md
+    # Réf: planning-artifacts/epic-77-workflow-engine-durability.md
     # Rapport comparaison workflow 2026-03-12 — I/O durable, types natifs, platform réel, output_mapping artifacts, on_commit, tests
     epic-77: backlog
     77-1-persister-outputs-handlers-steps: backlog

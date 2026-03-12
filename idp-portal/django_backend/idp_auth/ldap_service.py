@@ -190,7 +190,7 @@ class LDAPService:
         try:
             user_dn = dn_template.format(username=username)
         except (KeyError, ValueError) as exc:
-            logger.error("ldap_dn_template_error", error=str(exc))
+            log.error("ldap_dn_template_error", error=str(exc))
             raise LDAPUnavailableError(f"Template DN mal configuré : {exc}") from exc
 
         try:

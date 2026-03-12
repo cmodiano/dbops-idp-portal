@@ -21,6 +21,23 @@ are never incorrectly marked stale. Executions without updated_at (pre-76.3) fal
 Note: gate steps (Story 57.7) do not emit heartbeats while waiting; a gate held longer than the
 stale threshold may be incorrectly reconciled (pre-existing limitation).
 
+Story 76.5 — Retry pour étapes non-platform (service_call, http_request, evaluation) :
+======================================================================================
+
+Steps RUNNING sans ``platform_job_id`` : ces steps s'exécutent de façon synchrone dans le runtime
+(ServiceCallHandler, HttpRequestHandler, EvaluationHandler). En cas de crash pendant l'exécution,
+un retry est possible car il n'y a pas de job asynchrone à réattacher.
+
+**Stratégie retry vs FAILED :**
+- **Retry automatique** pour : service_call, http_request, evaluation (tous éligibles).
+- **Pas de retry** (comportement FAILED conservé) pour : platform, schedule_execution.
+- **Idempotence service_call** : retry par défaut pour toutes les opérations. Le risque de doublon
+  sur ``create_change`` ServiceNow est documenté ; une exclusion future est possible si nécessaire.
+
+**Flux retry :** helper ``_retry_non_platform_step(execution, step)`` — reconstruit le contexte
+(_step_outputs depuis COMPLETED, resolved_params via StepTemplateResolver), appelle le handler,
+met à jour le step et déclenche ``_resume_container_workflow`` si succès.
+
 Story 76.4 — Deux types de platform_job_id :
 ===============================================
 
@@ -282,13 +299,19 @@ def _resume_container_workflow(execution: Any, correlation_id: str = "") -> str:
     # --- Compute next wave ---
     results: dict = {}
     for db_step in completed_steps:
-        step_id = db_step.config_step_id
-        if step_id and step_id in _step_config_by_id:
-            step_cfg = _step_config_by_id[step_id]
+        step_id_key = db_step.config_step_id
+        if not step_id_key and db_step.step_name:
+            step_id_key = step_name_to_id.get(db_step.step_name)
+        if step_id_key and step_id_key in _step_config_by_id:
+            step_cfg = _step_config_by_id[step_id_key]
             next_ids = get_next_step_ids(step_cfg, ExecutionStatus.COMPLETED, all_steps)
-            results[step_id] = (ExecutionStatus.COMPLETED, next_ids)
+            results[step_id_key] = (ExecutionStatus.COMPLETED, next_ids)
 
-    completed_step_ids = {s.config_step_id for s in completed_steps if s.config_step_id}
+    completed_step_ids = {
+        db_step.config_step_id or step_name_to_id.get(db_step.step_name)
+        for db_step in completed_steps
+    }
+    completed_step_ids = {sid for sid in completed_step_ids if sid}
 
     candidate_steps = [
         _step_config_by_id[sid] for sid in results if sid in _step_config_by_id
@@ -361,6 +384,187 @@ def _is_child_execution_id(execution: Any, platform_job_id: str) -> bool:
         id=candidate_id,
         parent_execution_id=execution.id,
     ).exists()
+
+
+# Story 76.5 — Types éligibles au retry (steps synchrones sans platform_job_id)
+_RETRYABLE_STEP_TYPES = frozenset({
+    "service_call",
+    "http_request",
+    "evaluation",
+})
+
+
+def _retry_non_platform_step(execution: Any, step: Any) -> bool:
+    """Retry a RUNNING step without platform_job_id (service_call, http_request, evaluation).
+
+    Story 76.5 — Reconstructs context from COMPLETED steps, calls the appropriate handler,
+    updates the step on success, and triggers _resume_container_workflow.
+
+    Returns True if retry succeeded (step COMPLETED, workflow resumed), False otherwise.
+    """
+    from executions.models import Execution, ExecutionStep, ExecutionStepStatus  # noqa: PLC0415
+    from executions.output_extractor import OutputExtractor  # noqa: PLC0415
+    from executions.template_resolver import StepTemplateResolver  # noqa: PLC0415
+
+    step_type = (step.step_type or "").lower() if hasattr(step, "step_type") else ""
+    if step_type not in _RETRYABLE_STEP_TYPES:
+        return False
+
+    execution_id = execution.id
+    step_id = step.config_step_id or step.step_name
+    correlation_id = getattr(execution, "correlation_id", "") or ""
+
+    logger.info(
+        "reconcile_non_platform_retry_start",
+        execution_id=execution_id,
+        step_id=step.id,
+        step_type=step_type,
+        config_step_id=step_id,
+        correlation_id=correlation_id,
+    )
+
+    all_steps = execution.action.execution_steps or []
+    _step_config_by_id = {
+        s.get("step_id"): s for s in all_steps if isinstance(s, dict) and s.get("step_id")
+    }
+    step_name_to_id = {
+        s.get("name"): s.get("step_id")
+        for s in all_steps
+        if isinstance(s, dict) and s.get("name") and s.get("step_id")
+    }
+
+    step_cfg = _step_config_by_id.get(step_id) if step_id else None
+    if not step_cfg:
+        step_cfg = next(
+            (s for s in all_steps if isinstance(s, dict) and s.get("step_id") == step_id),
+            None,
+        )
+    if not step_cfg:
+        logger.error(
+            "reconcile_non_platform_retry_no_config",
+            execution_id=execution_id,
+            step_id=step_id,
+            config_step_id=step.config_step_id,
+        )
+        _mark_step_failed(
+            step,
+            "Retry failed: step config not found in action.execution_steps.",
+        )
+        return False
+
+    # Rebuild _step_outputs from COMPLETED steps
+    completed_steps = list(
+        ExecutionStep.objects.filter(
+            execution=execution,
+            status=ExecutionStepStatus.COMPLETED,
+        ).order_by("step_order")
+    )
+    _step_outputs: dict = {}
+    extractor = OutputExtractor()
+    for db_step in completed_steps:
+        raw_output = db_step.get_output() or {}
+        cfg_id = db_step.config_step_id
+        if not cfg_id and db_step.step_name:
+            cfg_id = step_name_to_id.get(db_step.step_name)
+        if cfg_id:
+            cfg = _step_config_by_id.get(cfg_id, {})
+            output_mapping = cfg.get("output_mapping", {})
+            if isinstance(output_mapping, dict) and output_mapping:
+                extracted = extractor.extract(raw_output, output_mapping)
+            else:
+                extracted = raw_output
+            _step_outputs[cfg_id] = extracted
+
+    # Resolve input_mapping
+    input_mapping = step_cfg.get("input_mapping", {})
+    resolved_params: dict = {}
+    if input_mapping and isinstance(input_mapping, dict):
+        resolver = StepTemplateResolver(
+            _step_outputs,
+            execution_context={
+                "action_name": getattr(execution.action, "name", ""),
+                "environment": execution.environment,
+                "execution_id": execution_id,
+            },
+        )
+        resolved_params = resolver.resolve(input_mapping)
+
+    # Dispatch handler
+    handler_map = {
+        "service_call": ("executions.step_handlers.service_call_handler", "ServiceCallHandler"),
+        "http_request": ("executions.step_handlers.http_request_handler", "HttpRequestHandler"),
+        "evaluation": ("executions.step_handlers.evaluation_handler", "EvaluationHandler"),
+    }
+    module_path, class_name = handler_map.get(step_type, (None, None))
+    if not module_path or not class_name:
+        _mark_step_failed(step, f"Retry failed: unknown step_type {step_type!r}.")
+        return False
+
+    from importlib import import_module  # noqa: PLC0415
+
+    mod = import_module(module_path)
+    handler_cls = getattr(mod, class_name)
+    handler = handler_cls()
+
+    try:
+        result = handler.execute(
+            step_config=step_cfg,
+            resolved_params=resolved_params,
+            execution=execution,
+            step=step_cfg,
+            correlation_id=correlation_id,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            "reconcile_non_platform_retry_failed",
+            execution_id=execution_id,
+            step_id=step.id,
+            step_type=step_type,
+            error=str(exc),
+            correlation_id=correlation_id,
+            exc_info=True,
+        )
+        _mark_step_failed(
+            step,
+            f"Retry failed: {exc!s}",
+        )
+        return False
+
+    # Success — update step and extract output
+    raw_output = result.get("raw_output", result) if isinstance(result, dict) else {}
+    if not isinstance(raw_output, dict):
+        raw_output = {"result": raw_output}
+    # Determine status: EvaluationHandler returns status; others default to COMPLETED
+    from executions.models import ExecutionStatus as ExecStatus  # noqa: PLC0415
+
+    result_status = ExecStatus.COMPLETED
+    if isinstance(result, dict):
+        hs = result.get("status")
+        if isinstance(hs, ExecStatus) and hs == ExecStatus.FAILED:
+            result_status = ExecStatus.FAILED
+
+    if result_status == ExecStatus.FAILED:
+        _mark_step_failed(step, "Retry completed but handler returned FAILED status.")
+        return False
+
+    step.status = ExecutionStepStatus.COMPLETED
+    step.completed_at = timezone.now()
+    step.error_message = None
+    step.set_output(raw_output)
+    step.save(update_fields=["status", "completed_at", "error_message", "output"])
+
+    Execution.objects.filter(id=execution_id).update(updated_at=timezone.now())
+
+    logger.info(
+        "reconcile_non_platform_retry_success",
+        execution_id=execution_id,
+        step_id=step.id,
+        step_type=step_type,
+        correlation_id=correlation_id,
+    )
+
+    # Workflow continuation is handled by the caller's block (reattached_any + remaining_running)
+    return True
 
 
 def _reconcile_schedule_step(execution: Any, step: Any) -> bool:
@@ -515,17 +719,24 @@ def _reconcile_execution(execution: Any) -> str:
 
     for step in running_steps:
         if not step.platform_job_id:
-            # Step is RUNNING but trigger never completed — no platform job to reattach
-            logger.warning(
-                "reconcile_step_no_platform_job_id",
-                execution_id=execution_id,
-                step_id=step.id,
-                step_name=step.step_name,
-            )
-            _mark_step_failed(
-                step,
-                "Step found RUNNING at startup with no platform_job_id — marked FAILED by reconciliation.",
-            )
+            # Story 76.5: Retry for non-platform steps (service_call, http_request, evaluation)
+            step_type_str = str(getattr(step, "step_type", "") or "").lower()
+            if step_type_str in _RETRYABLE_STEP_TYPES:
+                if _retry_non_platform_step(execution, step):
+                    reattached_any = True
+                # On False: step already marked FAILED inside _retry_non_platform_step
+            else:
+                # platform, schedule_execution, or unknown — keep FAILED behavior
+                logger.warning(
+                    "reconcile_step_no_platform_job_id",
+                    execution_id=execution_id,
+                    step_id=step.id,
+                    step_name=step.step_name,
+                )
+                _mark_step_failed(
+                    step,
+                    "Step found RUNNING at startup with no platform_job_id — marked FAILED by reconciliation.",
+                )
             continue
 
         # Step has a platform_job_id — check if it's a child execution ID (schedule_execution step)
@@ -688,7 +899,15 @@ def reconcile_stale_executions() -> dict:
     for execution in stale_roots:
         try:
             outcome = _reconcile_execution(execution)
-            processed_parent_ids.add(execution.id)
+            # Only add to processed_parent_ids when root is actually terminal after reconciliation.
+            # Reattached roots remain RUNNING — their children must not be cascade-failed.
+            if outcome == "failed":
+                processed_parent_ids.add(execution.id)
+            elif outcome not in ("reattached", "failed"):
+                # skipped or other terminal-like outcome
+                execution.refresh_from_db(fields=["status"])
+                if execution.status in terminal_statuses:
+                    processed_parent_ids.add(execution.id)
             if outcome == "reattached":
                 total_reattached += 1
             elif outcome == "failed":
@@ -711,7 +930,7 @@ def reconcile_stale_executions() -> dict:
                 "status": "partial_timeout",
             }
         except Exception as exc:  # noqa: BLE001 — never crash the whole reconciliation for one execution
-            processed_parent_ids.add(execution.id)
+            # Do not add to processed_parent_ids — execution state unknown, may still be RUNNING
             logger.error(
                 "reconcile_execution_error",
                 execution_id=execution.id,

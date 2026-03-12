@@ -60,25 +60,38 @@ class DashboardFilterOptionsView(APIView):
 
     @extend_schema(tags=['dashboard'], summary='Options de filtres pour le dashboard')
     def get(self, request):
-        # Engines from published actions
+        # Scope to caller's visible executions (ownership/visibility filtered)
+        visible_qs = Execution.objects.all()
+        visible_qs = filter_queryset_by_ownership(visible_qs, request)
+        visible_action_ids = visible_qs.values_list("action_id", flat=True).distinct()
+
+        # Engines from published actions linked to visible executions
         engines = (
-            Action.objects.filter(status="published")
+            Action.objects.filter(
+                id__in=visible_action_ids,
+                status="published",
+            )
             .values_list("engine", flat=True)
             .distinct()
             .order_by("engine")
         )
         engines_list = sorted({e for e in engines if e and str(e).strip()})
 
-        # Environments used in executions
-        envs = Execution.objects.values_list("environment", flat=True).distinct()
+        # Environments from visible executions
+        envs = visible_qs.values_list("environment", flat=True).distinct()
         order_rank = {"dev": 0, "staging": 1, "prod": 2}
         envs_list = sorted(
             {e for e in envs if e and str(e).strip()},
             key=lambda e: (order_rank.get(str(e).lower(), 99), str(e)),
         )
 
-        # All tags
-        tags = Tag.objects.values_list("name", flat=True).distinct().order_by("name")
+        # Tags from actions linked to visible executions
+        tags = (
+            Tag.objects.filter(actiontag__action_id__in=visible_action_ids)
+            .values_list("name", flat=True)
+            .distinct()
+            .order_by("name")
+        )
         tags_list = [t for t in tags if t and str(t).strip()]
 
         # All possible statuses

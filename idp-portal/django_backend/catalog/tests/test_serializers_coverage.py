@@ -1321,6 +1321,42 @@ class TestGetWorkflowStepsPartialFields(TestCase):
         self.assertEqual(gate_step['name'], 'Approbation')
         self.assertIsNone(gate_step['referenced_action_id'])
 
+    def test_workflow_steps_platform_includes_input_output_mapping(self):
+        """Story 63.12: Platform steps expose input_mapping and output_mapping in API response."""
+        ref_action = Action.objects.create(
+            name='Ref Action',
+            engine='Oracle',
+            platform='AAP',
+            status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.ACTION,
+            created_by=self.user,
+        )
+        wf = Action.objects.create(
+            name='Workflow Platform Mappings',
+            status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.WORKFLOW,
+            created_by=self.user,
+            execution_steps=[
+                {
+                    'order': 1,
+                    'step_id': 'platform-1',
+                    'name': 'Execute',
+                    'step_type': 'platform',
+                    'referenced_action_id': ref_action.id,
+                    'input_mapping': {'job_id': '{{ steps.prev.job_id }}'},
+                    'output_mapping': {'result': '$.output.value'},
+                },
+            ],
+        )
+        s = ActionSerializer(wf)
+        steps = s.data['workflow_steps']
+        self.assertIsNotNone(steps)
+        self.assertEqual(len(steps), 1)
+        platform_step = steps[0]
+        self.assertEqual(platform_step['step_type'], 'platform')
+        self.assertEqual(platform_step['input_mapping'], {'job_id': '{{ steps.prev.job_id }}'})
+        self.assertEqual(platform_step['output_mapping'], {'result': '$.output.value'})
+
 
 # ─── Tests get_tags — chemin sans prefetch (lignes 469, 615) ─────────────────
 

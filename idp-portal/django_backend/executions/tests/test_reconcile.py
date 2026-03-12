@@ -38,6 +38,7 @@ from executions.tasks.reconcile import (
     _reconcile_execution,
     _reconcile_schedule_step,
     _resume_container_workflow,
+    _retry_non_platform_step,
     reconcile_stale_executions,
 )
 from tests.factories import ExecutionFactory, ExecutionStepFactory
@@ -418,6 +419,37 @@ class TestReconcileStaleExecutionsChildren:
         assert child.id not in reconcile_ids
 
         assert result["failed"] >= 1
+
+    # ------------------------------------------------------------------
+    # Regression: Parent reattached → child NOT cascade-failed
+    # ------------------------------------------------------------------
+
+    def test_child_parent_reattached_allows_child_reconcile(self):
+        """Parent returns 'reattached' (stays RUNNING) → child is reconciled, NOT cascade-failed."""
+        parent = self._cutoff_execution()
+        child = self._cutoff_execution(parent=parent)
+
+        def reconcile_side_effect(exec):
+            return "reattached" if exec.id == parent.id else "reattached"
+
+        with patch(
+            "executions.tasks.reconcile._reconcile_execution",
+            side_effect=reconcile_side_effect,
+        ) as mock_reconcile, patch(
+            "executions.tasks.reconcile._mark_execution_failed"
+        ) as mock_fail:
+            result = reconcile_stale_executions()
+
+        # _reconcile_execution called for both parent and child
+        reconcile_ids = [c.args[0].id for c in mock_reconcile.call_args_list]
+        assert parent.id in reconcile_ids
+        assert child.id in reconcile_ids
+
+        # _mark_execution_failed must NOT be called for the child (parent stayed RUNNING)
+        fail_ids = [c.args[0].id for c in mock_fail.call_args_list]
+        assert child.id not in fail_ids
+
+        assert result["reattached"] >= 2
 
     # ------------------------------------------------------------------
     # AC3b — Enfant stale + parent déjà terminal en DB → cascade FAILED
@@ -1031,3 +1063,267 @@ class TestReconcileExecutionWithScheduleStep:
         assert step.get_output().get("child_execution_id") == child.id
         # AC2: workflow continuation triggered immediately
         mock_resume.assert_called_once_with(parent, correlation_id="")
+
+
+# ---------------------------------------------------------------------------
+# Story 76.5 — Retry pour étapes non-platform (service_call, http_request, evaluation)
+# ---------------------------------------------------------------------------
+
+
+STEP_ID_SVC = "step-service-call"
+STEP_ID_HTTP = "step-http-request"
+STEP_ID_EVAL = "step-evaluation"
+
+CONTAINER_STEPS_76_5 = [
+    {
+        "step_id": STEP_ID_SVC,
+        "name": "ServiceCall",
+        "type": "service_call",
+        "step_type": "service_call",
+        "integration_type": "notification",
+        "operation": "send_email",
+    },
+    {
+        "step_id": STEP_ID_HTTP,
+        "name": "HttpRequest",
+        "type": "http_request",
+        "step_type": "http_request",
+        "config": {"url": "https://example.com", "method": "GET"},
+    },
+    {
+        "step_id": STEP_ID_EVAL,
+        "name": "Evaluation",
+        "type": "evaluation",
+        "step_type": "evaluation",
+    },
+]
+
+
+@pytest.mark.django_db
+class TestRetryNonPlatformStep:
+    """Story 76.5 — Tests unitaires pour _retry_non_platform_step."""
+
+    def test_service_call_running_no_platform_job_id_retry_success(self):
+        """AC4/3.1: Step service_call RUNNING sans platform_job_id → retry, handler mock success."""
+        execution = _make_execution(execution_steps=CONTAINER_STEPS_76_5)
+        execution.action.execution_steps = CONTAINER_STEPS_76_5
+        execution.action.save(update_fields=["execution_steps"])
+        step = ExecutionStepFactory(
+            execution=execution,
+            status="RUNNING",
+            step_type="service_call",
+            config_step_id=STEP_ID_SVC,
+            step_order=1,
+            platform_job_id=None,
+        )
+
+        with patch(
+            "executions.step_handlers.service_call_handler.ServiceCallHandler.execute",
+            return_value={"result": "ok"},
+        ) as mock_execute:
+            result = _retry_non_platform_step(execution, step)
+
+        assert result is True
+        step.refresh_from_db()
+        assert step.status == "COMPLETED"
+        assert step.get_output() == {"result": "ok"}
+        mock_execute.assert_called_once()
+
+    def test_http_request_running_no_platform_job_id_retry(self):
+        """AC4/3.2: Step http_request RUNNING sans platform_job_id → retry."""
+        execution = _make_execution(execution_steps=CONTAINER_STEPS_76_5)
+        execution.action.execution_steps = CONTAINER_STEPS_76_5
+        execution.action.save(update_fields=["execution_steps"])
+        step = ExecutionStepFactory(
+            execution=execution,
+            status="RUNNING",
+            step_type="http_request",
+            config_step_id=STEP_ID_HTTP,
+            step_order=1,
+            platform_job_id=None,
+        )
+
+        with patch(
+            "executions.step_handlers.http_request_handler.HttpRequestHandler.execute",
+            return_value={"body": "ok"},
+        ) as mock_execute:
+            result = _retry_non_platform_step(execution, step)
+
+        assert result is True
+        step.refresh_from_db()
+        assert step.status == "COMPLETED"
+        mock_execute.assert_called_once()
+
+    def test_evaluation_running_no_platform_job_id_retry(self):
+        """AC4/3.3: Step evaluation RUNNING sans platform_job_id → retry."""
+        from executions.models import ExecutionStatus
+
+        execution = _make_execution(execution_steps=CONTAINER_STEPS_76_5)
+        execution.action.execution_steps = CONTAINER_STEPS_76_5
+        execution.action.save(update_fields=["execution_steps"])
+        step = ExecutionStepFactory(
+            execution=execution,
+            status="RUNNING",
+            step_type="evaluation",
+            config_step_id=STEP_ID_EVAL,
+            step_order=1,
+            platform_job_id=None,
+        )
+
+        with patch(
+            "executions.step_handlers.evaluation_handler.EvaluationHandler.execute",
+            return_value={"status": ExecutionStatus.COMPLETED, "decision": "auto_approved"},
+        ) as mock_execute:
+            result = _retry_non_platform_step(execution, step)
+
+        assert result is True
+        step.refresh_from_db()
+        assert step.status == "COMPLETED"
+        mock_execute.assert_called_once()
+
+    def test_platform_running_no_platform_job_id_returns_false_no_retry(self):
+        """AC4/3.4: Step platform RUNNING sans platform_job_id → pas de retry, retourne False."""
+        execution = _make_execution(execution_steps=CONTAINER_STEPS)
+        step = ExecutionStepFactory(
+            execution=execution,
+            status="RUNNING",
+            step_type="platform",
+            config_step_id=STEP_ID_A,
+            step_order=1,
+            platform_job_id=None,
+        )
+
+        result = _retry_non_platform_step(execution, step)
+
+        assert result is False
+        # Step non modifié (retry non tenté pour platform)
+        step.refresh_from_db()
+        assert step.status == "RUNNING"
+
+    def test_retry_success_triggers_resume_container_workflow(self):
+        """AC4/3.5: Retry réussi → step COMPLETED, caller will invoke _resume_container_workflow."""
+        execution = _make_execution(execution_steps=CONTAINER_STEPS_76_5)
+        execution.action.execution_steps = CONTAINER_STEPS_76_5
+        execution.action.save(update_fields=["execution_steps"])
+        ExecutionStepFactory(
+            execution=execution,
+            status="COMPLETED",
+            config_step_id=STEP_ID_SVC,
+            step_order=0,
+        )
+        step = ExecutionStepFactory(
+            execution=execution,
+            status="RUNNING",
+            step_type="http_request",
+            config_step_id=STEP_ID_HTTP,
+            step_order=1,
+            platform_job_id=None,
+        )
+
+        with patch(
+            "executions.step_handlers.http_request_handler.HttpRequestHandler.execute",
+            return_value={"body": "ok"},
+        ):
+            result = _retry_non_platform_step(execution, step)
+
+        assert result is True
+        step.refresh_from_db()
+        assert step.status == "COMPLETED"
+
+    def test_retry_failed_handler_raises_step_failed(self):
+        """AC4/3.6: Retry échoué (handler lève exception) → step FAILED, retourne False."""
+        from executions.models import ExecutionStepStatus
+
+        execution = _make_execution(execution_steps=CONTAINER_STEPS_76_5)
+        execution.action.execution_steps = CONTAINER_STEPS_76_5
+        execution.action.save(update_fields=["execution_steps"])
+        step = ExecutionStepFactory(
+            execution=execution,
+            status="RUNNING",
+            step_type="service_call",
+            config_step_id=STEP_ID_SVC,
+            step_order=1,
+            platform_job_id=None,
+        )
+
+        with patch(
+            "executions.step_handlers.service_call_handler.ServiceCallHandler.execute",
+            side_effect=ValueError("Service unavailable"),
+        ):
+            result = _retry_non_platform_step(execution, step)
+
+        assert result is False
+        step.refresh_from_db()
+        assert step.status == ExecutionStepStatus.FAILED
+        assert "Service unavailable" in (step.error_message or "")
+
+
+@pytest.mark.django_db
+class TestReconcileExecutionNonPlatformRetry:
+    """Story 76.5 — Tests d'intégration dans _reconcile_execution pour retry non-platform."""
+
+    def _cutoff_execution(self, parent=None, status="RUNNING"):
+        """Crée une exécution stale."""
+        from django.utils import timezone
+        from datetime import timedelta
+        from executions.models import Execution
+        from executions.tasks.reconcile import STALE_THRESHOLD_MINUTES
+
+        exec_ = ExecutionFactory(status=status, parent_execution=parent)
+        Execution.objects.filter(pk=exec_.pk).update(
+            created_at=timezone.now() - timedelta(minutes=STALE_THRESHOLD_MINUTES + 5)
+        )
+        exec_.refresh_from_db()
+        return exec_
+
+    def test_service_call_no_platform_job_id_retry_integration(self):
+        """Step service_call RUNNING sans platform_job_id → retry via handler mock, reattached + resume."""
+        execution = self._cutoff_execution()
+        execution.action.execution_steps = CONTAINER_STEPS_76_5
+        execution.action.save(update_fields=["execution_steps"])
+        step = ExecutionStepFactory(
+            execution=execution,
+            status="RUNNING",
+            step_type="service_call",
+            config_step_id=STEP_ID_SVC,
+            step_order=1,
+            platform_job_id=None,
+        )
+
+        with patch(
+            "executions.step_handlers.service_call_handler.ServiceCallHandler.execute",
+            return_value={"result": "ok"},
+        ) as mock_execute, patch(
+            "executions.tasks.reconcile._resume_container_workflow",
+            return_value="reattached",
+        ) as mock_resume:
+            result = _reconcile_execution(execution)
+
+        mock_execute.assert_called_once()
+        assert result == "reattached"
+        step.refresh_from_db()
+        assert step.status == "COMPLETED"
+        mock_resume.assert_called_once_with(execution, correlation_id="")
+
+    def test_platform_no_platform_job_id_marked_failed_no_retry(self):
+        """Step platform RUNNING sans platform_job_id → FAILED, pas de retry."""
+        execution = self._cutoff_execution()
+        ExecutionStepFactory(
+            execution=execution,
+            status="RUNNING",
+            step_type="platform",
+            config_step_id=STEP_ID_A,
+            step_order=1,
+            platform_job_id=None,
+        )
+
+        with patch(
+            "executions.tasks.reconcile._retry_non_platform_step",
+        ) as mock_retry, patch(
+            "executions.tasks.reconcile._mark_step_failed",
+        ) as mock_mark:
+            result = _reconcile_execution(execution)
+
+        mock_retry.assert_not_called()
+        mock_mark.assert_called_once()
+        assert result == "failed"
