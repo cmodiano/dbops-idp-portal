@@ -775,6 +775,7 @@ development_status:
     63-9-declarer-outputs-par-action: done # Déclarer les outputs par action : schémas OutputSchema par action (ou champ output_schema sur Action). Review: 2 HIGH + 3 MEDIUM + 1 LOW corrigés (output_schema_id ignoré PATCH multi-champs, Space direction, ActionListItem TS, test introspection, test PATCH multi-champs, test 7.4).
     63-10-github-actions-outputs-artifacts: done # GitHub Actions : récupérer outputs/artifacts du run et les exposer dans l'output du step. Review: 3 MEDIUM corrigés (assertions outputs/artifacts/job_conclusion dans queued+in_progress, docstring get_status(), assertion job_conclusion test artifacts). 63/63 tests verts.
     63-11-doc-syntaxe-steps-variables: done # Documenter la syntaxe {{ steps.<step_id>.<field> }} et le flux output_mapping → input_mapping. Review: 2 HIGH + 3 MEDIUM + 2 LOW corrigés (noms variables exécution, contenu orphelin, step_type incomplet, JSONPath comportement, condition formats, précisions mineures).
+    63-12-input-output-mapping-platform-steps: backlog # Input/output mapping UI pour steps platform — workflowConversion + StepConfigPanel (réutiliser ServiceCallStepConfig pattern)
     epic-63-retrospective: optional
     # === Epic 64: Infrastructure as Code — Git comme source de vérité ===
     # Réf: docs/architecture/infrastructure-as-code-strategy.md, docs/architecture/infrastructure-as-code-implementation-guide.md
@@ -912,8 +913,8 @@ development_status:
     # Crash entre étapes → reprise au lieu de FAILED ; exécutions enfants ; détection staleness ; polling actions individuelles
     epic-76: in-progress
     76-1-reprise-crash-entre-etapes-container-workflow: done
-    76-2-inclusion-executions-enfants-reconciliateur: backlog
-    76-3-amelioration-detection-staleness: backlog
+    76-2-inclusion-executions-enfants-reconciliateur: done
+    76-3-amelioration-detection-staleness: done
     76-4-verification-polling-actions-individuelles-running: backlog
     76-5-retry-etapes-non-platform-service-call-http-eval: backlog
     epic-76-retrospective: optional

@@ -14,8 +14,12 @@ Triggered at two points:
   1. AppConfig.ready() on Gunicorn/worker startup (immediate recovery after crash).
   2. Celery Beat every N minutes (safety net for mid-flight task losses).
 
-Stale threshold: executions whose created_at is older than RECONCILE_STALE_THRESHOLD_MINUTES
-(default 10) are considered orphaned. This prevents false positives on slow but healthy runs.
+Stale threshold: executions whose last activity (updated_at if set, else created_at) is older than
+RECONCILE_STALE_THRESHOLD_MINUTES (default 10) are considered orphaned. Container workflows update
+updated_at at each BFS wave / sequential step (heartbeat), so long-running but healthy workflows
+are never incorrectly marked stale. Executions without updated_at (pre-76.3) fall back to created_at.
+Note: gate steps (Story 57.7) do not emit heartbeats while waiting; a gate held longer than the
+stale threshold may be incorrectly reconciled (pre-existing limitation).
 """
 from __future__ import annotations
 
@@ -27,6 +31,7 @@ import structlog
 from celery import shared_task  # type: ignore[import-untyped]
 from celery.exceptions import SoftTimeLimitExceeded  # type: ignore[import-untyped]
 from django.conf import settings
+from django.db.models import Q
 from django.utils import timezone
 
 logger = structlog.get_logger(__name__)
@@ -45,6 +50,15 @@ def _parse_stale_threshold_minutes() -> int:
 
 
 STALE_THRESHOLD_MINUTES = _parse_stale_threshold_minutes()
+
+
+def _build_stale_filter(cutoff: Any) -> Q:
+    """
+    Story 76.3: Retourne le filtre Q pour détecter les exécutions stales.
+
+    Logique : dernière activité (updated_at si disponible, sinon created_at) avant cutoff.
+    """
+    return Q(updated_at__lt=cutoff) | Q(updated_at__isnull=True, created_at__lt=cutoff)
 
 
 def _build_adapter_kwargs(integration: Any) -> dict:
@@ -407,8 +421,17 @@ def reconcile_stale_executions() -> dict:
     """
     Detect and recover stale RUNNING executions after a crash.
 
-    Scans for Execution records with status=RUNNING whose created_at is older than
-    RECONCILE_STALE_THRESHOLD_MINUTES (default 10). For each:
+    Scans for Execution records with status=RUNNING whose last activity is older than
+    RECONCILE_STALE_THRESHOLD_MINUTES (default 10). Staleness is evaluated using:
+    - updated_at if non-null (heartbeat set by container_workflow_runtime at each BFS wave /
+      sequential step, and at the SUBMITTED→RUNNING transition). This allows long-running but
+      healthy container workflows to stay alive as long as they are progressing.
+    - created_at as fallback when updated_at is NULL (pre-76.3 executions or non-container
+      workflows — rétrocompatibilité).
+
+    Query: Q(updated_at__lt=cutoff) | Q(updated_at__isnull=True, created_at__lt=cutoff)
+
+    For each stale execution:
 
     - If a RUNNING step has a platform_job_id: reattach poll_platform_job_status.
     - If a RUNNING step has no platform_job_id: mark step + execution FAILED.
@@ -438,13 +461,15 @@ def reconcile_stale_executions() -> dict:
         ExecutionStatus.CANCELLED,
     }
 
+    # Stale = dernière activité (updated_at si disponible, sinon created_at) avant le cutoff
+    stale_filter = _build_stale_filter(cutoff)
+
     # --- 1. Root executions (no parent) ---
     stale_roots = list(
         Execution.objects.filter(
             status=ExecutionStatus.RUNNING,
-            created_at__lt=cutoff,
             parent_execution__isnull=True,
-        ).select_related("action__integration")
+        ).filter(stale_filter).select_related("action__integration")
     )
 
     # --- 2. Child executions (have a parent) ---
@@ -452,9 +477,8 @@ def reconcile_stale_executions() -> dict:
     stale_children = list(
         Execution.objects.filter(
             status=ExecutionStatus.RUNNING,
-            created_at__lt=cutoff,
             parent_execution__isnull=False,
-        ).select_related("action__integration", "parent_execution")
+        ).filter(stale_filter).select_related("action__integration", "parent_execution")
     )
 
     total_reattached = 0

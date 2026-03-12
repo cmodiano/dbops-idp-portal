@@ -1090,6 +1090,7 @@ class ContainerWorkflowRuntime:
         ).update(
             status=ExecutionStatus.RUNNING,
             started_at=timezone.now(),
+            updated_at=timezone.now(),  # Story 76.3: heartbeat initial
         )
         if updated == 0:
             logger.warning(
@@ -1148,6 +1149,7 @@ class ContainerWorkflowRuntime:
         ).update(
             status=ExecutionStatus.RUNNING,
             started_at=timezone.now(),
+            updated_at=timezone.now(),  # Story 76.3: heartbeat initial
         )
         if updated == 0:
             # Allow proceeding if already RUNNING (test scenario / resume)
@@ -1274,6 +1276,9 @@ class ContainerWorkflowRuntime:
             return self._execute_workflow_steps_sequential()
 
         while current_wave:
+            # Story 76.3: Heartbeat — mise à jour de updated_at à chaque vague pour éviter faux positifs staleness
+            Execution.objects.filter(id=self.execution.id).update(updated_at=timezone.now())
+
             # Check cancellation avant chaque vague (AC4)
             if self._check_cancelled():
                 logger.info(
@@ -1452,6 +1457,9 @@ class ContainerWorkflowRuntime:
         _failed_step_name: str | None = None
 
         for step in self.workflow_steps:
+            # Story 76.3: Heartbeat — mise à jour de updated_at à chaque step (chemin séquentiel)
+            Execution.objects.filter(id=self.execution.id).update(updated_at=timezone.now())
+
             if self._check_cancelled():
                 logger.info(
                     "container_workflow_cancelled",

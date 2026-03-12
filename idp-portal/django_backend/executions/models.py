@@ -174,6 +174,8 @@ class Execution(models.Model):
     started_at = models.DateTimeField(null=True, blank=True, db_column='STARTED_AT')
     completed_at = models.DateTimeField(null=True, blank=True, db_column='COMPLETED_AT')
     created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
+    # Story 76.3: heartbeat pour détection de staleness précise (updated à chaque progression significative)
+    updated_at = models.DateTimeField(null=True, blank=True, db_column='UPDATED_AT')
 
     # Custom manager
     objects = ExecutionManager()
@@ -183,6 +185,8 @@ class Execution(models.Model):
         ordering = ['-created_at']
         indexes = [
             models.Index(fields=['action', 'created_at'], name='idx_exec_action_created'),
+            # Story 76.3: index pour la détection de staleness via updated_at
+            models.Index(fields=['updated_at'], name='idx_exec_updated_at'),
         ]
 
     def __str__(self) -> str:

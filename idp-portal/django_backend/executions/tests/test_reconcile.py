@@ -21,6 +21,7 @@ import pytest
 from unittest.mock import patch, MagicMock
 
 from executions.tasks.reconcile import (
+    _build_stale_filter,
     _is_container_workflow,
     _reconcile_execution,
     _resume_container_workflow,
@@ -593,3 +594,135 @@ class TestReconcileStaleExecutionsChildren:
         # dans la même run (prefetch stale) → _reconcile_execution est appelé sur lui.
         reconcile_ids = [c.args[0].id for c in mock_reconcile.call_args_list]
         assert grandchild.id in reconcile_ids
+
+
+# ---------------------------------------------------------------------------
+# Story 76.3 — Détection de staleness améliorée (updated_at / created_at)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestReconcileStaleDetection:
+    """Story 76.3 — Tests unitaires pour la nouvelle logique de détection de staleness.
+
+    Vérifie que le stale_filter Q(updated_at__lt=cutoff) | Q(updated_at__isnull=True, created_at__lt=cutoff)
+    se comporte correctement selon les 4 scénarios définis en AC7 :
+    - AC5a : updated_at récent → exécution NON détectée comme stale
+    - AC5b : updated_at ancien → exécution détectée comme stale
+    - AC5c : updated_at NULL + created_at ancien → détectée (rétrocompat)
+    - AC5d : updated_at NULL + created_at récent → NON détectée
+    """
+
+    def _stale_filter(self, cutoff):
+        """Retourne le Q object stale_filter de la story 76.3 (délègue à la production)."""
+        return _build_stale_filter(cutoff)
+
+    def _cutoff(self, minutes_offset=0):
+        """Retourne un cutoff = now - (STALE_THRESHOLD_MINUTES + minutes_offset)."""
+        from django.utils import timezone
+        from datetime import timedelta
+        from executions.tasks.reconcile import STALE_THRESHOLD_MINUTES
+        return timezone.now() - timedelta(minutes=STALE_THRESHOLD_MINUTES + minutes_offset)
+
+    # ------------------------------------------------------------------
+    # AC5a — updated_at récent → NON stale (workflow long sain)
+    # ------------------------------------------------------------------
+
+    def test_ac5a_recent_updated_at_not_stale(self):
+        """AC5a: Exécution RUNNING avec updated_at récent (après cutoff) → non retournée dans la query stale."""
+        from django.utils import timezone
+        from datetime import timedelta
+        from executions.models import Execution
+
+        exec_ = ExecutionFactory(status="RUNNING")
+        cutoff = self._cutoff()
+        # updated_at = maintenant (bien après le cutoff)
+        Execution.objects.filter(pk=exec_.pk).update(updated_at=timezone.now())
+        # created_at ancien (sans updated_at, serait stale) — valide le cas réel
+        Execution.objects.filter(pk=exec_.pk).update(
+            created_at=timezone.now() - timedelta(minutes=60)
+        )
+
+        stale_filter = self._stale_filter(cutoff)
+        result_ids = list(
+            Execution.objects.filter(status="RUNNING").filter(stale_filter).values_list("id", flat=True)
+        )
+        assert exec_.id not in result_ids, (
+            "Une exécution avec updated_at récent ne doit pas être considérée stale"
+        )
+
+    # ------------------------------------------------------------------
+    # AC5b — updated_at ancien → stale
+    # ------------------------------------------------------------------
+
+    def test_ac5b_old_updated_at_is_stale(self):
+        """AC5b: Exécution RUNNING avec updated_at ancien (avant cutoff) → retournée comme stale."""
+        from django.utils import timezone
+        from datetime import timedelta
+        from executions.models import Execution
+
+        exec_ = ExecutionFactory(status="RUNNING")
+        cutoff = self._cutoff()
+        # updated_at = bien avant le cutoff
+        Execution.objects.filter(pk=exec_.pk).update(
+            updated_at=timezone.now() - timedelta(minutes=60)
+        )
+
+        stale_filter = self._stale_filter(cutoff)
+        result_ids = list(
+            Execution.objects.filter(status="RUNNING").filter(stale_filter).values_list("id", flat=True)
+        )
+        assert exec_.id in result_ids, (
+            "Une exécution avec updated_at ancien doit être détectée stale"
+        )
+
+    # ------------------------------------------------------------------
+    # AC5c — updated_at NULL + created_at ancien → stale (rétrocompat)
+    # ------------------------------------------------------------------
+
+    def test_ac5c_null_updated_at_old_created_at_is_stale(self):
+        """AC5c: Exécution sans updated_at et created_at ancien → retournée (rétrocompatibilité pre-76.3)."""
+        from django.utils import timezone
+        from datetime import timedelta
+        from executions.models import Execution
+
+        exec_ = ExecutionFactory(status="RUNNING")
+        cutoff = self._cutoff()
+        # updated_at reste NULL, created_at = bien avant le cutoff
+        Execution.objects.filter(pk=exec_.pk).update(
+            updated_at=None,
+            created_at=timezone.now() - timedelta(minutes=60),
+        )
+
+        stale_filter = self._stale_filter(cutoff)
+        result_ids = list(
+            Execution.objects.filter(status="RUNNING").filter(stale_filter).values_list("id", flat=True)
+        )
+        assert exec_.id in result_ids, (
+            "Une exécution sans updated_at et created_at ancien doit être détectée stale (rétrocompat)"
+        )
+
+    # ------------------------------------------------------------------
+    # AC5d — updated_at NULL + created_at récent → NON stale
+    # ------------------------------------------------------------------
+
+    def test_ac5d_null_updated_at_recent_created_at_not_stale(self):
+        """AC5d: Exécution sans updated_at et created_at récent → non retournée (exécution jeune)."""
+        from django.utils import timezone
+        from executions.models import Execution
+
+        exec_ = ExecutionFactory(status="RUNNING")
+        cutoff = self._cutoff()
+        # updated_at NULL, created_at = maintenant (récent, après cutoff)
+        Execution.objects.filter(pk=exec_.pk).update(
+            updated_at=None,
+            created_at=timezone.now(),
+        )
+
+        stale_filter = self._stale_filter(cutoff)
+        result_ids = list(
+            Execution.objects.filter(status="RUNNING").filter(stale_filter).values_list("id", flat=True)
+        )
+        assert exec_.id not in result_ids, (
+            "Une exécution sans updated_at et created_at récent ne doit pas être considérée stale"
+        )
