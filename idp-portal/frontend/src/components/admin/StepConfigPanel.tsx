@@ -22,6 +22,9 @@ import { EvaluationStepConfig } from './step-config/EvaluationStepConfig';
 import { GateStepConfig } from './step-config/GateStepConfig';
 import { HttpRequestStepConfig } from './step-config/HttpRequestStepConfig';
 import { ScheduleStepConfig } from './step-config/ScheduleStepConfig';
+import { KeyValueEditor } from './step-config/KeyValueEditor';
+import { MappingHelpPopover } from './step-config/MappingHelpPopover';
+import { useInputMappingWarnings } from '../../hooks/useInputMappingWarnings';
 import type { WorkflowStepType } from '../../types/api';
 import { getStepLabel } from '../../utils/workflowStepLabels';
 
@@ -68,6 +71,17 @@ export const StepConfigPanel: FC<StepConfigPanelProps> = ({
   const retryTimeline = useMemo(
     () => retryEnabled ? calculateRetryTimeline(maxAttempts, intervalSeconds, backoffMultiplier) : [],
     [retryEnabled, maxAttempts, intervalSeconds, backoffMultiplier],
+  );
+
+  // Story 63.12: input_mapping warnings for platform steps
+  const filteredStepOptionsForPlatform = useMemo(
+    () => availableStepOptions?.filter((s) => s.value !== node?.id),
+    [availableStepOptions, node?.id],
+  );
+
+  const platformInputMappingWarnings = useInputMappingWarnings(
+    stepType === 'platform' ? (data?.input_mapping as Record<string, string> | null) : null,
+    filteredStepOptionsForPlatform,
   );
 
   if (!node || !data) return null;
@@ -264,6 +278,40 @@ export const StepConfigPanel: FC<StepConfigPanelProps> = ({
                   </div>
                 )}
               </Space>
+            </div>
+
+            <Divider style={{ margin: '8px 0' }} />
+
+            {/* Story 63.12: Input mapping for platform steps */}
+            <div style={{ marginBottom: 12 }}>
+              <KeyValueEditor
+                label="Mapping d'entrée (input_mapping)"
+                helpContent={<MappingHelpPopover type="input" availableSteps={filteredStepOptionsForPlatform} />}
+                value={data.input_mapping as Record<string, string> | null}
+                onChange={(v) => handleUpdate({ input_mapping: v })}
+                disabled={disabled}
+                keyPlaceholder="Paramètre"
+                valuePlaceholder="{{ steps.<step_id>.<champ> }}"
+                data-testid="platform-input-mapping-editor"
+                warnings={platformInputMappingWarnings}
+                workflowId={workflowId}
+                currentStepId={data.step_id ?? node.id}
+                availableStepIds={availableStepIds}
+              />
+            </div>
+
+            {/* Story 63.12: Output mapping for platform steps */}
+            <div style={{ marginBottom: 12 }}>
+              <KeyValueEditor
+                label="Mapping de sortie (output_mapping)"
+                helpContent={<MappingHelpPopover type="output" stepType="platform" />}
+                value={data.output_mapping ?? null}
+                onChange={(v) => handleUpdate({ output_mapping: v })}
+                disabled={disabled}
+                keyPlaceholder="Variable"
+                valuePlaceholder="$.chemin.vers.champ"
+                data-testid="platform-output-mapping-editor"
+              />
             </div>
           </>
         )}

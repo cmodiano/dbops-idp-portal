@@ -775,7 +775,7 @@ development_status:
     63-9-declarer-outputs-par-action: done # Déclarer les outputs par action : schémas OutputSchema par action (ou champ output_schema sur Action). Review: 2 HIGH + 3 MEDIUM + 1 LOW corrigés (output_schema_id ignoré PATCH multi-champs, Space direction, ActionListItem TS, test introspection, test PATCH multi-champs, test 7.4).
     63-10-github-actions-outputs-artifacts: done # GitHub Actions : récupérer outputs/artifacts du run et les exposer dans l'output du step. Review: 3 MEDIUM corrigés (assertions outputs/artifacts/job_conclusion dans queued+in_progress, docstring get_status(), assertion job_conclusion test artifacts). 63/63 tests verts.
     63-11-doc-syntaxe-steps-variables: done # Documenter la syntaxe {{ steps.<step_id>.<field> }} et le flux output_mapping → input_mapping. Review: 2 HIGH + 3 MEDIUM + 2 LOW corrigés (noms variables exécution, contenu orphelin, step_type incomplet, JSONPath comportement, condition formats, précisions mineures).
-    63-12-input-output-mapping-platform-steps: backlog # Input/output mapping UI pour steps platform — workflowConversion + StepConfigPanel (réutiliser ServiceCallStepConfig pattern)
+    63-12-input-output-mapping-platform-steps: done # Input/output mapping UI pour steps platform — workflowConversion + StepConfigPanel (réutiliser ServiceCallStepConfig pattern) — code-review 2026-03-12: 6 fixes (H1,H2,M2,M3,M4)
     epic-63-retrospective: optional
     # === Epic 64: Infrastructure as Code — Git comme source de vérité ===
     # Réf: docs/architecture/infrastructure-as-code-strategy.md, docs/architecture/infrastructure-as-code-implementation-guide.md
@@ -918,3 +918,15 @@ development_status:
     76-4-verification-polling-actions-individuelles-running: backlog
     76-5-retry-etapes-non-platform-service-call-http-eval: backlog
     epic-76-retrospective: optional
+    # === Epic 77: Renforcer le moteur de workflow pour une base durable et fiable ===
+    # Réf: planning-artifacts/epics-workflow-engine-durability.md
+    # Rapport comparaison workflow 2026-03-12 — I/O durable, types natifs, platform réel, output_mapping artifacts, on_commit, tests
+    epic-77: backlog
+    77-1-persister-outputs-handlers-steps: backlog
+    77-2-preserver-types-natifs-input-mapping: backlog
+    77-3-executer-steps-platform-chemin-reel-dispatch: backlog
+    77-4-extraction-outputs-artifacts-reels-child-executions: backlog
+    77-5-side-effects-approve-reject-on-commit: backlog
+    77-6-tests-durabilite-workflow: backlog
+    77-7-valider-supporter-gate-steps-fan-out-parallele: backlog
+    epic-77-retrospective: optional

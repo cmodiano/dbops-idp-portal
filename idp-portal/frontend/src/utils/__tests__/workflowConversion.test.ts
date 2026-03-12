@@ -568,6 +568,137 @@ describe('reactFlowToWorkflowSteps — Story 57.16 round-trip schedule_execution
   });
 });
 
+// ── Story 63.12 — input/output mapping pour platform steps ──────────────────
+
+describe('Story 63.12 — workflowStepsToReactFlow platform avec input/output mapping', () => {
+  it('préserve input_mapping dans le node data pour un step platform', () => {
+    const step: WorkflowStep = {
+      order: 1,
+      step_id: 'p-1',
+      step_type: 'platform',
+      name: 'Step platform',
+      referenced_action_id: 10,
+      input_mapping: { job_id: '{{ steps.prev.job_id }}' },
+      output_mapping: null,
+    };
+    const { nodes } = workflowStepsToReactFlow([step]);
+    const nodeData = nodes.find((n) => n.id === 'p-1')!.data;
+    expect(nodeData.input_mapping).toEqual({ job_id: '{{ steps.prev.job_id }}' });
+  });
+
+  it('préserve output_mapping dans le node data pour un step platform', () => {
+    const step: WorkflowStep = {
+      order: 1,
+      step_id: 'p-2',
+      step_type: 'platform',
+      name: 'Step platform',
+      referenced_action_id: 10,
+      input_mapping: null,
+      output_mapping: { result: '$.output.value' },
+    };
+    const { nodes } = workflowStepsToReactFlow([step]);
+    const nodeData = nodes.find((n) => n.id === 'p-2')!.data;
+    expect(nodeData.output_mapping).toEqual({ result: '$.output.value' });
+  });
+
+  it('input_mapping null → null dans node data (rétrocompatibilité)', () => {
+    const step: WorkflowStep = {
+      order: 1,
+      step_id: 'p-3',
+      step_type: 'platform',
+      name: 'Step platform',
+      referenced_action_id: 10,
+    };
+    const { nodes } = workflowStepsToReactFlow([step]);
+    const nodeData = nodes.find((n) => n.id === 'p-3')!.data;
+    expect(nodeData.input_mapping).toBeNull();
+    expect(nodeData.output_mapping).toBeNull();
+  });
+
+  it('préserve step_id dans le node data (Story 63.12, M4)', () => {
+    const step: WorkflowStep = {
+      order: 1,
+      step_id: 'p-4',
+      step_type: 'platform',
+      name: 'Step platform',
+      referenced_action_id: 10,
+    };
+    const { nodes } = workflowStepsToReactFlow([step]);
+    const nodeData = nodes.find((n) => n.id === 'p-4')!.data;
+    expect(nodeData.step_id).toBe('p-4');
+  });
+});
+
+describe('Story 63.12 — reactFlowToWorkflowSteps round-trip platform avec input/output mapping', () => {
+  it('round-trip préserve input_mapping et output_mapping pour un step platform', () => {
+    const step: WorkflowStep = {
+      order: 1,
+      step_id: 'p-1',
+      step_type: 'platform',
+      name: 'Step platform',
+      referenced_action_id: 10,
+      input_mapping: { job_id: '{{ steps.prev.job_id }}', env: 'PROD' },
+      output_mapping: { result: '$.output.value', status: '$.status' },
+    };
+    const { nodes, edges } = workflowStepsToReactFlow([step]);
+    const result = reactFlowToWorkflowSteps(nodes, edges);
+    expect(result[0].step_type).toBe('platform');
+    expect(result[0].input_mapping).toEqual({ job_id: '{{ steps.prev.job_id }}', env: 'PROD' });
+    expect(result[0].output_mapping).toEqual({ result: '$.output.value', status: '$.status' });
+    expect(result[0].referenced_action_id).toBe(10);
+  });
+
+  it('round-trip platform sans mappings → input_mapping null et output_mapping null', () => {
+    const step: WorkflowStep = {
+      order: 1,
+      step_id: 'p-2',
+      step_type: 'platform',
+      name: 'Step platform',
+      referenced_action_id: 5,
+      retry_enabled: false,
+    };
+    const { nodes, edges } = workflowStepsToReactFlow([step]);
+    const result = reactFlowToWorkflowSteps(nodes, edges);
+    expect(result[0].input_mapping).toBeNull();
+    expect(result[0].output_mapping).toBeNull();
+  });
+
+  it('round-trip platform avec input_mapping seulement', () => {
+    const step: WorkflowStep = {
+      order: 1,
+      step_id: 'p-3',
+      step_type: 'platform',
+      name: 'Step platform',
+      referenced_action_id: 7,
+      input_mapping: { param1: '{{ steps.step1.output }}' },
+      output_mapping: null,
+    };
+    const { nodes, edges } = workflowStepsToReactFlow([step]);
+    const result = reactFlowToWorkflowSteps(nodes, edges);
+    expect(result[0].input_mapping).toEqual({ param1: '{{ steps.step1.output }}' });
+    expect(result[0].output_mapping).toBeNull();
+  });
+
+  it('backward compat: step platform sans step_type inclut input/output mapping', () => {
+    const nodes: Node[] = [
+      { id: START_NODE_ID, type: 'start', position: { x: 0, y: 0 }, data: {} },
+      {
+        id: 'p-1', type: 'workflowStep', position: { x: 0, y: 120 },
+        data: {
+          action_id: 5, name: 'P1', retry_enabled: false,
+          retry_max_attempts: null, retry_interval_seconds: null, retry_backoff_multiplier: null,
+          input_mapping: { key: 'value' }, output_mapping: { out: '$.result' },
+        },
+      },
+      { id: END_NODE_ID, type: 'end', position: { x: 0, y: 300 }, data: {} },
+    ];
+    const result = reactFlowToWorkflowSteps(nodes, []);
+    expect(result[0].step_type).toBe('platform');
+    expect(result[0].input_mapping).toEqual({ key: 'value' });
+    expect(result[0].output_mapping).toEqual({ out: '$.result' });
+  });
+});
+
 // ── Story 67.4 — multi-connexions et join_policy ────────────────────────────
 
 describe('Story 67.4 — reactFlowToWorkflowSteps multi-connexions', () => {
