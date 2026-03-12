@@ -101,6 +101,26 @@ class TestLDAPServiceAuthenticate(TestCase):
         assert ad_groups == []
         assert display_name is None
 
+    @patch("idp_auth.ldap_service.Connection")
+    @patch("idp_auth.ldap_service.Server")
+    def test_authenticate_multiple_entries_returns_false(
+        self, mock_server_cls: MagicMock, mock_conn_cls: MagicMock
+    ) -> None:
+        """sAMAccountName ambigu (2+ entrées) → False (fail closed)."""
+        mock_conn = MagicMock()
+        mock_conn_cls.return_value = mock_conn
+        mock_conn.search.return_value = True
+        mock_conn.entries = [
+            _make_entry([], "User One"),
+            _make_entry([], "User Two"),
+        ]
+
+        success, ad_groups, display_name = self.service.authenticate("svc-ci", "secret")
+
+        assert success is False
+        assert ad_groups == []
+        assert display_name is None
+
     # ------------------------------------------------------------------
     # AC2 — Credentials invalides
     # ------------------------------------------------------------------
@@ -336,6 +356,27 @@ class TestLDAPServiceBindAccount(TestCase):
         assert ad_groups == []
         assert display_name is None
         assert mock_conn_cls.call_count == 1  # Seulement le bind account
+
+    @patch("idp_auth.ldap_service.Connection")
+    @patch("idp_auth.ldap_service.Server")
+    def test_bind_account_multiple_entries_returns_false(
+        self, mock_server_cls: MagicMock, mock_conn_cls: MagicMock
+    ) -> None:
+        """sAMAccountName ambigu (2+ entrées) avec bind account → False (fail closed)."""
+        mock_conn = MagicMock()
+        mock_conn_cls.return_value = mock_conn
+        mock_conn.search.return_value = True
+        mock_conn.entries = [
+            _make_entry([], "User One", entry_dn="CN=user1,OU=SA,DC=example,DC=com"),
+            _make_entry([], "User Two", entry_dn="CN=user2,OU=SA,DC=example,DC=com"),
+        ]
+
+        success, ad_groups, display_name = self.service.authenticate("svc-ci", "secret")
+
+        assert success is False
+        assert ad_groups == []
+        assert display_name is None
+        assert mock_conn_cls.call_count == 1  # Bind account only, no re-bind
 
     @patch("idp_auth.ldap_service.Connection")
     @patch("idp_auth.ldap_service.Server")

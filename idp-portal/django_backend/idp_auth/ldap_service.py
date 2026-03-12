@@ -130,6 +130,12 @@ class LDAPService:
                     entries_count=len(conn.entries) if conn.entries else 0,
                 )
                 return False, [], None
+            if len(conn.entries) > 1:
+                log.warning(
+                    "ldap_search_ambiguous_samaccountname",
+                    entries_count=len(conn.entries),
+                )
+                return False, [], None
             entry = conn.entries[0]
             user_dn = entry.entry_dn
         except LDAPException as exc:
@@ -215,6 +221,12 @@ class LDAPService:
                     "ldap_search_no_results",
                     search_ok=search_ok,
                     entries_count=len(conn.entries) if conn.entries else 0,
+                )
+                return False, [], None
+            if len(conn.entries) > 1:
+                log.warning(
+                    "ldap_search_ambiguous_samaccountname",
+                    entries_count=len(conn.entries),
                 )
                 return False, [], None
             entry = conn.entries[0]
