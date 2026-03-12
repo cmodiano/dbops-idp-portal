@@ -18,7 +18,7 @@ import type {
 } from '../../types/api';
 // DIP: services encapsulés dans useProfileFormState — SOLID-FE-4
 import { useProfileFormState } from '../../hooks/useProfileFormState';
-import { MOCK_TARGET_OPTIONS } from '../../utils/profileOptions';
+import { useTargetsPaginated } from '../../hooks/useTargetInventory';
 import { useEnvironments } from '../../hooks/useEnvironments';
 
 const { TextArea } = Input;
@@ -131,6 +131,13 @@ export function ProfileForm({
   // Story 13.7: Load environments from inventory
   const { environmentOptions, loading: environmentsLoading } = useEnvironments();
 
+  // NEW-FE-A: Replace hardcoded MOCK_TARGET_OPTIONS with real inventory data.
+  // Only fetch when the form is open and the user might need the 'list' targets mode.
+  const [targetSearch, setTargetSearch] = useState('');
+  const { targets: inventoryTargets, loading: targetsLoading } = useTargetsPaginated(
+    targetSearch || undefined,
+  );
+
   // Story 21.6, AC6: Detect environments not in inventory for warning
   const watchedEnvironments = Form.useWatch('environments', form);
   const unknownEnvironments = useMemo(() => {
@@ -186,40 +193,49 @@ export function ProfileForm({
   const [permError, setPermError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
+    // NEW-FE-C: Wrap in try/catch — form.validateFields() rejects on validation failure,
+    // onSubmit() may reject on API errors. Both were previously uncaught, silently failing.
+    // ProfileWizard and ActionWizard already use this pattern.
     setPermError(null);
-    const values = await form.validateFields();
-    const basePayload: ProfileCreate | ProfileUpdate = {
-      name: values.name.trim(),
-      description: values.description?.trim() || null,
-      ad_group: values.ad_group.trim(),
-      is_admin: values.is_admin,
-      is_auditor: values.is_auditor,
-    };
-    if (isEdit && editProfile) {
-      // Consolidated update: profile + permissions in one call → single audit entry
-      const at = values.actions_type ?? 'all';
-      const tt = getTargetsTypeFromMode(targetsMode);
-      const payload: ProfileUpdate = {
-        ...basePayload,
-        action_permissions: {
-          actions_type: at,
-          action_ids: at === 'list' ? (values.action_ids ?? []) : [],
-          tag_patterns: at === 'pattern' ? (values.tag_patterns ?? []) : [],
-          environments: values.environments ?? [],
-        },
-        target_permissions: {
-          targets_type: tt,
-          target_names: tt === 'list' ? (values.target_names ?? []) : [],
-          target_patterns: tt === 'pattern' ? (values.target_patterns ?? []) : [],
-          filter_by_attribute: getFilterByAttribute(targetsMode),
-          exclusion_patterns: values.exclusion_patterns ?? [],
-        },
+    try {
+      const values = await form.validateFields();
+      const basePayload: ProfileCreate | ProfileUpdate = {
+        name: values.name.trim(),
+        description: values.description?.trim() || null,
+        ad_group: values.ad_group.trim(),
+        is_admin: values.is_admin,
+        is_auditor: values.is_auditor,
       };
-      const res = await onSubmit(payload);
-      if (res && onSuccess) onSuccess(res);
-    } else {
-      const res = await onSubmit(basePayload);
-      if (res && onSuccess) onSuccess(res);
+      if (isEdit && editProfile) {
+        // Consolidated update: profile + permissions in one call → single audit entry
+        const at = values.actions_type ?? 'all';
+        const tt = getTargetsTypeFromMode(targetsMode);
+        const payload: ProfileUpdate = {
+          ...basePayload,
+          action_permissions: {
+            actions_type: at,
+            action_ids: at === 'list' ? (values.action_ids ?? []) : [],
+            tag_patterns: at === 'pattern' ? (values.tag_patterns ?? []) : [],
+            environments: values.environments ?? [],
+          },
+          target_permissions: {
+            targets_type: tt,
+            target_names: tt === 'list' ? (values.target_names ?? []) : [],
+            target_patterns: tt === 'pattern' ? (values.target_patterns ?? []) : [],
+            filter_by_attribute: getFilterByAttribute(targetsMode),
+            exclusion_patterns: values.exclusion_patterns ?? [],
+          },
+        };
+        const res = await onSubmit(payload);
+        if (res && onSuccess) onSuccess(res);
+      } else {
+        const res = await onSubmit(basePayload);
+        if (res && onSuccess) onSuccess(res);
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message) {
+        setPermError(err.message);
+      }
     }
   };
 
@@ -408,10 +424,11 @@ export function ProfileForm({
                 <Select
                   mode="multiple"
                   placeholder="Sélectionner des targets (ex. assurance-db01)"
-                  options={MOCK_TARGET_OPTIONS.map((t) => ({ value: t, label: t }))}
-                  filterOption={(input, opt) =>
-                    (opt?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
-                  }
+                  loading={targetsLoading}
+                  showSearch
+                  filterOption={false}
+                  onSearch={(val) => setTargetSearch(val)}
+                  options={inventoryTargets.map((t) => ({ value: t.name, label: t.name }))}
                 />
               </Form.Item>
             )}

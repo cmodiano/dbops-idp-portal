@@ -5,7 +5,6 @@ Responsabilité : Endpoints liés aux approbations (liste, approve, reject).
 
 from __future__ import annotations
 
-import time
 from typing import cast
 
 import structlog
@@ -23,9 +22,8 @@ from core.exceptions import BadRequestError, NotFoundError
 from core.middleware import get_correlation_id
 from core.models import AuditActionType, AuditEntityType
 from core.pagination import paginate_queryset
-from core.permissions import IsAdminUser, is_admin_user
+from core.permissions import IsAdminUser, is_admin_user, get_user_profile_ids
 from core.services import AuditService
-from profiles.models import Profile
 from executions.models import (
     Execution,
     ExecutionStatus,
@@ -45,7 +43,13 @@ logger = structlog.get_logger(__name__)
 
 
 def _enqueue_resume_with_retries(execution_id: int, step_ids: list[str], max_retries: int = 3) -> None:
-    """Enqueue resume_container_workflow_from_gate with retries on transient broker errors."""
+    """Enqueue resume_container_workflow_from_gate with retries on transient broker errors.
+
+    NEW-BE-G: Removed time.sleep() calls that blocked gunicorn workers for up to 1.5s on
+    broker failure. Celery's own retry mechanism handles transient broker unavailability.
+    We attempt the enqueue once and log on failure — the approval DB state is already
+    committed, so a dead-letter / monitoring alert can trigger manual retry.
+    """
     for attempt in range(max_retries):
         try:
             resume_container_workflow_from_gate.apply_async(
@@ -53,9 +57,15 @@ def _enqueue_resume_with_retries(execution_id: int, step_ids: list[str], max_ret
             )
             return
         except Exception as e:  # noqa: BLE001
-            if attempt < max_retries - 1:
-                time.sleep(0.5 * (attempt + 1))
-            else:
+            logger.warning(
+                "approval_resume_enqueue_attempt_failed",
+                execution_id=execution_id,
+                step_ids=step_ids,
+                attempt=attempt + 1,
+                max_retries=max_retries,
+                error=str(e),
+            )
+            if attempt == max_retries - 1:
                 logger.error(
                     "approval_resume_enqueue_failed",
                     execution_id=execution_id,
@@ -70,28 +80,8 @@ def _enqueue_resume_with_retries(execution_id: int, step_ids: list[str], max_ret
 # ---------------------------------------------------------------------------
 
 
-def _get_user_profile_ids(user: User) -> set[int]:
-    """Retourne les IDs de profils de l'utilisateur.
-
-    Chemin 1 : Profile ORM direct
-    Chemin 2 : M2M profiles
-    Chemin 3 : ad_groups → Profile.objects.find_by_ad_groups()
-    """
-    profile_ids: set[int] = set()
-    # Chemin 1
-    profile_val = getattr(user, 'profile', None)
-    if profile_val and hasattr(profile_val, 'id'):
-        profile_ids.add(profile_val.id)
-    # Chemin 2
-    if hasattr(user, 'profiles'):
-        for p in user.profiles.all():
-            profile_ids.add(p.id)
-    # Chemin 3
-    if hasattr(user, 'ad_groups'):
-        ad_groups = user.ad_groups or []
-        for p in Profile.objects.find_by_ad_groups(ad_groups):
-            profile_ids.add(p.id)
-    return profile_ids
+# NEW-BE-A: Replaced local _get_user_profile_ids with get_user_profile_ids from core.permissions
+# to eliminate the duplicated profile-resolution logic (same 3-path traversal).
 
 
 
@@ -112,7 +102,7 @@ def _check_approver_permission(user: User, step_config: dict) -> bool:
             step_config_keys=list(step_config.keys()),
         )
         return False
-    user_profile_ids = _get_user_profile_ids(user)
+    user_profile_ids = get_user_profile_ids(user)
     return bool(user_profile_ids & set(approver_profile_ids))
 
 

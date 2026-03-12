@@ -36,9 +36,24 @@ def ensure_utc_isoformat(dt: datetime | None) -> str | None:
 
 # --- Audit sanitization (Story 61.5) ---
 
+# NEW-BE-B: Single source of truth for sensitive key detection.
+# Used by:
+#   - sanitize_audit_changes() for audit entries
+#   - SENSITIVE_PARAM_KEYS (re-exported) for execution parameter sanitization
+# Keys with partial matching (substring): password, passwd, token, secret, credential,
+# api_key, apikey, config, private_key, client_secret.
+# Exact-match key _env_config is kept in the execution-specific set below.
 _SENSITIVE_AUDIT_FIELD_KEYWORDS = frozenset({
     'password', 'passwd', 'token', 'secret', 'credential',
     'api_key', 'apikey', 'config', 'private_key', 'client_secret',
+})
+
+# Canonical set of exact (lowercased) parameter key names to redact from execution logs.
+# Superset of _SENSITIVE_AUDIT_FIELD_KEYWORDS for execution-specific keys.
+# Import this in executions/services.py instead of maintaining a local copy.
+SENSITIVE_PARAM_KEYS: frozenset[str] = frozenset({
+    'password', 'passwd', 'secret', 'api_key', 'apikey', 'token',
+    'private_key', 'credential', 'client_secret', '_env_config',
 })
 
 # Champs dont le nom contient un mot-clé sensible mais qui ne sont pas

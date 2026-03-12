@@ -7,6 +7,21 @@
 
 import { apiFetch, apiFetchRaw } from './api_client';
 import logger from './logger';
+import type {
+  ExecutionCreateRequest,
+  ExecutionCreateResponse,
+  ExecutionResponse,
+  ExecutionStepResponse,
+  StepLogsResponse,
+  InventoryItem,
+  InventorySchema,
+  ExecutionScope,
+  RemediationSuggestion,
+  RemediationContext,
+  DashboardStats,
+  ExecutionFilters,
+  DashboardTimeSeriesPoint,
+} from '../types/api';
 
 /** Target from inventory API (for pattern/manual resolution). */
 export interface InventoryTarget {
@@ -45,22 +60,6 @@ export async function fetchInventoryTargets(search?: string): Promise<InventoryT
   const response = await fetchTargetsPaginated(search);
   return response?.items ?? [];
 }
-import type {
-  ExecutionCreateRequest,
-  ExecutionCreateResponse,
-  ExecutionResponse,
-  ExecutionStepResponse,
-  StepLogsResponse,
-  InventoryItem,
-  InventorySchema,
-  ExecutionScope,
-  RemediationSuggestion,
-  RemediationContext,
-  DashboardStats,
-  ExecutionFilters,
-  DashboardTimeSeriesPoint,
-} from '../types/api';
-
 /**
  * Submit a new execution (Story 4.1, Task 1.1; Story 9.2 remediation).
  *

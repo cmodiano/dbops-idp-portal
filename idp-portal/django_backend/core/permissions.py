@@ -14,6 +14,18 @@ import structlog
 
 logger = structlog.get_logger(__name__)
 
+def get_user_profile_ids(user: Any) -> set[int]:
+    """Retourne les IDs de profils d'un utilisateur.
+
+    Wrapper autour de _resolve_user_profiles() qui retourne un ensemble d'IDs.
+    Utilisé par les vues d'approbation pour vérifier les permissions approver.
+
+    Story 71.9 / NEW-BE-A: Extrait depuis approval_views._get_user_profile_ids pour
+    éliminer la duplication de la logique de résolution de profils.
+    """
+    return {p.id for p in _resolve_user_profiles(user) if hasattr(p, 'id')}
+
+
 def _resolve_user_profiles(user: Any) -> list['Profile']:
     """Résout la liste des profils ORM d'un utilisateur.
 

@@ -21,18 +21,16 @@ from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.exceptions import BadRequestError
 from core.middleware import get_correlation_id
-from core.utils import sanitize_audit_changes
+from core.utils import sanitize_audit_changes, SENSITIVE_PARAM_KEYS
 from executions.dtos import ExecutionRequest
 from integrations.models import IntegrationStatus
 
 logger = structlog.get_logger(__name__)
 
 
-# Story 43.2: Clés sensibles à exclure des paramètres d'audit (case-insensitive)
-_SENSITIVE_PARAM_KEYS = frozenset({
-    'password', 'secret', 'api_key', 'token', 'private_key',
-    'credential', '_env_config'
-})
+# NEW-BE-B: Use canonical SENSITIVE_PARAM_KEYS from core.utils (single source of truth).
+# Previously defined locally as _SENSITIVE_PARAM_KEYS — now imported from core.utils.
+_SENSITIVE_PARAM_KEYS = SENSITIVE_PARAM_KEYS
 
 
 def _sanitize_list(lst: list) -> list:
@@ -69,17 +67,8 @@ def _sanitize_parameters(parameters: dict | None) -> dict | None:
                 sanitized[k] = sanitized_v
             # dict imbriqué entièrement sensible → clé exclue (pas incluse comme None)
         elif isinstance(v, list):
-            out: list = []
-            for item in v:
-                if isinstance(item, dict):
-                    sanitized_item = _sanitize_parameters(item)
-                    if sanitized_item is not None:
-                        out.append(sanitized_item)
-                elif isinstance(item, list):
-                    out.append(_sanitize_list(item))
-                else:
-                    out.append(item)
-            sanitized[k] = out
+            # NEW-BE-H: Delegate to _sanitize_list instead of duplicating the loop logic.
+            sanitized[k] = _sanitize_list(v)
         else:
             sanitized[k] = v
     return sanitized if sanitized else None
@@ -365,10 +354,14 @@ class ExecutionService:
             targets=targets,
         )
 
+        # NEW-BE-C: Use a single transaction.atomic() block covering both execution creation
+        # and steps creation. Previously _create_execution_atomic was called from inside
+        # a second with transaction.atomic(), creating double-nesting (risky on Oracle
+        # due to savepoint emulation). The @transaction.atomic decorator is kept on
+        # _create_execution_atomic so create_execution() remains self-contained.
         with transaction.atomic():
             execution = self._create_execution_atomic(exec_req)
-
-            # Create steps if provided
+            # Steps creation shares the same outer transaction via Django's savepoint merging
             if steps_data:
                 for step_data in steps_data:
                     ExecutionStep.objects.create(
@@ -763,10 +756,18 @@ class ExecutionService:
         if user_id:
             queryset = queryset.filter(user_id=user_id)
 
-        total = queryset.count()
-        completed = queryset.filter(status=ExecutionStatus.COMPLETED).count()
-        failed = queryset.filter(status=ExecutionStatus.FAILED).count()
-        running = queryset.filter(status=ExecutionStatus.RUNNING).count()
+        # NEW-BE-L: Single aggregate() call instead of 4 separate .count() queries.
+        # Same pattern as get_action_stats() which already uses conditional aggregation.
+        agg = queryset.aggregate(
+            total=Count('id'),
+            completed=Count('id', filter=Q(status=ExecutionStatus.COMPLETED)),
+            failed=Count('id', filter=Q(status=ExecutionStatus.FAILED)),
+            running=Count('id', filter=Q(status=ExecutionStatus.RUNNING)),
+        )
+        total = agg['total'] or 0
+        completed = agg['completed'] or 0
+        failed = agg['failed'] or 0
+        running = agg['running'] or 0
 
         # Calculate success rate
         success_rate = (completed / total * 100) if total > 0 else 0

@@ -27,6 +27,7 @@ from core.services import AuditService
 from core.middleware import get_correlation_id
 from core.models import AuditActionType, AuditEntityType
 from core.utils import sanitize_audit_changes
+from executions.output_extractor import OutputExtractor
 
 logger = structlog.get_logger(__name__)
 
@@ -840,15 +841,32 @@ def resume_container_workflow_from_gate(
             # Reprendre le workflow depuis le step cible
             runtime = ContainerWorkflowRuntime(execution)
             # Restaurer le contexte des outputs de steps déjà exécutés (keyed par step_id)
+            # NEW-BE-E: Apply output_mapping extraction on resume so that input_mapping
+            # expressions in subsequent steps receive the extracted fields, not raw output.
+            # Previously stored db_step.get_output() (raw), causing template resolution
+            # failures for {{ steps['step-id']['field'] }} expressions.
+            _extractor = OutputExtractor()
+            _step_config_by_id = {
+                s.get('step_id'): s
+                for s in all_steps
+                if isinstance(s, dict) and s.get('step_id')
+            }
             for db_step in completed_steps:
-                step_output = db_step.get_output() or {}
+                raw_output = db_step.get_output() or {}
                 # Primary: use config_step_id (robust UUID-based matching)
                 step_id_key = db_step.config_step_id
                 # Fallback for old records: map step_name → step_id via config
                 if not step_id_key and db_step.step_name:
                     step_id_key = step_name_to_id.get(db_step.step_name)
                 if step_id_key:
-                    runtime._step_outputs[step_id_key] = step_output
+                    # Apply output_mapping extraction to match what _extract_and_store_output stores
+                    step_cfg = _step_config_by_id.get(step_id_key, {})
+                    output_mapping = step_cfg.get('output_mapping', {})
+                    if isinstance(output_mapping, dict) and output_mapping:
+                        extracted = _extractor.extract(raw_output, output_mapping)
+                    else:
+                        extracted = raw_output
+                    runtime._step_outputs[step_id_key] = extracted
             runtime.workflow_steps = remaining_steps
             # Story 67.4: Vague initiale explicite pour reprendre exactement aux step_ids cibles.
             # IMPORTANT: toujours défini (pas seulement fan-out 2+ step_ids) sinon

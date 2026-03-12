@@ -647,8 +647,10 @@ class CatalogService:
         Reactivate a disabled action (Story 18.1, AC5).
         Resets status to 'published', clears soft-delete fields.
         """
+        # NEW-BE-D: select_for_update() added for consistency with update_action,
+        # delete_action, deactivate_action (RACE-2 pattern, Story 30.7).
         try:
-            action = Action.objects.get(id=action_id)
+            action = Action.objects.select_for_update().get(id=action_id)
         except Action.DoesNotExist:
             return None
 

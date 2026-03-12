@@ -230,7 +230,11 @@ export const useExecutionsData = (
     try {
       const response = await listPendingApprovals(50, 0);
       setPendingApprovals(response.data);
-    } catch {
+    } catch (err: unknown) {
+      // NEW-FE-H: Log error so DBA users know the empty list is an error, not genuinely empty.
+      logger.error('loadPendingApprovals_failed', {
+        error: err instanceof Error ? err.message : String(err),
+      });
       setPendingApprovals([]);
     } finally {
       isLoadingApprovalsRef.current = false;

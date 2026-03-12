@@ -396,13 +396,28 @@ def _compute_avg_duration_s(qs) -> float | None:
     DASH-MED-02: Extracted shared helper to avoid duplication between
     _stats_for_queryset() and DashboardStatsOperationsView.get().
     Pattern Python (compatibilité Oracle) — itération côté Python sur (started_at, completed_at).
+
+    NEW-BE-J: Added row count guard to avoid unbounded memory materialisation for large
+    datasets. When the count exceeds the threshold, a warning is logged and None is returned
+    rather than loading tens of thousands of rows into Python memory.
     """
-    durations = []
-    for started_at, completed_at in qs.filter(
+    _MAX_DURATION_ROWS = 10_000
+    completed_qs = qs.filter(
         status=ExecutionStatus.COMPLETED,
         started_at__isnull=False,
         completed_at__isnull=False,
-    ).values_list("started_at", "completed_at"):
+    )
+    row_count = completed_qs.count()
+    if row_count > _MAX_DURATION_ROWS:
+        logger.warning(
+            "dashboard_avg_duration_skipped_too_many_rows",
+            row_count=row_count,
+            threshold=_MAX_DURATION_ROWS,
+            correlation_id=get_correlation_id(),
+        )
+        return None
+    durations = []
+    for started_at, completed_at in completed_qs.values_list("started_at", "completed_at"):
         try:
             delta = (completed_at - started_at).total_seconds()
             if delta >= 0:
@@ -674,6 +689,10 @@ class DashboardStatsAdoptionView(APIView):
         )
         exec_qs = _filter_queryset_by_ownership(exec_qs, request, AdminProfilePermission)
 
+        # NEW-BE-F: user__profile is the legacy CharField on User (populated by SAML).
+        # Users authenticated via ad_groups or M2M profiles will show as "unknown".
+        # A proper fix requires storing a user_profile snapshot on Execution at creation time.
+        # Tracked as technical debt — acceptable for v1 (ad_groups auth is internal only).
         # executions_by_profile
         by_profile_rows = (
             exec_qs.values("user__profile")

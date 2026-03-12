@@ -106,7 +106,10 @@ export interface WorkflowStepNodeData {
   // === schedule_execution ===
   /** Story 57.16: Configuration du step de planification. */
   schedule_config?: ScheduleStepConfig | null;
-  // === parallel_group — TODO Story 67.7: supprimer ces champs après migration ===
+  // === parallel_group — backward compat fields for executions recorded before Story 67.5 ===
+  // NEW-FE-G: Kept intentionally — old DB records may contain these fields.
+  // `parallel_group` step_type was replaced by fan-out via on_success_step_ids[] in Story 67.5.
+  // These fields must remain to avoid TypeScript errors when displaying historical executions.
   /** Story 65.4: Liste des step_id à exécuter en parallèle (≥2 requis). */
   parallel_steps?: string[] | null;
   /** Story 65.4: Step suivant si tous les sous-steps réussissent. */

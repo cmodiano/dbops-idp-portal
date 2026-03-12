@@ -188,19 +188,21 @@ class InventoryService:
 
         TODO: Implement API-based inventory fetching when the integration is available.
         """
+        # NEW-BE-K: Previously returned ([], 0) silently, causing admins with an INVENTORY
+        # integration to see zero targets with no feedback. Now raises InventoryServiceError
+        # so the caller surfaces a clear user-facing error instead of silent empty results.
         correlation_id = get_correlation_id()
         logger.warning(
             "api_inventory_not_yet_implemented",
             integration_id=integration.id,
             base_url=integration.base_url,
-            message=(
-                "IntegrationType.INVENTORY integration is configured but the API inventory "
-                "source is not yet implemented. Returning empty results. "
-                "Configure an INVENTORY_DB integration instead, or remove the INVENTORY integration."
-            ),
-            correlation_id=correlation_id
+            correlation_id=correlation_id,
         )
-        return [], 0
+        raise InventoryServiceError(
+            "L'inventaire de type API n'est pas encore implémenté. "
+            "Configurez une intégration INVENTORY_DB à la place, "
+            "ou supprimez l'intégration INVENTORY."
+        )
 
     def _list_targets_from_db_schema(self, integration: Any, environment: str | None = None,
                                       search: str | None = None, target_type: str | None = None,

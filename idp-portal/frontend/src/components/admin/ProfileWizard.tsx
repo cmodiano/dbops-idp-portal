@@ -20,7 +20,7 @@ import type {
 } from '../../types/api';
 // DIP: services encapsulés dans useProfileFormState — SOLID-FE-4
 import { useProfileFormState } from '../../hooks/useProfileFormState';
-import { MOCK_TARGET_OPTIONS } from '../../utils/profileOptions';
+import { useTargetsPaginated } from '../../hooks/useTargetInventory';
 import { useEnvironments } from '../../hooks/useEnvironments';
 
 const { TextArea } = Input;
@@ -81,6 +81,12 @@ export function ProfileWizard({
 
   // Story 13.7: Load environments from inventory
   const { environmentOptions, loading: environmentsLoading } = useEnvironments();
+
+  // NEW-FE-A: Real inventory targets replacing hardcoded MOCK_TARGET_OPTIONS.
+  const [targetSearch, setTargetSearch] = useState('');
+  const { targets: inventoryTargets, loading: targetsLoading } = useTargetsPaginated(
+    targetSearch || undefined,
+  );
 
   const isEditMode = !!editProfile;
 
@@ -360,10 +366,11 @@ export function ProfileWizard({
                 <Select
                   mode="multiple"
                   placeholder="Sélectionner des targets (ex. assurance-db01)"
-                  options={MOCK_TARGET_OPTIONS.map((t) => ({ value: t, label: t }))}
-                  filterOption={(input, opt) =>
-                    (opt?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
-                  }
+                  loading={targetsLoading}
+                  showSearch
+                  filterOption={false}
+                  onSearch={(val) => setTargetSearch(val)}
+                  options={inventoryTargets.map((t) => ({ value: t.name, label: t.name }))}
                   aria-label="Targets autorisés"
                 />
               </Form.Item>

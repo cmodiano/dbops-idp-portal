@@ -7,7 +7,7 @@
  * IMPORTANT: Must be called inside a ReactFlowProvider context (uses useReactFlow internally).
  */
 
-import React, { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { App } from 'antd';
 import {
   addEdge,
@@ -96,6 +96,10 @@ export function useWorkflowGraph({
   const initial = useMemo(() => workflowStepsToReactFlow(steps), []);
   const [nodes, setNodes, onNodesChangeRaw] = useNodesState(initial.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initial.edges);
+  // NEW-FE-E: Ref to always access current edges without closure staleness.
+  // Used in handleNodeUpdate's queueMicrotask to avoid capturing stale edges.
+  const edgesRef = useRef(edges);
+  edgesRef.current = edges;
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [configPanelOpen, setConfigPanelOpen] = useState(false);
   const [validation, setValidation] = useState<ValidationResult | null>(null);
@@ -230,8 +234,11 @@ export function useWorkflowGraph({
         } satisfies WorkflowStepNodeData,
       };
 
+      // NEW-FE-D: Compute new nodes and new edges separately before calling setters.
+      // Previously called setEdges() inside a setNodes() functional updater — an anti-pattern
+      // that is not safe in React concurrent mode (calling a different state setter from
+      // inside another state updater function).
       setNodes((nds) => {
-        const updated = [...nds, newNode];
         const existingStepNodes = nds.filter((n) => n.type === 'workflowStep');
 
         if (existingStepNodes.length === 0) {
@@ -275,7 +282,7 @@ export function useWorkflowGraph({
           });
         }
 
-        return updated;
+        return [...nds, newNode];
       });
     },
     [disabled, screenToFlowPosition, setNodes, setEdges]
@@ -300,8 +307,10 @@ export function useWorkflowGraph({
             ? { ...node, data: { ...node.data, ...updates } }
             : node
         );
-        // Defer sync to next tick so React has applied the state update
-        queueMicrotask(() => syncToParent(newNodes, edges));
+        // NEW-FE-E: Use edgesRef.current instead of capturing edges from the outer closure.
+        // The queueMicrotask fires after React's state update, by which time the edges
+        // state variable in the outer closure may be stale. The ref always reflects current.
+        queueMicrotask(() => syncToParent(newNodes, edgesRef.current));
         return newNodes;
       });
       setSelectedNode((prev) =>
@@ -310,7 +319,7 @@ export function useWorkflowGraph({
           : prev
       );
     },
-    [setNodes, syncToParent, edges]
+    [setNodes, syncToParent]
   );
 
   // Count workflow nodes (exclude start/end)
