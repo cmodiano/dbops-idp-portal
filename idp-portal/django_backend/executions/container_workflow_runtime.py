@@ -57,8 +57,8 @@ def _broadcast_step(execution_id: int, step: ExecutionStep) -> None:
     try:
         from executions.utils.websocket_broadcast import broadcast_step_update  # noqa: PLC0415
         broadcast_step_update(execution_id, step)
-    except Exception:  # noqa: BLE001 — best-effort: must not interrupt workflow execution
-        pass
+    except Exception as e:  # noqa: BLE001 — best-effort: must not interrupt workflow execution
+        logger.debug("broadcast_step_update_failed", execution_id=execution_id, step_id=step.id, error=str(e))
 
 
 def _broadcast_terminal(execution: Execution) -> None:
@@ -89,8 +89,8 @@ def _broadcast_terminal(execution: Execution) -> None:
                 },
             },
         )
-    except Exception:  # noqa: BLE001 — best-effort: must not interrupt workflow execution
-        pass
+    except Exception as e:  # noqa: BLE001 — best-effort: must not interrupt workflow execution
+        logger.debug("broadcast_terminal_failed", execution_id=execution.id, error=str(e))
 
 
 class ParallelContext(NamedTuple):
@@ -171,7 +171,7 @@ class ContainerWorkflowRuntime:
         self.action = execution.action
         # Story 72.1: In Celery (e.g. resume_container_workflow_from_gate), get_correlation_id()
         # returns None — use execution.correlation_id for audit consistency.
-        self.correlation_id = get_correlation_id() or (execution.correlation_id or "")
+        self.correlation_id = get_correlation_id() or execution.correlation_id or None
         self.execution_service = execution_service or ExecutionService()
 
         # Load workflow steps from action's execution_steps
@@ -602,6 +602,7 @@ class ContainerWorkflowRuntime:
             return ExecutionStatus.FAILED, []
 
         max_workers = getattr(settings, 'PARALLEL_GROUP_MAX_WORKERS', 5)
+        step_timeout = getattr(settings, 'PARALLEL_GROUP_STEP_TIMEOUT_S', 300)
 
         logger.info(
             "container_workflow_fan_out_starting",
@@ -621,29 +622,46 @@ class ContainerWorkflowRuntime:
             status = self._execute_step(sub_step, ParallelContext(step_order=allocated_order))
             return sub_step_id, status
 
+        from concurrent.futures import TimeoutError as FutureTimeoutError  # noqa: PLC0415
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_step = {
                 executor.submit(execute_sub_step, sub_step): sub_step
                 for sub_step in sub_steps
             }
-            for future in as_completed(future_to_step):
-                try:
-                    sub_step_id, status = future.result()
-                    sub_step = self._step_lookup_by_id[sub_step_id]
-                    next_ids = self._get_next_step_ids(sub_step, status)
-                    results[sub_step_id] = (status, next_ids)
-                except Exception as exc:  # noqa: BLE001
-                    failed_step = future_to_step[future]
-                    failed_id = failed_step.get('step_id', '?')
-                    logger.error(
-                        "container_workflow_fan_out_sub_step_exception",
-                        execution_id=self.execution.id,
-                        sub_step_id=failed_id,
-                        error=str(exc),
-                        correlation_id=self.correlation_id,
-                        exc_info=True,
-                    )
-                    results[failed_id] = (ExecutionStatus.FAILED, [])
+            try:
+                for future in as_completed(future_to_step, timeout=step_timeout):
+                    try:
+                        sub_step_id, status = future.result()
+                        sub_step = self._step_lookup_by_id[sub_step_id]
+                        next_ids = self._get_next_step_ids(sub_step, status)
+                        results[sub_step_id] = (status, next_ids)
+                    except Exception as exc:  # noqa: BLE001
+                        failed_step = future_to_step[future]
+                        failed_id = failed_step.get('step_id', '?')
+                        logger.error(
+                            "container_workflow_fan_out_sub_step_exception",
+                            execution_id=self.execution.id,
+                            sub_step_id=failed_id,
+                            error=str(exc),
+                            correlation_id=self.correlation_id,
+                            exc_info=True,
+                        )
+                        results[failed_id] = (ExecutionStatus.FAILED, [])
+            except FutureTimeoutError:
+                # One or more sub-steps exceeded step_timeout — mark remaining as FAILED.
+                # The executor context manager will call shutdown(cancel_futures=True) on exit.
+                pending_ids = [
+                    s.get('step_id', '?') for f, s in future_to_step.items() if not f.done()
+                ]
+                logger.error(
+                    "container_workflow_fan_out_timeout",
+                    execution_id=self.execution.id,
+                    timeout_s=step_timeout,
+                    pending_step_ids=pending_ids,
+                    correlation_id=self.correlation_id,
+                )
+                for pending_id in pending_ids:
+                    results[pending_id] = (ExecutionStatus.FAILED, [])
 
         # Phase 1 limitation: gate steps returning RUNNING inside a fan-out are treated
         # as FAILED (they cannot pause the fan-out — ThreadPoolExecutor has already joined).

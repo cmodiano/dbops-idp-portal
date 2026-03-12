@@ -823,3 +823,8 @@ INVENTORY_FALLBACK_SCHEMA = os.getenv('INVENTORY_FALLBACK_SCHEMA', 'DBOPS_INVENT
 # Story 65.2 — fan-out ThreadPoolExecutor max workers
 # Utilisé par ContainerWorkflowRuntime._execute_fan_out() (Story 67.2).
 PARALLEL_GROUP_MAX_WORKERS = int(os.environ.get('PARALLEL_GROUP_MAX_WORKERS', '5'))
+
+# Timeout par step dans as_completed() du fan-out (secondes).
+# Évite un hang silencieux si un thread fils accroche alors que SoftTimeLimitExceeded est reçu
+# dans le thread principal — doit être inférieur au soft_time_limit Celery de la tâche (600s).
+PARALLEL_GROUP_STEP_TIMEOUT_S = int(os.environ.get('PARALLEL_GROUP_STEP_TIMEOUT_S', '300'))

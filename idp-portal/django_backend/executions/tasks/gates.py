@@ -98,7 +98,7 @@ def evaluate_waiting_gates(self: Any) -> dict:
     for step in waiting_steps:
         # Story 72.1 (AC3): Utiliser execution.correlation_id pour chaque step.
         # get_correlation_id() retourne None dans les workers Celery (pas de contexte HTTP).
-        step_correlation_id = (step.execution.correlation_id or task_correlation_id or "")
+        step_correlation_id = step.execution.correlation_id or task_correlation_id or None
         try:
             all_satisfied, gate_status = evaluator.evaluate(step)
 
@@ -189,7 +189,7 @@ def evaluate_waiting_gates(self: Any) -> dict:
     }
 
 
-def _perform_step_transition(step: ExecutionStep, correlation_id: str) -> bool:
+def _perform_step_transition(step: ExecutionStep, correlation_id: str | None) -> bool:
     """
     CAS update: transition step from WAITING to RUNNING.
 
@@ -220,7 +220,7 @@ def _perform_step_transition(step: ExecutionStep, correlation_id: str) -> bool:
     return True
 
 
-def _emit_gate_satisfied_audit(step: ExecutionStep, correlation_id: str) -> None:
+def _emit_gate_satisfied_audit(step: ExecutionStep, correlation_id: str | None) -> None:
     """
     Emit audit trail entry for a gate step that has been satisfied.
 
@@ -244,7 +244,7 @@ def _emit_gate_satisfied_audit(step: ExecutionStep, correlation_id: str) -> None
     )
 
 
-def _transition_step_to_running(step: ExecutionStep, gate_status: dict, correlation_id: str) -> None:
+def _transition_step_to_running(step: ExecutionStep, gate_status: dict, correlation_id: str | None) -> None:
     """
     Transition an ExecutionStep from WAITING to RUNNING and trigger execution.
 
@@ -273,7 +273,7 @@ def _transition_step_to_running(step: ExecutionStep, gate_status: dict, correlat
     _resume_workflow_after_gate(step, action, step_def, correlation_id, old_style_step_def=step_def)
 
 
-def _update_waiting_context(step: ExecutionStep, gate_status: dict, correlation_id: str) -> None:
+def _update_waiting_context(step: ExecutionStep, gate_status: dict, correlation_id: str | None) -> None:
     """
     Update the waiting context for a step whose conditions are NOT yet satisfied.
 
@@ -394,7 +394,7 @@ def _get_next_step_by_order(execution_steps: list, current_step_config: dict) ->
     return None
 
 
-def _cleanup_step_resources(step: ExecutionStep, old_status: ExecutionStepStatus, correlation_id: str) -> None:
+def _cleanup_step_resources(step: ExecutionStep, old_status: ExecutionStepStatus, correlation_id: str | None) -> None:
     """
     Best-effort cleanup: remove step from runnable queue and emit durable status-changed event.
 
@@ -435,7 +435,7 @@ def _cleanup_step_resources(step: ExecutionStep, old_status: ExecutionStepStatus
     transaction.on_commit(_do_cleanup)
 
 
-def _complete_execution_on_last_step(step: ExecutionStep, correlation_id: str) -> None:
+def _complete_execution_on_last_step(step: ExecutionStep, correlation_id: str | None) -> None:
     """
     Complete the parent execution when the gate is the last step (CAS update).
 
@@ -486,7 +486,7 @@ def _resume_workflow_after_gate(
     step: ExecutionStep,
     action: Any,
     step_def: dict | None,
-    correlation_id: str,
+    correlation_id: str | None,
     old_style_step_def: dict | None = None,
 ) -> None:
     """
@@ -563,7 +563,7 @@ def _perform_timeout_step_update(
     next_step_status: ExecutionStepStatus,
     error_msg: str,
     timeout_action: str,
-    correlation_id: str,
+    correlation_id: str | None,
 ) -> bool:
     """
     CAS update: transition step from WAITING to SKIPPED/FAILED on timeout.
@@ -601,7 +601,7 @@ def _perform_timeout_step_update(
     return True
 
 
-def _mark_execution_failed(execution: Execution, step: ExecutionStep, correlation_id: str) -> None:
+def _mark_execution_failed(execution: Execution, step: ExecutionStep, correlation_id: str | None) -> None:
     """
     Mark a parent execution as FAILED (resilience boundary — best-effort).
 
@@ -636,7 +636,7 @@ def _mark_execution_failed(execution: Execution, step: ExecutionStep, correlatio
 def _handle_timeout_continuation(
     step: ExecutionStep,
     timeout_action: str,
-    correlation_id: str,
+    correlation_id: str | None,
 ) -> None:
     """
     Continue workflow after gate timeout: SKIPPED → resume next step, FAILED → mark execution failed.
@@ -656,7 +656,7 @@ def _handle_timeout_continuation(
         _mark_execution_failed(step.execution, step, correlation_id)
 
 
-def _handle_gate_timeout(step: ExecutionStep, gate_status: dict, correlation_id: str) -> None:
+def _handle_gate_timeout(step: ExecutionStep, gate_status: dict, correlation_id: str | None) -> None:
     """
     Handle a gate timeout condition — transition step to FAILED or SKIPPED.
 

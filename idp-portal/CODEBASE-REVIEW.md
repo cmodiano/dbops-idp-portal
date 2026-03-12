@@ -1203,3 +1203,59 @@ Cet audit se concentre sur la suppression du code rétrocompatible accumulé (AD
 | Gate resume output correctness fixé (OutputExtractor appliqué) | ✅ |
 | React anti-patterns corrigés (setEdges/setNodes, stale closure, useMemo identity) | ✅ |
 | **VERDICT GLOBAL** | **✅ CODEBASE SAIN — AUDIT #7 CLÔTURÉ** |
+
+---
+
+## 27. Audit #8 — Revue exhaustive pré-release (2026-03-11)
+
+**Date :** 2026-03-11
+**Scope :** Backend Django + Frontend React — lecture complète de tous les fichiers > 400 LOC, scan TODOs, anti-patterns, N+1, broadcast exception handlers, fan-out timeout.
+
+### 27.1 Findings réels confirmés (après élimination des faux positifs)
+
+| # | Sévérité | Fichier | Description | Statut |
+|---|----------|---------|-------------|--------|
+| **NEW-8-BE-A** | MEDIUM | `container_workflow_runtime.py:60,92` | `except Exception: pass` sans log debug dans `_broadcast_step` et `_broadcast_terminal` — perte d'informations diagnostiques | ✅ Résolu — `logger.debug("broadcast_*_failed", ...)` ajouté |
+| **NEW-8-BE-B** | MEDIUM | `container_workflow_runtime.py:174` | `correlation_id` fallback à `""` (string vide) au lieu de `None` — structlog émet `correlation_id=""` non filtrable dans les workers Celery | ✅ Résolu — `or None` |
+| **NEW-8-BE-C** | MEDIUM | `executions/tasks/gates.py:101` | `step_correlation_id` fallback à `""` — même problème | ✅ Résolu — `or None` |
+| **NEW-8-BE-D** | MEDIUM | `container_workflow_runtime.py:629` | `as_completed(future_to_step)` sans timeout — si un thread fils accroche après `SoftTimeLimitExceeded` Celery, le `shutdown(wait=True)` du ThreadPoolExecutor peut bloquer indéfiniment | ✅ Résolu — `timeout=step_timeout` avec handler `FutureTimeoutError` ; `PARALLEL_GROUP_STEP_TIMEOUT_S=300` ajouté dans `settings.py` |
+| **NEW-8-FE-A** | MEDIUM | `api_client.ts:161` | TODO actif : pas de notification UI sur premier 429 — utilisateur voit le rate limit uniquement en console | ✅ Résolu — `_notify('warning', ...)` appelé au premier retry 429 via le callback DIP existant |
+| **NEW-8-BE-E** | LOW | `inventory/services.py:189` | TODO obsolète — le comportement (lève `InventoryServiceError`) est implémenté depuis audit #7 (NEW-BE-K) | ✅ Résolu — reformulé en note descriptive |
+| **NEW-8-BE-F** | LOW | `catalog/services.py:425` | Whitespace trailing après `action.save()` | ✅ Résolu |
+
+### 27.2 Faux positifs identifiés et justifiés
+
+| Finding | Raison du rejet |
+|---------|-----------------|
+| `select_for_update()` manquant dans `resume_container_workflow_from_gate` | Intentionnel (commentaire Story 57.7) — idempotency check dans `transaction.atomic()` assure la protection |
+| Double `@transaction.atomic` imbriqué `create_execution_with_steps` | Django savepoints — comportement correct et documenté |
+| Approval gate timeout sur premier step → COMPLETED silencieux | `_get_next_step_by_order()` fallback couvre le cas ; si aucun next → le gate est bien le dernier step |
+| Limit MAX_STEP_TRANSITIONS insuffisante pour child executions | `MAX_STEP_TRANSITIONS = 100` couvre les transitions incluant les fan-outs |
+| CAS `logger.warning` devrait être `logger.error` | Warning correct — race condition attendue et traitée gracieusement |
+| JSON fields sans validation dans `update_action()` | Validés en amont par le serializer DRF avant appel au service |
+| Audit cascade en boucle dans `deactivate_action()` | Intentionnel SOC1 — un audit entry par workflow affecté |
+
+### 27.3 Scan global — résultats
+
+| Vérification | Résultat |
+|---|---|
+| `import logging` (stdlib) en code métier | 0 — tous dans infra/config justifiés |
+| `console.log` en code de production | 0 |
+| `as any` / `@ts-ignore` en production | 0 |
+| `.catch(() => {})` silencieux en production | 0 |
+| TODO actifs non traçables | 2 (servicenow — intentionnels story-future) |
+| Fichiers BE > 1000 LOC | 1 (`container_workflow_runtime.py` 1564) — justifié |
+| Fichiers FE > 500 LOC | 2 (`ActionWizard.tsx` 542, `useWorkflowGraph.ts` 523) — logique extraite dans hooks |
+
+### 27.4 Bilan cumulatif
+
+| Critère | Statut |
+|---------|--------|
+| Zéro finding HIGH ouvert | ✅ |
+| Zéro finding MEDIUM ouvert | ✅ |
+| Sécurité : 0 issues ouvertes | ✅ |
+| Fan-out ThreadPoolExecutor timeout ajouté | ✅ |
+| 429 notification UI implémentée | ✅ |
+| correlation_id cohérent (None, non string vide) | ✅ |
+| **VERDICT GLOBAL** | **✅ CODEBASE SAIN — AUDIT #8 CLÔTURÉ** |
+

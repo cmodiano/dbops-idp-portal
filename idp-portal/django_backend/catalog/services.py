@@ -422,11 +422,11 @@ class CatalogService:
             action.remediation_rules = action_update_data['remediation_rules']
 
         action.save()
-        
+
         # Update tags if provided
         if 'tags' in action_update_data:
             self._sync_tags(action, action_update_data['tags'])
-        
+
         # Story 61.2: Construire changes pour l'audit
         changes = {}
         for field, old_val in old_values.items():

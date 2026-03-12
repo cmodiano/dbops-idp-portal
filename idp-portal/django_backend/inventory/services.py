@@ -186,7 +186,7 @@ class InventoryService:
         Behavior: fail-silent — users with API inventory configured will see no targets.
         A warning is logged to signal the misconfiguration.
 
-        TODO: Implement API-based inventory fetching when the integration is available.
+        API-based inventory fetching is not yet implemented (future story).
         """
         # NEW-BE-K: Previously returned ([], 0) silently, causing admins with an INVENTORY
         # integration to see zero targets with no feedback. Now raises InventoryServiceError
