@@ -1,7 +1,7 @@
 """Dashboard stats operations and approbations views."""
 from __future__ import annotations
 
-from django.db.models import Q, Count
+from django.db.models import Count, Min, Q
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -195,18 +195,16 @@ class DashboardStatsApprobationsView(APIView):
 
         # Chemin nouveau (ADR-007): ExecutionStep.approved_at - Execution.created_at
         # Exclure les exécutions déjà traitées via legacy (approved_at non-null sur Execution)
-        # Dédupliquer par execution_id : une exécution peut avoir plusieurs gate steps approuvés
-        # (ex: retry). On prend le premier rencontré (ORDER BY par défaut sur created_at desc).
-        gate_exec_seen: set[int] = set()
-        for exec_id, exec_created_at, step_approved_at in qs_approved.filter(
+        # Agrégation Min(approved_at) pour une seule ligne par exécution (déterministe).
+        qs_gate = qs_approved.filter(
             approved_at__isnull=True,
             executionstep__step_type=ExecutionStepType.GATE,
             executionstep__status=ExecutionStepStatus.COMPLETED,
             executionstep__approved_at__isnull=False,
-        ).values_list("id", "created_at", "executionstep__approved_at").distinct():
-            if exec_id in gate_exec_seen:
-                continue
-            gate_exec_seen.add(exec_id)
+        ).annotate(first_approved_at=Min("executionstep__approved_at"))
+        for exec_id, exec_created_at, step_approved_at in qs_gate.values_list(
+            "id", "created_at", "first_approved_at"
+        ):
             try:
                 if step_approved_at is None or exec_created_at is None:
                     continue

@@ -23,7 +23,7 @@ Ce dossier contient le script de **baseline** du schéma Oracle de l'IDP Portal.
 sqlplus idp_user/password@NEW_ENV:1521/XEPDB1 @database/baseline/baseline_schema_v088.sql
 ```
 
-> Le script crée les 28 tables (dont EXECUTIONS, EXECUTION_STEPS, AUDIT_LOG partitionnées), indexes, contraintes, le trigger d'immutabilité, le package PKG_IDP_MAINTENANCE et insère les données de référence (REF_ENGINES, REF_CATEGORIES).
+> Le script crée les 36 tables (dont EXECUTIONS, EXECUTION_STEPS, AUDIT_LOG partitionnées, et les tables Django auth/session/API), indexes, contraintes, le trigger d'immutabilité, le package PKG_IDP_MAINTENANCE et insère les données de référence (REF_ENGINES, REF_CATEGORIES).
 
 ### Étape 2 : Déclarer la base au niveau V119 (commande Flyway `baseline`)
 
@@ -74,7 +74,7 @@ Les environnements existants ont déjà V000–V118 (ou V119) dans `flyway_schem
 
 ## Contenu de baseline_schema_v088.sql
 
-### Tables créées (28)
+### Tables créées (36)
 
 | Phase | Tables |
 |-------|--------|
@@ -159,7 +159,7 @@ diff <(normalize.sh /tmp/schema-a.sql) <(normalize.sh /tmp/schema-b.sql)
 
 | Vérification | Commande SQL | Critère de succès |
 |--------------|-------------|-------------------|
-| Nombre de tables | `SELECT COUNT(*) FROM user_tables` | 28 tables |
+| Nombre de tables | `SELECT COUNT(*) FROM user_tables` | 36 tables |
 | Trigger immutabilité | `SELECT status FROM user_triggers WHERE trigger_name = 'TRG_AUDIT_LOG_IMMUTABLE'` | ENABLED |
 | Données REF_ENGINES | `SELECT COUNT(*) FROM REF_ENGINES` | 6 lignes |
 | Données REF_CATEGORIES | `SELECT COUNT(*) FROM REF_CATEGORIES` | 6 lignes |

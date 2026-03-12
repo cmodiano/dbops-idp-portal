@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from django.db.models import Q
 from rest_framework import serializers
 
 from catalog import models
@@ -78,8 +79,8 @@ class ActionMutexCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(f"L'action principale {action_id} n'existe pas")
 
         existing = ActionMutex.objects.filter(
-            action_id=int(action_id),
-            incompatible_with_id=incompatible_with_id
+            Q(action_id=int(action_id), incompatible_with_id=incompatible_with_id)
+            | Q(action_id=incompatible_with_id, incompatible_with_id=int(action_id))
         ).first()
 
         if existing:

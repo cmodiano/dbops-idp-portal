@@ -1176,7 +1176,7 @@ class TestMutexRules:
         user = _make_dbops_user()
         action_a = ActionFactory(status='published', created_by=user)
         action_b = ActionFactory(status='published', created_by=user)
-        # Pre-create the symmetric rule
+        # Pre-create the symmetric rule (B→A)
         ActionMutex.objects.create(action=action_b, incompatible_with=action_a, same_target=True)
 
         view = ActionViewSet.as_view({'post': 'mutex_rules'})
@@ -1187,9 +1187,9 @@ class TestMutexRules:
         force_authenticate(request, user=user)
         response = view(request, pk=action_a.id)
 
-        assert response.status_code == 201
-        # Should NOT have created another symmetric rule (already exists)
-        assert ActionMutex.objects.count() == 2
+        # Reversed pair (A→B) is rejected when B→A already exists
+        assert response.status_code == 400
+        assert ActionMutex.objects.count() == 1
 
     def test_mutex_rules_post_invalid_data_returns_400(self):
         user = _make_dbops_user()

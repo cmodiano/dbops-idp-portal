@@ -27,10 +27,13 @@ class StepResult:
     Result of executing a single workflow step.
 
     Attributes:
-        outcome: SUCCESS or ERROR
+        outcome: SUCCESS, ERROR, or WAITING (from StepOutcome enum).
+            - SUCCESS: step completed successfully
+            - ERROR: step failed; error_message and error_details apply
+            - WAITING: step blocked by gate_conditions (Story 25.2)
         output: Optional output data from the step
-        error_message: Error message if outcome is ERROR
-        error_details: Additional error context
+        error_message: Error message if outcome is ERROR (otherwise None)
+        error_details: Additional error context if outcome is ERROR (otherwise None)
     """
     outcome: StepOutcome
     output: Optional[Dict[str, Any]] = None
@@ -75,5 +78,5 @@ class WorkflowExecutionState:
         self.transition_count += 1
 
     def has_exceeded_max_transitions(self) -> bool:
-        """Check if workflow has exceeded maximum transitions (loop detection)."""
+        """Check if workflow has reached or exceeded maximum transitions (loop detection)."""
         return self.transition_count >= MAX_STEP_TRANSITIONS

@@ -39,11 +39,10 @@ def apply_join_policy(
         for target_id in all_targets:
             target_preds.setdefault(target_id, []).append((sid, status))
 
-    candidate_ids: list[str] = []
+    all_next_ids: list[str] = []
     for _, (_, next_ids) in results.items():
-        for nid in next_ids:
-            if nid not in candidate_ids:
-                candidate_ids.append(nid)
+        all_next_ids.extend(next_ids)
+    candidate_ids = list(dict.fromkeys(all_next_ids))
 
     result: list[str] = []
     for target_id in candidate_ids:

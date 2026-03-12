@@ -178,6 +178,25 @@ class DashboardCompareView(APIView):
                     },
                 )
 
+            if p1s > p1e:
+                raise BadRequestError(
+                    code="BAD_REQUEST",
+                    message="period1_start ne peut pas être postérieure à period1_end",
+                    details={
+                        "period1_start": str(p1s),
+                        "period1_end": str(p1e),
+                    },
+                )
+            if p2s > p2e:
+                raise BadRequestError(
+                    code="BAD_REQUEST",
+                    message="period2_start ne peut pas être postérieure à period2_end",
+                    details={
+                        "period2_start": str(p2s),
+                        "period2_end": str(p2e),
+                    },
+                )
+
             p1_start_dt = timezone.make_aware(datetime.combine(p1s, datetime.min.time()))
             p1_end_excl = timezone.make_aware(datetime.combine(p1e + timedelta(days=1), datetime.min.time()))
             p2_start_dt = timezone.make_aware(datetime.combine(p2s, datetime.min.time()))

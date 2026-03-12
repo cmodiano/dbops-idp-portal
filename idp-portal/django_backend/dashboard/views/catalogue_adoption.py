@@ -103,7 +103,7 @@ class DashboardStatsAdoptionView(APIView):
 
     @extend_schema(
         tags=['dashboard'],
-        summary='Statistiques adoption par profil (admin)',
+        summary='Statistiques adoption par profil',
         parameters=[
             OpenApiParameter('days', int, description='Période en jours (défaut: 14)'),
             OpenApiParameter('from_date', str, description='Date de début (YYYY-MM-DD)'),

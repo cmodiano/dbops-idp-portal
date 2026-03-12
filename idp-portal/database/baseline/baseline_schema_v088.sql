@@ -953,27 +953,38 @@ ALTER TABLE AUDIT_LOG ADD CONSTRAINT CK_AUDIT_LOG_ACTION_TYPE CHECK (
             'SCHEDULED_EXECUTION_CREATED', 'SCHEDULED_EXECUTION_RECURRING_CREATED',
             'SCHEDULED_EXECUTION_EXECUTED', 'SCHEDULED_EXECUTION_CANCELLED',
             'SCHEDULED_EXECUTION_RECURRING_DISABLED',
+            'SCHEDULED_EXECUTION_RECURRING_ENABLED',
             'SCHEDULED_EXECUTION_CELERY_TRIGGERED',
 
             -- User / Auth / Favorites
             'USER_CREATED', 'USER_UPDATED', 'USER_LOGIN', 'USER_LOGOUT', 'USER_REFRESH',
-            'API_KEY_TOKEN_EXCHANGE', 'FAVORITE_ADDED', 'FAVORITE_REMOVED', 'SERVICE_LOGIN',
+            'API_KEY_TOKEN_EXCHANGE', 'API_KEY_CREATED', 'API_KEY_REVOKED',
+            'FAVORITE_ADDED', 'FAVORITE_REMOVED', 'SERVICE_LOGIN',
             'AUTH_DEV_BYPASS_LOGIN',
 
             -- Execution step retry
             'EXECUTION_STEP_RETRY_ATTEMPT', 'EXECUTION_STEP_RETRY_SUCCESS',
             'EXECUTION_STEP_RETRY_EXHAUSTED', 'EXECUTION_STEP_RETRY_ABORTED',
 
-            -- Condition gates
+            -- Condition gates / policy approval (Epic 57)
             'EXECUTION_STEP_WAITING',
             'EXECUTION_STEP_GATE_SATISFIED',
             'EXECUTION_STEP_GATE_TIMEOUT',
+            'EXECUTION_STEP_POLICY_APPROVAL_REQUIRED',
+            'EXECUTION_STEP_POLICY_AUTO_APPROVED',
+            'EXECUTION_STEP_POLICY_EVALUATION_FAILED',
 
             -- Workflow schedule step
             'WORKFLOW_STEP_SCHEDULE_CREATED',
 
             -- Feature flags
             'FEATURE_FLAG_CREATED', 'FEATURE_FLAG_UPDATED',
+
+            -- Business rule policies (Epic 57)
+            'POLICY_CREATED', 'POLICY_UPDATED', 'POLICY_DELETED',
+
+            -- Execution polling
+            'EXECUTION_POLLING_EXHAUSTED',
 
             -- IaC Config Sync import actions
             'CONFIG_SYNC_REFERENCE_IMPORT', 'CONFIG_SYNC_TAGS_IMPORT',
@@ -1397,6 +1408,28 @@ CREATE OR REPLACE PACKAGE BODY PKG_IDP_MAINTENANCE AS
 
             IF v_part_date <= v_cutoff_date THEN
                 IF p_dry_run = 0 THEN
+                    EXECUTE IMMEDIATE
+                        'DELETE FROM WORKFLOW_EVENTS WHERE EXECUTION_ID IN '
+                        || '(SELECT ID FROM EXECUTIONS PARTITION (' || r.PARTITION_NAME || '))';
+
+                    log_maintenance('EXECUTIONS', r.PARTITION_NAME, 'PREREQ_DELETE',
+                        'SUCCESS', 0, 'WORKFLOW_EVENTS supprimés: ' || SQL%ROWCOUNT || ' rows');
+
+                    EXECUTE IMMEDIATE
+                        'DELETE FROM RUNNABLE_STEPS WHERE EXECUTION_ID IN '
+                        || '(SELECT ID FROM EXECUTIONS PARTITION (' || r.PARTITION_NAME || '))';
+
+                    log_maintenance('EXECUTIONS', r.PARTITION_NAME, 'PREREQ_DELETE',
+                        'SUCCESS', 0, 'RUNNABLE_STEPS supprimés: ' || SQL%ROWCOUNT || ' rows');
+
+                    EXECUTE IMMEDIATE
+                        'UPDATE SCHEDULED_EXECUTIONS SET SOURCE_EXECUTION_ID = NULL '
+                        || 'WHERE SOURCE_EXECUTION_ID IN '
+                        || '(SELECT ID FROM EXECUTIONS PARTITION (' || r.PARTITION_NAME || '))';
+
+                    log_maintenance('EXECUTIONS', r.PARTITION_NAME, 'PREREQ_UPDATE',
+                        'SUCCESS', 0, 'SCHEDULED_EXECUTIONS SOURCE_EXECUTION_ID nullifiés: ' || SQL%ROWCOUNT || ' rows');
+
                     EXECUTE IMMEDIATE
                         'UPDATE EXECUTIONS SET PARENT_EXECUTION_ID = NULL '
                         || 'WHERE PARENT_EXECUTION_ID IN '

@@ -134,9 +134,6 @@ export async function fetchInventoryItems(
       return items;
     } catch (err) {
       loadingPromises.delete(apiKey);
-      if (err instanceof Error && (err as Error & { useCache?: boolean }).useCache) {
-        throw err;
-      }
       throw err;
     }
   })();

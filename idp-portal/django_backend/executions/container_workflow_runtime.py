@@ -48,8 +48,10 @@ from executions.step_handlers.service_call_handler import ServiceCallHandler
 from executions.step_handlers.http_request_handler import HttpRequestHandler
 from executions.step_handlers.evaluation_handler import EvaluationHandler
 from executions.step_handlers.gate_handler import GateHandler
-from executions.container_routing import get_next_step_ids as _routing_get_next_step_ids
-from executions.container_routing import get_linear_next_step_ids as _routing_get_linear_next_step_ids
+from executions.container_routing import (
+    get_linear_next_step_ids as _routing_get_linear_next_step_ids,
+    get_next_step_ids as _routing_get_next_step_ids,
+)
 from executions.container_parallel import apply_join_policy as _parallel_apply_join_policy
 
 logger = structlog.get_logger(__name__)

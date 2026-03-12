@@ -23,7 +23,7 @@
 - **Commande** : `flyway migrate` (via `scripts/run_migrations.sh` ou `flyway.conf`)
 - **Historique** : table `flyway_schema_history`
 
-### 2.2 Dernières migrations (V089–V118)
+### 2.2 Dernières migrations (V089–V119)
 
 | Version | Description |
 |---------|-------------|
@@ -75,7 +75,7 @@
 
 ### 3.2 Contenu baseline
 
-- **28 tables** (dont EXECUTIONS, EXECUTION_STEPS, AUDIT_LOG partitionnées)
+- **36 tables** (dont EXECUTIONS, EXECUTION_STEPS, AUDIT_LOG partitionnées, et tables Django auth/session/API)
 - **WORKFLOW_EVENTS**, **RUNNABLE_STEPS** (V113)
 - **OUTPUT_SCHEMAS** (V111), **OUTPUT_SCHEMA_ID** sur ACTIONS_CATALOG (V115)
 - **CONFIG_STEP_ID** sur EXECUTION_STEPS (V116)

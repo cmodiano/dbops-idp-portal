@@ -284,10 +284,10 @@ class TestDashboardStatsCataloguePeriodParams:
         assert 'data' in response.data
         assert 'evolution' in response.data['data']
 
-    def test_from_date_without_to_date_returns_200(self):
-        """from_date sans to_date → from_date ignoré, repli sur days par défaut → 200."""
+    def test_from_date_without_to_date_returns_400(self):
+        """from_date sans to_date → 400 (from_date et to_date doivent être fournis ensemble)."""
         response = self.client.get(URL, {'from_date': '2026-01-01'})
-        assert response.status_code == 200
+        assert response.status_code == 400
 
     def test_valid_days_returns_200(self):
         """days=30 valide → 200."""

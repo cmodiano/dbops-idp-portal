@@ -78,7 +78,20 @@ def get_period_bounds(request) -> tuple[datetime, datetime]:
     """
     from_date = parse_date(request.query_params.get("from_date"), name="from_date")
     to_date = parse_date(request.query_params.get("to_date"), name="to_date")
-    if from_date and to_date:
+
+    if from_date is not None or to_date is not None:
+        if from_date is None or to_date is None:
+            raise BadRequestError(
+                code="BAD_REQUEST",
+                message="from_date et to_date doivent être fournis ensemble",
+                details={"from_date": request.query_params.get("from_date"), "to_date": request.query_params.get("to_date")},
+            )
+        if from_date > to_date:
+            raise BadRequestError(
+                code="BAD_REQUEST",
+                message="from_date ne peut pas être postérieure à to_date",
+                details={"from_date": str(from_date), "to_date": str(to_date)},
+            )
         start_dt = timezone.make_aware(datetime.combine(from_date, datetime.min.time()))
         end_exclusive = timezone.make_aware(datetime.combine(to_date + timedelta(days=1), datetime.min.time()))
         return start_dt, end_exclusive
@@ -110,7 +123,7 @@ def apply_common_filters(qs: QuerySet, *, request: Any, include_status: bool) ->
     tags = request.query_params.getlist("tags")
     tags = [t.strip() for t in tags if t and t.strip()]
     if tags:
-        qs = qs.filter(action__actiontag__tag__name__in=tags)
+        qs = qs.filter(action__actiontag__tag__name__in=tags).distinct()
 
     if include_status:
         status = request.query_params.get("status")
@@ -128,32 +141,21 @@ def compute_avg_duration_s(qs) -> float | None:
     stats_for_queryset() and DashboardStatsOperationsView.get().
     Pattern Python (compatibilité Oracle) — itération côté Python sur (started_at, completed_at).
 
-    NEW-BE-J: Added row count guard to avoid unbounded memory materialisation for large
-    datasets. When the count exceeds the threshold, a warning is logged and None is returned
-    rather than loading tens of thousands of rows into Python memory.
+    Uses iterator(chunk_size=1000) to avoid ORA-22848 and unbounded memory for large tenants.
     """
-
-    _MAX_DURATION_ROWS = 10_000
     completed_qs = qs.filter(
         status=ExecutionStatus.COMPLETED,
         started_at__isnull=False,
         completed_at__isnull=False,
     )
-    row_count = completed_qs.count()
-    if row_count > _MAX_DURATION_ROWS:
-        logger.warning(
-            "dashboard_avg_duration_skipped_too_many_rows",
-            row_count=row_count,
-            threshold=_MAX_DURATION_ROWS,
-            correlation_id=get_correlation_id(),
-        )
-        return None
-    durations = []
-    for started_at, completed_at in completed_qs.values_list("started_at", "completed_at"):
+    total_seconds = 0.0
+    count = 0
+    for started_at, completed_at in completed_qs.values_list("started_at", "completed_at").iterator(chunk_size=1000):
         try:
             delta = (completed_at - started_at).total_seconds()
             if delta >= 0:
-                durations.append(delta)
+                total_seconds += delta
+                count += 1
         except (TypeError, AttributeError) as e:
             logger.debug(
                 "execution_duration_calculation_skipped",
@@ -164,7 +166,7 @@ def compute_avg_duration_s(qs) -> float | None:
                 correlation_id=get_correlation_id(),
             )
             continue
-    return round(sum(durations) / len(durations), 2) if durations else None
+    return round(total_seconds / count, 2) if count > 0 else None
 
 
 def stats_for_queryset(qs) -> dict:
