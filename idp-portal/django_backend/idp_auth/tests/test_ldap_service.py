@@ -28,10 +28,14 @@ LDAP_SETTINGS = dict(
 )
 
 
-def _make_entry(groups: list[str], display_name: str | None) -> MagicMock:
-    """Construit un mock d'entrée LDAP avec memberOf et displayName."""
+def _make_entry(
+    groups: list[str], display_name: str | None, entry_dn: str | None = None
+) -> MagicMock:
+    """Construit un mock d'entrée LDAP avec memberOf, displayName et optionnellement entry_dn."""
     entry = MagicMock()
     entry.__contains__ = lambda self, key: key in ("memberOf", "displayName")
+    if entry_dn is not None:
+        entry.entry_dn = entry_dn
 
     member_of_attr = MagicMock()
     member_of_attr.values = groups
@@ -265,6 +269,107 @@ class TestLDAPServiceAuthenticate(TestCase):
         assert "svc-ci" in call_kwargs.kwargs.get("user", "") or (
             len(call_kwargs.args) > 1 and "svc-ci" in str(call_kwargs.args[1])
         )
+
+
+# ============================================================================
+# Compte de bind technique (LDAP_BIND_DN + LDAP_BIND_PASSWORD)
+# ============================================================================
+
+
+BIND_ACCOUNT_SETTINGS = dict(
+    LDAP_URI="ldap://dc.example.com:389",
+    LDAP_BASE_DN="DC=example,DC=com",
+    LDAP_USER_DN_TEMPLATE="{username}@example.com",
+    LDAP_BIND_DN="CN=svc-ldap,OU=ServiceAccounts,DC=example,DC=com",
+    LDAP_BIND_PASSWORD="bind_secret",
+)
+
+
+@override_settings(**BIND_ACCOUNT_SETTINGS)
+class TestLDAPServiceBindAccount(TestCase):
+    """Tests du flux avec compte de bind technique."""
+
+    def setUp(self) -> None:
+        self.service = LDAPService()
+
+    @patch("idp_auth.ldap_service.Connection")
+    @patch("idp_auth.ldap_service.Server")
+    def test_bind_account_success_returns_true_with_groups(
+        self, mock_server_cls: MagicMock, mock_conn_cls: MagicMock
+    ) -> None:
+        """Bind avec compte technique → recherche user → re-bind user → succès."""
+        groups = ["CN=GRP-IDP-DBOPS,OU=Groups,DC=example,DC=com"]
+        user_dn = "CN=svc-ci,OU=ServiceAccounts,DC=example,DC=com"
+        entry = _make_entry(groups, "John Doe", entry_dn=user_dn)
+
+        mock_conn = MagicMock()
+        mock_conn_cls.return_value = mock_conn
+        mock_conn.search.return_value = True
+        mock_conn.entries = [entry]
+
+        success, ad_groups, display_name = self.service.authenticate("svc-ci", "user_secret")
+
+        assert success is True
+        assert ad_groups == groups
+        assert display_name == "John Doe"
+        # Connection appelée 2 fois : bind account puis user
+        assert mock_conn_cls.call_count == 2
+        first_call_user = mock_conn_cls.call_args_list[0].kwargs["user"]
+        second_call_user = mock_conn_cls.call_args_list[1].kwargs["user"]
+        assert first_call_user == BIND_ACCOUNT_SETTINGS["LDAP_BIND_DN"]
+        assert second_call_user == user_dn
+
+    @patch("idp_auth.ldap_service.Connection")
+    @patch("idp_auth.ldap_service.Server")
+    def test_bind_account_user_not_found_returns_false(
+        self, mock_server_cls: MagicMock, mock_conn_cls: MagicMock
+    ) -> None:
+        """Recherche user sans résultat → False."""
+        mock_conn = MagicMock()
+        mock_conn_cls.return_value = mock_conn
+        mock_conn.search.return_value = True
+        mock_conn.entries = []
+
+        success, ad_groups, display_name = self.service.authenticate("unknown", "secret")
+
+        assert success is False
+        assert ad_groups == []
+        assert display_name is None
+        assert mock_conn_cls.call_count == 1  # Seulement le bind account
+
+    @patch("idp_auth.ldap_service.Connection")
+    @patch("idp_auth.ldap_service.Server")
+    def test_bind_account_invalid_bind_credentials_raises_unavailable(
+        self, mock_server_cls: MagicMock, mock_conn_cls: MagicMock
+    ) -> None:
+        """Compte de bind invalide → LDAPUnavailableError."""
+        mock_conn_cls.side_effect = LDAPBindError("Invalid credentials")
+
+        with pytest.raises(LDAPUnavailableError, match="compte technique LDAP"):
+            self.service.authenticate("svc-ci", "secret")
+
+    @patch("idp_auth.ldap_service.Connection")
+    @patch("idp_auth.ldap_service.Server")
+    def test_bind_account_invalid_user_password_returns_false(
+        self, mock_server_cls: MagicMock, mock_conn_cls: MagicMock
+    ) -> None:
+        """Re-bind user avec mauvais mot de passe → False."""
+        user_dn = "CN=svc-ci,OU=ServiceAccounts,DC=example,DC=com"
+        entry = _make_entry([], None, entry_dn=user_dn)
+
+        mock_conn_first = MagicMock()
+        mock_conn_first.search.return_value = True
+        mock_conn_first.entries = [entry]
+        mock_conn_cls.side_effect = [
+            mock_conn_first,
+            LDAPBindError("Invalid credentials"),
+        ]
+
+        success, ad_groups, display_name = self.service.authenticate("svc-ci", "wrong_password")
+
+        assert success is False
+        assert ad_groups == []
+        assert display_name is None
 
 
 # ============================================================================

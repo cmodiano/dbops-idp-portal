@@ -517,6 +517,12 @@ CORS_ALLOW_HEADERS = [
 # Leave empty in non-LDAP environments; LDAPService raises LDAPUnavailableError if LDAP_URI is empty.
 LDAP_URI = os.getenv("LDAP_URI", "")           # ex: ldap://dc.example.com:389
 LDAP_BASE_DN = os.getenv("LDAP_BASE_DN", "")   # ex: DC=example,DC=com
+# Compte de bind technique (optionnel). Si LDAP_BIND_DN et LDAP_BIND_PASSWORD sont définis,
+# le service se connecte d'abord avec ce compte pour rechercher l'utilisateur, puis
+# vérifie le mot de passe via un re-bind avec le DN trouvé. Sinon, bind direct avec
+# le DN construit via LDAP_USER_DN_TEMPLATE.
+LDAP_BIND_DN = os.getenv("LDAP_BIND_DN", "")       # ex: CN=svc-ldap,OU=ServiceAccounts,DC=example,DC=com
+LDAP_BIND_PASSWORD = os.getenv("LDAP_BIND_PASSWORD", "")
 # Template for user DN used in LDAP bind. Supports two formats:
 #   UPN:     "{username}@example.com"
 #   Full DN: "CN={username},OU=ServiceAccounts,DC=example,DC=com"

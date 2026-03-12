@@ -6,7 +6,7 @@ Ce document décrit la configuration LDAP requise pour activer l'authentificatio
 
 Le portail IDP intègre un `LDAPService` qui permet aux comptes Active Directory de s'authentifier de façon programmatique. Lorsqu'un compte de service appelle `/auth/service-login`, le portail :
 
-1. Effectue un **bind LDAP** avec les credentials fournis (username + password)
+1. Effectue un **bind LDAP** avec les credentials fournis (username + password). Deux modes : *bind direct* (DN construit via `LDAP_USER_DN_TEMPLATE`) ou *compte de bind technique* (si `LDAP_BIND_DN` et `LDAP_BIND_PASSWORD` sont définis : bind technique → recherche utilisateur → re-bind pour vérifier le mot de passe)
 2. Récupère les **groupes AD** du compte (attribut `memberOf`)
 3. Résout le **profil IDP** associé via `Profile.objects.find_by_ad_groups(ad_groups)`
 4. Émet un **JWT** avec les mêmes champs que le flow SAML (`sub`, `username`, `profile`, `ad_groups`)
@@ -53,6 +53,27 @@ LDAP_BASE_DN=DC=corp,DC=acme,DC=local
 ```
 
 > **Note :** Si `LDAP_BASE_DN` est vide ou non défini, `LDAPService.authenticate()` lève `LDAPUnavailableError` → réponse `503 LDAP_UNAVAILABLE` (même comportement que `LDAP_URI` manquant).
+
+---
+
+### LDAP_BIND_DN et LDAP_BIND_PASSWORD (optionnel)
+
+| Attribut | Valeur |
+|----------|--------|
+| **Description** | Compte de bind technique pour se connecter à l'AD avant de rechercher les utilisateurs. Si les deux variables sont définies, le service se connecte d'abord avec ce compte, recherche l'utilisateur par `sAMAccountName`, puis vérifie le mot de passe via un re-bind avec le DN trouvé. |
+| **Format** | DN LDAP complet pour `LDAP_BIND_DN` |
+| **Valeur par défaut** | *(vide)* — si non défini, bind direct avec le DN construit via `LDAP_USER_DN_TEMPLATE` |
+| **Obligatoire** | Non — requis uniquement si l'AD impose un compte technique pour les recherches |
+
+**Quand utiliser :** Lorsque l'Active Directory ne permet pas le bind anonyme et exige un compte de service pour effectuer les recherches LDAP.
+
+**Exemples :**
+```bash
+LDAP_BIND_DN=CN=svc-ldap,OU=ServiceAccounts,DC=example,DC=com
+LDAP_BIND_PASSWORD=secret_du_compte_bind
+```
+
+> **Sécurité :** Ne jamais committer le mot de passe en clair. Utiliser un gestionnaire de secrets (Vault, variables d'environnement sécurisées) en production.
 
 ---
 
@@ -247,7 +268,11 @@ curl -s -X POST https://portail.example.com/api/v1/auth/service-login \
 LDAP_URI=ldaps://dc.example.com:636
 LDAP_BASE_DN=DC=example,DC=com
 
-# Template DN pour le bind (format UPN recommandé)
+# Compte de bind technique (optionnel — si l'AD l'exige)
+# LDAP_BIND_DN=CN=svc-ldap,OU=ServiceAccounts,DC=example,DC=com
+# LDAP_BIND_PASSWORD=secret_du_compte_bind
+
+# Template DN pour le bind direct (format UPN recommandé, utilisé si pas de compte de bind)
 LDAP_USER_DN_TEMPLATE={username}@example.com
 
 # Timeouts de connexion (secondes)
