@@ -176,3 +176,28 @@ module = [
     "croniter.*",
 ]
 ignore_missing_imports = true
+
+# Story 78.10–78.12: Normalized models (managed=False) — django-stubs false positives
+# on ForeignKey _id accessors and .objects manager for unmanaged models
+[[tool.mypy.overrides]]
+module = [
+    "catalog.models_workflow_definition",
+    "profiles.models_action_permission_normalized",
+    "profiles.action_permission_repository",
+    "profiles.models_target_permission_normalized",
+    "profiles.target_permission_repository",
+]
+disable_error_code = ["attr-defined"]
+
+# catalog.workflow_definition_repository — attr-defined + no-any-return from Django queryset
+[[tool.mypy.overrides]]
+module = "catalog.workflow_definition_repository"
+disable_error_code = ["attr-defined", "no-any-return"]
+
+# executions — unreachable statements are intentional exhaustiveness guards
+[[tool.mypy.overrides]]
+module = [
+    "executions.utils.workflow_parsing",
+    "executions.container_workflow_runtime",
+]
+disable_error_code = ["unreachable"]

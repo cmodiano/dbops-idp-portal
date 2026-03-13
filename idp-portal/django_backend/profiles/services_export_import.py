@@ -18,6 +18,12 @@ from profiles.action_permission_repository import (
     get_tag_patterns as repo_get_tag_patterns,
     get_environments as repo_get_environments,
 )
+from profiles.target_permission_repository import (
+    get_target_names as repo_get_target_names,
+    get_target_patterns as repo_get_target_patterns,
+    get_filter_by_attribute as repo_get_filter_by_attribute,
+    get_exclusion_patterns as repo_get_exclusion_patterns,
+)
 from profiles.models import Profile
 from profiles.services import ProfileService
 
@@ -162,13 +168,13 @@ def export_profile_yaml(name: str) -> bytes:
         targets_type = _PERMISSION_TYPE_MAP.get(targets_perm.permission_type, "all")
         targets_block = _build_targets_block(
             targets_type,
-            targets_perm.get_target_names(),
-            targets_perm.get_target_patterns(),
+            repo_get_target_names(targets_perm),
+            repo_get_target_patterns(targets_perm),
         )
-        exclusion_patterns = targets_perm.get_exclusion_patterns()
+        exclusion_patterns = repo_get_exclusion_patterns(targets_perm)
         if exclusion_patterns:
             targets_block["exclusion_patterns"] = exclusion_patterns
-        filter_by_attribute = targets_perm.get_filter_by_attribute()
+        filter_by_attribute = repo_get_filter_by_attribute(targets_perm)
         if filter_by_attribute is not None:
             targets_block["filter_by_attribute"] = filter_by_attribute
         spec["targets"] = targets_block
@@ -224,13 +230,13 @@ def export_profiles_yaml() -> bytes:
             targets_type = _PERMISSION_TYPE_MAP.get(targets_perm.permission_type, "all")
             targets_block = _build_targets_block(
                 targets_type,
-                targets_perm.get_target_names(),
-                targets_perm.get_target_patterns(),
+                repo_get_target_names(targets_perm),
+                repo_get_target_patterns(targets_perm),
             )
-            exclusion_patterns = targets_perm.get_exclusion_patterns()
+            exclusion_patterns = repo_get_exclusion_patterns(targets_perm)
             if exclusion_patterns:
                 targets_block["exclusion_patterns"] = exclusion_patterns
-            filter_by_attribute = targets_perm.get_filter_by_attribute()
+            filter_by_attribute = repo_get_filter_by_attribute(targets_perm)
             if filter_by_attribute is not None:
                 targets_block["filter_by_attribute"] = filter_by_attribute
 
@@ -319,13 +325,13 @@ def _permissions_differ(
     if current_targets_type != incoming_targets_type:
         return True
     if targets_perm and incoming_targets_type == "PATTERN":
-        incoming_pt = tuple(targets_payload.get("target_patterns") or [])
-        current_pt = tuple(targets_perm.get_target_patterns() or [])
+        incoming_pt = tuple(sorted(targets_payload.get("target_patterns") or []))
+        current_pt = tuple(repo_get_target_patterns(targets_perm))
         if incoming_pt != current_pt:
             return True
     if targets_perm and incoming_targets_type == "LIST":
         incoming_names = tuple(sorted(targets_payload.get("target_names") or []))
-        current_names = tuple(sorted(targets_perm.get_target_names() or []))
+        current_names = tuple(repo_get_target_names(targets_perm))
         if incoming_names != current_names:
             return True
     return False

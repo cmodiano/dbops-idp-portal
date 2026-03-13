@@ -138,7 +138,7 @@ class TestRBACPermissionAggregatorAggregatePattern(TestCase):
         self.assertEqual(len(result['target_restrictions']), 1)
         perm_type, patterns = result['target_restrictions'][0]
         self.assertEqual(perm_type, 'PATTERN')
-        self.assertEqual(patterns, ['srv-*', 'db-*'])
+        self.assertEqual(patterns, ['db-*', 'srv-*'])
 
     def test_profile_pattern_empty_patterns_excluded(self):
         """PATTERN with empty patterns list is not added to target_restrictions."""

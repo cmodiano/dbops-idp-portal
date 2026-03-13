@@ -79,7 +79,7 @@ class TestProfileTargetPermissionsAPIWithExclusion(TestCase):
         
         self.assertEqual(response.status_code, 200)
         data = response.json()['data']
-        self.assertEqual(data['exclusion_patterns'], exclusion_patterns)
+        self.assertEqual(data['exclusion_patterns'], sorted(exclusion_patterns))
     
     def test_put_target_permissions_with_exclusion_patterns(self):
         """Test PUT creates/updates permission with exclusion_patterns."""

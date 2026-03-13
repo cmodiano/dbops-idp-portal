@@ -401,15 +401,19 @@ class ProfileTargetPermissionsSerializer(serializers.Serializer):
     def to_representation(self, instance: Any) -> dict[str, Any]:
         """Convert ProfileTargetPermission model to serializer format."""
         if isinstance(instance, ProfileTargetPermission):
+            from profiles.target_permission_repository import (
+                get_target_names, get_target_patterns,
+                get_filter_by_attribute, get_exclusion_patterns,
+            )
             # Map permission_type (LIST/PATTERN/ALL) to targets_type (list/pattern/all)
             type_map = {'LIST': 'list', 'PATTERN': 'pattern', 'ALL': 'all'}
             targets_type = type_map.get(instance.permission_type, 'all')
 
             return {
                 'targets_type': targets_type,
-                'target_names': instance.get_target_names(),
-                'target_patterns': instance.get_target_patterns(),
-                'filter_by_attribute': instance.get_filter_by_attribute(),
-                'exclusion_patterns': instance.get_exclusion_patterns(),  # Story 25.6
+                'target_names': get_target_names(instance),
+                'target_patterns': get_target_patterns(instance),
+                'filter_by_attribute': get_filter_by_attribute(instance),
+                'exclusion_patterns': get_exclusion_patterns(instance),  # Story 25.6
             }
         return super().to_representation(instance)

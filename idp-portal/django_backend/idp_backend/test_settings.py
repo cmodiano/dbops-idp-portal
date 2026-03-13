@@ -63,6 +63,9 @@ WORKFLOW_NORMALIZED_DEFINITIONS_ENABLED = False
 # Story 78.11: Normalized profile action permissions disabled by default in tests
 PROFILE_ACTION_PERMISSIONS_NORMALIZED_ENABLED = False
 
+# Story 78.12: Normalized profile target permissions disabled by default in tests
+PROFILE_TARGET_PERMISSIONS_NORMALIZED_ENABLED = False
+
 # Story 20.5: Use in-memory cache for tests (avoids Redis dependency)
 CACHES = {
     'default': {

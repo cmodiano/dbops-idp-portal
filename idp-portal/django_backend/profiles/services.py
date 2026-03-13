@@ -57,16 +57,20 @@ def _serialize_action_permissions_from_data(data: dict[str, Any]) -> dict[str, A
 
 def _serialize_target_permissions(perm: ProfileTargetPermission) -> dict[str, Any]:
     """Serialize ProfileTargetPermission to dict for audit (Story 72.2)."""
+    from profiles.target_permission_repository import (
+        get_target_names, get_target_patterns,
+        get_filter_by_attribute, get_exclusion_patterns,
+    )
     type_map = {'LIST': 'list', 'PATTERN': 'pattern', 'ALL': 'all'}
     result: dict[str, Any] = {
         'targets_type': type_map.get(perm.permission_type, perm.permission_type.lower()),
-        'target_names': perm.get_target_names(),
-        'target_patterns': perm.get_target_patterns(),
+        'target_names': get_target_names(perm),
+        'target_patterns': get_target_patterns(perm),
     }
-    fa = perm.get_filter_by_attribute()
+    fa = get_filter_by_attribute(perm)
     if fa:
         result['filter_by_attribute'] = fa
-    ep = perm.get_exclusion_patterns()
+    ep = get_exclusion_patterns(perm)
     if ep:
         result['exclusion_patterns'] = ep
     return result
@@ -561,6 +565,11 @@ class ProfileService:
             perm.set_exclusion_patterns(permission_data['exclusion_patterns'])
         perm.save()
 
+        # Story 78.12: Dual-write to normalized tables when feature flag is enabled
+        if getattr(settings, 'PROFILE_TARGET_PERMISSIONS_NORMALIZED_ENABLED', False):
+            from profiles.target_permission_repository import sync_from_json
+            sync_from_json(profile_id)
+
         # Audit trail for permission changes — SOC1 compliance (PROF-MED-02 fix)
         if user and not skip_audit:
             AuditService.create_entry(
@@ -648,6 +657,10 @@ class ProfileService:
             get_tag_patterns as repo_get_tag_patterns,
             get_environments as repo_get_environments,
         )
+        from profiles.target_permission_repository import (
+            get_target_names as repo_get_target_names,
+            get_target_patterns as repo_get_target_patterns,
+        )
 
         for profile in profiles:
             is_admin = getattr(profile, 'is_admin', 0) == 1
@@ -676,8 +689,8 @@ class ProfileService:
             if perm_t:
                 target_permissions.append({
                     'targets_type': perm_t.permission_type.lower(),
-                    'target_names': perm_t.get_target_names(),
-                    'target_patterns': perm_t.get_target_patterns(),
+                    'target_names': repo_get_target_names(perm_t),
+                    'target_patterns': repo_get_target_patterns(perm_t),
                 })
             elif is_admin:
                 # Admin profiles (DBOPS, DBA) without explicit ProfileTargetPermission
