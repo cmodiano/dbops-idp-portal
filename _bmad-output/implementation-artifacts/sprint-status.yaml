@@ -930,3 +930,24 @@ development_status:
     77-6-tests-durabilite-workflow: done # Code review 2026-03-13: M1 assertions outcome renforcées (==completed), M2 assertions tautologiques AC3 vérifiées en valeurs, L1 @pytest.mark.django_db déplacé au niveau classe TestAC4, L2 config_step_id ajouté dans _make_approval_step_77_6 (7/7 tests, 45/45 régression)
     77-7-valider-supporter-gate-steps-fan-out-parallele: done # Code review 2026-03-13: M2 BFS deque+popleft (O(1) vs O(n)), M3 test fan-out imbriqué ajouté, L4 docstring module mis à jour, L5 join_point exclus à l'enqueue (10/10 tests, 58/58 catalog, 45/45 epic 77)
     epic-77-retrospective: optional
+    # === Epic 78: Orchestration Temporal-like sans Temporal ===
+    # Réf: docs/backend/epic-78-temporal-like-orchestration-without-temporal.md, docs/architecture/temporal-advantages-without-temporal-implementation-plan.md
+    # Fiabilité niveau entreprise : file pilote unique, séquence atomique, leases, normalisation CLOB, workers stateless
+    epic-78: in-progress
+    78-1-workflow-event-counter-sequence-atomique: done
+    78-2-runnable-steps-leases-reclaim: backlog
+    78-3-alignement-config-step-id-model-schema: backlog
+    78-4-workflow-commands-table: backlog
+    78-5-dispatch-file-container-workflow-runtime: backlog
+    78-6-simplification-reconciliateur: backlog
+    78-7-execution-outbox: backlog
+    78-8-desactivation-runtime-legacy: backlog
+    78-9-consolidation-state-machine-persistence: backlog
+    78-10-workflow-definitions-normalisees: backlog
+    78-11-profile-action-permission-normalisees: backlog
+    78-12-profile-target-permission-normalisees: backlog
+    78-13-contraintes-json-tier2: backlog
+    78-14-deprecation-colonnes-runtime-legacy: backlog
+    78-15-suppression-clob-permissions-legacy: backlog
+    78-16-observabilite-metriques-runbooks-alertes: backlog
+    epic-78-retrospective: optional

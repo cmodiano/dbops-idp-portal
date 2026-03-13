@@ -666,6 +666,30 @@ class WorkflowEvent(models.Model):
             self.payload = None
 
 
+class WorkflowEventCounter(models.Model):
+    """
+    WorkflowEventCounter model mapping to Oracle WORKFLOW_EVENT_COUNTER table (V122).
+
+    One row per execution. LAST_SEQUENCE_NUM is incremented atomically via
+    SELECT FOR UPDATE (row-level lock) to eliminate sequence collisions under
+    concurrent emitters (parallel workflow steps completing simultaneously).
+    """
+    execution = models.OneToOneField(
+        Execution,
+        primary_key=True,
+        on_delete=models.CASCADE,
+        related_name='event_counter',
+        db_column='EXECUTION_ID'
+    )
+    last_sequence_num = models.BigIntegerField(default=0, db_column='LAST_SEQUENCE_NUM')
+
+    class Meta:
+        db_table = 'WORKFLOW_EVENT_COUNTER'
+
+    def __str__(self) -> str:
+        return f"WorkflowEventCounter(execution_id={self.execution_id}, last_seq={self.last_sequence_num})"
+
+
 class RunnableStep(models.Model):
     """
     RunnableStep model mapping to Oracle RUNNABLE_STEPS table (V113).
