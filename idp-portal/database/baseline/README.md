@@ -107,6 +107,7 @@ Les environnements existants ont déjà V000–V120 (ou V121) dans `flyway_schem
 | `CONFIG_STEP_ID` sur EXECUTION_STEPS | Correspondance étape ↔ définition workflow |
 | `REJECTED_BY`, `REJECTED_AT` sur EXECUTION_STEPS | Audit trail rejet gate |
 | `CORRELATION_ID` sur EXECUTIONS + index | Traçage sur tout le cycle d'exécution |
+| `UPDATED_AT` sur EXECUTIONS + IDX_EXECUTIONS_UPDATED_AT | Détection staleness (Epic 76) |
 
 ### Éléments exclus (neutralisés par les migrations)
 
@@ -168,6 +169,7 @@ diff <(normalize.sh /tmp/schema-a.sql) <(normalize.sh /tmp/schema-b.sql)
 | Données REF_CATEGORIES | `SELECT COUNT(*) FROM REF_CATEGORIES` | 6 lignes |
 | Colonnes ACTIONS_CATALOG | `SELECT column_name FROM user_tab_columns WHERE table_name = 'ACTIONS_CATALOG' ORDER BY column_id` | Vérifier absence de RBAC_POLICIES, CHANGE_MODEL_CODE ; présence de OUTPUT_SCHEMA_ID |
 | Colonne CORRELATION_ID sur EXECUTIONS | `SELECT column_name FROM user_tab_columns WHERE table_name = 'EXECUTIONS' AND column_name = 'CORRELATION_ID'` | 1 ligne |
+| Colonne UPDATED_AT sur EXECUTIONS | `SELECT column_name FROM user_tab_columns WHERE table_name = 'EXECUTIONS' AND column_name = 'UPDATED_AT'` | 1 ligne |
 | Contraintes exclues | `SELECT constraint_name FROM user_constraints WHERE table_name = 'ACTIONS_CATALOG'` | Absence de CK_ACTIONS_CATALOG_CATEGORY, CK_ACTIONS_CATALOG_ENGINE, CK_ACTIONS_CATALOG_PLATFORM |
 | Partitionnement | `SELECT table_name FROM user_part_tables WHERE table_name IN ('EXECUTIONS','EXECUTION_STEPS','AUDIT_LOG')` | 3 tables partitionnées |
 | Package purge | `SELECT status FROM user_objects WHERE object_name = 'PKG_IDP_MAINTENANCE'` | VALID |

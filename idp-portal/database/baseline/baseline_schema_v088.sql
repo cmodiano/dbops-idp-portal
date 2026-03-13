@@ -11,8 +11,8 @@
 --   1. sqlplus idp_user/password@HOST:1521/XEPDB1 @database/baseline/baseline_schema_v088.sql
 --   2. flyway -baselineVersion=121 -baselineDescription=baseline_schema_v088 baseline
 --
--- Ce script couvre TOUTES les migrations V000–V119. Aucune migration incrémentale
--- n'est nécessaire après application. État identique à V000→V119 sans phases intermédiaires.
+-- Ce script couvre TOUTES les migrations V000–V121. Aucune migration incrémentale
+-- n'est nécessaire après application. État identique à V000→V121 sans phases intermédiaires.
 -- ===========================================================================
 --
 -- Objets créés :
@@ -282,7 +282,7 @@ COMMENT ON COLUMN PROFILES.DESCRIPTION IS 'Description du profil.';
 COMMENT ON COLUMN PROFILES.AD_GROUP IS 'Groupe AD associé au profil (ex. GRP-IDP-ASSURANCE).';
 COMMENT ON COLUMN PROFILES.IS_ADMIN IS '1 = profil administrateur.';
 COMMENT ON COLUMN PROFILES.IS_AUDITOR IS '1 = profil auditeur.';
-COMMENT ON COLUMN PROFILES.IS_APPROVER IS '1 = profil éligible comme approbateur dans un step gate approval';
+COMMENT ON COLUMN PROFILES.IS_APPROVER IS '1 = profil éligible comme approbateur dans une étape d''approbation.';
 COMMENT ON COLUMN PROFILES.CREATED_AT IS 'Date de création.';
 COMMENT ON COLUMN PROFILES.UPDATED_AT IS 'Date de dernière mise à jour.';
 COMMENT ON COLUMN PROFILES.LAST_SYNCED_AT IS 'Dernière synchronisation IaC.';
@@ -633,6 +633,7 @@ CREATE INDEX IDX_ACTIONS_CATALOG_DELETED_AT     ON ACTIONS_CATALOG(DELETED_AT);
 CREATE INDEX IDX_ACTION_BUSINESS_RULE_POLICY    ON ACTIONS_CATALOG(BUSINESS_RULE_POLICY_ID);
 CREATE INDEX IDX_ACTION_OUTPUT_SCHEMA           ON ACTIONS_CATALOG(OUTPUT_SCHEMA_ID);
 
+COMMENT ON TABLE ACTIONS_CATALOG IS 'Catalogue des actions et workflows exécutables.';
 COMMENT ON COLUMN ACTIONS_CATALOG.OUTPUT_SCHEMA_ID IS 'FK vers OUTPUT_SCHEMAS — schéma d''output déclaré par l''admin pour cette action';
 COMMENT ON COLUMN ACTIONS_CATALOG.PARAMETERS_SCHEMA IS 'Schéma JSON (draft-07) définissant les paramètres de l''action.';
 COMMENT ON COLUMN ACTIONS_CATALOG.IMPACT_RULES IS 'Objet JSON mappant l''environnement au niveau d''impact.';
@@ -914,7 +915,7 @@ ALTER TABLE AUDIT_LOG ADD CONSTRAINT CK_AUDIT_LOG_ACTION_TYPE CHECK (
             'EXECUTION_STEP_RETRY_ATTEMPT', 'EXECUTION_STEP_RETRY_SUCCESS',
             'EXECUTION_STEP_RETRY_EXHAUSTED', 'EXECUTION_STEP_RETRY_ABORTED',
 
-            -- Condition gates / policy approval (Epic 57)
+            -- Portes de condition et approbation policy
             'EXECUTION_STEP_WAITING',
             'EXECUTION_STEP_GATE_SATISFIED',
             'EXECUTION_STEP_GATE_TIMEOUT',
@@ -928,7 +929,7 @@ ALTER TABLE AUDIT_LOG ADD CONSTRAINT CK_AUDIT_LOG_ACTION_TYPE CHECK (
             -- Feature flags
             'FEATURE_FLAG_CREATED', 'FEATURE_FLAG_UPDATED',
 
-            -- Business rule policies (Epic 57)
+            -- Politiques de règles métier
             'POLICY_CREATED', 'POLICY_UPDATED', 'POLICY_DELETED',
 
             -- Execution polling
@@ -970,7 +971,7 @@ COMMENT ON COLUMN AUDIT_LOG.IP_ADDRESS IS 'Adresse IP de la requête.';
 -- ===========================================================================
 
 -- ---------------------------------------------------------------------------
--- EXECUTIONS (V023 + V030 + V033 + V048 + V057 + V084)
+-- EXECUTIONS (V023 + V030 + V033 + V048 + V057 + V084 + V119 + V120)
 -- Partitionnée par CREATED_AT (Range INTERVAL mensuel)
 -- Pas de CHK_EXECUTION_ENV : l'environnement est dicté par l'inventaire (validé par l'app)
 -- ---------------------------------------------------------------------------
@@ -985,6 +986,7 @@ CREATE TABLE EXECUTIONS (
     STARTED_AT           TIMESTAMP,
     COMPLETED_AT         TIMESTAMP,
     CREATED_AT           TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    UPDATED_AT           TIMESTAMP,
     APPROVED_BY           NUMBER(10),
     APPROVED_AT           TIMESTAMP,
     APPROVAL_COMMENT      VARCHAR2(1000),
@@ -1014,9 +1016,11 @@ CREATE INDEX IDX_EXECUTIONS_CREATED_USER   ON EXECUTIONS(CREATED_AT, USER_ID) LO
 CREATE INDEX IDX_EXECUTIONS_CREATED_STATUS ON EXECUTIONS(CREATED_AT, STATUS) LOCAL;
 CREATE INDEX IDX_EXECUTIONS_PARENT_ID      ON EXECUTIONS(PARENT_EXECUTION_ID);
 CREATE INDEX IDX_EXECUTIONS_CORRELATION ON EXECUTIONS(CORRELATION_ID);
+CREATE INDEX IDX_EXECUTIONS_UPDATED_AT ON EXECUTIONS (UPDATED_AT) GLOBAL;
 
 COMMENT ON TABLE EXECUTIONS IS 'Enregistrements d''exécution des actions. Partitionné par CREATED_AT (mensuel).';
 COMMENT ON COLUMN EXECUTIONS.CREATED_AT IS 'Horodatage UTC utilisé comme clé de partition (partitionnement mensuel).';
+COMMENT ON COLUMN EXECUTIONS.UPDATED_AT IS 'Horodatage de la dernière activité (heartbeat). NULL pour les exécutions anciennes ; utilisé avec created_at pour la détection de staleness.';
 COMMENT ON COLUMN EXECUTIONS.ID IS 'Clé primaire, colonne IDENTITY.';
 COMMENT ON COLUMN EXECUTIONS.CORRELATION_ID IS 'Identifiant de corrélation pour le traçage sur tout le cycle d''exécution.';
 COMMENT ON COLUMN EXECUTIONS.ACTION_ID IS 'FK vers ACTIONS_CATALOG.';
@@ -1660,9 +1664,9 @@ COMMIT;
 -- FIN DU SCRIPT BASELINE V088
 -- ===========================================================================
 -- Après application de ce script :
---   flyway baseline -baselineVersion=119 -baselineDescription=baseline_schema_v088
+--   flyway baseline -baselineVersion=121 -baselineDescription=baseline_schema_v088
 --
--- Aucune migration incrémentale requise — état identique à V000→V119.
+-- Aucune migration incrémentale requise — état identique à V000→V121.
 --
 -- Validation rapide :
 --   SELECT COUNT(*) FROM user_tables;             -- doit retourner 28 (26 + WORKFLOW_EVENTS + RUNNABLE_STEPS)
