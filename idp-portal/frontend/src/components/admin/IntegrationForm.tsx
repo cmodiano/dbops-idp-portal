@@ -194,7 +194,8 @@ export function IntegrationForm({
 
   const iconSrc = getIconUrl(uploadedIconUrl || watchedIcon);
   const iconPreview = <Avatar src={iconSrc || undefined} shape="square" size={32} icon={<ApiOutlined />} />;
-  const activeTypes = integrationTypes.filter((t) => t.is_active);
+  const types = integrationTypes ?? [];
+  const activeTypes = types.filter((t) => t.is_active);
   const platforms = activeTypes.filter((t) => t.integration_role === 'platform');
   const services = activeTypes.filter((t) => t.integration_role === 'service');
   const ungrouped = activeTypes.filter((t) => !t.integration_role);

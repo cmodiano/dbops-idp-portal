@@ -216,7 +216,10 @@ class TestAC4ProcessPendingCommands:
         execution = ExecutionFactory()
         cmd = _make_command(execution=execution)
 
-        count = WorkflowCommandService.process_pending_commands()
+        # Story 78.5: _dispatch_command now has real handlers that need valid payload.
+        # Mock dispatch to test infrastructure only (78.4 scope).
+        with patch.object(WorkflowCommandService, '_dispatch_command', classmethod(lambda cls, c: None)):
+            count = WorkflowCommandService.process_pending_commands()
 
         assert count == 1
         cmd.refresh_from_db()
@@ -237,12 +240,10 @@ class TestAC4ProcessPendingCommands:
                              created_at=now - timezone.timedelta(minutes=5))
 
         processed_order = []
-        original_dispatch = WorkflowCommandService._dispatch_command
 
         @classmethod
         def tracking_dispatch(cls, cmd):
             processed_order.append(cmd.id)
-            return original_dispatch.__func__(cls, cmd)
 
         with patch.object(WorkflowCommandService, '_dispatch_command', tracking_dispatch):
             count = WorkflowCommandService.process_pending_commands()
@@ -337,7 +338,9 @@ class TestAC4ProcessPendingCommands:
                 created_at=now - timezone.timedelta(minutes=5 - i),
             ))
 
-        count = WorkflowCommandService.process_pending_commands(batch_size=2)
+        # Story 78.5: Mock dispatch since commands lack valid handler payloads
+        with patch.object(WorkflowCommandService, '_dispatch_command', classmethod(lambda cls, c: None)):
+            count = WorkflowCommandService.process_pending_commands(batch_size=2)
         assert count == 2
         # Les 2 plus anciennes traitées (FIFO)
         for cmd in cmds[:2]:

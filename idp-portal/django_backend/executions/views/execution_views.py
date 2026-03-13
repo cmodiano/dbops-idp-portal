@@ -7,7 +7,6 @@ from __future__ import annotations
 from typing import Any
 
 from django.conf import settings
-from django.db import transaction
 from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -301,7 +300,7 @@ class ExecutionCancelView(APIView):
         """Return an ExecutionService instance (overridable in tests)."""
         return self._execution_service_class()
 
-    @extend_schema(tags=['executions'], summary='Annuler une exécution', responses={200: ExecutionSerializer})
+    @extend_schema(tags=['executions'], summary='Annuler une exécution', responses={202: ExecutionSerializer})
     def patch(self, request: Request, execution_id: int) -> Response:
         try:
             execution = Execution.objects.select_related("action", "user", "action__integration").prefetch_related("targets").get(id=execution_id)
@@ -319,33 +318,29 @@ class ExecutionCancelView(APIView):
                 details={"execution_id": execution_id, "current_status": execution.status},
             )
 
-        with transaction.atomic():
-            if execution.status == ExecutionStatus.RUNNING:
-                self._attempt_remote_cancellation(execution)
+        # Story 78.5: Write durable cancel command instead of inline processing
+        from executions.services.workflow_commands import WorkflowCommandService  # noqa: PLC0415
+        user_id = str(request.user.id)
+        cmd = WorkflowCommandService.write_command(
+            execution_id=execution_id,
+            command_type="cancel",
+            payload={},
+            created_by=user_id,
+        )
 
-            cancelled_by_admin = execution.user_id != request.user.id
-            try:
-                updated = self.get_execution_service().update_status(execution_id, ExecutionStatus.CANCELLED, str(request.user.id))
-            except ValueError as e:
-                raise BadRequestError(
-                    code="INVALID_STATUS",
-                    message=str(e),
-                    details={"execution_id": execution_id},
-                )
+        exec_logger.info(
+            "execution_cancel_command_written",
+            execution_id=execution_id,
+            command_id=cmd.id,
+            cancelled_by=request.user.id,
+            previous_status=execution.status,
+            correlation_id=get_correlation_id(),
+        )
 
-            if updated is None:
-                raise NotFoundError(code="NOT_FOUND", message="Execution non trouvée", details={"execution_id": execution_id})
-
-            exec_logger.info(
-                "execution_cancelled",
-                execution_id=execution_id,
-                cancelled_by=request.user.id,
-                cancelled_by_admin=cancelled_by_admin,
-                previous_status=execution.status,
-                correlation_id=get_correlation_id(),
-            )
-
-            return Response({"data": ExecutionSerializer(updated).data})
+        return Response(
+            {"data": {"command_id": cmd.id, "status": "accepted"}},
+            status=202,
+        )
 
     def _attempt_remote_cancellation(self, execution: Any) -> None:
         """Best-effort remote cancellation on execution engine.

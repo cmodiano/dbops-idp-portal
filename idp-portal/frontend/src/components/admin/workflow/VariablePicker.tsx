@@ -47,11 +47,11 @@ export const VariablePicker: FC<VariablePickerProps> = ({
     const precedingIds = availableStepIds != null
       ? availableStepIds.filter((id) => id !== currentStepId)
       : null;
-    return availableVariables
+    return (availableVariables ?? [])
       .filter((step) => precedingIds == null || precedingIds.includes(step.step_id))
       .map((step) => ({
         ...step,
-        variables: step.variables.filter(
+        variables: (step.variables ?? []).filter(
           (v) =>
             !search ||
             v.name.toLowerCase().includes(search.toLowerCase()) ||

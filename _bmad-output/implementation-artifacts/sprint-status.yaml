@@ -938,7 +938,7 @@ development_status:
     78-2-runnable-steps-leases-reclaim: done # Code review 2026-03-13: 3 MEDIUM fixes (M1 eligible_at test helper, M2 double logging, M3 max_attempts enforcement) — 17/17 tests
     78-3-alignement-config-step-id-model-schema: done # Code review 2026-03-13: 4 fixes (M1 test chaîne vide, M2 dead import, L1 File List, L2 comptage) — 9/9 tests
     78-4-workflow-commands-table: done # Code review 2026-03-13: 6 fixes (H1 race condition select_for_update, H2 BigAutoField, M1 write_command atomique, M2 set vs list, M3 test FIFO batch, L1 exists()) — 23/23 tests
-    78-5-dispatch-file-container-workflow-runtime: backlog
+    78-5-dispatch-file-container-workflow-runtime: done # Code review 2026-03-13: 6 fixes (H1 heartbeat worker, H2 cancel audit, H3 finalize atomic, M1 celery apply test, M2 step_type align, M3 cancel audit) — 56/56 tests
     78-6-simplification-reconciliateur: backlog
     78-7-execution-outbox: backlog
     78-8-desactivation-runtime-legacy: backlog

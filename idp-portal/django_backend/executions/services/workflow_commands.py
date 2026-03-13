@@ -1,6 +1,8 @@
 """Service pour la persistance et le traitement des commandes workflow.
 
 Story 78.4 — Command Store pour orchestration asynchrone.
+Story 78.5 — Handlers approve/reject/cancel/timeout/resume branchés.
+
 L'API écrit une commande durable et retourne rapidement,
 un processor séparé traite les commandes en FIFO.
 
@@ -16,6 +18,9 @@ from django.utils import timezone
 
 from executions.models import (
     Execution,
+    ExecutionStatus,
+    ExecutionStep,
+    ExecutionStepStatus,
     WorkflowCommand,
     WorkflowCommandStatus,
     VALID_COMMAND_TYPES,
@@ -120,8 +125,8 @@ class WorkflowCommandService:
     def _dispatch_command(cls, cmd: WorkflowCommand) -> None:
         """Dispatch vers le handler approprié.
 
-        Story 78.4: infrastructure seulement — les handlers seront
-        branchés dans 78.5/78.6.
+        Story 78.5: Route vers _handle_approve, _handle_reject, _handle_cancel,
+        _handle_timeout, _handle_resume.
         """
         logger.info(
             "workflow_command_dispatched",
@@ -129,3 +134,401 @@ class WorkflowCommandService:
             command_type=cmd.command_type,
             execution_id=cmd.execution_id,
         )
+
+        handler = {
+            "approve": cls._handle_approve,
+            "reject": cls._handle_reject,
+            "cancel": cls._handle_cancel,
+            "timeout_signal": cls._handle_timeout,
+            "resume_signal": cls._handle_resume,
+        }.get(cmd.command_type)
+
+        if handler is None:
+            raise ValueError(f"No handler for command_type: {cmd.command_type}")
+
+        handler(cmd)
+
+    @classmethod
+    def _handle_approve(cls, cmd: WorkflowCommand) -> None:
+        """Handle approve command: step WAITING→COMPLETED, emit event, enqueue next steps."""
+        payload = cmd.payload or {}
+        step_id = payload.get("step_id")
+        user_id = cmd.created_by or "system"
+
+        if not step_id:
+            raise ValueError("approve command requires payload.step_id")
+
+        step = ExecutionStep.objects.select_related('execution', 'execution__action').get(
+            id=step_id, execution_id=cmd.execution_id,
+        )
+
+        if step.status != ExecutionStepStatus.WAITING:
+            logger.info(
+                "command_approve_step_not_waiting",
+                step_id=step_id,
+                status=step.status,
+                execution_id=cmd.execution_id,
+            )
+            return  # Idempotent: already processed
+
+        # Update step status
+        step.status = ExecutionStepStatus.COMPLETED
+        step.completed_at = timezone.now()
+        step.approval_comment = payload.get("comment", "")
+
+        # Update gate_status in output
+        output = step.get_output() or {}
+        gate_status = output.get("gate_status", [])
+        for gs in gate_status:
+            if isinstance(gs, dict) and gs.get("type") == "approval_granted":
+                gs["satisfied"] = True
+                gs["reason"] = f"Approuvé par utilisateur {user_id}"
+                break
+        output["gate_status"] = gate_status
+        step.set_output(output)
+        step.save()
+
+        # Emit event + dequeue runnable step (on_commit for side-effects)
+        _eid, _step_id = cmd.execution_id, step.id
+
+        def _post_approve() -> None:
+            from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
+            from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
+            WorkflowEventService.emit_approval_granted(_eid, step, approved_by=user_id)
+            RunnableStepService.delete(_step_id)
+
+        transaction.on_commit(_post_approve)
+
+        # Determine and enqueue next steps
+        execution = step.execution
+        all_steps = execution.action.execution_steps or []
+        step_config = cls._find_step_config(all_steps, step.config_step_id)
+
+        if step_config:
+            on_success = step_config.get("on_success_step_ids") or []
+            if not on_success:
+                # Linear fallback: next step by order
+                on_success = cls._get_linear_next_ids(all_steps, step_config)
+
+            if on_success:
+                cls._enqueue_resume_steps(execution, on_success, all_steps)
+            else:
+                # No next steps — finalize if needed (deferred to on_commit)
+                transaction.on_commit(
+                    lambda: cls._finalize_if_done(execution)
+                )
+        else:
+            transaction.on_commit(
+                lambda: cls._finalize_if_done(execution)
+            )
+
+        logger.info(
+            "command_approve_handled",
+            step_id=step_id,
+            execution_id=cmd.execution_id,
+            user_id=user_id,
+        )
+
+    @classmethod
+    def _handle_reject(cls, cmd: WorkflowCommand) -> None:
+        """Handle reject command: step WAITING→FAILED, emit event, route to error path."""
+        payload = cmd.payload or {}
+        step_id = payload.get("step_id")
+        user_id = cmd.created_by or "system"
+
+        if not step_id:
+            raise ValueError("reject command requires payload.step_id")
+
+        step = ExecutionStep.objects.select_related('execution', 'execution__action').get(
+            id=step_id, execution_id=cmd.execution_id,
+        )
+
+        if step.status != ExecutionStepStatus.WAITING:
+            logger.info(
+                "command_reject_step_not_waiting",
+                step_id=step_id,
+                status=step.status,
+                execution_id=cmd.execution_id,
+            )
+            return  # Idempotent
+
+        step.status = ExecutionStepStatus.FAILED
+        step.completed_at = timezone.now()
+        step.approval_comment = payload.get("comment", "")
+        step.save()
+
+        _eid, _step_id = cmd.execution_id, step.id
+
+        def _post_reject() -> None:
+            from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
+            from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
+            WorkflowEventService.emit_approval_rejected(_eid, step, rejected_by=user_id)
+            RunnableStepService.delete(_step_id)
+
+        transaction.on_commit(_post_reject)
+
+        # Route to error path or fail execution
+        execution = step.execution
+        all_steps = execution.action.execution_steps or []
+        step_config = cls._find_step_config(all_steps, step.config_step_id)
+
+        on_error = (step_config.get("on_error_step_ids") or []) if step_config else []
+
+        if on_error:
+            cls._enqueue_resume_steps(execution, on_error, all_steps)
+        else:
+            # No error path — fail the execution
+            if execution.status == ExecutionStatus.RUNNING:
+                Execution.objects.filter(
+                    id=execution.id, status=ExecutionStatus.RUNNING,
+                ).update(
+                    status=ExecutionStatus.FAILED,
+                    completed_at=timezone.now(),
+                    error_message="Step approval rejected",
+                )
+
+        logger.info(
+            "command_reject_handled",
+            step_id=step_id,
+            execution_id=cmd.execution_id,
+            user_id=user_id,
+        )
+
+    @classmethod
+    def _handle_cancel(cls, cmd: WorkflowCommand) -> None:
+        """Handle cancel command: execution→CANCELLED, cascade cancel children."""
+        execution = Execution.objects.get(id=cmd.execution_id)
+
+        if execution.status not in (ExecutionStatus.SUBMITTED, ExecutionStatus.RUNNING):
+            logger.info(
+                "command_cancel_not_cancellable",
+                execution_id=cmd.execution_id,
+                status=execution.status,
+            )
+            return  # Idempotent
+
+        # CAS update to CANCELLED
+        updated = Execution.objects.filter(
+            id=execution.id,
+            status__in=[ExecutionStatus.SUBMITTED, ExecutionStatus.RUNNING],
+        ).update(
+            status=ExecutionStatus.CANCELLED,
+            completed_at=timezone.now(),
+        )
+
+        if updated == 0:
+            return
+
+        # Cascade cancel child executions
+        Execution.objects.filter(
+            parent_execution_id=execution.id,
+            status__in=[ExecutionStatus.SUBMITTED, ExecutionStatus.RUNNING],
+        ).update(
+            status=ExecutionStatus.CANCELLED,
+            completed_at=timezone.now(),
+        )
+
+        # Cancel pending steps
+        ExecutionStep.objects.filter(
+            execution_id=execution.id,
+            status__in=[ExecutionStepStatus.PENDING, ExecutionStepStatus.RUNNING, ExecutionStepStatus.WAITING],
+        ).update(
+            status=ExecutionStepStatus.FAILED,
+            completed_at=timezone.now(),
+            error_message="Execution cancelled",
+        )
+
+        # Dequeue all runnable steps for this execution
+        from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
+        RunnableStepService.delete_for_execution(execution.id)
+
+        # Mark in cancellation cache
+        from executions.cancellation_cache import mark_cancelled  # noqa: PLC0415
+        mark_cancelled(execution.id)
+
+        # Audit trail (was in ExecutionCancelView before 78.5)
+        try:
+            from core.services import AuditService  # noqa: PLC0415
+            from core.models import AuditActionType, AuditEntityType  # noqa: PLC0415
+            AuditService.create_entry(
+                user_id=cmd.created_by or "system",
+                action_type=AuditActionType.EXECUTION_CANCELLED,
+                entity_type=AuditEntityType.EXECUTION,
+                entity_id=execution.id,
+                details={"cancelled_by": cmd.created_by, "via": "workflow_command"},
+                correlation_id=getattr(execution, 'correlation_id', None),
+            )
+        except Exception:  # noqa: BLE001
+            logger.warning("command_cancel_audit_failed", execution_id=execution.id)
+
+        logger.info(
+            "command_cancel_handled",
+            execution_id=cmd.execution_id,
+            cancelled_by=cmd.created_by,
+        )
+
+    @classmethod
+    def _handle_timeout(cls, cmd: WorkflowCommand) -> None:
+        """Handle timeout_signal: step WAITING→FAILED, route to error path."""
+        payload = cmd.payload or {}
+        step_id = payload.get("step_id")
+
+        if not step_id:
+            raise ValueError("timeout_signal command requires payload.step_id")
+
+        step = ExecutionStep.objects.select_related('execution', 'execution__action').get(
+            id=step_id, execution_id=cmd.execution_id,
+        )
+
+        if step.status != ExecutionStepStatus.WAITING:
+            return  # Idempotent
+
+        step.status = ExecutionStepStatus.FAILED
+        step.completed_at = timezone.now()
+        step.error_message = "Step timed out"
+        step.save()
+
+        # Dequeue
+        from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
+        RunnableStepService.delete(step.id)
+
+        # Route to error path
+        execution = step.execution
+        all_steps = execution.action.execution_steps or []
+        step_config = cls._find_step_config(all_steps, step.config_step_id)
+        on_error = (step_config.get("on_error_step_ids") or []) if step_config else []
+
+        if on_error:
+            cls._enqueue_resume_steps(execution, on_error, all_steps)
+        else:
+            if execution.status == ExecutionStatus.RUNNING:
+                Execution.objects.filter(
+                    id=execution.id, status=ExecutionStatus.RUNNING,
+                ).update(
+                    status=ExecutionStatus.FAILED,
+                    completed_at=timezone.now(),
+                    error_message="Step timed out",
+                )
+
+        logger.info(
+            "command_timeout_handled",
+            step_id=step_id,
+            execution_id=cmd.execution_id,
+        )
+
+    @classmethod
+    def _handle_resume(cls, cmd: WorkflowCommand) -> None:
+        """Handle resume_signal: enqueue specified step_ids as new runnable steps."""
+        payload = cmd.payload or {}
+        step_ids = payload.get("step_ids", [])
+
+        if not step_ids:
+            raise ValueError("resume_signal command requires payload.step_ids")
+
+        execution = Execution.objects.select_related('action').get(id=cmd.execution_id)
+
+        if execution.status != ExecutionStatus.RUNNING:
+            logger.info(
+                "command_resume_execution_not_running",
+                execution_id=cmd.execution_id,
+                status=execution.status,
+            )
+            return
+
+        all_steps = execution.action.execution_steps or []
+        cls._enqueue_resume_steps(execution, step_ids, all_steps)
+
+        logger.info(
+            "command_resume_handled",
+            step_ids=step_ids,
+            execution_id=cmd.execution_id,
+        )
+
+    # -----------------------------------------------------------------------
+    # Internal helpers
+    # -----------------------------------------------------------------------
+
+    @staticmethod
+    def _find_step_config(all_steps: list, config_step_id: str | None) -> dict | None:
+        """Find step config dict by step_id in workflow definition."""
+        if not config_step_id:
+            return None
+        for s in all_steps:
+            if isinstance(s, dict) and s.get('step_id') == config_step_id:
+                return s
+        return None
+
+    @staticmethod
+    def _get_linear_next_ids(all_steps: list, step_config: dict) -> list[str]:
+        """Get the next step by order (linear fallback)."""
+        current_order = step_config.get('order', 0)
+        for s in sorted(all_steps, key=lambda x: x.get('order', 0)):
+            if isinstance(s, dict) and s.get('order', 0) > current_order and s.get('step_id'):
+                return [s['step_id']]
+        return []
+
+    @classmethod
+    def _enqueue_resume_steps(
+        cls, execution: Execution, step_ids: list[str], all_steps: list,
+    ) -> None:
+        """Create PENDING ExecutionSteps for the given step_ids and enqueue them."""
+        from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
+        from executions.container_workflow_runtime import ContainerWorkflowRuntime  # noqa: PLC0415
+        from django.db.models import Max  # noqa: PLC0415
+
+        max_order = ExecutionStep.objects.filter(
+            execution=execution,
+        ).aggregate(Max('step_order'))['step_order__max'] or 0
+
+        step_config_by_id = {
+            s.get('step_id'): s
+            for s in all_steps
+            if isinstance(s, dict) and s.get('step_id')
+        }
+
+        for sid in step_ids:
+            if not isinstance(sid, str) or not sid:
+                continue
+
+            # Idempotency: skip if step already exists and is active
+            existing = ExecutionStep.objects.filter(
+                execution=execution,
+                config_step_id=sid,
+                status__in=[
+                    ExecutionStepStatus.PENDING,
+                    ExecutionStepStatus.RUNNING,
+                    ExecutionStepStatus.COMPLETED,
+                ],
+            ).exists()
+            if existing:
+                continue
+
+            step_config = step_config_by_id.get(sid)
+            if not step_config:
+                continue
+
+            step_type_str = step_config.get('step_type', 'platform')
+            from executions.models import ExecutionStepType  # noqa: PLC0415
+            db_step_type = ContainerWorkflowRuntime._STEP_TYPE_TO_DB_TYPE.get(
+                step_type_str, ExecutionStepType.PLATFORM,
+            )
+            step_name = step_config.get('name') or f"Étape {step_config.get('order', 0)}"
+
+            max_order += 1
+            exec_step = ExecutionStep.objects.create(
+                execution=execution,
+                step_order=max_order,
+                step_name=step_name,
+                config_step_id=sid,
+                step_type=db_step_type,
+                status=ExecutionStepStatus.PENDING,
+            )
+            RunnableStepService.enqueue(exec_step)
+
+    @staticmethod
+    def _finalize_if_done(execution: Execution) -> None:
+        """Finalize execution if no more active steps remain."""
+        from executions.tasks.orchestration_worker import _finalize_execution_if_done  # noqa: PLC0415
+        with transaction.atomic():
+            execution.refresh_from_db()
+            _finalize_execution_if_done(execution, ExecutionStatus.COMPLETED)
