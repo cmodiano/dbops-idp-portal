@@ -927,6 +927,6 @@ development_status:
     77-3-executer-steps-platform-chemin-reel-dispatch: done # Code review 2026-03-12: M1-M4 fixes (enum, timeout test, patch redondant, imports, File List)
     77-4-extraction-outputs-artifacts-reels-child-executions: done # Code review 2026-03-12: fix C1 guard item_type==ACTION, +2 tests (regression + no-integration)
     77-5-side-effects-approve-reject-on-commit: done # Code review 2026-03-13: M1 fix _eid shadowing in ApproveStepView, M2 rollback test rendu significatif (assertion callbacks), M3 test rollback reject ajouté (6/6 tests, 21/21 régression)
-    77-6-tests-durabilite-workflow: backlog
+    77-6-tests-durabilite-workflow: done # Code review 2026-03-13: M1 assertions outcome renforcées (==completed), M2 assertions tautologiques AC3 vérifiées en valeurs, L1 @pytest.mark.django_db déplacé au niveau classe TestAC4, L2 config_step_id ajouté dans _make_approval_step_77_6 (7/7 tests, 45/45 régression)
     77-7-valider-supporter-gate-steps-fan-out-parallele: backlog
     epic-77-retrospective: optional
