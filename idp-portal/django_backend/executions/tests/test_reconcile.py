@@ -54,10 +54,18 @@ from tests.factories import ExecutionFactory, ExecutionStepFactory
 
 STEP_ID_A = "step-id-aaa"
 STEP_ID_B = "step-id-bbb"
+STEP_ID_C = "step-id-ccc"
 
 CONTAINER_STEPS = [
     {"step_id": STEP_ID_A, "name": "step_a", "type": "platform"},
     {"step_id": STEP_ID_B, "name": "step_b", "type": "platform"},
+]
+
+# Steps with on_error_step_ids for on-error resume tests
+CONTAINER_STEPS_WITH_ON_ERROR = [
+    {"step_id": STEP_ID_A, "name": "step_a", "type": "platform"},
+    {"step_id": STEP_ID_B, "name": "step_b", "type": "platform", "on_error_step_ids": [STEP_ID_C]},
+    {"step_id": STEP_ID_C, "name": "step_c", "type": "platform"},
 ]
 
 
@@ -338,6 +346,45 @@ class TestResumeContainerWorkflow:
         assert result == "reattached"
         mock_rt._execute_workflow_steps.assert_called_once()
         assert mock_rt._initial_wave == [STEP_ID_B]
+
+    def test_failed_step_with_on_error_step_ids_resumes_to_on_error_successor(self):
+        """FAILED step with on_error_step_ids → resume along on-error continuation to STEP_ID_C."""
+        from executions.models import ExecutionStatus
+
+        execution = _make_execution(execution_steps=CONTAINER_STEPS_WITH_ON_ERROR)
+        ExecutionStepFactory(
+            execution=execution,
+            status="COMPLETED",
+            config_step_id=STEP_ID_A,
+            step_order=1,
+        )
+        ExecutionStepFactory(
+            execution=execution,
+            status="FAILED",
+            config_step_id=STEP_ID_B,
+            step_order=2,
+        )
+
+        mock_rt = MagicMock()
+        mock_rt._step_outputs = {}
+        mock_rt._step_lookup_by_id = {
+            s["step_id"]: s for s in CONTAINER_STEPS_WITH_ON_ERROR
+        }
+
+        with patch(
+            "executions.container_workflow_runtime.ContainerWorkflowRuntime",
+            return_value=mock_rt,
+        ), patch(
+            "executions.output_extractor.OutputExtractor",
+            return_value=MagicMock(extract=lambda raw, mapping: raw),
+        ):
+            result = _resume_container_workflow(execution)
+
+        assert result == "reattached"
+        mock_rt._execute_workflow_steps.assert_called_once()
+        assert mock_rt._initial_wave == [STEP_ID_C]
+        execution.refresh_from_db()
+        assert execution.status == ExecutionStatus.RUNNING
 
 
 # ---------------------------------------------------------------------------
