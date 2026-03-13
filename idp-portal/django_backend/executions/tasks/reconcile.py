@@ -271,13 +271,14 @@ def _resume_container_workflow(execution: Any, correlation_id: str = "") -> str:
         if isinstance(s, dict) and s.get("name") and s.get("step_id")
     }
 
-    completed_steps = list(
+    terminal_steps = list(
         ExecutionStep.objects.filter(
             execution=execution,
-            status=ExecutionStepStatus.COMPLETED,
+            status__in=(ExecutionStepStatus.COMPLETED, ExecutionStepStatus.FAILED),
         ).order_by("step_order")
     )
 
+    completed_steps = [s for s in terminal_steps if s.status == ExecutionStepStatus.COMPLETED]
     if not completed_steps:
         raise ValueError("No COMPLETED steps found — cannot resume container workflow")
 
@@ -299,21 +300,30 @@ def _resume_container_workflow(execution: Any, correlation_id: str = "") -> str:
             runtime._step_outputs[step_id_key] = extracted
 
     # --- Compute next wave ---
+    # Map ExecutionStepStatus to ExecutionStatus for get_next_step_ids / apply_join_policy
+    _step_status_to_exec_status: dict[str, ExecutionStatus] = {
+        ExecutionStepStatus.COMPLETED.value: ExecutionStatus.COMPLETED,
+        ExecutionStepStatus.FAILED.value: ExecutionStatus.FAILED,
+    }
     results: dict = {}
-    for db_step in completed_steps:
+    for db_step in terminal_steps:
         step_id_key = db_step.config_step_id
         if not step_id_key and db_step.step_name:
             step_id_key = step_name_to_id.get(db_step.step_name)
         if step_id_key and step_id_key in _step_config_by_id:
             step_cfg = _step_config_by_id[step_id_key]
-            next_ids = get_next_step_ids(step_cfg, ExecutionStatus.COMPLETED, all_steps)
-            results[step_id_key] = (ExecutionStatus.COMPLETED, next_ids)
+            step_status_val = getattr(db_step.status, "value", db_step.status) or db_step.status
+            exec_status = _step_status_to_exec_status.get(
+                step_status_val, ExecutionStatus.FAILED
+            )
+            next_ids = get_next_step_ids(step_cfg, exec_status, all_steps)
+            results[step_id_key] = (exec_status, next_ids)
 
-    completed_step_ids = {
+    terminal_step_ids = {
         db_step.config_step_id or step_name_to_id.get(db_step.step_name)
-        for db_step in completed_steps
+        for db_step in terminal_steps
     }
-    completed_step_ids = {sid for sid in completed_step_ids if sid}
+    terminal_step_ids = {sid for sid in terminal_step_ids if sid}
 
     candidate_steps = [
         _step_config_by_id[sid] for sid in results if sid in _step_config_by_id
@@ -321,7 +331,7 @@ def _resume_container_workflow(execution: Any, correlation_id: str = "") -> str:
     next_wave = [
         nid
         for nid in apply_join_policy(candidate_steps, results, runtime._step_lookup_by_id)
-        if nid not in completed_step_ids
+        if nid not in terminal_step_ids
     ]
 
     logger.info(
