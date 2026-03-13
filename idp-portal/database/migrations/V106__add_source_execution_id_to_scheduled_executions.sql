@@ -1,7 +1,7 @@
 -- Story 57.17: Add SOURCE_EXECUTION_ID to SCHEDULED_EXECUTIONS
 -- Links a ScheduledExecution to the source Execution that triggered its creation
 -- via a schedule_execution workflow step.
--- Idempotent pour compatibilité avec baseline mis à jour (V106/V107 inclus dans baseline_schema_v088)
+-- Idempotent pour compatibilité avec baseline mis à jour (V106/V107 inclus dans baseline_flyway)
 DECLARE
   v_cnt NUMBER;
 BEGIN

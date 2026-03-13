@@ -16,6 +16,7 @@ import structlog
 from django.db import transaction
 from django.utils import timezone
 
+from catalog.workflow_definition_repository import get_steps as get_workflow_steps
 from executions.models import (
     Execution,
     ExecutionStatus,
@@ -207,7 +208,7 @@ class WorkflowCommandService:
 
         # Determine and enqueue next steps
         execution = step.execution
-        all_steps = execution.action.execution_steps or []
+        all_steps = get_workflow_steps(execution.action)
         step_config = cls._find_step_config(all_steps, step.config_step_id)
 
         if step_config:
@@ -283,7 +284,7 @@ class WorkflowCommandService:
 
         # Route to error path or fail execution
         execution = step.execution
-        all_steps = execution.action.execution_steps or []
+        all_steps = get_workflow_steps(execution.action)
         step_config = cls._find_step_config(all_steps, step.config_step_id)
 
         on_error = (step_config.get("on_error_step_ids") or []) if step_config else []
@@ -414,7 +415,7 @@ class WorkflowCommandService:
 
         # Route to error path
         execution = step.execution
-        all_steps = execution.action.execution_steps or []
+        all_steps = get_workflow_steps(execution.action)
         step_config = cls._find_step_config(all_steps, step.config_step_id)
         on_error = (step_config.get("on_error_step_ids") or []) if step_config else []
 
@@ -455,7 +456,7 @@ class WorkflowCommandService:
             )
             return
 
-        all_steps = execution.action.execution_steps or []
+        all_steps = get_workflow_steps(execution.action)
         cls._enqueue_resume_steps(execution, step_ids, all_steps)
 
         logger.info(

@@ -44,6 +44,7 @@ from core.utils import sanitize_audit_changes
 from core.middleware import get_correlation_id
 from executions.output_extractor import OutputExtractor
 from executions.template_resolver import StepTemplateResolver
+from catalog.workflow_definition_repository import get_steps as get_workflow_steps
 from executions.utils.workflow_parsing import get_workflow_entry_step_ids
 from executions.step_handlers.condition_evaluator import StepConditionEvaluator
 from executions.step_handlers.service_call_handler import ServiceCallHandler
@@ -227,7 +228,7 @@ class ContainerWorkflowRuntime:
 
     def _load_workflow_steps(self) -> List[Dict[str, Any]]:
         """Load and sort workflow steps from action's execution_steps."""
-        steps = self.action.execution_steps or []
+        steps = get_workflow_steps(self.action)
         if not isinstance(steps, list):
             logger.warning(
                 "container_workflow_steps_invalid_format",

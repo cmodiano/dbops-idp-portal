@@ -2,21 +2,21 @@
 -- Baseline Schema V088 — IDP Portal
 -- ===========================================================================
 -- Date            : 2026-03-13
--- Version couverte: V000–V121 (incl. V120 UPDATED_AT, V121 drop legacy tables)
+-- Version couverte: V000–V129 (incl. V122–V129 workflow tables, purge V126)
 --
 -- Usage           : NOUVEAUX ENVIRONNEMENTS UNIQUEMENT (base Oracle vierge)
 -- Interdit sur    : Environnements existants (dev, staging, prod) — INCHANGÉS
 --
 -- Procédure de déploiement :
---   1. sqlplus idp_user/password@HOST:1521/XEPDB1 @database/baseline/baseline_schema_v088.sql
---   2. flyway -baselineVersion=121 -baselineDescription=baseline_schema_v088 baseline
+--   1. sqlplus idp_user/password@HOST:1521/XEPDB1 @database/baseline/baseline_flyway.sql
+--   2. flyway -baselineVersion=129 -baselineDescription=baseline_flyway baseline
 --
--- Ce script couvre TOUTES les migrations V000–V121. Aucune migration incrémentale
--- n'est nécessaire après application. État identique à V000→V121 sans phases intermédiaires.
+-- Ce script couvre TOUTES les migrations V000–V129. Aucune migration incrémentale
+-- n'est nécessaire après application. État identique à V000→V129 sans phases intermédiaires.
 -- ===========================================================================
 --
 -- Objets créés :
---   28 tables, indexes, contraintes, trigger, package PKG_IDP_MAINTENANCE, données de référence
+--   40 tables, indexes, contraintes, trigger, package PKG_IDP_MAINTENANCE, données de référence
 --
 -- Exclusions (éléments neutralisés par les migrations) :
 --   - SCHEMA_VERSION (créée V000, droppée V015)
@@ -1378,6 +1378,27 @@ CREATE OR REPLACE PACKAGE BODY PKG_IDP_MAINTENANCE AS
                         'SUCCESS', 0, 'RUNNABLE_STEPS supprimés: ' || SQL%ROWCOUNT || ' rows');
 
                     EXECUTE IMMEDIATE
+                        'DELETE FROM WORKFLOW_EVENT_COUNTER WHERE EXECUTION_ID IN '
+                        || '(SELECT ID FROM EXECUTIONS PARTITION (' || r.PARTITION_NAME || '))';
+
+                    log_maintenance('EXECUTIONS', r.PARTITION_NAME, 'PREREQ_DELETE',
+                        'SUCCESS', 0, 'WORKFLOW_EVENT_COUNTER supprimés: ' || SQL%ROWCOUNT || ' rows');
+
+                    EXECUTE IMMEDIATE
+                        'DELETE FROM WORKFLOW_COMMANDS WHERE EXECUTION_ID IN '
+                        || '(SELECT ID FROM EXECUTIONS PARTITION (' || r.PARTITION_NAME || '))';
+
+                    log_maintenance('EXECUTIONS', r.PARTITION_NAME, 'PREREQ_DELETE',
+                        'SUCCESS', 0, 'WORKFLOW_COMMANDS supprimés: ' || SQL%ROWCOUNT || ' rows');
+
+                    EXECUTE IMMEDIATE
+                        'DELETE FROM EXECUTION_OUTBOX WHERE EXECUTION_ID IN '
+                        || '(SELECT ID FROM EXECUTIONS PARTITION (' || r.PARTITION_NAME || '))';
+
+                    log_maintenance('EXECUTIONS', r.PARTITION_NAME, 'PREREQ_DELETE',
+                        'SUCCESS', 0, 'EXECUTION_OUTBOX supprimés: ' || SQL%ROWCOUNT || ' rows');
+
+                    EXECUTE IMMEDIATE
                         'UPDATE SCHEDULED_EXECUTIONS SET SOURCE_EXECUTION_ID = NULL '
                         || 'WHERE SOURCE_EXECUTION_ID IN '
                         || '(SELECT ID FROM EXECUTIONS PARTITION (' || r.PARTITION_NAME || '))';
@@ -1595,7 +1616,24 @@ COMMENT ON COLUMN WORKFLOW_EVENTS.PAYLOAD IS 'Snapshot JSON du changement (nouve
 COMMENT ON COLUMN WORKFLOW_EVENTS.CREATED_AT IS 'Horodatage de l''événement. Utilisé pour la purge de rétention (7 jours par défaut).';
 
 -- ---------------------------------------------------------------------------
--- V113 Part 3: RUNNABLE_STEPS — Work queue of steps ready for execution
+-- V122: WORKFLOW_EVENT_COUNTER — allocation séquence atomique pour WORKFLOW_EVENTS
+-- ---------------------------------------------------------------------------
+CREATE TABLE WORKFLOW_EVENT_COUNTER (
+    EXECUTION_ID        NUMBER NOT NULL,
+    LAST_SEQUENCE_NUM   NUMBER DEFAULT 0 NOT NULL,
+
+    CONSTRAINT PK_WORKFLOW_EVENT_COUNTER PRIMARY KEY (EXECUTION_ID),
+    CONSTRAINT FK_WF_EVENT_COUNTER_EXEC FOREIGN KEY (EXECUTION_ID)
+        REFERENCES EXECUTIONS(ID) ON DELETE CASCADE,
+    CONSTRAINT CK_WF_EVENT_COUNTER_SEQ CHECK (LAST_SEQUENCE_NUM >= 0)
+);
+
+COMMENT ON TABLE WORKFLOW_EVENT_COUNTER IS 'Compteur de séquence atomique par exécution pour WORKFLOW_EVENTS. Une seule ligne par execution_id ; incrément via SELECT FOR UPDATE.';
+COMMENT ON COLUMN WORKFLOW_EVENT_COUNTER.EXECUTION_ID IS 'FK vers EXECUTIONS(ID) — clé primaire de la table.';
+COMMENT ON COLUMN WORKFLOW_EVENT_COUNTER.LAST_SEQUENCE_NUM IS 'Dernier numéro de séquence alloué pour cette exécution. Initialisé à 0, incrémenté de 1 à chaque événement.';
+
+-- ---------------------------------------------------------------------------
+-- V113 Part 3: RUNNABLE_STEPS — Work queue of steps ready for execution (V123: leases)
 -- ---------------------------------------------------------------------------
 CREATE TABLE RUNNABLE_STEPS (
     ID                NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -1607,6 +1645,10 @@ CREATE TABLE RUNNABLE_STEPS (
     ELIGIBLE_AT       TIMESTAMP DEFAULT TO_TIMESTAMP(TO_CHAR(SYSTIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS.FF6'), 'YYYY-MM-DD HH24:MI:SS.FF6') NOT NULL,
     CLAIMED_AT        TIMESTAMP,
     CLAIMED_BY        VARCHAR2(255),
+    CLAIMED_UNTIL     TIMESTAMP,
+    ATTEMPT_NO        NUMBER DEFAULT 0 NOT NULL,
+    LAST_ERROR        VARCHAR2(4000),
+    MAX_ATTEMPTS      NUMBER DEFAULT 3 NOT NULL,
     CREATED_AT        TIMESTAMP DEFAULT TO_TIMESTAMP(TO_CHAR(SYSTIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS.FF6'), 'YYYY-MM-DD HH24:MI:SS.FF6') NOT NULL,
 
     CONSTRAINT FK_RUNNABLE_STEPS_STEP FOREIGN KEY (EXECUTION_STEP_ID)
@@ -1616,8 +1658,8 @@ CREATE TABLE RUNNABLE_STEPS (
     CONSTRAINT UK_RUNNABLE_STEPS_STEP UNIQUE (EXECUTION_STEP_ID)
 );
 
-CREATE INDEX IDX_RUNNABLE_STEPS_UNCLAIMED ON RUNNABLE_STEPS(CLAIMED_AT, PRIORITY, ELIGIBLE_AT);
-CREATE INDEX IDX_RUNNABLE_STEPS_EXEC      ON RUNNABLE_STEPS(EXECUTION_ID);
+CREATE INDEX IDX_RUNNABLE_STEPS_LEASE ON RUNNABLE_STEPS(ELIGIBLE_AT, CLAIMED_UNTIL, PRIORITY);
+CREATE INDEX IDX_RUNNABLE_STEPS_EXEC  ON RUNNABLE_STEPS(EXECUTION_ID);
 
 COMMENT ON TABLE RUNNABLE_STEPS IS 'File d''attente des étapes d''exécution prêtes à être exécutées. Les workers réclament et traitent les lignes puis les suppriment.';
 COMMENT ON COLUMN RUNNABLE_STEPS.EXECUTION_STEP_ID IS 'FK vers EXECUTION_STEPS — l''étape à exécuter. Unique : une étape ne peut être en file qu''une fois.';
@@ -1628,6 +1670,140 @@ COMMENT ON COLUMN RUNNABLE_STEPS.PRIORITY IS 'Plus élevé = priorité plus haut
 COMMENT ON COLUMN RUNNABLE_STEPS.ELIGIBLE_AT IS 'Moment où l''étape est devenue éligible. Utilisé pour l''ordre FIFO à priorité égale.';
 COMMENT ON COLUMN RUNNABLE_STEPS.CLAIMED_AT IS 'NULL = non réclamé. Défini par le worker pour réclamer l''étape (verrouillage optimiste).';
 COMMENT ON COLUMN RUNNABLE_STEPS.CLAIMED_BY IS 'Identifiant du worker ayant réclamé cette étape (hostname, task_id, etc.).';
+COMMENT ON COLUMN RUNNABLE_STEPS.CLAIMED_UNTIL IS 'Expiration du lease du worker. NULL = step disponible. Si < now = lease expiré (crash worker), step récupérable.';
+COMMENT ON COLUMN RUNNABLE_STEPS.ATTEMPT_NO IS 'Nombre de tentatives cumulées (incrémenté à chaque claim, jamais réinitialisé).';
+COMMENT ON COLUMN RUNNABLE_STEPS.LAST_ERROR IS 'Dernière erreur rencontrée lors de l''exécution du step (max 4000 chars Oracle).';
+COMMENT ON COLUMN RUNNABLE_STEPS.MAX_ATTEMPTS IS 'Nombre maximum de tentatives avant abandon (défaut: 3).';
+
+-- ---------------------------------------------------------------------------
+-- V124: WORKFLOW_COMMANDS — commandes durables
+-- ---------------------------------------------------------------------------
+CREATE TABLE WORKFLOW_COMMANDS (
+    ID              NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    EXECUTION_ID    NUMBER NOT NULL,
+    COMMAND_TYPE    VARCHAR2(50) NOT NULL,
+    PAYLOAD         CLOB,
+    STATUS          VARCHAR2(20) DEFAULT 'pending' NOT NULL,
+    CREATED_AT      TIMESTAMP DEFAULT TO_TIMESTAMP(TO_CHAR(SYSTIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS.FF6'), 'YYYY-MM-DD HH24:MI:SS.FF6') NOT NULL,
+    PROCESSED_AT    TIMESTAMP,
+    CREATED_BY      VARCHAR2(255),
+    ERROR_MESSAGE   CLOB,
+    CONSTRAINT FK_WF_CMD_EXECUTION FOREIGN KEY (EXECUTION_ID)
+        REFERENCES EXECUTIONS(ID) ON DELETE CASCADE,
+    CONSTRAINT CHK_WF_CMD_STATUS CHECK (STATUS IN ('pending', 'processed', 'failed')),
+    CONSTRAINT CHK_WF_CMD_TYPE CHECK (COMMAND_TYPE IN (
+        'approve', 'reject', 'cancel', 'timeout_signal', 'resume_signal'
+    ))
+);
+
+CREATE INDEX IDX_WF_CMD_STATUS_CREATED ON WORKFLOW_COMMANDS(STATUS, CREATED_AT);
+CREATE INDEX IDX_WF_CMD_EXECUTION ON WORKFLOW_COMMANDS(EXECUTION_ID);
+
+COMMENT ON TABLE WORKFLOW_COMMANDS IS 'Commandes workflow durables — persistées avant traitement (approve, reject, cancel, signals).';
+COMMENT ON COLUMN WORKFLOW_COMMANDS.EXECUTION_ID IS 'FK vers EXECUTIONS — exécution cible de la commande.';
+COMMENT ON COLUMN WORKFLOW_COMMANDS.COMMAND_TYPE IS 'Type de commande: approve, reject, cancel, timeout_signal, resume_signal.';
+COMMENT ON COLUMN WORKFLOW_COMMANDS.PAYLOAD IS 'Données JSON de la commande (step_id, comment, user_id, etc.).';
+COMMENT ON COLUMN WORKFLOW_COMMANDS.STATUS IS 'Statut: pending (en attente), processed (traité), failed (échoué).';
+COMMENT ON COLUMN WORKFLOW_COMMANDS.CREATED_AT IS 'Horodatage de création de la commande.';
+COMMENT ON COLUMN WORKFLOW_COMMANDS.PROCESSED_AT IS 'Horodatage de traitement effectif. NULL si pending.';
+COMMENT ON COLUMN WORKFLOW_COMMANDS.CREATED_BY IS 'Identifiant utilisateur ayant émis la commande.';
+COMMENT ON COLUMN WORKFLOW_COMMANDS.ERROR_MESSAGE IS 'Message d''erreur si status=failed.';
+
+-- ---------------------------------------------------------------------------
+-- V125: EXECUTION_OUTBOX — transactional outbox pattern
+-- ---------------------------------------------------------------------------
+CREATE TABLE EXECUTION_OUTBOX (
+    ID              NUMBER(19) GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    EXECUTION_ID    NUMBER(19) NOT NULL REFERENCES EXECUTIONS(ID) ON DELETE CASCADE,
+    EVENT_TYPE      VARCHAR2(50) NOT NULL,
+    PAYLOAD         CLOB CHECK (PAYLOAD IS JSON),
+    STATUS          VARCHAR2(20) DEFAULT 'pending' NOT NULL,
+    IDEMPOTENCY_KEY VARCHAR2(255) NOT NULL UNIQUE,
+    CREATED_AT      TIMESTAMP DEFAULT TO_TIMESTAMP(TO_CHAR(SYSTIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS.FF6'), 'YYYY-MM-DD HH24:MI:SS.FF6') NOT NULL,
+    DISPATCHED_AT   TIMESTAMP,
+    ATTEMPT_NO      NUMBER(10) DEFAULT 0 NOT NULL,
+    MAX_ATTEMPTS    NUMBER(10) DEFAULT 3 NOT NULL,
+    LAST_ERROR      CLOB
+);
+
+CREATE INDEX IDX_OUTBOX_STATUS_CREATED ON EXECUTION_OUTBOX(STATUS, CREATED_AT);
+
+COMMENT ON TABLE EXECUTION_OUTBOX IS 'Transactional outbox — effets de bord (notifications, websocket) persistés dans la même transaction que la mutation métier.';
+
+-- ---------------------------------------------------------------------------
+-- V127: WORKFLOW_DEFINITIONS, WORKFLOW_STEPS, WORKFLOW_STEP_EDGES (V129 constraints)
+-- ---------------------------------------------------------------------------
+CREATE TABLE WORKFLOW_DEFINITIONS (
+    ID              NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    ACTION_ID       NUMBER NOT NULL,
+    VERSION         NUMBER DEFAULT 1 NOT NULL,
+    CREATED_AT      TIMESTAMP DEFAULT TO_TIMESTAMP(TO_CHAR(SYSTIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS.FF6'), 'YYYY-MM-DD HH24:MI:SS.FF6') NOT NULL,
+    UPDATED_AT      TIMESTAMP DEFAULT TO_TIMESTAMP(TO_CHAR(SYSTIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS.FF6'), 'YYYY-MM-DD HH24:MI:SS.FF6') NOT NULL,
+    CONSTRAINT FK_WF_DEF_ACTION FOREIGN KEY (ACTION_ID)
+        REFERENCES ACTIONS_CATALOG(ID) ON DELETE CASCADE,
+    CONSTRAINT UK_WF_DEF_ACTION_ID UNIQUE (ACTION_ID)
+);
+
+COMMENT ON TABLE WORKFLOW_DEFINITIONS IS 'Définition normalisée d''un workflow — one-to-one avec ACTIONS_CATALOG pour item_type=workflow.';
+COMMENT ON COLUMN WORKFLOW_DEFINITIONS.ACTION_ID IS 'FK vers ACTIONS_CATALOG — action de type workflow associée.';
+COMMENT ON COLUMN WORKFLOW_DEFINITIONS.VERSION IS 'Version de la définition (incrémentée à chaque modification).';
+
+CREATE TABLE WORKFLOW_STEPS (
+    ID                          NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    WORKFLOW_DEFINITION_ID      NUMBER NOT NULL,
+    STEP_ID                     VARCHAR2(255) NOT NULL,
+    STEP_ORDER                  NUMBER NOT NULL,
+    STEP_NAME                   VARCHAR2(255) NOT NULL,
+    STEP_TYPE                   VARCHAR2(50) NOT NULL,
+    REFERENCED_ACTION_ID        NUMBER,
+    INTEGRATION_TYPE            VARCHAR2(100),
+    OPERATION                   VARCHAR2(255),
+    INPUT_MAPPING               CLOB,
+    OUTPUT_MAPPING              CLOB,
+    CONDITION                   CLOB,
+    RETRY_ENABLED               NUMBER(1) DEFAULT 0 NOT NULL,
+    RETRY_MAX_ATTEMPTS          NUMBER,
+    RETRY_INTERVAL_SECONDS      NUMBER,
+    RETRY_BACKOFF_MULTIPLIER    NUMBER(5,2),
+    JOIN_POLICY                 VARCHAR2(50),
+    CONSTRAINT FK_WF_STEPS_DEF FOREIGN KEY (WORKFLOW_DEFINITION_ID)
+        REFERENCES WORKFLOW_DEFINITIONS(ID) ON DELETE CASCADE,
+    CONSTRAINT FK_WF_STEPS_REF_ACTION FOREIGN KEY (REFERENCED_ACTION_ID)
+        REFERENCES ACTIONS_CATALOG(ID) ON DELETE SET NULL,
+    CONSTRAINT UK_WF_STEPS_DEF_STEP_ID UNIQUE (WORKFLOW_DEFINITION_ID, STEP_ID),
+    CONSTRAINT CK_WF_STEPS_STEP_TYPE CHECK (
+        STEP_TYPE IN ('platform', 'service_call', 'http_request', 'evaluation', 'gate', 'schedule_execution')
+    )
+);
+
+CREATE INDEX IDX_WF_STEPS_DEF_ID ON WORKFLOW_STEPS(WORKFLOW_DEFINITION_ID);
+CREATE INDEX IDX_WF_STEPS_STEP_ID ON WORKFLOW_STEPS(STEP_ID);
+
+COMMENT ON TABLE WORKFLOW_STEPS IS 'Steps individuels d''un workflow — une ligne par étape.';
+COMMENT ON COLUMN WORKFLOW_STEPS.STEP_ID IS 'Identifiant stable du step (UUID) — utilisé pour le routage success/error.';
+COMMENT ON COLUMN WORKFLOW_STEPS.STEP_ORDER IS 'Ordre d''exécution du step dans le workflow.';
+COMMENT ON COLUMN WORKFLOW_STEPS.STEP_TYPE IS 'Type de step: platform, service_call, http_request, evaluation, gate, schedule_execution.';
+
+CREATE TABLE WORKFLOW_STEP_EDGES (
+    ID              NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    FROM_STEP_ID    NUMBER NOT NULL,
+    TO_STEP_ID      NUMBER NOT NULL,
+    EDGE_TYPE       VARCHAR2(20) NOT NULL,
+    CONSTRAINT FK_WF_EDGES_FROM FOREIGN KEY (FROM_STEP_ID)
+        REFERENCES WORKFLOW_STEPS(ID) ON DELETE CASCADE,
+    CONSTRAINT FK_WF_EDGES_TO FOREIGN KEY (TO_STEP_ID)
+        REFERENCES WORKFLOW_STEPS(ID) ON DELETE CASCADE,
+    CONSTRAINT UK_WF_EDGES_FROM_TO_TYPE UNIQUE (FROM_STEP_ID, TO_STEP_ID, EDGE_TYPE),
+    CONSTRAINT CK_WF_EDGES_EDGE_TYPE CHECK (EDGE_TYPE IN ('success', 'error'))
+);
+
+CREATE INDEX IDX_WF_EDGES_FROM ON WORKFLOW_STEP_EDGES(FROM_STEP_ID);
+CREATE INDEX IDX_WF_EDGES_TO ON WORKFLOW_STEP_EDGES(TO_STEP_ID);
+
+COMMENT ON TABLE WORKFLOW_STEP_EDGES IS 'Arêtes du graphe de workflow — transitions success/error entre steps.';
+COMMENT ON COLUMN WORKFLOW_STEP_EDGES.FROM_STEP_ID IS 'FK vers WORKFLOW_STEPS — step source de la transition.';
+COMMENT ON COLUMN WORKFLOW_STEP_EDGES.TO_STEP_ID IS 'FK vers WORKFLOW_STEPS — step destination de la transition.';
+COMMENT ON COLUMN WORKFLOW_STEP_EDGES.EDGE_TYPE IS 'Type de transition: success ou error.';
 
 -- ===========================================================================
 -- PHASE 5 : Données de référence
@@ -1668,12 +1844,12 @@ COMMIT;
 -- FIN DU SCRIPT BASELINE V088
 -- ===========================================================================
 -- Après application de ce script :
---   flyway baseline -baselineVersion=121 -baselineDescription=baseline_schema_v088
+--   flyway baseline -baselineVersion=129 -baselineDescription=baseline_flyway
 --
--- Aucune migration incrémentale requise — état identique à V000→V121.
+-- Aucune migration incrémentale requise — état identique à V000→V129.
 --
 -- Validation rapide :
---   SELECT COUNT(*) FROM user_tables;             -- doit retourner 28 (26 + WORKFLOW_EVENTS + RUNNABLE_STEPS)
+--   SELECT COUNT(*) FROM user_tables;             -- doit retourner 40
 --   SELECT table_name FROM user_part_tables;      -- EXECUTIONS, EXECUTION_STEPS, AUDIT_LOG
 --   SELECT status FROM user_triggers WHERE trigger_name = 'TRG_AUDIT_LOG_IMMUTABLE'; -- ENABLED
 --   SELECT status FROM user_objects WHERE object_name = 'PKG_IDP_MAINTENANCE';       -- VALID

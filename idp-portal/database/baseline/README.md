@@ -2,11 +2,11 @@
 
 ## Contexte
 
-Ce dossier contient le script de **baseline** du schéma Oracle de l'IDP Portal. Il consolide les migrations Flyway V000–V121 en un seul script d'initialisation pour les **nouveaux environnements**.
+Ce dossier contient le script de **baseline** du schéma Oracle de l'IDP Portal. Il consolide les migrations Flyway V000–V129 en un seul script d'initialisation pour les **nouveaux environnements**.
 
 | Fichier | Description |
 |---------|-------------|
-| `baseline_schema_v088.sql` | Script DDL+DML : tables, indexes, contraintes, trigger, package PKG_IDP_MAINTENANCE, données de référence (état V121) |
+| `baseline_flyway.sql` | Script DDL+DML : tables, indexes, contraintes, trigger, package PKG_IDP_MAINTENANCE, données de référence (état V129) |
 | `README.md` | Ce fichier — procédure de déploiement et validation |
 
 > **⚠️ IMPORTANT** : Ce script s'applique **UNIQUEMENT** sur une base Oracle vierge.
@@ -20,10 +20,10 @@ Ce dossier contient le script de **baseline** du schéma Oracle de l'IDP Portal.
 
 ```bash
 # Connexion à la base vierge et exécution du script
-sqlplus idp_user/password@NEW_ENV:1521/XEPDB1 @database/baseline/baseline_schema_v088.sql
+sqlplus idp_user/password@NEW_ENV:1521/XEPDB1 @database/baseline/baseline_flyway.sql
 ```
 
-> Le script crée les 34 tables (dont EXECUTIONS, EXECUTION_STEPS, AUDIT_LOG partitionnées, et les tables Django auth/session/API), indexes, contraintes, le trigger d'immutabilité, le package PKG_IDP_MAINTENANCE et insère les données de référence (REF_ENGINES, REF_CATEGORIES).
+> Le script crée les 40 tables (dont EXECUTIONS, EXECUTION_STEPS, AUDIT_LOG partitionnées, WORKFLOW_DEFINITIONS, WORKFLOW_STEPS, WORKFLOW_STEP_EDGES, et les tables Django auth/session/API), indexes, contraintes, le trigger d'immutabilité, le package PKG_IDP_MAINTENANCE et insère les données de référence (REF_ENGINES, REF_CATEGORIES).
 
 ### Étape 2 : Déclarer la base au niveau V121 (commande Flyway `baseline`)
 
@@ -32,12 +32,12 @@ flyway \
   -url=jdbc:oracle:thin:@NEW_ENV:1521/XEPDB1 \
   -user=idp_user \
   -password=password \
-  -baselineVersion=121 \
-  -baselineDescription=baseline_schema_v088 \
+  -baselineVersion=129 \
+  -baselineDescription=baseline_flyway \
   baseline
 ```
 
-> Cette commande enregistre une ligne dans `flyway_schema_history` indiquant que la base est déjà au niveau V121 (success=true). Flyway ne re-jouera pas V000–V121. **Aucune migration incrémentale n'est nécessaire pour V000–V121.** Les migrations futures (V122 et au-delà) devront être appliquées via `flyway migrate`.
+> Cette commande enregistre une ligne dans `flyway_schema_history` indiquant que la base est déjà au niveau V129 (success=true). Flyway ne re-jouera pas V000–V129. **Aucune migration incrémentale n'est nécessaire pour V000–V129.** Les migrations futures (V130 et au-delà) devront être appliquées via `flyway migrate`.
 
 ### Étape 3 : Vérifier le résultat
 
@@ -55,7 +55,7 @@ Le résultat attendu :
 +------------+---------+-------------------------------+--------+---------------------+----------+
 | Category   | Version | Description                   | Type   | Installed On        | State    |
 +------------+---------+-------------------------------+--------+---------------------+----------+
-| Versioned  | 121     | baseline schema v088          | BASELN | ...                 | Baseline |
+| Versioned  | 129     | baseline schema v088          | BASELN | ...                 | Baseline |
 +------------+---------+-------------------------------+--------+---------------------+----------+
 ```
 
@@ -72,7 +72,7 @@ Les environnements existants ont déjà V000–V120 (ou V121) dans `flyway_schem
 
 ---
 
-## Contenu de baseline_schema_v088.sql
+## Contenu de baseline_flyway.sql
 
 ### Convention timestamps (UTC)
 
@@ -82,7 +82,7 @@ TO_TIMESTAMP(TO_CHAR(SYSTIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS.FF6
 ```
 Cela garantit un stockage en UTC quel que soit le timezone de la base ou de la session.
 
-### Tables créées (34)
+### Tables créées (40)
 
 | Phase | Tables |
 |-------|--------|
@@ -91,7 +91,7 @@ Cela garantit un stockage en UTC quel que soit le timezone de la base ou de la s
 | Phase 3 — Exécutions | EXECUTIONS (partitionnée), EXECUTION_STEPS (reference partitioned), EXECUTION_TARGETS, SCHEDULED_EXECUTIONS, RECURRING_PATTERNS |
 | Phase 4 — Trigger | TRG_AUDIT_LOG_IMMUTABLE |
 | Phase 4b — Maintenance | IDP_MAINTENANCE_LOG, PKG_IDP_MAINTENANCE |
-| Phase 4c — V113 | WORKFLOW_EVENTS (event sourcing, 7-day retention purge), RUNNABLE_STEPS (work queue) |
+| Phase 4c — V113–V129 | WORKFLOW_EVENTS, WORKFLOW_EVENT_COUNTER, RUNNABLE_STEPS (V123 leases), WORKFLOW_COMMANDS, EXECUTION_OUTBOX, WORKFLOW_DEFINITIONS, WORKFLOW_STEPS, WORKFLOW_STEP_EDGES |
 
 ### Données de référence insérées
 
@@ -102,14 +102,18 @@ Cela garantit un stockage en UTC quel que soit le timezone de la base ou de la s
 | INTEGRATION_TYPE_CATALOGUE | 0 | Gérées par l'application (fixtures Django) |
 | INTEGRATION_ACTIONS | 0 | Gérées par l'application (fixtures Django) |
 
-### Ajouts V112–V121 (inclus dans le baseline)
+### Ajouts V112–V129 (inclus dans le baseline)
 
 | Élément | Description |
 |---------|-------------|
 | `LAST_SYNCED_AT` + `LAST_SYNCED_HASH` sur 8 tables | IaC sync tracking |
 | 8 optimized indexes (GLOBAL indexes sur EXECUTIONS, EXECUTION_STEPS, etc.) | Index optimisés |
 | `WORKFLOW_EVENTS` table + 3 indexes | Event sourcing, purge 7 jours |
-| `RUNNABLE_STEPS` table + 2 indexes | File d'attente des étapes |
+| `WORKFLOW_EVENT_COUNTER` table (V122) | Allocation séquence atomique |
+| `RUNNABLE_STEPS` table + leases (V123: CLAIMED_UNTIL, ATTEMPT_NO, MAX_ATTEMPTS) | File d'attente avec reclaim |
+| `WORKFLOW_COMMANDS` table (V124) | Command Store durable |
+| `EXECUTION_OUTBOX` table (V125) | Transactional outbox |
+| `WORKFLOW_DEFINITIONS`, `WORKFLOW_STEPS`, `WORKFLOW_STEP_EDGES` (V127–V129) | Définitions workflow normalisées |
 | CONFIG_SYNC_* audit types, reference_data/tags entity types | IaC Config Sync |
 | `OUTPUT_SCHEMA_ID` sur ACTIONS_CATALOG | Schéma d'output déclaré |
 | `CONFIG_STEP_ID` sur EXECUTION_STEPS | Correspondance étape ↔ définition workflow |
@@ -142,27 +146,27 @@ Cela garantit un stockage en UTC quel que soit le timezone de la base ou de la s
 
 ## Plan de validation — Procédure via Docker
 
-Pour valider que le schéma produit par `baseline_schema_v088.sql` est identique à celui produit par la chaîne V000–V121 :
+Pour valider que le schéma produit par `baseline_flyway.sql` est identique à celui produit par la chaîne V000–V121 :
 
 ```bash
 # 1. Démarrer deux instances Oracle Docker
 docker-compose up oracle-a oracle-b
 
-# 2. Sur oracle-a : appliquer la chaîne complète V000–V121
+# 2. Sur oracle-a : appliquer la chaîne complète V000–V129
 flyway -url=jdbc:oracle:thin:@oracle-a:1521/XEPDB1 migrate
 
 # 3. Sur oracle-b : appliquer le baseline uniquement
-sqlplus idp_user/password@oracle-b:1521/XEPDB1 @database/baseline/baseline_schema_v088.sql
+sqlplus idp_user/password@oracle-b:1521/XEPDB1 @database/baseline/baseline_flyway.sql
 flyway -url=jdbc:oracle:thin:@oracle-b:1521/XEPDB1 \
-       -baselineVersion=121 \
-       -baselineDescription=baseline_schema_v088 \
+       -baselineVersion=129 \
+       -baselineDescription=baseline_flyway \
        baseline
 
 # 4. Exporter et comparer (script de diff DBMS_METADATA)
 ./scripts/export_schema.sh oracle-a > /tmp/schema-a.sql
 ./scripts/export_schema.sh oracle-b > /tmp/schema-b.sql
 diff <(normalize.sh /tmp/schema-a.sql) <(normalize.sh /tmp/schema-b.sql)
-# Résultat attendu : 0 différences structurelles
+# Résultat attendu : 0 différences structurelles (état V129)
 ```
 
 ---
@@ -171,7 +175,7 @@ diff <(normalize.sh /tmp/schema-a.sql) <(normalize.sh /tmp/schema-b.sql)
 
 | Vérification | Commande SQL | Critère de succès |
 |--------------|-------------|-------------------|
-| Nombre de tables | `SELECT COUNT(*) FROM user_tables` | 34 tables |
+| Nombre de tables | `SELECT COUNT(*) FROM user_tables` | 40 tables |
 | Trigger immutabilité | `SELECT status FROM user_triggers WHERE trigger_name = 'TRG_AUDIT_LOG_IMMUTABLE'` | ENABLED |
 | Données REF_ENGINES | `SELECT COUNT(*) FROM REF_ENGINES` | 6 lignes |
 | Données REF_CATEGORIES | `SELECT COUNT(*) FROM REF_CATEGORIES` | 6 lignes |
@@ -183,7 +187,8 @@ diff <(normalize.sh /tmp/schema-a.sql) <(normalize.sh /tmp/schema-b.sql)
 | Package purge | `SELECT status FROM user_objects WHERE object_name = 'PKG_IDP_MAINTENANCE'` | VALID |
 | WORKFLOW_EVENTS exists | `SELECT COUNT(*) FROM user_tables WHERE table_name = 'WORKFLOW_EVENTS'` | 1 |
 | RUNNABLE_STEPS exists | `SELECT COUNT(*) FROM user_tables WHERE table_name = 'RUNNABLE_STEPS'` | 1 |
-| Historique Flyway | `SELECT version, state FROM flyway_schema_history ORDER BY installed_rank` | baseline V121 uniquement |
+| WORKFLOW_DEFINITIONS exists | `SELECT COUNT(*) FROM user_tables WHERE table_name = 'WORKFLOW_DEFINITIONS'` | 1 |
+| Historique Flyway | `SELECT version, state FROM flyway_schema_history ORDER BY installed_rank` | baseline V129 uniquement |
 
 ---
 

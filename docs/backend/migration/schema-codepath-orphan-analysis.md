@@ -173,14 +173,14 @@ Ces colonnes/tables ont déjà été supprimées par des migrations Flyway anté
 
 ### Phase 3 — Mise à jour baseline
 
-- Si baseline `baseline_schema_v088.sql` est régénéré manuellement : retirer EXECUTION_LOG et USER_PERMISSIONS du script  
+- Si baseline `baseline_flyway.sql` est régénéré manuellement : retirer EXECUTION_LOG et USER_PERMISSIONS du script  
 - Mettre à jour `database/baseline/README.md` et `docs/backend/migration/etat-des-lieux-migrations-bd.md`  
 
 ---
 
 ## 8. Références
 
-- `idp-portal/database/baseline/baseline_schema_v088.sql`
+- `idp-portal/database/baseline/baseline_flyway.sql`
 - `idp-portal/django_backend/*/models.py` (catalog, executions, profiles, core, integrations, reference, idp_auth, output_schemas)
 - `docs/backend/migration/migration-audit-epic41.md`
 - `docs/backend/migration/etat-des-lieux-migrations-bd.md`

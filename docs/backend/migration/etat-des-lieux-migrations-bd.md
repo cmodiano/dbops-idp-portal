@@ -10,7 +10,7 @@
 | Composant | Emplacement | Version actuelle | Rôle |
 |-----------|-------------|------------------|------|
 | **Flyway** | `idp-portal/database/migrations/` | V000–V119 (120 scripts) | Schéma Oracle en production |
-| **Baseline** | `idp-portal/database/baseline/baseline_schema_v088.sql` | État V119 | Nouveaux environnements vierges |
+| **Baseline** | `idp-portal/database/baseline/baseline_flyway.sql` | État V119 | Nouveaux environnements vierges |
 | **Django** | `idp-portal/django_backend/*/migrations/` | 60 migrations (8 apps) | Tests SQLite + mapping ORM Oracle |
 
 ---
@@ -67,9 +67,9 @@
 
 | Élément | Valeur | Note |
 |--------|--------|------|
-| Fichier | `baseline_schema_v088.sql` | Nom historique |
+| Fichier | `baseline_flyway.sql` | Nom historique |
 | État réel | V000–V119 | Couvert intégralement |
-| Commande Flyway | `flyway baseline -baselineVersion=119 -baselineDescription=baseline_schema_v088` | |
+| Commande Flyway | `flyway baseline -baselineVersion=119 -baselineDescription=baseline_flyway` | |
 
 **Note** : Le nom du fichier (`v088`) ne reflète pas l’état actuel (V119). Le README du baseline précise que le script couvre V000–V119.
 
@@ -85,8 +85,8 @@
 
 ### 3.3 Procédure nouveaux environnements
 
-1. `sqlplus ... @database/baseline/baseline_schema_v088.sql`
-2. `flyway baseline -baselineVersion=119 -baselineDescription=baseline_schema_v088`
+1. `sqlplus ... @database/baseline/baseline_flyway.sql`
+2. `flyway baseline -baselineVersion=119 -baselineDescription=baseline_flyway`
 3. `flyway migrate` (pour V120+ futures)
 4. `manage.py migrate --fake-initial` — applique les migrations Django de données (ex. `reference/0004_refengine_icon_url_fix_paths`) qui corrigent les chemins `icon_url` des REF_ENGINES ; les migrations DDL sont fakées car les tables existent déjà.
 
