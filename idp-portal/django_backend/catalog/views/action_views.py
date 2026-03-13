@@ -160,11 +160,11 @@ class ActionViewSet(viewsets.ModelViewSet):
     def update(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """PUT/PATCH /admin/actions/{id} - Update action metadata."""
         instance = self.get_object()
-        # Toujours partial=True pour accepter les mises à jour partielles (integration_id, parameters_schema, etc.)
-        partial = True
+        # PUT: full replacement, all required fields enforced. PATCH: partial update (DRF injects partial=True via partial_update).
+        partial = kwargs.get('partial', request.method == 'PATCH')
 
-        # Story 63.9: Handle output_schema_id in PATCH requests (direct update, no ActionCreateSerializer)
-        if 'output_schema_id' in request.data and len(request.data) == 1:
+        # Story 63.9: Handle output_schema_id in PATCH requests only (direct update, no ActionCreateSerializer)
+        if partial and 'output_schema_id' in request.data and len(request.data) == 1:
             raw_schema_id = request.data.get('output_schema_id')
             if raw_schema_id is not None:
                 from output_schemas.models import OutputSchema  # noqa: PLC0415
@@ -178,8 +178,8 @@ class ActionViewSet(viewsets.ModelViewSet):
             response_serializer = ActionSerializer(instance)
             return Response({"data": response_serializer.data})
 
-        # Story 28.4: Handle business_rule_policy_id in PATCH requests
-        if 'business_rule_policy_id' in request.data or 'business_rule_policies' in request.data:
+        # Story 28.4: Handle business_rule_policy_id in PATCH requests only
+        if partial and ('business_rule_policy_id' in request.data or 'business_rule_policies' in request.data):
             brp_id = request.data.get('business_rule_policy_id')
             brp_inline = request.data.get('business_rule_policies')
 

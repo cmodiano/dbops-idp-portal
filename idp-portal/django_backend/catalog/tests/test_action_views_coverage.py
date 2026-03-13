@@ -468,11 +468,12 @@ class TestUpdate:
         assert response.status_code == 404
 
     def test_update_with_business_rule_policy_id(self):
+        """PATCH with only business_rule_policy_id clears the FK (partial update)."""
         user = _make_dbops_user()
         action_obj = ActionFactory(status='draft', created_by=user)
 
-        view = ActionViewSet.as_view({'put': 'update'})
-        request = factory.put(f'/admin/actions/{action_obj.id}/', {
+        view = ActionViewSet.as_view({'patch': 'partial_update'})
+        request = factory.patch(f'/admin/actions/{action_obj.id}/', {
             'business_rule_policy_id': None,
         }, format='json')
         force_authenticate(request, user=user)
@@ -482,11 +483,12 @@ class TestUpdate:
         assert 'data' in response.data
 
     def test_update_xor_validation_both_brp_fields(self):
+        """PATCH with both business_rule_policy_id and business_rule_policies raises XOR validation."""
         user = _make_dbops_user()
         action_obj = ActionFactory(status='draft', created_by=user)
 
-        view = ActionViewSet.as_view({'put': 'update'})
-        request = factory.put(f'/admin/actions/{action_obj.id}/', {
+        view = ActionViewSet.as_view({'patch': 'partial_update'})
+        request = factory.patch(f'/admin/actions/{action_obj.id}/', {
             'business_rule_policy_id': 1,
             'business_rule_policies': [{'rule': 'test'}],
         }, format='json')
@@ -499,6 +501,7 @@ class TestUpdate:
         assert 'business_rule_policies' in details
 
     def test_update_inline_brp_validation_error(self):
+        """PATCH with invalid business_rule_policies raises validation error."""
         user = _make_dbops_user()
         action_obj = ActionFactory(status='draft', created_by=user)
 
@@ -506,8 +509,8 @@ class TestUpdate:
                    side_effect=ValueError('bad policy'), create=True), \
              patch('catalog.validators.validate_business_rule_policies',
                    side_effect=ValueError('bad policy')):
-            view = ActionViewSet.as_view({'put': 'update'})
-            request = factory.put(f'/admin/actions/{action_obj.id}/', {
+            view = ActionViewSet.as_view({'patch': 'partial_update'})
+            request = factory.patch(f'/admin/actions/{action_obj.id}/', {
                 'business_rule_policies': [{'bad': 'data'}],
             }, format='json')
             force_authenticate(request, user=user)
