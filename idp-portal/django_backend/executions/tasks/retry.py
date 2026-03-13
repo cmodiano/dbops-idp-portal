@@ -72,6 +72,19 @@ def retry_workflow_step(self: Any, execution_id: int, step: dict, attempt: int) 
                 'error_message': 'Execution cancelled during retry',
             }
 
+        # Story 78.8: Guard legacy runtime with feature flag
+        if not settings.WORKFLOW_LEGACY_RUNTIME_ENABLED:
+            logger.warning(
+                "legacy_retry_task_disabled",
+                execution_id=execution_id,
+                step_id=step_id,
+                attempt=attempt,
+            )
+            return {
+                'outcome': 'error',
+                'error_message': 'Legacy runtime disabled',
+            }
+
         # Load execution and create runtime
         execution = Execution.objects.select_related('action').get(id=execution_id)
         # Story 72.1 (AC5): récupérer correlation_id depuis Execution pour les entrées d'audit

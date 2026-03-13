@@ -795,6 +795,12 @@ WORKFLOW_RETRY_USE_CANCELLATION_CACHE = os.getenv(
     'WORKFLOW_RETRY_USE_CANCELLATION_CACHE', 'False'
 ).lower() == 'true'
 
+# Story 78.8: Feature flag to disable legacy workflow runtime
+# Default: False (legacy disabled). Set to True for emergency rollback only.
+WORKFLOW_LEGACY_RUNTIME_ENABLED = os.getenv(
+    'WORKFLOW_LEGACY_RUNTIME_ENABLED', 'False'
+).lower() == 'true'
+
 # ============================================================================
 # External Services Configuration (Story M.8 - Health Check)
 # ============================================================================

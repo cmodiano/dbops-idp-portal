@@ -25,6 +25,7 @@ import structlog
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any, List, NamedTuple, Union, cast
 
+from django.conf import settings
 from django.db import close_old_connections, transaction
 from django.utils import timezone
 
@@ -1291,6 +1292,19 @@ class ContainerWorkflowRuntime:
         # Story 78.5: Enqueue root steps to RUNNABLE_STEPS (queue-based dispatch)
         initial_wave = self._determine_initial_wave()
         if initial_wave is None:
+            # Story 78.8: Guard legacy fallback with feature flag
+            if not settings.WORKFLOW_LEGACY_RUNTIME_ENABLED:
+                from executions.exceptions import WorkflowLegacyDisabledError  # noqa: PLC0415
+                logger.warning(
+                    "container_workflow_legacy_fallback_blocked",
+                    execution_id=self.execution.id,
+                    correlation_id=self.correlation_id,
+                )
+                self.execution.status = ExecutionStatus.FAILED
+                self.execution.completed_at = timezone.now()
+                self.execution.error_message = str(WorkflowLegacyDisabledError())
+                self.execution.save(update_fields=['status', 'completed_at', 'error_message'])
+                raise WorkflowLegacyDisabledError()
             # Legacy fallback: steps without step_id — thread-based execution
             thread = threading.Thread(
                 target=self._run_workflow_loop,
