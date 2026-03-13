@@ -173,9 +173,10 @@ class DashboardStatsApprobationsView(APIView):
         delays = []
 
         # Chemin legacy: Execution.approved_at - created_at
-        for created_at, approved_at in qs_approved.filter(
+        # Include id so executions with identical timestamps remain distinct (matches gate path).
+        for _, created_at, approved_at in qs_approved.filter(
             approved_at__isnull=False
-        ).values_list("created_at", "approved_at"):
+        ).values_list("id", "created_at", "approved_at"):
             try:
                 if approved_at is None or created_at is None:
                     continue
