@@ -188,16 +188,20 @@ class WorkflowCommandService:
         step.set_output(output)
         step.save()
 
-        # Emit event + dequeue runnable step (on_commit for side-effects)
-        _eid, _step_id = cmd.execution_id, step.id
-
-        def _post_approve() -> None:
-            from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
-            from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
-            WorkflowEventService.emit_approval_granted(_eid, step, approved_by=user_id)
-            RunnableStepService.delete(_step_id)
-
-        transaction.on_commit(_post_approve)
+        # Story 78.7: Write outbox entry for side-effects (replaces on_commit callback)
+        from executions.services.outbox import OutboxService, APPROVAL_GRANTED  # noqa: PLC0415
+        OutboxService.write_entry(
+            execution_id=cmd.execution_id,
+            event_type=APPROVAL_GRANTED,
+            payload={
+                "execution_step_id": step.id,
+                "approved_by": user_id,
+                "execution_id": cmd.execution_id,
+            },
+            idempotency_key=OutboxService.build_idempotency_key(
+                cmd.execution_id, APPROVAL_GRANTED, f"step_{step.id}",
+            ),
+        )
 
         # Determine and enqueue next steps
         execution = step.execution
@@ -257,15 +261,21 @@ class WorkflowCommandService:
         step.approval_comment = payload.get("comment", "")
         step.save()
 
-        _eid, _step_id = cmd.execution_id, step.id
-
-        def _post_reject() -> None:
-            from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
-            from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
-            WorkflowEventService.emit_approval_rejected(_eid, step, rejected_by=user_id)
-            RunnableStepService.delete(_step_id)
-
-        transaction.on_commit(_post_reject)
+        # Story 78.7: Write outbox entry for side-effects (replaces on_commit callback)
+        from executions.services.outbox import OutboxService, APPROVAL_REJECTED  # noqa: PLC0415
+        OutboxService.write_entry(
+            execution_id=cmd.execution_id,
+            event_type=APPROVAL_REJECTED,
+            payload={
+                "execution_step_id": step.id,
+                "rejected_by": user_id,
+                "execution_id": cmd.execution_id,
+                "reason": payload.get("comment", ""),
+            },
+            idempotency_key=OutboxService.build_idempotency_key(
+                cmd.execution_id, APPROVAL_REJECTED, f"step_{step.id}",
+            ),
+        )
 
         # Route to error path or fail execution
         execution = step.execution

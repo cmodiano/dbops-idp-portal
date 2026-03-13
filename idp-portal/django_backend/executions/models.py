@@ -828,3 +828,82 @@ class WorkflowCommand(models.Model):
 
     def __str__(self) -> str:
         return f"WorkflowCommand {self.id} - {self.command_type} ({self.status})"
+
+
+class OutboxEntryStatus(models.TextChoices):
+    PENDING = "pending", "En attente"
+    DISPATCHED = "dispatched", "Dispatché"
+    FAILED = "failed", "Échoué"
+
+
+class ExecutionOutbox(models.Model):
+    """Outbox transactionnel pour effets externes fiables.
+
+    Composant Outbox de l'architecture Temporal-like (Epic 78).
+    Les side-effects (notifications, websocket, events) sont persistés
+    dans la même transaction que la mutation métier, puis dispatchés
+    par un worker Celery Beat séparé.
+    Ref: docs/backend/epic-78-temporal-like-orchestration-without-temporal.md#Story 78.7
+    """
+    id = models.BigAutoField(primary_key=True, db_column='ID')
+    execution = models.ForeignKey(
+        Execution,
+        on_delete=models.CASCADE,
+        related_name="outbox_entries",
+        db_column="EXECUTION_ID",
+    )
+    event_type = models.CharField(
+        max_length=50,
+        db_column="EVENT_TYPE",
+    )
+    payload = models.JSONField(
+        null=True,
+        blank=True,
+        db_column="PAYLOAD",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=OutboxEntryStatus.choices,
+        default=OutboxEntryStatus.PENDING,
+        db_column="STATUS",
+    )
+    idempotency_key = models.CharField(
+        max_length=255,
+        unique=True,
+        db_column="IDEMPOTENCY_KEY",
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        db_column="CREATED_AT",
+    )
+    dispatched_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_column="DISPATCHED_AT",
+    )
+    attempt_no = models.IntegerField(
+        default=0,
+        db_column="ATTEMPT_NO",
+    )
+    max_attempts = models.IntegerField(
+        default=3,
+        db_column="MAX_ATTEMPTS",
+    )
+    last_error = models.TextField(
+        null=True,
+        blank=True,
+        db_column="LAST_ERROR",
+    )
+
+    class Meta:
+        db_table = "EXECUTION_OUTBOX"
+        ordering = ["created_at"]
+        indexes = [
+            models.Index(
+                fields=["status", "created_at"],
+                name="idx_outbox_status_created",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"ExecutionOutbox {self.id} - {self.event_type} ({self.status})"

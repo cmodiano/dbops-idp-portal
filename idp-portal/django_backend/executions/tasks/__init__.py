@@ -40,6 +40,7 @@ from executions.tasks.polling import (  # noqa: E402
 from executions.tasks.trigger import trigger_platform_job  # noqa: E402
 from executions.tasks.cleanup import purge_old_platform_logs, purge_old_workflow_events  # noqa: E402
 from executions.tasks.reconcile import reconcile_stale_executions  # noqa: E402
+from executions.tasks.outbox_dispatcher import process_outbox_entries  # noqa: E402
 
 __all__ = [
     # Public tasks
@@ -67,4 +68,6 @@ __all__ = [
     # Cleanup tasks
     "purge_old_platform_logs",
     "purge_old_workflow_events",
+    # Story 78.7: Outbox dispatcher
+    "process_outbox_entries",
 ]

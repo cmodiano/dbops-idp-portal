@@ -292,3 +292,21 @@ if _reconcile_schedule > 0:
         'task': 'executions.tasks.reconcile_stale_executions',
         'schedule': _reconcile_schedule,
     }
+
+# Story 78.7: Outbox dispatcher — process pending outbox entries for reliable side-effect delivery.
+# Default interval = 10s. Set CELERY_BEAT_OUTBOX_INTERVAL env var to override (seconds).
+try:
+    _outbox_schedule = float(os.getenv('CELERY_BEAT_OUTBOX_INTERVAL', '10.0'))
+except ValueError as exc:
+    logger.warning(
+        "celery_beat_invalid_outbox_interval: value=%r error=%s fallback=10.0",
+        os.getenv('CELERY_BEAT_OUTBOX_INTERVAL'),
+        exc,
+    )
+    _outbox_schedule = 10.0
+
+if _outbox_schedule > 0:
+    app.conf.beat_schedule['process-outbox-entries'] = {
+        'task': 'executions.tasks.process_outbox_entries',
+        'schedule': _outbox_schedule,
+    }
