@@ -1,5 +1,5 @@
 """
-Tests unitaires pour la logique de réconciliation crash-recovery — Story 76.1, 76.2, 76.3, 76.4
+Tests unitaires pour la logique de réconciliation crash-recovery — Story 76.1, 76.2, 76.3, 76.4, 76.5
 
 Tests Story 76.1:
 - AC1: Container workflow avec étapes COMPLETED → résultat 'reattached', pas de FAILED
@@ -26,6 +26,10 @@ Tests Story 76.4:
 - AC3/Task 3.1: Action simple RUNNING avec platform_job_id réel → _reattach_poll appelé
 - AC3/Task 3.2: Step schedule_execution avec platform_job_id = child_id → _reconcile_schedule_step appelé
 - AC3/Task 3.3: platform_job_id numérique qui n'est pas un child → reattach normal
+
+Tests Story 76.5:
+- AC4/3.1-3.6: Retry non-platform (service_call, http_request, evaluation) — success, fail, platform no-retry
+- Mixed retry: step A retry success + step B retry fail → execution FAILED (not resume)
 """
 
 import pytest
@@ -1327,3 +1331,46 @@ class TestReconcileExecutionNonPlatformRetry:
         mock_retry.assert_not_called()
         mock_mark.assert_called_once()
         assert result == "failed"
+
+    def test_mixed_retry_success_and_fail_marks_execution_failed(self):
+        """M3: Step A retry success + Step B retry fail → execution FAILED, not _resume_container_workflow.
+
+        AC4: retry échoué → step FAILED, exécution FAILED.
+        """
+        from executions.models import ExecutionStatus
+
+        execution = self._cutoff_execution()
+        execution.action.execution_steps = CONTAINER_STEPS_76_5
+        execution.action.save(update_fields=["execution_steps"])
+        ExecutionStepFactory(
+            execution=execution,
+            status="RUNNING",
+            step_type="service_call",
+            config_step_id=STEP_ID_SVC,
+            step_order=1,
+            platform_job_id=None,
+        )
+        ExecutionStepFactory(
+            execution=execution,
+            status="RUNNING",
+            step_type="http_request",
+            config_step_id=STEP_ID_HTTP,
+            step_order=2,
+            platform_job_id=None,
+        )
+
+        with patch(
+            "executions.step_handlers.service_call_handler.ServiceCallHandler.execute",
+            return_value={"result": "ok"},
+        ), patch(
+            "executions.step_handlers.http_request_handler.HttpRequestHandler.execute",
+            side_effect=ValueError("HTTP timeout"),
+        ), patch(
+            "executions.tasks.reconcile._resume_container_workflow",
+        ) as mock_resume:
+            result = _reconcile_execution(execution)
+
+        assert result == "failed"
+        mock_resume.assert_not_called()
+        execution.refresh_from_db()
+        assert execution.status == ExecutionStatus.FAILED

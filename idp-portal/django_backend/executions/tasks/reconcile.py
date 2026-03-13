@@ -207,6 +207,7 @@ def _mark_execution_failed(execution: Any, reason: str) -> None:
 
     try:
         changes = sanitize_audit_changes({'status': {'old': old_status, 'new': ExecutionStatus.FAILED}})
+        correlation_id = getattr(execution, "correlation_id", "") or ""
         AuditService.create_entry(
             user_id=str(execution.user_id),
             action_type=AuditActionType.EXECUTION_FAILED,
@@ -217,6 +218,7 @@ def _mark_execution_failed(execution: Any, reason: str) -> None:
                 "reconciled_at": timezone.now().isoformat(),
                 "changes": changes,
             },
+            correlation_id=correlation_id or None,
         )
     except Exception as exc:  # noqa: BLE001 — best-effort audit
         logger.warning(
@@ -406,7 +408,8 @@ def _retry_non_platform_step(execution: Any, step: Any) -> bool:
     from executions.output_extractor import OutputExtractor  # noqa: PLC0415
     from executions.template_resolver import StepTemplateResolver  # noqa: PLC0415
 
-    step_type = (step.step_type or "").lower() if hasattr(step, "step_type") else ""
+    raw_type = getattr(step, "step_type", None) or ""
+    step_type = (getattr(raw_type, "value", raw_type) or "").lower() if raw_type else ""
     if step_type not in _RETRYABLE_STEP_TYPES:
         return False
 
@@ -720,7 +723,8 @@ def _reconcile_execution(execution: Any) -> str:
     for step in running_steps:
         if not step.platform_job_id:
             # Story 76.5: Retry for non-platform steps (service_call, http_request, evaluation)
-            step_type_str = str(getattr(step, "step_type", "") or "").lower()
+            raw_st = getattr(step, "step_type", None) or ""
+            step_type_str = (getattr(raw_st, "value", raw_st) or "").lower() if raw_st else ""
             if step_type_str in _RETRYABLE_STEP_TYPES:
                 if _retry_non_platform_step(execution, step):
                     reattached_any = True
@@ -777,12 +781,17 @@ def _reconcile_execution(execution: Any) -> str:
     # AC2 Task 2.2: if schedule step(s) were resolved (child COMPLETED), there may be no
     # RUNNING steps left — trigger workflow continuation immediately instead of waiting
     # for the next reconcile run.
+    # Story 76.5 fix: do NOT resume if any step FAILED (mixed retry success + retry fail).
     if reattached_any and _is_container_workflow(execution):
         remaining_running = ExecutionStep.objects.filter(
             execution_id=execution_id,
             status=ExecutionStepStatus.RUNNING,
         ).exists()
-        if not remaining_running:
+        has_failed_step = ExecutionStep.objects.filter(
+            execution_id=execution_id,
+            status=ExecutionStepStatus.FAILED,
+        ).exists()
+        if not remaining_running and not has_failed_step:
             try:
                 result = _resume_container_workflow(
                     execution,
@@ -797,6 +806,12 @@ def _reconcile_execution(execution: Any) -> str:
                     exc_info=True,
                 )
                 # Fall through — we still return "reattached" since we resolved the step
+        elif has_failed_step:
+            _mark_execution_failed(
+                execution,
+                "At least one RUNNING step failed retry — marked FAILED by reconciliation.",
+            )
+            return "failed"
 
     if not reattached_any:
         # All steps either had no platform_job_id or failed to reattach
