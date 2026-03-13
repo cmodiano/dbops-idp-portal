@@ -1523,3 +1523,16 @@ class TestActionCreateValidateEnginePlatformRequired(TestCase):
         )
         self.assertFalse(s.is_valid())
         self.assertIn('engine is required', str(s.errors))
+
+    def test_validate_patch_workflow_name_only_succeeds(self):
+        """PATCH workflow with only name (no item_type) must succeed — item_type resolved from instance."""
+        from types import SimpleNamespace
+
+        workflow = SimpleNamespace(item_type=ActionItemType.WORKFLOW, engine=None, platform=None)
+        s = ActionCreateSerializer(
+            data={'name': 'Updated Workflow Name'},
+            partial=True,
+            context={'is_update': True, 'instance': workflow},
+        )
+        self.assertTrue(s.is_valid(), s.errors)
+        self.assertEqual(s.validated_data['name'], 'Updated Workflow Name')

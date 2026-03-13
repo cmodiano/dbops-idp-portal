@@ -446,9 +446,16 @@ class ActionCreateSerializer(ActionFieldValidationMixin, serializers.Serializer)
         return stripped
 
     def validate(self, data: dict[str, Any]) -> dict[str, Any]:
-        item_type = data.get('item_type', ActionItemType.ACTION)
         is_update = self.context.get('is_update', False)
         instance = self.context.get('instance')
+
+        # Resolve item_type: from request, or from instance (for partial update), or default
+        if 'item_type' in data:
+            item_type = data['item_type']
+        elif is_update and instance is not None:
+            item_type = getattr(instance, 'item_type', ActionItemType.ACTION)
+        else:
+            item_type = ActionItemType.ACTION
 
         if item_type == ActionItemType.ACTION:
             # Effective values: from request data, or existing instance (for partial update)
