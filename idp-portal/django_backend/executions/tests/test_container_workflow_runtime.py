@@ -13,7 +13,7 @@ Tests:
 
 import pytest
 from unittest.mock import patch
-
+from django.utils import timezone
 from django.test import override_settings
 
 from executions.container_workflow_runtime import ContainerWorkflowRuntime
@@ -25,6 +25,24 @@ from tests.factories import UserFactory, ActionFactory
 
 
 TEST_ENVIRONMENT = 'developpement'
+
+
+@pytest.fixture(autouse=True)
+def mock_platform_dispatch():
+    """
+    Story 77.3: les steps platform 'action' passent désormais par trigger_platform_job.apply_async.
+    Ce fixture marque le child step COMPLETED pour que les tests de routing existants fonctionnent.
+    """
+    def _complete_child_step(kwargs, queue):
+        exec_step_id = kwargs['execution_step_id']
+        ExecutionStep.objects.filter(id=exec_step_id).update(
+            status=ExecutionStepStatus.COMPLETED,
+            completed_at=timezone.now(),
+        )
+
+    with patch('executions.container_workflow_runtime.trigger_platform_job') as mock_trigger:
+        mock_trigger.apply_async.side_effect = _complete_child_step
+        yield mock_trigger
 
 
 def _make_workflow_steps(referenced_actions):
@@ -741,14 +759,16 @@ class TestContainerWorkflowChildSteps:
 
     @patch('executions.container_workflow_runtime.AuditService')
     def test_no_child_steps_without_simulation(self, mock_audit):
-        """AC4: Without simulation, child executions have no steps (non-regression)."""
+        """Story 77.3: Without simulation, child executions have exactly 1 Platform Job step."""
         execution = self._create_execution()
         runtime = ContainerWorkflowRuntime(execution)
         runtime.run_sync()
 
         for child in runtime.child_executions:
             child_steps = ExecutionStep.objects.filter(execution_id=child.id)
-            assert child_steps.count() == 0
+            # Story 77.3 creates a Platform Job ExecutionStep on the child for tracking
+            assert child_steps.count() == 1
+            assert child_steps.first().step_name == "Platform Job"
 
     @override_settings(
         SIMULATE_EXECUTION_DEV=True,

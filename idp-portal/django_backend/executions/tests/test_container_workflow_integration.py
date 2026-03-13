@@ -13,12 +13,14 @@ Tests end-to-end workflow execution through the API:
 import pytest
 from unittest.mock import patch
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from catalog.models import Action, ActionStatus, ActionItemType
-from executions.models import Execution, ExecutionStep, ExecutionStatus
+from executions.models import Execution, ExecutionStep, ExecutionStatus, ExecutionStepStatus
 from idp_auth.models import User
+from tests.factories import IntegrationFactory
 
 
 @pytest.mark.django_db
@@ -30,6 +32,9 @@ class TestContainerWorkflowAPIIntegration(TestCase):
         self.user = User.objects.create(username="workflow_int_user", profile="DBA")
         self.client.force_authenticate(user=self.user)
 
+        # Story 77.3: actions with integration required for real dispatch path
+        self.integration = IntegrationFactory()
+
         # Create referenced actions (with parameters_schema for step params tests)
         self.ref_action_1 = Action.objects.create(
             name="Integration Ref Action 1",
@@ -40,6 +45,7 @@ class TestContainerWorkflowAPIIntegration(TestCase):
             item_type=ActionItemType.ACTION,
             requires_target=False,
             parameters_schema={"type": "object"},
+            integration=self.integration,
         )
         self.ref_action_2 = Action.objects.create(
             name="Integration Ref Action 2",
@@ -50,7 +56,21 @@ class TestContainerWorkflowAPIIntegration(TestCase):
             item_type=ActionItemType.ACTION,
             requires_target=False,
             parameters_schema={"type": "object"},
+            integration=self.integration,
         )
+
+        # Story 77.3: mock trigger_platform_job to complete child steps immediately
+        def _complete_child_step(kwargs, queue):
+            exec_step_id = kwargs['execution_step_id']
+            ExecutionStep.objects.filter(id=exec_step_id).update(
+                status=ExecutionStepStatus.COMPLETED,
+                completed_at=timezone.now(),
+            )
+
+        patcher = patch('executions.container_workflow_runtime.trigger_platform_job')
+        self.mock_trigger = patcher.start()
+        self.mock_trigger.apply_async.side_effect = _complete_child_step
+        self.addCleanup(patcher.stop)
 
         # Create workflow
         self.workflow = Action.objects.create(

@@ -18,10 +18,11 @@ Story 67.3:
 import pytest
 from unittest.mock import patch
 from rest_framework.exceptions import ValidationError
+from django.utils import timezone
 
 from executions.container_workflow_runtime import ContainerWorkflowRuntime
 from executions.models import (
-    Execution, ExecutionStep, ExecutionStatus,
+    Execution, ExecutionStep, ExecutionStatus, ExecutionStepStatus,
 )
 from catalog.models import ActionStatus, ActionItemType
 from catalog.validation import validate_workflow_steps
@@ -29,6 +30,25 @@ from tests.factories import UserFactory, ActionFactory
 
 
 TEST_ENVIRONMENT = 'developpement'
+
+
+@pytest.fixture(autouse=True)
+def mock_platform_dispatch():
+    """
+    Story 77.3: les steps platform 'action' passent désormais par trigger_platform_job.apply_async.
+    Ces tests vérifient la logique de routage (fan-out, join_policy), pas le dispatch plateforme.
+    Ce fixture marque automatiquement le child step COMPLETED pour que la logique de routage fonctionne.
+    """
+    def _complete_child_step(kwargs, queue):
+        exec_step_id = kwargs['execution_step_id']
+        ExecutionStep.objects.filter(id=exec_step_id).update(
+            status=ExecutionStepStatus.COMPLETED,
+            completed_at=timezone.now(),
+        )
+
+    with patch('executions.container_workflow_runtime.trigger_platform_job') as mock_trigger:
+        mock_trigger.apply_async.side_effect = _complete_child_step
+        yield mock_trigger
 
 
 def _make_fan_out_workflow(action_a_id, action_b_id, action_c_id,

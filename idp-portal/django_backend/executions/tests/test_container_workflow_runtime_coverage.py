@@ -6,11 +6,23 @@ import json
 import pytest
 from unittest.mock import patch
 from django.test import TestCase
+from django.utils import timezone
 
 from executions.container_workflow_runtime import ContainerWorkflowRuntime, MAX_STEP_TRANSITIONS
 from executions.models import Execution, ExecutionStep, ExecutionStatus, ExecutionStepStatus
 from catalog.models import ActionStatus, ActionItemType
 from tests.factories import UserFactory, ActionFactory
+
+
+def _make_trigger_mock_completing():
+    """Return a side_effect function that marks child step COMPLETED immediately (Story 77.3)."""
+    def _complete_child_step(kwargs, queue):
+        exec_step_id = kwargs['execution_step_id']
+        ExecutionStep.objects.filter(id=exec_step_id).update(
+            status=ExecutionStepStatus.COMPLETED,
+            completed_at=timezone.now(),
+        )
+    return _complete_child_step
 
 TEST_ENV = 'developpement'
 
@@ -446,7 +458,7 @@ class TestExecuteStepActionNotFound(TestCase):
 
 @pytest.mark.django_db
 class TestExecuteStepNoSimulation(TestCase):
-    """Simulation désactivée → fallback direct status update sur child execution."""
+    """Simulation désactivée → dispatch réel via trigger_platform_job (Story 77.3)."""
 
     def setUp(self):
         self.user = UserFactory(username='exec_step_nosim_user', profile='DBA')
@@ -458,10 +470,15 @@ class TestExecuteStepNoSimulation(TestCase):
             execution_steps=_make_steps([self.action_a.id]),
             created_by=self.user,
         )
+        # Story 77.3: mock trigger_platform_job pour que le child step soit COMPLETED
+        patcher = patch('executions.container_workflow_runtime.trigger_platform_job')
+        self.mock_trigger = patcher.start()
+        self.mock_trigger.apply_async.side_effect = _make_trigger_mock_completing()
+        self.addCleanup(patcher.stop)
 
     @patch('executions.container_workflow_runtime.AuditService')
     def test_no_simulation_marks_child_completed(self, mock_audit):
-        """Simulation off → child COMPLETED via direct update."""
+        """Simulation off → child COMPLETED via dispatch réel (trigger_platform_job mocké)."""
         execution = Execution.objects.create(
             action=self.wf, user=self.user, environment=TEST_ENV, status=ExecutionStatus.RUNNING,
         )
@@ -793,6 +810,11 @@ class TestPlatformStepOutputMappingNotDict(TestCase):
             }],
             created_by=self.user,
         )
+        # Story 77.3: mock trigger_platform_job pour que le child step soit COMPLETED
+        patcher = patch('executions.container_workflow_runtime.trigger_platform_job')
+        self.mock_trigger = patcher.start()
+        self.mock_trigger.apply_async.side_effect = _make_trigger_mock_completing()
+        self.addCleanup(patcher.stop)
 
     @patch('executions.container_workflow_runtime.logger')
     @patch('executions.container_workflow_runtime.AuditService')

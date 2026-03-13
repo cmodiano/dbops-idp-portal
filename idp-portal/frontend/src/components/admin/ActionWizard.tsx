@@ -7,7 +7,7 @@
  * Story 9.5: Support for workflows (item_type='workflow') with WorkflowStepsEditor.
  */
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { Modal, Steps, Button, Form, Alert, Space, App, List } from 'antd';
 import { CloseCircleOutlined } from '@ant-design/icons';
 import type {
@@ -117,6 +117,17 @@ export function ActionWizard({
   // Story 31.1: Derive AAP check from selected integration
   const selectedIntegration = integrationId ? getIntegrationById(integrationId) : undefined;
   const isPlatformAAP = selectedIntegration?.type === 'aap' || selectedIntegration?.type === 'tower';
+
+  // Inclure l'intégration courante dans les options si absente (ex: statut invalid, filtrée)
+  const integrationOptionsWithCurrent = useMemo(() => {
+    const currentId = editAction?.integration_id ?? integrationId;
+    if (!currentId || integrationOptions.some((o) => o.value === currentId)) {
+      return integrationOptions;
+    }
+    const current = getIntegrationById(currentId);
+    const label = current ? `${current.name} — ${current.type}` : `Intégration #${currentId}`;
+    return [{ value: currentId, label }, ...integrationOptions];
+  }, [integrationOptions, editAction?.integration_id, integrationId, getIntegrationById]);
 
   useEffect(() => {
     if (open && editAction) {
@@ -484,7 +495,7 @@ export function ActionWizard({
               isReadOnly={!!isReadOnly}
               engineOptions={engineOptions}
               enginesLoading={enginesLoading}
-              integrationOptions={integrationOptions}
+              integrationOptions={integrationOptionsWithCurrent}
               integrationsLoading={integrationsLoading}
               isEditMode={isEditMode}
               editAction={editAction}

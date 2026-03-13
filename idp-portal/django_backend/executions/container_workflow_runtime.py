@@ -19,6 +19,7 @@ Architecture:
 # loop detection, intégration ServiceNow) — volume justifié par la complexité inhérente
 # à l'orchestration async multi-étapes (Story 35.4 AC3).
 
+import time
 import threading
 import structlog
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -27,7 +28,7 @@ from typing import Dict, Any, List, NamedTuple, Union, cast
 from django.db import close_old_connections, transaction
 from django.utils import timezone
 
-from catalog.models import Action, ActionStatus
+from catalog.models import Action, ActionItemType, ActionStatus
 from executions.models import (
     Execution, ExecutionStep, ExecutionStatus, ExecutionStepStatus,
     ExecutionStepType,
@@ -48,6 +49,8 @@ from executions.step_handlers.service_call_handler import ServiceCallHandler
 from executions.step_handlers.http_request_handler import HttpRequestHandler
 from executions.step_handlers.evaluation_handler import EvaluationHandler
 from executions.step_handlers.gate_handler import GateHandler
+from executions.tasks.trigger import trigger_platform_job
+from executions.tasks.polling import get_platform_queue
 from executions.container_routing import (
     get_linear_next_step_ids as _routing_get_linear_next_step_ids,
     get_next_step_ids as _routing_get_next_step_ids,
@@ -55,6 +58,10 @@ from executions.container_routing import (
 from executions.container_parallel import apply_join_policy as _parallel_apply_join_policy
 
 logger = structlog.get_logger(__name__)
+
+# Story 77.3: Platform action polling constants
+PLATFORM_ACTION_POLL_INTERVAL_SECONDS: int = 5
+PLATFORM_ACTION_MAX_WAIT_SECONDS: int = 3600  # 1 heure
 
 
 def _broadcast_step(execution_id: int, step: ExecutionStep) -> None:
@@ -606,7 +613,7 @@ class ContainerWorkflowRuntime:
             return None
 
         try:
-            return cast(Action, Action.objects.get(id=referenced_action_id, status=ActionStatus.PUBLISHED))
+            return cast(Action, Action.objects.select_related('integration').get(id=referenced_action_id, status=ActionStatus.PUBLISHED))
         except Action.DoesNotExist:
             parent_step.status = ExecutionStepStatus.FAILED
             parent_step.completed_at = timezone.now()
@@ -655,11 +662,12 @@ class ContainerWorkflowRuntime:
         parent_step.save(update_fields=['platform_job_id'])
         return child_execution
 
-    def _run_child_execution(self, child_execution: Execution) -> None:
+    def _run_child_execution(self, child_execution: Execution, integration: Any = None) -> None:
         """
         Run the child execution (simulation or production fallback).
 
         Story 71.6: Extracted from _execute_platform_step (subtask 9.3).
+        Story 77.3: Added integration parameter for real platform dispatch.
         """
         if SimulationService.is_enabled():
             SimulationService.create_simulated_steps(child_execution)
@@ -686,7 +694,7 @@ class ContainerWorkflowRuntime:
             # For workflows, run_sync blocks until completion; for other types,
             # no runtime is registered — keep placeholder behavior.
             action = child_execution.action
-            if action and action.item_type == "workflow":
+            if action and action.item_type == ActionItemType.WORKFLOW:
                 try:
                     ContainerWorkflowRuntime(child_execution).run_sync()
                 except Exception as run_err:  # noqa: BLE001
@@ -706,13 +714,108 @@ class ContainerWorkflowRuntime:
                         error_message=str(run_err),
                     )
             else:
-                # No runtime for item_type='action' — placeholder: mark completed
-                now = timezone.now()
-                Execution.objects.filter(id=child_execution.id).update(
-                    status=ExecutionStatus.COMPLETED,
-                    started_at=now,
-                    completed_at=now,
+                # Story 77.3: Real dispatch for item_type='action' via platform job.
+                if integration is None:
+                    # AC2: No integration configured — mark child FAILED explicitly
+                    now = timezone.now()
+                    Execution.objects.filter(id=child_execution.id).update(
+                        status=ExecutionStatus.FAILED,
+                        started_at=now,
+                        completed_at=now,
+                        error_message="Action has no integration configured",
+                    )
+                    logger.error(
+                        "container_workflow_platform_action_no_integration",
+                        child_execution_id=child_execution.id,
+                        parent_execution_id=self.execution.id,
+                        correlation_id=self.correlation_id,
+                    )
+                    return
+
+                # AC1: Integration available — dispatch real platform job
+                # Create an ExecutionStep on the child execution for the platform job tracker
+                child_step = ExecutionStep.objects.create(
+                    execution=child_execution,
+                    step_order=1,
+                    step_name="Platform Job",
+                    step_type=ExecutionStepType.PLATFORM,
+                    status=ExecutionStepStatus.RUNNING,
+                    started_at=timezone.now(),
                 )
+
+                # Set child execution to RUNNING
+                Execution.objects.filter(id=child_execution.id).update(
+                    status=ExecutionStatus.RUNNING,
+                    started_at=timezone.now(),
+                )
+
+                # Build trigger_kwargs from child execution parameters
+                params = child_execution.get_parameters() or {}
+                trigger_kwargs: dict = {"correlation_id": self.correlation_id}
+                if params.get("template_id"):
+                    trigger_kwargs["template_id"] = str(params["template_id"])
+                if params.get("resource_type"):
+                    trigger_kwargs["resource_type"] = params["resource_type"]
+                if params.get("extra_vars"):
+                    trigger_kwargs["extra_vars"] = params["extra_vars"]
+
+                trigger_platform_job.apply_async(
+                    kwargs={
+                        "execution_step_id": child_step.id,
+                        "execution_id": child_execution.id,
+                        "integration_id": integration.id,
+                        "trigger_kwargs": trigger_kwargs,
+                    },
+                    queue=get_platform_queue(integration.type),
+                )
+
+                logger.info(
+                    "container_workflow_platform_action_dispatched",
+                    child_execution_id=child_execution.id,
+                    parent_execution_id=self.execution.id,
+                    integration_id=integration.id,
+                    child_step_id=child_step.id,
+                    correlation_id=self.correlation_id,
+                )
+
+                # Poll child_step.status until terminal or timeout (Task 4)
+                elapsed = 0
+                while elapsed < PLATFORM_ACTION_MAX_WAIT_SECONDS:
+                    child_step.refresh_from_db()
+                    if child_step.status in (
+                        ExecutionStepStatus.COMPLETED,
+                        ExecutionStepStatus.FAILED,
+                    ):
+                        break
+                    time.sleep(PLATFORM_ACTION_POLL_INTERVAL_SECONDS)
+                    elapsed += PLATFORM_ACTION_POLL_INTERVAL_SECONDS
+                else:
+                    # Timeout: mark step and execution as FAILED
+                    ExecutionStep.objects.filter(id=child_step.id).update(
+                        status=ExecutionStepStatus.FAILED,
+                        completed_at=timezone.now(),
+                        error_message="Platform action wait timeout",
+                    )
+                    child_step.refresh_from_db()
+                    logger.error(
+                        "container_workflow_platform_action_timeout",
+                        child_execution_id=child_execution.id,
+                        parent_execution_id=self.execution.id,
+                        elapsed=elapsed,
+                        correlation_id=self.correlation_id,
+                    )
+
+                # Derive final child execution status from child_step.status
+                final_exec_status = (
+                    ExecutionStatus.COMPLETED
+                    if child_step.status == ExecutionStepStatus.COMPLETED
+                    else ExecutionStatus.FAILED
+                )
+                Execution.objects.filter(id=child_execution.id).update(
+                    status=final_exec_status,
+                    completed_at=timezone.now(),
+                )
+                child_execution.refresh_from_db()
 
     def _extract_and_store_output(
         self, step_id: str, parent_step: ExecutionStep, output_mapping: Any,
@@ -774,6 +877,9 @@ class ContainerWorkflowRuntime:
 
         _broadcast_step(self.execution.id, parent_step)  # RUNNING
 
+        # Story 77.3: Extract integration pre-loaded via select_related
+        integration = getattr(referenced_action, 'integration', None)
+
         # Pure computation outside transaction to minimize lock duration
         child_params = self._get_step_parameters(step)
         if resolved_params:
@@ -797,7 +903,7 @@ class ContainerWorkflowRuntime:
             )
 
             # Execution runs OUTSIDE transaction (can be long-running)
-            self._run_child_execution(child_execution)
+            self._run_child_execution(child_execution, integration=integration)
             child_execution.refresh_from_db()
 
             # Story 71.7 AC#4: Transaction 2 — finalize parent_step after execution
