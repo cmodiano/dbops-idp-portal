@@ -24,7 +24,7 @@ describe('help_service', () => {
       const result = await getHelpContent('action-form-integration');
 
       expect(apiClient.apiFetchRaw).toHaveBeenCalledWith(
-        'help/action-form-integration/'
+        '/help/action-form-integration/'
       );
       expect(result).toEqual(mockData);
 

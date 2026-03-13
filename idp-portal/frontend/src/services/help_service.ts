@@ -31,7 +31,7 @@ export async function getHelpContent(topicId: string): Promise<HelpContent> {
 
   try {
     const raw = await apiFetchRaw<{ topic_id?: string; short?: string; markdown?: string }>(
-      `help/${topicId}/`
+      `/help/${topicId}/`
     );
     const data: HelpContent = {
       topic_id: raw.topic_id ?? topicId,

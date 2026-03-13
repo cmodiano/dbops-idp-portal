@@ -384,6 +384,10 @@ class CatalogService:
             action.name = action_update_data['name']
         if 'description' in action_update_data:
             action.description = action_update_data.get('description')
+        if 'item_type' in action_update_data:
+            action.item_type = action_update_data['item_type']
+        if 'category' in action_update_data:
+            action.category = action_update_data.get('category')
         if 'engine' in action_update_data:
             action.engine = action_update_data['engine']
         if 'platform' in action_update_data:

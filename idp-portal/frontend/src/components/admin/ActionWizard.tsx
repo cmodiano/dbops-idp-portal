@@ -7,7 +7,7 @@
  * Story 9.5: Support for workflows (item_type='workflow') with WorkflowStepsEditor.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Modal, Steps, Button, Form, Alert, Space, App, List } from 'antd';
 import { CloseCircleOutlined } from '@ant-design/icons';
 import type {
@@ -79,6 +79,8 @@ export function ActionWizard({
   const [impactRulesList, setImpactRulesList] = useState<ImpactRuleDefinition[]>([]);
   const [defaultImpactLevel, setDefaultImpactLevel] = useState<ImpactLevel | null>(null);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  /** Valeurs de l'étape 1 capturées à la navigation — évite la perte quand step 1 est masqué (display:none) */
+  const _step1ValuesRef = useRef<{ integration_id?: number; engine?: string; category?: string } | null>(null);
 
   // DIP: services encapsulés via useActionWizardState — SOLID-FE-4
   const {
@@ -158,8 +160,10 @@ export function ActionWizard({
         setAapTemplateId(undefined);
       }
       setCurrentStep(0);
+      _step1ValuesRef.current = null;
     } else if (!open) {
       form.resetFields();
+      _step1ValuesRef.current = null;
       setParameterList([]);
       setImpactRulesList([]);
       setDefaultImpactLevel(null);
@@ -232,6 +236,13 @@ export function ActionWizard({
       } catch {
         return;
       }
+      // Capturer les valeurs de l'étape 1 avant de masquer (évite perte integration_id, engine, etc.)
+      const vals = form.getFieldsValue();
+      _step1ValuesRef.current = {
+        integration_id: vals.integration_id,
+        engine: vals.engine,
+        category: vals.category,
+      };
     }
     // Step 2 validation for workflows
     if (currentStep === 1 && isWorkflow) {
@@ -243,7 +254,10 @@ export function ActionWizard({
     setCurrentStep((s) => Math.min(s + 1, 2));
   };
 
-  const handlePrev = () => setCurrentStep((s) => Math.max(s - 1, 0));
+  const handlePrev = () => {
+    if (currentStep === 1) _step1ValuesRef.current = null;
+    setCurrentStep((s) => Math.max(s - 1, 0));
+  };
 
   const handleSave = async () => {
     setSubmitError(null);
@@ -274,6 +288,12 @@ export function ActionWizard({
 
     setSaving(true);
     try {
+      // Priorité: _step1ValuesRef (capturé à la nav) > values (validateFields) > form (getFieldsValue)
+      const captured = _step1ValuesRef.current;
+      const formValues = form.getFieldsValue();
+      const integrationId = captured?.integration_id ?? values.integration_id ?? formValues.integration_id;
+      const engine = captured?.engine ?? values.engine ?? formValues.engine;
+
       const payload: ActionCreate = {
         name: values.name,
         description: values.description,
@@ -287,16 +307,16 @@ export function ActionWizard({
         // Story 63.9: Schéma d'output déclaré par l'admin
         output_schema_id: outputSchemaId,
         // category: both actions and workflows (workflows: optional, backend defaults to 'autres')
-        category: (values as Record<string, unknown>).category as string | undefined ?? null,
+        category: (captured?.category ?? (values as Record<string, unknown>).category ?? formValues.category) as string | undefined ?? null,
         // Only include engine/platform/integration_id/parameters_schema for actions
         ...(isWorkflowSave
           ? {}
           : {
-              engine: values.engine,
+              engine,
               // Story 31.1: Derive platform from integration type, send both
-              integration_id: values.integration_id,
-              platform: values.integration_id
-                ? (integrationTypeToPlatformCode(getIntegrationById(values.integration_id)?.type ?? '') as ActionPlatform)
+              integration_id: integrationId,
+              platform: integrationId
+                ? (integrationTypeToPlatformCode(getIntegrationById(integrationId)?.type ?? '') as ActionPlatform)
                 : undefined,
               parameters_schema: parameterListToSchema(parameterList),
             }),
@@ -353,8 +373,8 @@ export function ActionWizard({
           // Save execution steps for actions (only if draft or disabled)
           if (canEditSteps) {
             // Story 31.1: Derive connector from integration type
-            const connector = values.integration_id
-              ? integrationToConnector(getIntegrationById(values.integration_id)?.type ?? '')
+            const connector = integrationId
+              ? integrationToConnector(getIntegrationById(integrationId)?.type ?? '')
               : 'none';
             const connector_config =
               connector === 'aap' && aapTemplateId != null && aapTemplateId >= 1

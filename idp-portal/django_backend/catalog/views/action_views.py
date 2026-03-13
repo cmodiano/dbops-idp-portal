@@ -160,7 +160,8 @@ class ActionViewSet(viewsets.ModelViewSet):
     def update(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """PUT/PATCH /admin/actions/{id} - Update action metadata."""
         instance = self.get_object()
-        partial = kwargs.get('partial', False)
+        # Toujours partial=True pour accepter les mises à jour partielles (integration_id, parameters_schema, etc.)
+        partial = True
 
         # Story 63.9: Handle output_schema_id in PATCH requests (direct update, no ActionCreateSerializer)
         if 'output_schema_id' in request.data and len(request.data) == 1:
@@ -207,8 +208,8 @@ class ActionViewSet(viewsets.ModelViewSet):
             response_serializer = ActionSerializer(instance)
             return Response({"data": response_serializer.data})
 
-        # Handle other fields via ActionCreateSerializer
-        serializer = ActionCreateSerializer(data=request.data, partial=partial)
+        # Handle other fields via ActionCreateSerializer (context is_update pour validation partielle)
+        serializer = ActionCreateSerializer(data=request.data, partial=partial, context={'is_update': True})
         serializer.is_valid(raise_exception=True)
         update_data = serializer.validated_data
         svc = self.get_catalog_service()

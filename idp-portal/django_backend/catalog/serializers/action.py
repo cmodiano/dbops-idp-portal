@@ -449,7 +449,9 @@ class ActionCreateSerializer(ActionFieldValidationMixin, serializers.Serializer)
 
     def validate(self, data: dict[str, Any]) -> dict[str, Any]:
         item_type = data.get('item_type', ActionItemType.ACTION)
-        if item_type == ActionItemType.ACTION:
+        is_update = self.context.get('is_update', False)
+        # En mode update partiel, ne pas exiger engine/platform si absents
+        if item_type == ActionItemType.ACTION and not is_update:
             if not data.get('engine'):
                 raise serializers.ValidationError("engine is required for action type")
             if not data.get('platform'):

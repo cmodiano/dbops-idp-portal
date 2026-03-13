@@ -5,16 +5,30 @@ Résout les références ``{{ steps.<step_id>.<field> }}`` dans les ``input_mapp
 d'un step en utilisant Jinja2 ``SandboxedEnvironment``.
 
 Filtres autorisés : ``join``, ``length``, ``first``, ``default``, ``truncate``.
+
+Story 77.2 — Préservation des types natifs :
+- Expression pure ``{{ steps.X.Y }}`` (un seul bloc, sans texte autour) :
+  si la valeur résolue est list/dict/int/float/bool, retourne le type natif.
+- Template mixte ``"Patch {{ steps.X.Y }}"`` : render() → string (comportement actuel).
 """
 
+import re
 from typing import Any, Iterator, cast
 
 import jinja2
 import jinja2.sandbox
+import structlog
+
+logger = structlog.get_logger(__name__)
 
 
 # Ensemble des filtres Jinja2 autorisés dans les templates de workflow
 _ALLOWED_FILTERS = frozenset({'join', 'length', 'first', 'default', 'truncate'})
+
+# Regex détectant une expression Jinja pure : exactement un bloc {{ ... }} sans texte autour.
+# Exemples : "{{ steps.X.Y }}", "{{ steps.X.Y | default('v', true) }}"
+# Non-match : "Patch {{ steps.X.N }}", "{{ a }} et {{ b }}"
+_PURE_EXPRESSION_RE = re.compile(r'^\s*\{\{(.+)\}\}\s*$', re.DOTALL)
 
 
 class _StepOutputProxy:
@@ -108,6 +122,17 @@ class StepTemplateResolver:
         # truncate(N) strict : pas de leeway (par défaut 5) pour garantir ≤ N caractères
         self._env.policies['truncate.leeway'] = 0
 
+        # Environnement sans finalize pour évaluation d'expressions pures (Story 77.2).
+        # Permet de retourner None natif (et donc list/dict/bool réels) au lieu de ''.
+        self._env_native = jinja2.sandbox.SandboxedEnvironment(
+            undefined=jinja2.Undefined,
+        )
+        self._env_native.filters = {
+            k: v for k, v in self._env_native.filters.items()
+            if k in _ALLOWED_FILTERS
+        }
+        self._env_native.policies['truncate.leeway'] = 0
+
     def resolve(self, input_mapping: dict) -> dict:
         """
         Résout les templates dans ``input_mapping``.
@@ -129,17 +154,24 @@ class StepTemplateResolver:
         """
         Résout récursivement une valeur (str, dict, list ou autre).
 
+        Story 77.2 — Expression pure vs template mixte :
+        - Expression pure (``{{ expr }}``) : si la valeur résolue est un type natif
+          (list, dict, int, float, bool), retourner ce type sans stringification.
+          Si la valeur est None (step/champ absent), retourner '' (AC#4, compat).
+        - Template mixte (``"Prefix {{ expr }}"``) : render() → string (comportement actuel).
+
         Args:
             value:   Valeur à résoudre.
             context: Contexte Jinja2 (contient ``steps``).
 
         Returns:
-            Valeur résolue du même type que ``value``.
+            Valeur résolue (type natif pour expressions pures, string pour templates mixtes).
         """
         if isinstance(value, str):
+            if _PURE_EXPRESSION_RE.match(value):
+                return self._resolve_pure_expression(value, context)
             try:
                 rendered = self._env.from_string(value).render(context)
-                # Jinja2 Undefined retourne une chaîne vide "" — conserver ce comportement
                 return rendered
             except jinja2.exceptions.TemplateError:
                 return value
@@ -148,3 +180,54 @@ class StepTemplateResolver:
         elif isinstance(value, list):
             return [self._resolve_value(item, context) for item in value]
         return value
+
+    def _resolve_pure_expression(self, value: str, context: dict) -> Any:
+        """
+        Évalue une expression Jinja pure (``{{ expr }}``) et retourne la valeur Python native.
+
+        Technique : wrapper l'expression en ``{% set _result = expr %}`` puis exécuter
+        le template via ``new_context`` + ``root_render_func`` pour obtenir la valeur
+        Python native depuis ``ctx.vars['_result']`` (sans passer par render() → str).
+
+        Si la valeur est None ou Undefined (step/champ absent), retourne '' (compat AC#4).
+        En cas d'erreur, bascule sur render() classique avec finalize.
+
+        Args:
+            value:   String matchant ``_PURE_EXPRESSION_RE``.
+            context: Contexte Jinja2.
+
+        Returns:
+            Valeur Python native (list, dict, int, float, bool, str ou '').
+        """
+        try:
+            expr_inner = _PURE_EXPRESSION_RE.match(value).group(1).strip()  # type: ignore[union-attr]
+            wrapper = f"{{% set _result = {expr_inner} %}}"
+            template = self._env_native.from_string(wrapper)
+
+            # Exécuter le template dans un Context et lire la variable _result
+            ctx = template.new_context(context)
+            list(template.root_render_func(ctx))  # exécuter le {% set %}
+            native_value = ctx.vars.get('_result', jinja2.Undefined())
+
+            # Jinja2 Undefined → step/champ absent → '' (compat AC#4)
+            if isinstance(native_value, jinja2.Undefined):
+                return ''
+
+            # None Python → '' (compat AC#4, finalize habituel)
+            if native_value is None:
+                return ''
+
+            # Type natif (list, dict, scalaires) : retourner tel quel
+            return native_value
+
+        except jinja2.exceptions.TemplateError as e:
+            # Fallback : render() classique avec finalize (évite de masquer d'autres bugs)
+            logger.warning(
+                "template_resolver_pure_expression_fallback",
+                expression=value[:200] if len(value) > 200 else value,
+                error=str(e),
+            )
+            try:
+                return self._env.from_string(value).render(context)
+            except jinja2.exceptions.TemplateError:
+                return value
