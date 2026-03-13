@@ -15,6 +15,7 @@ Documentation d'architecture du projet IDP Portal.
 - [Architecture des conteneurs](container-architecture.md)
 - [Configuration as Code – Stratégie](configuration-as-code-strategy.md) ✅ Document référence (Story 64-17)
 - [Configuration as Code – Implémentation](configuration-as-code-implementation-guide.md) ✅ Document référence (Story 64-17)
+- [Plan complet: Temporal-like orchestration sans Temporal](temporal-advantages-without-temporal-implementation-plan.md)
 - [Infrastructure as Code – Stratégie](infrastructure-as-code-strategy.md) ⚠️ OBSOLÈTE — remplacé par configuration-as-code-strategy.md
 - [Infrastructure as Code – Implémentation](infrastructure-as-code-implementation-guide.md) ⚠️ OBSOLÈTE — remplacé par configuration-as-code-implementation-guide.md
 - [Analyse : Actions parallèles dans les workflows](parallel-workflow-actions-analysis.md)
