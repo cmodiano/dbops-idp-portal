@@ -751,3 +751,80 @@ class RunnableStep(models.Model):
     @property
     def has_exceeded_max_attempts(self) -> bool:
         return self.attempt_no >= self.max_attempts
+
+
+class WorkflowCommandStatus(models.TextChoices):
+    """Statuts possibles d'une commande workflow."""
+    PENDING = "pending", "En attente"
+    PROCESSED = "processed", "Traité"
+    FAILED = "failed", "Échoué"
+
+
+VALID_COMMAND_TYPES = {
+    "approve", "reject", "cancel", "timeout_signal", "resume_signal"
+}
+
+
+class WorkflowCommand(models.Model):
+    """Commande workflow durable — persistée avant traitement.
+
+    Composant Command Store de l'architecture Temporal-like (Epic 78).
+    L'API écrit une commande et retourne rapidement, un processor séparé
+    traite les commandes en FIFO.
+    Ref: docs/backend/epic-78-temporal-like-orchestration-without-temporal.md#Section 3.1
+    """
+    id = models.BigAutoField(primary_key=True, db_column='ID')
+    execution = models.ForeignKey(
+        Execution,
+        on_delete=models.CASCADE,
+        related_name="workflow_commands",
+        db_column="EXECUTION_ID",
+    )
+    command_type = models.CharField(
+        max_length=50,
+        db_column="COMMAND_TYPE",
+    )
+    payload = models.JSONField(
+        null=True,
+        blank=True,
+        db_column="PAYLOAD",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=WorkflowCommandStatus.choices,
+        default=WorkflowCommandStatus.PENDING,
+        db_column="STATUS",
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        db_column="CREATED_AT",
+    )
+    processed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_column="PROCESSED_AT",
+    )
+    created_by = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        db_column="CREATED_BY",
+    )
+    error_message = models.TextField(
+        null=True,
+        blank=True,
+        db_column="ERROR_MESSAGE",
+    )
+
+    class Meta:
+        db_table = "WORKFLOW_COMMANDS"
+        ordering = ["created_at"]
+        indexes = [
+            models.Index(
+                fields=["status", "created_at"],
+                name="idx_wf_cmd_status_created",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"WorkflowCommand {self.id} - {self.command_type} ({self.status})"
