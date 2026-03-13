@@ -3,7 +3,6 @@ Story 78.10 — Tests for WorkflowDefinitionRepository.
 AC3: get_steps_from_json, get_steps_from_normalized, get_steps dispatch, sync_from_json.
 """
 
-from django.db import connection
 from django.test import TestCase, override_settings
 
 from catalog.models import Action, ActionItemType, ActionStatus
@@ -11,6 +10,10 @@ from catalog.models_workflow_definition import (
     WorkflowDefinition,
     WorkflowStep,
     WorkflowStepEdge,
+)
+from catalog.tests._workflow_definition_test_helpers import (
+    create_unmanaged_tables,
+    drop_unmanaged_tables,
 )
 from catalog.workflow_definition_repository import (
     get_steps,
@@ -20,24 +23,6 @@ from catalog.workflow_definition_repository import (
 )
 from reference.models import RefEngine
 from integrations.models import IntegrationTypeCatalogue, IntegrationRole
-
-
-def _create_unmanaged_tables():
-    with connection.schema_editor() as editor:
-        for model in [WorkflowDefinition, WorkflowStep, WorkflowStepEdge]:
-            try:
-                editor.create_model(model)
-            except Exception:
-                pass
-
-
-def _drop_unmanaged_tables():
-    with connection.schema_editor() as editor:
-        for model in [WorkflowStepEdge, WorkflowStep, WorkflowDefinition]:
-            try:
-                editor.delete_model(model)
-            except Exception:
-                pass
 
 
 SAMPLE_STEPS_LINEAR = [
@@ -137,11 +122,11 @@ class GetStepsFromNormalizedTests(TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        _create_unmanaged_tables()
+        create_unmanaged_tables()
 
     @classmethod
     def tearDownClass(cls):
-        _drop_unmanaged_tables()
+        drop_unmanaged_tables()
         super().tearDownClass()
 
     def setUp(self):
@@ -253,11 +238,11 @@ class GetStepsDispatchTests(TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        _create_unmanaged_tables()
+        create_unmanaged_tables()
 
     @classmethod
     def tearDownClass(cls):
-        _drop_unmanaged_tables()
+        drop_unmanaged_tables()
         super().tearDownClass()
 
     def setUp(self):
@@ -300,11 +285,11 @@ class SyncFromJsonTests(TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        _create_unmanaged_tables()
+        create_unmanaged_tables()
 
     @classmethod
     def tearDownClass(cls):
-        _drop_unmanaged_tables()
+        drop_unmanaged_tables()
         super().tearDownClass()
 
     def setUp(self):

@@ -23,10 +23,21 @@ from catalog.workflow_definition_repository import (
 
 
 def _normalize_step(step: dict) -> dict:
-    """Normalize a step dict for comparison (sort keys, convert types)."""
+    """Normalize a step dict for comparison (sort keys, convert types, strip nulls/empties).
+
+    Strips keys with None values and empty lists so both JSON and normalized
+    outputs are comparable regardless of whether absent-vs-null or absent-vs-[]
+    was used.
+    """
     normalized: dict[str, Any] = {}
     for key in sorted(step.keys()):
         val = step[key]
+        # Strip None values — absent key and explicit null are equivalent
+        if val is None:
+            continue
+        # Strip empty lists — absent key and [] are equivalent for edge lists
+        if isinstance(val, list) and len(val) == 0:
+            continue
         if isinstance(val, float):
             val = round(val, 2)
         elif isinstance(val, list):

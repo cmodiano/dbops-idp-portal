@@ -943,7 +943,7 @@ development_status:
     78-7-execution-outbox: done # Code review 2026-03-13: 6 fixes (H1 migration AlterField séparée, H2 dead code skipped, M1 tests routing 3 event types, M2 fusion dispatch notification, M3 renommage F expression, M4 transaction.atomic tests AC2) — 29/29 tests + 76 régression
     78-8-desactivation-runtime-legacy: done # Code review 2026-03-13: 4 fixes (H1 execution zombie RUNNING→FAILED avant raise, M1 test vérifie status FAILED, M2 tests log structuré fallback+retry, L1 docstring exceptions.py générique) — 10/10 tests
     78-9-consolidation-state-machine-persistence: done # Code review 2026-03-13: 9 fixes (H1 suppression assert CAS inutile, H2/H3 params fantômes WorkQueue, M1 10+ transitions non gardées, M2 guard _handle_cancel, M3 renommage release(), M4 validation entity_id EventStore, L1/L2 commentaires stale) — 57/57 tests + 2021 régression
-    78-10-workflow-definitions-normalisees: in-progress
+    78-10-workflow-definitions-normalisees: done # Code review 2026-03-13: 4 fixes (H1-H3 parity check faux positifs nulls/empty arrays, M2 bulk_create edges, L1 test parity empty arrays). BLOQUANT: C1 fichiers non commités (_workflow_definition_test_helpers.py, test_story_78_10_dual_write.py + 3 fichiers modifiés non staged) — 37/37 tests
     78-11-profile-action-permission-normalisees: backlog
     78-12-profile-target-permission-normalisees: backlog
     78-13-contraintes-json-tier2: backlog

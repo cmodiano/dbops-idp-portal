@@ -2,7 +2,7 @@
 Story 78.10 — Tests for WorkflowDefinition, WorkflowStep, WorkflowStepEdge models.
 AC1: ORM creation, FK constraints, unique_together, edge type validation.
 """
-from django.db import connection, IntegrityError
+from django.db import IntegrityError
 from django.test import TestCase
 
 from catalog.models import Action, ActionItemType, ActionStatus
@@ -11,28 +11,12 @@ from catalog.models_workflow_definition import (
     WorkflowStep,
     WorkflowStepEdge,
 )
+from catalog.tests._workflow_definition_test_helpers import (
+    create_unmanaged_tables,
+    drop_unmanaged_tables,
+)
 from reference.models import RefEngine
 from integrations.models import IntegrationTypeCatalogue, IntegrationRole
-
-
-def _create_unmanaged_tables():
-    """Create tables for managed=False models (handled by Flyway in production)."""
-    with connection.schema_editor() as editor:
-        for model in [WorkflowDefinition, WorkflowStep, WorkflowStepEdge]:
-            try:
-                editor.create_model(model)
-            except Exception:
-                pass  # Table may already exist
-
-
-def _drop_unmanaged_tables():
-    """Drop tables for managed=False models."""
-    with connection.schema_editor() as editor:
-        for model in [WorkflowStepEdge, WorkflowStep, WorkflowDefinition]:
-            try:
-                editor.delete_model(model)
-            except Exception:
-                pass
 
 
 class WorkflowDefinitionModelTests(TestCase):
@@ -41,11 +25,11 @@ class WorkflowDefinitionModelTests(TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        _create_unmanaged_tables()
+        create_unmanaged_tables()
 
     @classmethod
     def tearDownClass(cls):
-        _drop_unmanaged_tables()
+        drop_unmanaged_tables()
         super().tearDownClass()
 
     def setUp(self):

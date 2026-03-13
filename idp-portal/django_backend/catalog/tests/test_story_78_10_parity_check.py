@@ -5,36 +5,19 @@ AC4: JSON vs normalized table comparison for various workflow shapes.
 from io import StringIO
 
 from django.core.management import call_command
-from django.db import connection
 from django.test import TestCase
 
 from catalog.models import Action, ActionItemType, ActionStatus
 from catalog.models_workflow_definition import (
-    WorkflowDefinition,
     WorkflowStep,
-    WorkflowStepEdge,
+)
+from catalog.tests._workflow_definition_test_helpers import (
+    create_unmanaged_tables,
+    drop_unmanaged_tables,
 )
 from catalog.workflow_definition_repository import sync_from_json
 from reference.models import RefEngine
 from integrations.models import IntegrationTypeCatalogue, IntegrationRole
-
-
-def _create_unmanaged_tables():
-    with connection.schema_editor() as editor:
-        for model in [WorkflowDefinition, WorkflowStep, WorkflowStepEdge]:
-            try:
-                editor.create_model(model)
-            except Exception:
-                pass
-
-
-def _drop_unmanaged_tables():
-    with connection.schema_editor() as editor:
-        for model in [WorkflowStepEdge, WorkflowStep, WorkflowDefinition]:
-            try:
-                editor.delete_model(model)
-            except Exception:
-                pass
 
 
 class ParityCheckCommandTests(TestCase):
@@ -43,11 +26,11 @@ class ParityCheckCommandTests(TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        _create_unmanaged_tables()
+        create_unmanaged_tables()
 
     @classmethod
     def tearDownClass(cls):
-        _drop_unmanaged_tables()
+        drop_unmanaged_tables()
         super().tearDownClass()
 
     def setUp(self):
@@ -172,3 +155,22 @@ class ParityCheckCommandTests(TestCase):
         output = out.getvalue()
         self.assertIn('OK', output)
         self.assertIn('Verbose WF', output)
+
+    def test_parity_ok_with_empty_arrays_and_nulls(self):
+        """Parity OK when JSON has empty arrays and null values that normalized omits."""
+        wf = self._create_workflow('EmptyArrays WF', [
+            {
+                'order': 1, 'step_id': 's1', 'name': 'S1', 'step_type': 'platform',
+                'referenced_action_id': None,
+                'on_success_step_ids': [],
+                'on_error_step_ids': [],
+                'retry_enabled': False,
+                'integration_type': None,
+                'operation': None,
+            },
+        ])
+        sync_from_json(wf)
+
+        out = StringIO()
+        call_command('check_workflow_definition_parity', stdout=out)
+        self.assertIn('PARITY CHECK PASSED', out.getvalue())

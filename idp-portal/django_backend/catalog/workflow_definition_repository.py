@@ -178,7 +178,8 @@ def sync_from_json(action: Action) -> None:
         )
         step_objects[step_id] = step_obj
 
-    # Insert edges
+    # Insert edges in bulk
+    edges_to_create: list[WorkflowStepEdge] = []
     for step_data in steps_json:
         if not isinstance(step_data, dict):
             continue
@@ -194,11 +195,13 @@ def sync_from_json(action: Action) -> None:
             for target_step_id in target_ids:
                 to_step = step_objects.get(target_step_id)
                 if to_step:
-                    WorkflowStepEdge.objects.create(
+                    edges_to_create.append(WorkflowStepEdge(
                         from_step=from_step,
                         to_step=to_step,
                         edge_type=edge_type,
-                    )
+                    ))
+    if edges_to_create:
+        WorkflowStepEdge.objects.bulk_create(edges_to_create)
 
     logger.info(
         "workflow_definition_synced",
