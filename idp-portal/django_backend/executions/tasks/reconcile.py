@@ -343,10 +343,8 @@ def _resume_container_workflow(execution: Any, correlation_id: str = "") -> str:
     )
 
     if not next_wave:
-        # All steps already COMPLETED — mark execution COMPLETED
-        execution.status = ExecutionStatus.COMPLETED
-        execution.completed_at = timezone.now()
-        execution.save(update_fields=["status", "completed_at"])
+        # All steps already COMPLETED — use runtime finalization for audit + websocket broadcast
+        runtime._finalize_workflow_execution(ExecutionStatus.COMPLETED, failed_step_name=None)
         logger.info(
             "reconcile_container_workflow_completed",
             execution_id=execution.id,
