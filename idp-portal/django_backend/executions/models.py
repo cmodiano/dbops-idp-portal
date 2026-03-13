@@ -356,11 +356,10 @@ class ExecutionStep(models.Model):
         db_column='PLATFORM_JOB_ID'
     )
     error_message = models.TextField(null=True, blank=True, db_column='ERROR_MESSAGE')
-    # config_step_id: stores the step_id from action.execution_steps config.
-    # Used as the reliable identifier to match an ExecutionStep back to its
-    # workflow step definition (replaces fragile name-based matching).
-    # TextField supports arbitrarily long step_ids (no truncation).
-    config_step_id = models.TextField(
+    # config_step_id: step_id from action.execution_steps config (UUID format).
+    # Aligned to Oracle VARCHAR2(255) — see Flyway V116.
+    config_step_id = models.CharField(
+        max_length=255,
         null=True,
         blank=True,
         db_column='CONFIG_STEP_ID',

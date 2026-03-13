@@ -936,7 +936,7 @@ development_status:
     epic-78: in-progress
     78-1-workflow-event-counter-sequence-atomique: done
     78-2-runnable-steps-leases-reclaim: done # Code review 2026-03-13: 3 MEDIUM fixes (M1 eligible_at test helper, M2 double logging, M3 max_attempts enforcement) — 17/17 tests
-    78-3-alignement-config-step-id-model-schema: backlog
+    78-3-alignement-config-step-id-model-schema: done # Code review 2026-03-13: 4 fixes (M1 test chaîne vide, M2 dead import, L1 File List, L2 comptage) — 9/9 tests
     78-4-workflow-commands-table: backlog
     78-5-dispatch-file-container-workflow-runtime: backlog
     78-6-simplification-reconciliateur: backlog
