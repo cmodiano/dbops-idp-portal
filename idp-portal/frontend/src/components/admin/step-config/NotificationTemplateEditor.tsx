@@ -77,6 +77,7 @@ export const NotificationTemplateEditor: FC<NotificationTemplateEditorProps> = (
 }) => {
   const current = value ?? {};
 
+  const recipientRef = useRef<InputRef>(null);
   const subjectRef = useRef<InputRef>(null);
   const bodyRef = useRef<TextAreaRef>(null);
   const titleRef = useRef<InputRef>(null);
@@ -131,10 +132,20 @@ export const NotificationTemplateEditor: FC<NotificationTemplateEditorProps> = (
         </div>
 
         <div style={{ marginBottom: 8 }}>
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            Destinataire (recipient_email)
-          </Text>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 2 }}>
+            <Text type="secondary" style={{ fontSize: 12, flex: 1 }}>
+              Destinataire (recipient_email)
+            </Text>
+            <VariablePicker
+              workflowId={workflowId}
+              currentStepId={currentStepId}
+              availableStepIds={availableStepIds}
+              disabled={disabled}
+              onSelect={(expr) => insertAtCursor(recipientRef, 'recipient_email', expr)}
+            />
+          </div>
           <Input
+            ref={recipientRef}
             size="small"
             value={current.recipient_email ?? ''}
             disabled={disabled}

@@ -954,8 +954,8 @@ development_status:
     # === Epic 79: Notifications enrichies — Variables, CC, pièces jointes, webhook Teams par step ===
     # Réf: docs/backend/epic-79-notifications-enrichies.md
     # Variables {{ steps.* }}, CC email, pièces jointes, webhook Teams par step
-    epic-79: backlog
-    79-1-variables-steps-notification: backlog
+    epic-79: in-progress
+    79-1-variables-steps-notification: done
     79-2-champ-cc-email: backlog
     79-3-pieces-jointes-email: backlog
     79-4-webhook-teams-par-step: backlog

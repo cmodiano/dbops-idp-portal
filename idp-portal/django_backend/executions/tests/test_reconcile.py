@@ -37,12 +37,12 @@ from unittest.mock import patch, MagicMock
 
 from executions.tasks.reconcile import (
     _build_stale_filter,
+    _enqueue_recovery_steps,
     _is_child_execution_id,
     _is_container_workflow,
     _reconcile_execution,
     _reconcile_schedule_step,
-    _resume_container_workflow,
-    _retry_non_platform_step,
+    _reset_and_enqueue_step,
     reconcile_stale_executions,
 )
 from tests.factories import ExecutionFactory, ExecutionStepFactory
@@ -139,7 +139,7 @@ class TestReconcileExecution:
         )
 
         with patch(
-            "executions.tasks.reconcile._resume_container_workflow",
+            "executions.tasks.reconcile._enqueue_recovery_steps",
             return_value="reattached",
         ) as mock_resume, patch(
             "executions.tasks.reconcile._mark_execution_failed"
@@ -159,7 +159,7 @@ class TestReconcileExecution:
         execution = _make_execution(execution_steps=CONTAINER_STEPS)
 
         with patch(
-            "executions.tasks.reconcile._resume_container_workflow",
+            "executions.tasks.reconcile._enqueue_recovery_steps",
             side_effect=ValueError("No COMPLETED steps found — cannot resume container workflow"),
         ) as mock_resume, patch(
             "executions.tasks.reconcile._mark_execution_failed"
@@ -183,7 +183,7 @@ class TestReconcileExecution:
         execution.action.execution_steps = [{"name": "step_a", "type": "vault"}]
 
         with patch(
-            "executions.tasks.reconcile._resume_container_workflow"
+            "executions.tasks.reconcile._enqueue_recovery_steps"
         ) as mock_resume, patch(
             "executions.tasks.reconcile._mark_execution_failed"
         ) as mock_fail:
@@ -198,9 +198,9 @@ class TestReconcileExecution:
     # ------------------------------------------------------------------
 
     def test_container_workflow_resume_propagates_reattached(self):
-        """AC4.4 (wrapper): Quand _resume_container_workflow retourne 'reattached',
+        """AC4.4 (wrapper): Quand _enqueue_recovery_steps retourne 'reattached',
         _reconcile_execution propage ce résultat sans appeler _mark_execution_failed.
-        Note: la vérification que execution.status → COMPLETED est dans TestResumeContainerWorkflow."""
+        Note: la vérification que execution.status → COMPLETED est dans TestEnqueueRecoverySteps."""
         execution = _make_execution(execution_steps=CONTAINER_STEPS)
 
         ExecutionStepFactory(
@@ -217,7 +217,7 @@ class TestReconcileExecution:
         )
 
         with patch(
-            "executions.tasks.reconcile._resume_container_workflow",
+            "executions.tasks.reconcile._enqueue_recovery_steps",
             return_value="reattached",
         ) as mock_resume, patch(
             "executions.tasks.reconcile._mark_execution_failed"
@@ -233,11 +233,11 @@ class TestReconcileExecution:
     # ------------------------------------------------------------------
 
     def test_exception_during_resume_falls_back_to_failed_and_logs(self):
-        """AC3 + AC4.5: Exception inattendue pendant _resume → FAILED + log."""
+        """AC3 + AC4.5: Exception inattendue pendant _enqueue_recovery_steps → FAILED + log."""
         execution = _make_execution(execution_steps=CONTAINER_STEPS)
 
         with patch(
-            "executions.tasks.reconcile._resume_container_workflow",
+            "executions.tasks.reconcile._enqueue_recovery_steps",
             side_effect=RuntimeError("Unexpected error"),
         ) as mock_resume, patch(
             "executions.tasks.reconcile._mark_execution_failed"
@@ -251,29 +251,28 @@ class TestReconcileExecution:
         mock_fail.assert_called_once()
         mock_logger.error.assert_called_once()
         error_call_kwargs = mock_logger.error.call_args
-        assert "reconcile_container_workflow_resume_failed" in error_call_kwargs[0]
+        assert "reconcile_enqueue_recovery_failed" in error_call_kwargs[0]
 
 
 # ---------------------------------------------------------------------------
-# _resume_container_workflow — Tests directs (H2 fix)
+# _enqueue_recovery_steps — Tests directs (Story 78.6)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db
-class TestResumeContainerWorkflow:
-    """Tests directs de _resume_container_workflow — vérifie la logique interne (AC1, AC2, AC3)."""
+class TestEnqueueRecoverySteps:
+    """Tests directs de _enqueue_recovery_steps — vérifie la logique interne (AC1, AC2, AC3)."""
 
     def test_no_completed_steps_raises_value_error(self):
         """AC3: Aucune étape COMPLETED → ValueError (le caller fait fallback FAILED)."""
         execution = _make_execution(execution_steps=CONTAINER_STEPS)
         # Aucun ExecutionStep créé → completed_steps = []
 
-        with patch("executions.container_workflow_runtime.ContainerWorkflowRuntime"):
-            with pytest.raises(ValueError, match="No COMPLETED steps"):
-                _resume_container_workflow(execution)
+        with pytest.raises(ValueError, match="No COMPLETED steps"):
+            _enqueue_recovery_steps(execution)
 
-    def test_empty_next_wave_marks_execution_completed(self):
-        """AC2: Toutes étapes COMPLETED, vague suivante vide → execution.status = COMPLETED."""
+    def test_empty_next_wave_finalizes_execution_completed(self):
+        """AC2: Toutes étapes COMPLETED, vague suivante vide → execution finalisée COMPLETED."""
         from executions.models import ExecutionStatus
 
         execution = _make_execution(execution_steps=CONTAINER_STEPS)
@@ -284,35 +283,22 @@ class TestResumeContainerWorkflow:
             step_order=1,
         )
 
-        mock_rt = MagicMock()
-        mock_rt._step_outputs = {}
-        mock_rt._step_lookup_by_id = {
-            STEP_ID_A: CONTAINER_STEPS[0],
-            STEP_ID_B: CONTAINER_STEPS[1],
-        }
-
         with patch(
-            "executions.container_workflow_runtime.ContainerWorkflowRuntime",
-            return_value=mock_rt,
-        ), patch(
             "executions.container_routing.get_next_step_ids",
             return_value=[STEP_ID_B],
         ), patch(
             "executions.container_parallel.apply_join_policy",
             return_value=[],  # vague suivante vide
         ), patch(
-            "executions.output_extractor.OutputExtractor",
-            return_value=MagicMock(extract=lambda raw, mapping: raw),
-        ):
-            result = _resume_container_workflow(execution)
+            "executions.tasks.orchestration_worker._finalize_execution_if_done",
+        ) as mock_finalize:
+            result = _enqueue_recovery_steps(execution)
 
         assert result == "reattached"
-        execution.refresh_from_db()
-        assert execution.status == ExecutionStatus.COMPLETED
-        assert execution.completed_at is not None
+        mock_finalize.assert_called_once_with(execution, ExecutionStatus.COMPLETED)
 
-    def test_non_empty_next_wave_calls_execute_workflow_steps(self):
-        """AC1: Vague suivante non vide → _execute_workflow_steps appelé, _initial_wave défini."""
+    def test_non_empty_next_wave_enqueues_via_work_queue(self):
+        """AC1: Vague suivante non vide → _enqueue_next_steps appelé via WorkQueue."""
         execution = _make_execution(execution_steps=CONTAINER_STEPS)
         ExecutionStepFactory(
             execution=execution,
@@ -321,36 +307,23 @@ class TestResumeContainerWorkflow:
             step_order=1,
         )
 
-        mock_rt = MagicMock()
-        mock_rt._step_outputs = {}
-        mock_rt._step_lookup_by_id = {
-            STEP_ID_A: CONTAINER_STEPS[0],
-            STEP_ID_B: CONTAINER_STEPS[1],
-        }
-
         with patch(
-            "executions.container_workflow_runtime.ContainerWorkflowRuntime",
-            return_value=mock_rt,
-        ), patch(
             "executions.container_routing.get_next_step_ids",
             return_value=[STEP_ID_B],
         ), patch(
             "executions.container_parallel.apply_join_policy",
             return_value=[STEP_ID_B],  # vague suivante non vide
         ), patch(
-            "executions.output_extractor.OutputExtractor",
-            return_value=MagicMock(extract=lambda raw, mapping: raw),
-        ):
-            result = _resume_container_workflow(execution)
+            "executions.tasks.orchestration_worker._enqueue_next_steps",
+            return_value=1,
+        ) as mock_enqueue:
+            result = _enqueue_recovery_steps(execution)
 
         assert result == "reattached"
-        mock_rt._execute_workflow_steps.assert_called_once()
-        assert mock_rt._initial_wave == [STEP_ID_B]
+        mock_enqueue.assert_called_once()
 
-    def test_failed_step_with_on_error_step_ids_resumes_to_on_error_successor(self):
-        """FAILED step with on_error_step_ids → resume along on-error continuation to STEP_ID_C."""
-        from executions.models import ExecutionStatus
-
+    def test_failed_step_with_on_error_step_ids_enqueues_on_error_successor(self):
+        """FAILED step with on_error_step_ids → next wave computed along on-error path (STEP_ID_C)."""
         execution = _make_execution(execution_steps=CONTAINER_STEPS_WITH_ON_ERROR)
         ExecutionStepFactory(
             execution=execution,
@@ -365,26 +338,18 @@ class TestResumeContainerWorkflow:
             step_order=2,
         )
 
-        mock_rt = MagicMock()
-        mock_rt._step_outputs = {}
-        mock_rt._step_lookup_by_id = {
-            s["step_id"]: s for s in CONTAINER_STEPS_WITH_ON_ERROR
-        }
-
         with patch(
-            "executions.container_workflow_runtime.ContainerWorkflowRuntime",
-            return_value=mock_rt,
-        ), patch(
-            "executions.output_extractor.OutputExtractor",
-            return_value=MagicMock(extract=lambda raw, mapping: raw),
-        ):
-            result = _resume_container_workflow(execution)
+            "executions.tasks.orchestration_worker._enqueue_next_steps",
+            return_value=1,
+        ) as mock_enqueue:
+            result = _enqueue_recovery_steps(execution)
 
         assert result == "reattached"
-        mock_rt._execute_workflow_steps.assert_called_once()
-        assert mock_rt._initial_wave == [STEP_ID_C]
-        execution.refresh_from_db()
-        assert execution.status == ExecutionStatus.RUNNING
+        mock_enqueue.assert_called_once()
+        # Verify the next wave passed to _enqueue_next_steps contains STEP_ID_C
+        call_args = mock_enqueue.call_args
+        next_wave_arg = call_args[0][2]  # positional arg index 2 = next_wave
+        assert STEP_ID_C in next_wave_arg
 
 
 # ---------------------------------------------------------------------------
@@ -1081,8 +1046,8 @@ class TestReconcileExecutionWithScheduleStep:
         mock_schedule.assert_not_called()
         assert result == "reattached"
 
-    def test_schedule_step_child_completed_triggers_resume_container_workflow(self):
-        """MEDIUM: Schedule step child COMPLETED → step COMPLETED with output → _resume_container_workflow appelé."""
+    def test_schedule_step_child_completed_triggers_enqueue_recovery_steps(self):
+        """MEDIUM: Schedule step child COMPLETED → step COMPLETED with output → _enqueue_recovery_steps appelé."""
         parent = ExecutionFactory(status="RUNNING")
         parent.action.execution_steps = CONTAINER_STEPS
         parent.action.save(update_fields=["execution_steps"])
@@ -1103,7 +1068,7 @@ class TestReconcileExecutionWithScheduleStep:
         )
 
         with patch(
-            "executions.tasks.reconcile._resume_container_workflow",
+            "executions.tasks.reconcile._enqueue_recovery_steps",
             return_value="reattached",
         ) as mock_resume:
             result = _reconcile_execution(parent)
@@ -1154,147 +1119,37 @@ CONTAINER_STEPS_76_5 = [
 
 
 @pytest.mark.django_db
-class TestRetryNonPlatformStep:
-    """Story 76.5 — Tests unitaires pour _retry_non_platform_step."""
+class TestResetAndEnqueueStep:
+    """Story 78.6 — Tests unitaires pour _reset_and_enqueue_step."""
 
-    def test_service_call_running_no_platform_job_id_retry_success(self):
-        """AC4/3.1: Step service_call RUNNING sans platform_job_id → retry, handler mock success."""
-        execution = _make_execution(execution_steps=CONTAINER_STEPS_76_5)
-        execution.action.execution_steps = CONTAINER_STEPS_76_5
-        execution.action.save(update_fields=["execution_steps"])
-        step = ExecutionStepFactory(
-            execution=execution,
-            status="RUNNING",
-            step_type="service_call",
-            config_step_id=STEP_ID_SVC,
-            step_order=1,
-            platform_job_id=None,
-        )
-
-        with patch(
-            "executions.step_handlers.service_call_handler.ServiceCallHandler.execute",
-            return_value={"result": "ok"},
-        ) as mock_execute:
-            result = _retry_non_platform_step(execution, step)
-
-        assert result is True
-        step.refresh_from_db()
-        assert step.status == "COMPLETED"
-        # Story 77.1: standard format {raw_output, extracted_output, status_context}
-        output = step.get_output()
-        assert output is not None
-        assert output.get("raw_output") == {"result": "ok"}
-        assert output.get("extracted_output") == {}
-        mock_execute.assert_called_once()
-
-    def test_http_request_running_no_platform_job_id_retry(self):
-        """AC4/3.2: Step http_request RUNNING sans platform_job_id → retry."""
-        execution = _make_execution(execution_steps=CONTAINER_STEPS_76_5)
-        execution.action.execution_steps = CONTAINER_STEPS_76_5
-        execution.action.save(update_fields=["execution_steps"])
-        step = ExecutionStepFactory(
-            execution=execution,
-            status="RUNNING",
-            step_type="http_request",
-            config_step_id=STEP_ID_HTTP,
-            step_order=1,
-            platform_job_id=None,
-        )
-
-        with patch(
-            "executions.step_handlers.http_request_handler.HttpRequestHandler.execute",
-            return_value={"body": "ok"},
-        ) as mock_execute:
-            result = _retry_non_platform_step(execution, step)
-
-        assert result is True
-        step.refresh_from_db()
-        assert step.status == "COMPLETED"
-        mock_execute.assert_called_once()
-
-    def test_evaluation_running_no_platform_job_id_retry(self):
-        """AC4/3.3: Step evaluation RUNNING sans platform_job_id → retry."""
-        from executions.models import ExecutionStatus
-
-        execution = _make_execution(execution_steps=CONTAINER_STEPS_76_5)
-        execution.action.execution_steps = CONTAINER_STEPS_76_5
-        execution.action.save(update_fields=["execution_steps"])
-        step = ExecutionStepFactory(
-            execution=execution,
-            status="RUNNING",
-            step_type="evaluation",
-            config_step_id=STEP_ID_EVAL,
-            step_order=1,
-            platform_job_id=None,
-        )
-
-        with patch(
-            "executions.step_handlers.evaluation_handler.EvaluationHandler.execute",
-            return_value={"status": ExecutionStatus.COMPLETED, "decision": "auto_approved"},
-        ) as mock_execute:
-            result = _retry_non_platform_step(execution, step)
-
-        assert result is True
-        step.refresh_from_db()
-        assert step.status == "COMPLETED"
-        mock_execute.assert_called_once()
-
-    def test_platform_running_no_platform_job_id_returns_false_no_retry(self):
-        """AC4/3.4: Step platform RUNNING sans platform_job_id → pas de retry, retourne False."""
-        execution = _make_execution(execution_steps=CONTAINER_STEPS)
-        step = ExecutionStepFactory(
-            execution=execution,
-            status="RUNNING",
-            step_type="platform",
-            config_step_id=STEP_ID_A,
-            step_order=1,
-            platform_job_id=None,
-        )
-
-        result = _retry_non_platform_step(execution, step)
-
-        assert result is False
-        # Step non modifié (retry non tenté pour platform)
-        step.refresh_from_db()
-        assert step.status == "RUNNING"
-
-    def test_retry_success_triggers_resume_container_workflow(self):
-        """AC4/3.5: Retry réussi → step COMPLETED, caller will invoke _resume_container_workflow."""
-        execution = _make_execution(execution_steps=CONTAINER_STEPS_76_5)
-        execution.action.execution_steps = CONTAINER_STEPS_76_5
-        execution.action.save(update_fields=["execution_steps"])
-        ExecutionStepFactory(
-            execution=execution,
-            status="COMPLETED",
-            config_step_id=STEP_ID_SVC,
-            step_order=0,
-        )
-        step = ExecutionStepFactory(
-            execution=execution,
-            status="RUNNING",
-            step_type="http_request",
-            config_step_id=STEP_ID_HTTP,
-            step_order=1,
-            platform_job_id=None,
-        )
-
-        with patch(
-            "executions.step_handlers.http_request_handler.HttpRequestHandler.execute",
-            return_value={"body": "ok"},
-        ):
-            result = _retry_non_platform_step(execution, step)
-
-        assert result is True
-        step.refresh_from_db()
-        assert step.status == "COMPLETED"
-
-    def test_retry_failed_handler_raises_step_failed(self):
-        """AC4/3.6: Retry échoué (handler lève exception) → step FAILED, retourne False."""
+    def test_running_step_reset_to_pending_and_enqueued(self):
+        """Step RUNNING sans platform_job_id → reset PENDING + WorkQueue.enqueue."""
         from executions.models import ExecutionStepStatus
 
         execution = _make_execution(execution_steps=CONTAINER_STEPS_76_5)
-        execution.action.execution_steps = CONTAINER_STEPS_76_5
-        execution.action.save(update_fields=["execution_steps"])
+        step = ExecutionStepFactory(
+            execution=execution,
+            status="RUNNING",
+            step_type="service_call",
+            config_step_id=STEP_ID_SVC,
+            step_order=1,
+            platform_job_id=None,
+        )
+
+        with patch("executions.infra.work_queue.WorkQueue.enqueue") as mock_enqueue, \
+             patch("executions.domain.state_machine.assert_step_transition"):
+            result = _reset_and_enqueue_step(step)
+
+        assert result is True
+        step.refresh_from_db()
+        assert step.status == ExecutionStepStatus.PENDING
+        mock_enqueue.assert_called_once_with(step)
+
+    def test_enqueue_failure_marks_step_failed_and_returns_false(self):
+        """WorkQueue.enqueue raises → step FAILED, retourne False."""
+        from executions.models import ExecutionStepStatus
+
+        execution = _make_execution(execution_steps=CONTAINER_STEPS_76_5)
         step = ExecutionStepFactory(
             execution=execution,
             status="RUNNING",
@@ -1305,20 +1160,19 @@ class TestRetryNonPlatformStep:
         )
 
         with patch(
-            "executions.step_handlers.service_call_handler.ServiceCallHandler.execute",
-            side_effect=ValueError("Service unavailable"),
-        ):
-            result = _retry_non_platform_step(execution, step)
+            "executions.infra.work_queue.WorkQueue.enqueue",
+            side_effect=RuntimeError("Queue unavailable"),
+        ), patch("executions.domain.state_machine.assert_step_transition"):
+            result = _reset_and_enqueue_step(step)
 
         assert result is False
         step.refresh_from_db()
         assert step.status == ExecutionStepStatus.FAILED
-        assert "Service unavailable" in (step.error_message or "")
 
 
 @pytest.mark.django_db
 class TestReconcileExecutionNonPlatformRetry:
-    """Story 76.5 — Tests d'intégration dans _reconcile_execution pour retry non-platform."""
+    """Story 78.6 — Tests d'intégration dans _reconcile_execution pour reset+enqueue non-platform."""
 
     def _cutoff_execution(self, parent=None, status="RUNNING"):
         """Crée une exécution stale."""
@@ -1334,8 +1188,9 @@ class TestReconcileExecutionNonPlatformRetry:
         exec_.refresh_from_db()
         return exec_
 
-    def test_service_call_no_platform_job_id_retry_integration(self):
-        """Step service_call RUNNING sans platform_job_id → retry via handler mock, reattached + resume."""
+    def test_service_call_no_platform_job_id_reset_and_enqueued(self):
+        """Step service_call RUNNING sans platform_job_id → reset PENDING + enqueue → reattached."""
+
         execution = self._cutoff_execution()
         execution.action.execution_steps = CONTAINER_STEPS_76_5
         execution.action.save(update_fields=["execution_steps"])
@@ -1349,22 +1204,16 @@ class TestReconcileExecutionNonPlatformRetry:
         )
 
         with patch(
-            "executions.step_handlers.service_call_handler.ServiceCallHandler.execute",
-            return_value={"result": "ok"},
-        ) as mock_execute, patch(
-            "executions.tasks.reconcile._resume_container_workflow",
-            return_value="reattached",
-        ) as mock_resume:
+            "executions.tasks.reconcile._reset_and_enqueue_step",
+            return_value=True,
+        ) as mock_reset:
             result = _reconcile_execution(execution)
 
-        mock_execute.assert_called_once()
+        mock_reset.assert_called_once_with(step)
         assert result == "reattached"
-        step.refresh_from_db()
-        assert step.status == "COMPLETED"
-        mock_resume.assert_called_once_with(execution, correlation_id="")
 
-    def test_platform_no_platform_job_id_marked_failed_no_retry(self):
-        """Step platform RUNNING sans platform_job_id → FAILED, pas de retry."""
+    def test_platform_no_platform_job_id_marked_failed_no_reset(self):
+        """Step platform RUNNING sans platform_job_id → _reset_and_enqueue_step appelé (handles all types)."""
         execution = self._cutoff_execution()
         ExecutionStepFactory(
             execution=execution,
@@ -1376,22 +1225,19 @@ class TestReconcileExecutionNonPlatformRetry:
         )
 
         with patch(
-            "executions.tasks.reconcile._retry_non_platform_step",
-        ) as mock_retry, patch(
-            "executions.tasks.reconcile._mark_step_failed",
+            "executions.tasks.reconcile._reset_and_enqueue_step",
+            return_value=False,
+        ) as mock_reset, patch(
+            "executions.tasks.reconcile._mark_execution_failed",
         ) as mock_mark:
             result = _reconcile_execution(execution)
 
-        mock_retry.assert_not_called()
+        mock_reset.assert_called_once()
         mock_mark.assert_called_once()
         assert result == "failed"
 
-    def test_mixed_retry_success_and_fail_marks_execution_failed(self):
-        """M3: Step A retry success + Step B retry fail → execution FAILED, not _resume_container_workflow.
-
-        AC4: retry échoué → step FAILED, exécution FAILED.
-        """
-        from executions.models import ExecutionStatus
+    def test_reset_enqueue_failure_marks_execution_failed(self):
+        """_reset_and_enqueue_step returns False → execution FAILED, not _enqueue_recovery_steps."""
 
         execution = self._cutoff_execution()
         execution.action.execution_steps = CONTAINER_STEPS_76_5
@@ -1404,27 +1250,14 @@ class TestReconcileExecutionNonPlatformRetry:
             step_order=1,
             platform_job_id=None,
         )
-        ExecutionStepFactory(
-            execution=execution,
-            status="RUNNING",
-            step_type="http_request",
-            config_step_id=STEP_ID_HTTP,
-            step_order=2,
-            platform_job_id=None,
-        )
 
         with patch(
-            "executions.step_handlers.service_call_handler.ServiceCallHandler.execute",
-            return_value={"result": "ok"},
+            "executions.tasks.reconcile._reset_and_enqueue_step",
+            return_value=False,
         ), patch(
-            "executions.step_handlers.http_request_handler.HttpRequestHandler.execute",
-            side_effect=ValueError("HTTP timeout"),
-        ), patch(
-            "executions.tasks.reconcile._resume_container_workflow",
+            "executions.tasks.reconcile._enqueue_recovery_steps",
         ) as mock_resume:
             result = _reconcile_execution(execution)
 
         assert result == "failed"
         mock_resume.assert_not_called()
-        execution.refresh_from_db()
-        assert execution.status == ExecutionStatus.FAILED

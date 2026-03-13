@@ -314,3 +314,109 @@ class TestServiceCallHandler:
                 step=step_config,
                 correlation_id=None,
             )
+
+    @patch("executions.step_handlers.service_call_handler.get_service_client")
+    def test_send_email_with_step_variable_input_mapping(self, mock_gsc):
+        """AC1, AC4 (story 79.1) : send_email appelé avec les valeurs résolues depuis steps.*.output.*
+
+        Simule le cas où StepTemplateResolver a déjà résolu l'input_mapping :
+            - steps.patch_step.output.contact_email → 'dba-team@company.com'
+            - steps.patch_step.output.subject_line  → 'Patch Oracle terminé'
+            - body statique résolu
+
+        Le handler doit appeler send_email(**resolved_params) sans transformation.
+        """
+        mock_notification_service = MagicMock()
+        mock_notification_service.send_email.return_value = None
+        mock_gsc.return_value = mock_notification_service
+
+        step_config = {
+            "integration_type": "notification",
+            "operation": "send_email",
+        }
+        # resolved_params = ce que StepTemplateResolver produit après résolution des {{ steps.* }}
+        resolved_params = {
+            "recipient_email": "dba-team@company.com",
+            "subject": "Patch Oracle terminé",
+            "body": "L'exécution de patch_oracle s'est terminée avec succès.",
+        }
+
+        result = self.handler.execute(
+            step_config=step_config,
+            resolved_params=resolved_params,
+            execution=self._make_execution(),
+            step=step_config,
+            correlation_id="corr-79-1",
+        )
+
+        mock_notification_service.send_email.assert_called_once_with(
+            recipient_email="dba-team@company.com",
+            subject="Patch Oracle terminé",
+            body="L'exécution de patch_oracle s'est terminée avec succès.",
+        )
+        assert result == {"result": None}
+
+    @patch("executions.step_handlers.service_call_handler.get_service_client")
+    def test_send_email_exception_propagates(self, mock_gsc):
+        """AC4 (story 79.1) : exception de send_email propagée + loguée (chemin d'échec)."""
+        mock_notification_service = MagicMock()
+        mock_notification_service.send_email.side_effect = RuntimeError("SMTP timeout")
+        mock_gsc.return_value = mock_notification_service
+
+        step_config = {
+            "integration_type": "notification",
+            "operation": "send_email",
+        }
+        resolved_params = {
+            "recipient_email": "dba@company.com",
+            "subject": "Test",
+            "body": "Body",
+        }
+
+        with pytest.raises(RuntimeError, match="SMTP timeout"):
+            self.handler.execute(
+                step_config=step_config,
+                resolved_params=resolved_params,
+                execution=self._make_execution(),
+                step=step_config,
+                correlation_id="corr-fail",
+            )
+
+    @patch("executions.step_handlers.service_call_handler.get_service_client")
+    def test_send_teams_with_step_variable_input_mapping(self, mock_gsc):
+        """AC1, AC4 (story 79.1) : send_teams appelé avec les valeurs résolues depuis steps.*.output.*
+
+        Simule le cas où StepTemplateResolver a déjà résolu l'input_mapping :
+            - steps.patch_step.output.env_name → 'production'
+            - steps.patch_step.output.action_label → 'Oracle Patch 19.3'
+
+        Le handler doit appeler send_teams(**resolved_params) sans transformation.
+        """
+        mock_notification_service = MagicMock()
+        mock_notification_service.send_teams.return_value = None
+        mock_gsc.return_value = mock_notification_service
+
+        step_config = {
+            "integration_type": "notification",
+            "operation": "send_teams",
+        }
+        resolved_params = {
+            "webhook_url": "https://teams.example.com/webhook/abc123",
+            "title": "Oracle Patch 19.3 — production",
+            "message": "Exécution terminée avec succès dans production.",
+        }
+
+        result = self.handler.execute(
+            step_config=step_config,
+            resolved_params=resolved_params,
+            execution=self._make_execution(),
+            step=step_config,
+            correlation_id="corr-79-1-teams",
+        )
+
+        mock_notification_service.send_teams.assert_called_once_with(
+            webhook_url="https://teams.example.com/webhook/abc123",
+            title="Oracle Patch 19.3 — production",
+            message="Exécution terminée avec succès dans production.",
+        )
+        assert result == {"result": None}

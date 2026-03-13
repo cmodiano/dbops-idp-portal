@@ -87,13 +87,26 @@ describe('NotificationTemplateEditor — send_email (AC3)', () => {
     );
   });
 
-  it('rend le VariablePicker sur le champ subject et body', () => {
+  it('rend le VariablePicker sur les champs recipient_email, subject et body', () => {
     const { container } = render(
       <NotificationTemplateEditor {...defaultEmailProps} workflowId={1} />,
     );
-    // subject + body ont chacun un VariablePicker → au moins 2
+    // recipient_email + subject + body ont chacun un VariablePicker → au moins 3
     const pickers = container.querySelectorAll('[data-testid="variable-picker-trigger"]');
-    expect(pickers.length).toBeGreaterThanOrEqual(2);
+    expect(pickers.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('rend le VariablePicker sur le champ recipient_email (AC2, AC3 — story 79.1)', () => {
+    const { container } = render(
+      <NotificationTemplateEditor
+        {...defaultEmailProps}
+        workflowId={1}
+        availableStepIds={['patch-step', 'check-step']}
+      />,
+    );
+    // recipient_email + subject + body ont chacun un VariablePicker → au moins 3
+    const pickers = container.querySelectorAll('[data-testid="variable-picker-trigger"]');
+    expect(pickers.length).toBeGreaterThanOrEqual(3);
   });
 
   it('désactive les boutons de template quand disabled=true', () => {
