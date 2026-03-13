@@ -939,7 +939,7 @@ development_status:
     78-3-alignement-config-step-id-model-schema: done # Code review 2026-03-13: 4 fixes (M1 test chaîne vide, M2 dead import, L1 File List, L2 comptage) — 9/9 tests
     78-4-workflow-commands-table: done # Code review 2026-03-13: 6 fixes (H1 race condition select_for_update, H2 BigAutoField, M1 write_command atomique, M2 set vs list, M3 test FIFO batch, L1 exists()) — 23/23 tests
     78-5-dispatch-file-container-workflow-runtime: done # Code review 2026-03-13: 6 fixes (H1 heartbeat worker, H2 cancel audit, H3 finalize atomic, M1 celery apply test, M2 step_type align, M3 cancel audit) — 56/56 tests
-    78-6-simplification-reconciliateur: backlog
+    78-6-simplification-reconciliateur: done # Code review 2026-03-13: 5 fixes (H1 post-loop scope trop large, M1 docstring auto-référence, M2 import inutilisé ContainerWorkflowRuntime, M3 dict dupliqué step_lookup_by_id, M4 exception avalée à tort) + L1 dead code tests, L2 test failure path ajouté — 20/20 tests
     78-7-execution-outbox: backlog
     78-8-desactivation-runtime-legacy: backlog
     78-9-consolidation-state-machine-persistence: backlog

@@ -1,70 +1,35 @@
 """
-executions/tasks/reconcile.py — Crash recovery: reconcile stale RUNNING executions.
+executions/tasks/reconcile.py — Réconciliateur simplifié : crash recovery pour exécutions stales.
 
-After a backend crash and restart, executions that were in RUNNING status are left
-orphaned: their Celery polling tasks are gone and the workflow orchestration thread
-is dead. This task detects those executions and either:
+Story 78.6 — Réconciliateur simplifié post-worker d'orchestration.
 
-  - Reattaches a poll_platform_job_status task if the step has a platform_job_id
-    (the platform job was already triggered and is still running on the remote platform).
-  - Marks the execution FAILED if no platform_job_id exists (trigger never completed
-    or the execution was between steps).
+Responsabilités (ce que fait le réconciliateur) :
+  1. Reclaim des leases expirés (RunnableStepService.reclaim_expired_leases) — crash recovery worker
+  2. Re-drive des commandes pending (WorkflowCommandService.process_pending_commands) — commandes stuck
+  3. Détection stale (RUNNING + cutoff) :
+     - Step RUNNING avec platform_job_id réel → reattach poll (_reattach_poll)
+     - Step RUNNING avec child execution ID → sync parent-child (_reconcile_schedule_step)
+     - Step RUNNING sans platform_job_id → reset PENDING + enqueue (_reset_and_enqueue_step)
+     - Pas de RUNNING steps + container workflow → enqueue next wave (_enqueue_recovery_steps)
+     - Irrécupérable → mark FAILED (_mark_execution_failed)
+  4. Parent-child cascade (enfants d'exécutions reconciliées → cascade FAILED)
 
-Triggered at two points:
-  1. AppConfig.ready() on Gunicorn/worker startup (immediate recovery after crash).
-  2. Celery Beat every N minutes (safety net for mid-flight task losses).
+Ce que le réconciliateur ne fait plus (délégué au worker d'orchestration 78.5) :
+  - Exécution de handlers (ServiceCallHandler, HttpRequestHandler, EvaluationHandler)
+  - Appel direct à _execute_workflow_steps() (l'ancienne boucle thread BFS)
+  - Reconstruction complète du contexte d'exécution (_step_outputs) pour retry inline
 
-Stale threshold: executions whose last activity (updated_at if set, else created_at) is older than
-RECONCILE_STALE_THRESHOLD_MINUTES (default 10) are considered orphaned. Container workflows update
-updated_at at each BFS wave / sequential step (heartbeat), so long-running but healthy workflows
-are never incorrectly marked stale. Executions without updated_at (pre-76.3) fall back to created_at.
-Note: gate steps (Story 57.7) do not emit heartbeats while waiting; a gate held longer than the
-stale threshold may be incorrectly reconciled (pre-existing limitation).
+Seuil stale : exécutions dont la dernière activité (updated_at si disponible, sinon created_at)
+est antérieure à RECONCILE_STALE_THRESHOLD_MINUTES (défaut 10). Les container workflows mettent
+à jour updated_at à chaque wave (heartbeat), évitant les faux positifs.
 
-Story 76.5 — Retry pour étapes non-platform (service_call, http_request, evaluation) :
-======================================================================================
-
-Steps RUNNING sans ``platform_job_id`` : ces steps s'exécutent de façon synchrone dans le runtime
-(ServiceCallHandler, HttpRequestHandler, EvaluationHandler). En cas de crash pendant l'exécution,
-un retry est possible car il n'y a pas de job asynchrone à réattacher.
-
-**Stratégie retry vs FAILED :**
-- **Retry automatique** pour : service_call, http_request, evaluation (tous éligibles).
-- **Pas de retry** (comportement FAILED conservé) pour : platform, schedule_execution.
-- **Idempotence service_call** : retry par défaut pour toutes les opérations. Le risque de doublon
-  sur ``create_change`` ServiceNow est documenté ; une exclusion future est possible si nécessaire.
-
-**Flux retry :** helper ``_retry_non_platform_step(execution, step)`` — reconstruit le contexte
-(_step_outputs depuis COMPLETED, resolved_params via StepTemplateResolver), appelle le handler,
-met à jour le step et déclenche ``_resume_container_workflow`` si succès.
+Déclenché par :
+  1. AppConfig.ready() au démarrage Gunicorn/worker (recovery immédiat après crash)
+  2. Celery Beat toutes les N minutes (filet de sécurité)
 
 Story 76.4 — Deux types de platform_job_id :
-===============================================
-
-1. **Action simple** (non-workflow) :
-   L'action est une action plateforme (AAP, Tower, Azure DevOps, GitHub, Terraform, etc.).
-   ``trigger_platform_job`` stocke ``platform_job_id = adapter_result.get("platform_job_id")``
-   (ex. ``"job-123"`` pour AAP, ``"42"`` pour Tower, ``"run-abc"`` pour Terraform).
-   Le polling interroge la plateforme via ``adapter.get_status(platform_job_id)``.
-   → **Reattach fonctionne** : l'adapter reçoit un vrai ID de job plateforme.
-
-2. **Step schedule_execution (container workflow)** :
-   Le parent exécute un workflow ; une étape référence une action (workflow ou action simple).
-   ``ContainerWorkflowRuntime._create_and_run_child_execution`` crée une exécution enfant et
-   stocke ``parent_step.platform_job_id = str(child_execution.id)`` (ligne ~654).
-   Il n'y a pas de job AAP/TC à interroger — ``platform_job_id`` est un ID d'exécution IDP.
-   → **Reattach naïf échoue** : l'adapter recevrait un entier numérique qui n'est pas un job
-   plateforme valide, causant un échec ou un comportement indéfini.
-
-Stratégie implémentée (Option A — Story 76.4) :
-  - ``_is_child_execution_id(execution, platform_job_id)`` : détecte si ``platform_job_id``
-    correspond à un ``Execution.id`` enfant de l'exécution courante.
-  - ``_reconcile_schedule_step(execution, step)`` : au lieu de ``_reattach_poll``, vérifie le
-    statut du child directement en DB :
-      * child terminal (COMPLETED/FAILED/CANCELLED) → met à jour le parent step et continue.
-      * child RUNNING et stale → marque child FAILED (cascade), puis marque parent step FAILED.
-  - Intégration dans ``_reconcile_execution`` : avant d'appeler ``_reattach_poll``, si
-    ``_is_child_execution_id`` est vrai → appelle ``_reconcile_schedule_step`` à la place.
+  1. Action plateforme (AAP, Tower, etc.) : platform_job_id = vrai ID job → reattach poll
+  2. Step schedule_execution : platform_job_id = child Execution.id → _reconcile_schedule_step
 """
 from __future__ import annotations
 
@@ -243,27 +208,29 @@ def _is_container_workflow(execution: Any) -> bool:
         return False
 
 
-def _resume_container_workflow(execution: Any, correlation_id: str = "") -> str:
-    """Resume a container workflow execution that crashed between steps.
+def _enqueue_recovery_steps(execution: Any, correlation_id: str = "") -> str:
+    """Enqueue next wave of steps for a container workflow that crashed between steps.
 
-    Reconstructs ``_step_outputs`` from COMPLETED steps in the DB, computes
-    the next wave of steps to execute, and either marks the execution
-    COMPLETED (if the workflow is fully done) or calls
-    ``_execute_workflow_steps()`` to continue from where it left off.
+    Story 78.6 — Replaces _resume_container_workflow(). Instead of calling
+    _execute_workflow_steps() (the old thread-based BFS loop), computes the next
+    wave and enqueues via RunnableStepService.enqueue(). The orchestration worker
+    (78.5) handles actual execution.
+
+    If all steps are terminal and no next wave exists, finalizes the execution
+    via _finalize_execution_if_done().
 
     Returns 'reattached' on success.
-    Raises on any error so the caller can fall back to ``_mark_execution_failed``.
+    Raises on any error so the caller can fall back to _mark_execution_failed.
     """
     from executions.models import ExecutionStep, ExecutionStepStatus, ExecutionStatus  # noqa: PLC0415
-    from executions.container_workflow_runtime import ContainerWorkflowRuntime  # noqa: PLC0415
-    from executions.output_extractor import OutputExtractor  # noqa: PLC0415
     from executions.container_routing import get_next_step_ids  # noqa: PLC0415
     from executions.container_parallel import apply_join_policy  # noqa: PLC0415
+    from executions.tasks.orchestration_worker import _enqueue_next_steps, _finalize_execution_if_done  # noqa: PLC0415
     from django.db.models import Max  # noqa: PLC0415
 
     all_steps = execution.action.execution_steps or []
-    _step_config_by_id = {
-        s.get("step_id"): s for s in all_steps if isinstance(s, dict) and s.get("step_id")
+    _step_config_by_id: dict[str, dict] = {
+        s["step_id"]: s for s in all_steps if isinstance(s, dict) and s.get("step_id")
     }
     step_name_to_id = {
         s.get("name"): s.get("step_id")
@@ -282,25 +249,7 @@ def _resume_container_workflow(execution: Any, correlation_id: str = "") -> str:
     if not completed_steps:
         raise ValueError("No COMPLETED steps found — cannot resume container workflow")
 
-    # --- Rebuild _step_outputs from COMPLETED DB steps ---
-    runtime = ContainerWorkflowRuntime(execution=execution)
-    _extractor = OutputExtractor()
-    for db_step in completed_steps:
-        raw_output = db_step.get_output() or {}
-        step_id_key = db_step.config_step_id
-        if not step_id_key and db_step.step_name:
-            step_id_key = step_name_to_id.get(db_step.step_name)
-        if step_id_key:
-            step_cfg = _step_config_by_id.get(step_id_key, {})
-            output_mapping = step_cfg.get("output_mapping", {})
-            if isinstance(output_mapping, dict) and output_mapping:
-                extracted = _extractor.extract(raw_output, output_mapping)
-            else:
-                extracted = raw_output
-            runtime._step_outputs[step_id_key] = extracted
-
-    # --- Compute next wave ---
-    # Map ExecutionStepStatus to ExecutionStatus for get_next_step_ids / apply_join_policy
+    # --- Compute next wave (step IDs only, no _step_outputs rebuild for execution) ---
     _step_status_to_exec_status: dict[str, ExecutionStatus] = {
         ExecutionStepStatus.COMPLETED.value: ExecutionStatus.COMPLETED,
         ExecutionStepStatus.FAILED.value: ExecutionStatus.FAILED,
@@ -330,12 +279,12 @@ def _resume_container_workflow(execution: Any, correlation_id: str = "") -> str:
     ]
     next_wave = [
         nid
-        for nid in apply_join_policy(candidate_steps, results, runtime._step_lookup_by_id)
+        for nid in apply_join_policy(candidate_steps, results, _step_config_by_id)
         if nid not in terminal_step_ids
     ]
 
     logger.info(
-        "reconcile_container_workflow_resume",
+        "reconcile_enqueue_recovery_steps",
         execution_id=execution.id,
         completed_count=len(completed_steps),
         next_wave=next_wave,
@@ -343,8 +292,8 @@ def _resume_container_workflow(execution: Any, correlation_id: str = "") -> str:
     )
 
     if not next_wave:
-        # All steps already COMPLETED — use runtime finalization for audit + websocket broadcast
-        runtime._finalize_workflow_execution(ExecutionStatus.COMPLETED, failed_step_name=None)
+        # All steps already terminal — finalize via orchestration_worker helper
+        _finalize_execution_if_done(execution, ExecutionStatus.COMPLETED)
         logger.info(
             "reconcile_container_workflow_completed",
             execution_id=execution.id,
@@ -352,18 +301,23 @@ def _resume_container_workflow(execution: Any, correlation_id: str = "") -> str:
         )
         return "reattached"
 
-    # Resume from next wave
+    # Build a minimal runtime object for _enqueue_next_steps (needs _step_order_counter only)
+    class _MinimalRuntime:
+        _step_order_counter: int = 0
+
+    runtime = _MinimalRuntime()
     max_order = ExecutionStep.objects.filter(execution=execution).aggregate(
         Max("step_order")
     )["step_order__max"]
     runtime._step_order_counter = max_order if max_order is not None else 0
-    runtime._initial_wave = next_wave
-    runtime._execute_workflow_steps()
+
+    enqueued = _enqueue_next_steps(runtime, execution, next_wave, _step_config_by_id)
 
     logger.info(
-        "reconcile_container_workflow_reattached",
+        "reconcile_recovery_steps_enqueued",
         execution_id=execution.id,
         next_wave=next_wave,
+        enqueued=enqueued,
         correlation_id=correlation_id,
     )
     return "reattached"
@@ -396,194 +350,42 @@ def _is_child_execution_id(execution: Any, platform_job_id: str) -> bool:
     ).exists()
 
 
-# Story 76.5 — Types éligibles au retry (steps synchrones sans platform_job_id)
-_RETRYABLE_STEP_TYPES = frozenset({
-    "service_call",
-    "http_request",
-    "evaluation",
-})
+def _reset_and_enqueue_step(step: Any) -> bool:
+    """Reset a RUNNING step to PENDING and enqueue it for the orchestration worker.
 
+    Story 78.6 — Replaces _retry_non_platform_step(). Instead of executing the
+    handler inline, resets the step status to PENDING and enqueues via
+    RunnableStepService.enqueue(). The orchestration worker (78.5) handles execution.
 
-def _retry_non_platform_step(execution: Any, step: Any) -> bool:
-    """Retry a RUNNING step without platform_job_id (service_call, http_request, evaluation).
-
-    Story 76.5 — Reconstructs context from COMPLETED steps, calls the appropriate handler,
-    updates the step on success, and triggers _resume_container_workflow.
-
-    Returns True if retry succeeded (step COMPLETED, workflow resumed), False otherwise.
+    Returns True if the step was successfully enqueued, False otherwise.
     """
-    from executions.models import Execution, ExecutionStep, ExecutionStepStatus  # noqa: PLC0415
-    from executions.output_extractor import OutputExtractor  # noqa: PLC0415
-    from executions.template_resolver import StepTemplateResolver  # noqa: PLC0415
-    from executions.tasks.gates import _build_step_outputs_from_completed  # noqa: PLC0415
-
-    raw_type = getattr(step, "step_type", None) or ""
-    step_type = (getattr(raw_type, "value", raw_type) or "").lower() if raw_type else ""
-    if step_type not in _RETRYABLE_STEP_TYPES:
-        return False
-
-    execution_id = execution.id
-    step_id = step.config_step_id or step.step_name
-    correlation_id = getattr(execution, "correlation_id", "") or ""
-
-    logger.info(
-        "reconcile_non_platform_retry_start",
-        execution_id=execution_id,
-        step_id=step.id,
-        step_type=step_type,
-        config_step_id=step_id,
-        correlation_id=correlation_id,
-    )
-
-    all_steps = execution.action.execution_steps or []
-    _step_config_by_id = {
-        s.get("step_id"): s for s in all_steps if isinstance(s, dict) and s.get("step_id")
-    }
-    step_name_to_id = {
-        s.get("name"): s.get("step_id")
-        for s in all_steps
-        if isinstance(s, dict) and s.get("name") and s.get("step_id")
-    }
-
-    step_cfg = _step_config_by_id.get(step_id) if step_id else None
-    if not step_cfg:
-        step_cfg = next(
-            (s for s in all_steps if isinstance(s, dict) and s.get("step_id") == step_id),
-            None,
-        )
-    if not step_cfg:
-        logger.error(
-            "reconcile_non_platform_retry_no_config",
-            execution_id=execution_id,
-            step_id=step_id,
-            config_step_id=step.config_step_id,
-        )
-        _mark_step_failed(
-            step,
-            "Retry failed: step config not found in action.execution_steps.",
-        )
-        return False
-
-    # Rebuild _step_outputs from COMPLETED steps
-    # Story 77.1: Use _build_step_outputs_from_completed for consistent logic with gates.py.
-    completed_steps = list(
-        ExecutionStep.objects.filter(
-            execution=execution,
-            status=ExecutionStepStatus.COMPLETED,
-        ).order_by("step_order")
-    )
-    _step_outputs: dict = {}
-    _build_step_outputs_from_completed(
-        completed_steps=completed_steps,
-        step_config_by_id=_step_config_by_id,
-        step_name_to_id=step_name_to_id,
-        step_outputs=_step_outputs,
-    )
-
-    # Resolve input_mapping
-    input_mapping = step_cfg.get("input_mapping", {})
-    resolved_params: dict = {}
-    if input_mapping and isinstance(input_mapping, dict):
-        resolver = StepTemplateResolver(
-            _step_outputs,
-            execution_context={
-                "action_name": getattr(execution.action, "name", ""),
-                "environment": execution.environment,
-                "execution_id": execution_id,
-            },
-        )
-        resolved_params = resolver.resolve(input_mapping)
-
-    # Dispatch handler
-    handler_map = {
-        "service_call": ("executions.step_handlers.service_call_handler", "ServiceCallHandler"),
-        "http_request": ("executions.step_handlers.http_request_handler", "HttpRequestHandler"),
-        "evaluation": ("executions.step_handlers.evaluation_handler", "EvaluationHandler"),
-    }
-    module_path, class_name = handler_map.get(step_type, (None, None))
-    if not module_path or not class_name:
-        _mark_step_failed(step, f"Retry failed: unknown step_type {step_type!r}.")
-        return False
-
-    from importlib import import_module  # noqa: PLC0415
-
-    mod = import_module(module_path)
-    handler_cls = getattr(mod, class_name)
-    handler = handler_cls()
+    from executions.models import ExecutionStepStatus  # noqa: PLC0415
+    from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
 
     try:
-        result = handler.execute(
-            step_config=step_cfg,
-            resolved_params=resolved_params,
-            execution=execution,
-            step=step_cfg,
-            correlation_id=correlation_id,
+        step.status = ExecutionStepStatus.PENDING
+        step.error_message = None
+        step.save(update_fields=["status", "error_message"])
+
+        RunnableStepService.enqueue(step)
+
+        logger.info(
+            "reconcile_step_reset_and_enqueued",
+            execution_id=step.execution_id,
+            step_id=step.id,
+            step_name=step.step_name,
         )
+        return True
     except Exception as exc:  # noqa: BLE001
         logger.error(
-            "reconcile_non_platform_retry_failed",
-            execution_id=execution_id,
+            "reconcile_step_reset_enqueue_failed",
+            execution_id=step.execution_id,
             step_id=step.id,
-            step_type=step_type,
             error=str(exc),
-            correlation_id=correlation_id,
             exc_info=True,
         )
-        _mark_step_failed(
-            step,
-            f"Retry failed: {exc!s}",
-        )
+        _mark_step_failed(step, f"Reset+enqueue failed: {exc!s}")
         return False
-
-    # Success — update step and extract output
-    # Story 77.1: Persist standard format {raw_output, extracted_output, status_context}.
-    raw_output = result.get("raw_output", result) if isinstance(result, dict) else {}
-    if not isinstance(raw_output, dict):
-        raw_output = {"result": raw_output}
-    # Determine status: EvaluationHandler returns status; others default to COMPLETED
-    from executions.models import ExecutionStatus as ExecStatus  # noqa: PLC0415
-
-    result_status = ExecStatus.COMPLETED
-    if isinstance(result, dict):
-        hs = result.get("status")
-        if isinstance(hs, ExecStatus) and hs == ExecStatus.FAILED:
-            result_status = ExecStatus.FAILED
-
-    if result_status == ExecStatus.FAILED:
-        _mark_step_failed(step, "Retry completed but handler returned FAILED status.")
-        return False
-
-    output_mapping = step_cfg.get("output_mapping", {})
-    if not isinstance(output_mapping, dict):
-        output_mapping = {}
-    extractor = OutputExtractor()
-    extracted = extractor.extract(raw_output, output_mapping)
-
-    step.status = ExecutionStepStatus.COMPLETED
-    step.completed_at = timezone.now()
-    step.error_message = None
-    step.set_output({
-        "raw_output": raw_output,
-        "extracted_output": extracted,
-        "status_context": {
-            "status": ExecutionStepStatus.COMPLETED,
-            "completed_at": step.completed_at.isoformat(),
-        },
-    })
-    step.save(update_fields=["status", "completed_at", "error_message", "output"])
-
-    Execution.objects.filter(id=execution_id).update(updated_at=timezone.now())
-
-    logger.info(
-        "reconcile_non_platform_retry_success",
-        execution_id=execution_id,
-        step_id=step.id,
-        step_type=step_type,
-        correlation_id=correlation_id,
-    )
-
-    # Workflow continuation is handled by the caller's block (reattached_any + remaining_running)
-    return True
 
 
 def _reconcile_schedule_step(execution: Any, step: Any) -> bool:
@@ -735,14 +537,14 @@ def _reconcile_execution(execution: Any) -> str:
         )
         if _is_container_workflow(execution):
             try:
-                result = _resume_container_workflow(
+                result = _enqueue_recovery_steps(
                     execution,
                     correlation_id=getattr(execution, "correlation_id", "") or "",
                 )
                 return result
             except Exception as exc:  # noqa: BLE001
                 logger.error(
-                    "reconcile_container_workflow_resume_failed",
+                    "reconcile_enqueue_recovery_failed",
                     execution_id=execution_id,
                     error=str(exc),
                     exc_info=True,
@@ -756,28 +558,14 @@ def _reconcile_execution(execution: Any) -> str:
         return "failed"
 
     reattached_any = False
+    schedule_step_resolved = False
 
     for step in running_steps:
         if not step.platform_job_id:
-            # Story 76.5: Retry for non-platform steps (service_call, http_request, evaluation)
-            raw_st = getattr(step, "step_type", None) or ""
-            step_type_str = (getattr(raw_st, "value", raw_st) or "").lower() if raw_st else ""
-            if step_type_str in _RETRYABLE_STEP_TYPES:
-                if _retry_non_platform_step(execution, step):
-                    reattached_any = True
-                # On False: step already marked FAILED inside _retry_non_platform_step
-            else:
-                # platform, schedule_execution, or unknown — keep FAILED behavior
-                logger.warning(
-                    "reconcile_step_no_platform_job_id",
-                    execution_id=execution_id,
-                    step_id=step.id,
-                    step_name=step.step_name,
-                )
-                _mark_step_failed(
-                    step,
-                    "Step found RUNNING at startup with no platform_job_id — marked FAILED by reconciliation.",
-                )
+            # Story 78.6: Reset to PENDING and enqueue for the orchestration worker
+            if _reset_and_enqueue_step(step):
+                reattached_any = True
+            # On False: step already marked FAILED inside _reset_and_enqueue_step
             continue
 
         # Step has a platform_job_id — check if it's a child execution ID (schedule_execution step)
@@ -785,6 +573,7 @@ def _reconcile_execution(execution: Any) -> str:
         if _is_child_execution_id(execution, step.platform_job_id):
             if _reconcile_schedule_step(execution, step):
                 reattached_any = True
+                schedule_step_resolved = True
             # If False: step was marked FAILED inside _reconcile_schedule_step
             continue
 
@@ -815,40 +604,43 @@ def _reconcile_execution(execution: Any) -> str:
                 "Failed to reattach polling task at startup — marked FAILED by reconciliation.",
             )
 
-    # AC2 Task 2.2: if schedule step(s) were resolved (child COMPLETED), there may be no
-    # RUNNING steps left — trigger workflow continuation immediately instead of waiting
-    # for the next reconcile run.
-    # Story 76.5 fix: do NOT resume if any step FAILED (mixed retry success + retry fail).
-    if reattached_any and _is_container_workflow(execution):
+    # Story 78.6: After processing all steps, if a schedule_step was resolved (child
+    # COMPLETED) and there are no RUNNING steps left, enqueue next wave via recovery.
+    # Only trigger when a schedule_step was resolved — steps reset+enqueued by
+    # _reset_and_enqueue_step are already PENDING and handled by the worker.
+    if schedule_step_resolved and _is_container_workflow(execution):
         remaining_running = ExecutionStep.objects.filter(
             execution_id=execution_id,
             status=ExecutionStepStatus.RUNNING,
         ).exists()
-        has_failed_step = ExecutionStep.objects.filter(
-            execution_id=execution_id,
-            status=ExecutionStepStatus.FAILED,
-        ).exists()
-        if not remaining_running and not has_failed_step:
+        if not remaining_running:
+            has_failed_step = ExecutionStep.objects.filter(
+                execution_id=execution_id,
+                status=ExecutionStepStatus.FAILED,
+            ).exists()
+            if has_failed_step:
+                _mark_execution_failed(
+                    execution,
+                    "At least one step failed during reconciliation — marked FAILED.",
+                )
+                return "failed"
+            # Schedule step resolved, no more RUNNING — enqueue next wave
             try:
-                result = _resume_container_workflow(
+                _enqueue_recovery_steps(
                     execution,
                     correlation_id=getattr(execution, "correlation_id", "") or "",
                 )
-                return result
             except Exception as exc:  # noqa: BLE001
                 logger.error(
-                    "reconcile_schedule_step_resume_failed",
+                    "reconcile_schedule_step_enqueue_failed",
                     execution_id=execution_id,
                     error=str(exc),
                     exc_info=True,
                 )
-                # Fall through — we still return "reattached" since we resolved the step
-        elif has_failed_step:
-            _mark_execution_failed(
-                execution,
-                "At least one RUNNING step failed retry — marked FAILED by reconciliation.",
-            )
-            return "failed"
+                _mark_execution_failed(
+                    execution,
+                    f"Failed to enqueue recovery after schedule_step resolution: {exc!s}",
+                )
 
     if not reattached_any:
         # All steps either had no platform_job_id or failed to reattach
@@ -902,11 +694,29 @@ def reconcile_stale_executions() -> dict:
     """
     from executions.models import Execution, ExecutionStatus  # noqa: PLC0415
     from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
+    from executions.services.workflow_commands import WorkflowCommandService  # noqa: PLC0415
 
-    # Reclaim expired leases before stale detection (Story 78.2)
-    # Note: reclaim_expired_leases() log déjà "runnable_steps_leases_reclaimed"
+    # 1. Reclaim expired leases before stale detection (Story 78.2)
     RunnableStepService.reclaim_expired_leases()
 
+    # 2. Re-drive pending commands (Story 78.6 — AC2)
+    # Best-effort: log + continue if re-drive fails
+    commands_redriven = 0
+    try:
+        commands_redriven = WorkflowCommandService.process_pending_commands()
+        if commands_redriven:
+            logger.info(
+                "reconcile_commands_redriven",
+                commands_redriven=commands_redriven,
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            "reconcile_commands_redrive_failed",
+            error=str(exc),
+            exc_info=True,
+        )
+
+    # 3. Stale detection
     cutoff = timezone.now() - timedelta(minutes=STALE_THRESHOLD_MINUTES)
 
     terminal_statuses = {
@@ -984,6 +794,7 @@ def reconcile_stale_executions() -> dict:
                 "failed": total_failed,
                 "skipped": total_skipped,
                 "errors": total_errors,
+                "commands_redriven": commands_redriven,
                 "status": "partial_timeout",
             }
         except Exception as exc:  # noqa: BLE001 — never crash the whole reconciliation for one execution
@@ -1045,6 +856,7 @@ def reconcile_stale_executions() -> dict:
                 "failed": total_failed,
                 "skipped": total_skipped,
                 "errors": total_errors,
+                "commands_redriven": commands_redriven,
                 "status": "partial_timeout",
             }
         except Exception as exc:  # noqa: BLE001 — never crash the whole reconciliation for one execution
@@ -1062,6 +874,7 @@ def reconcile_stale_executions() -> dict:
         failed=total_failed,
         skipped=total_skipped,
         errors=total_errors,
+        commands_redriven=commands_redriven,
         stale_threshold_minutes=STALE_THRESHOLD_MINUTES,
     )
 
@@ -1070,4 +883,5 @@ def reconcile_stale_executions() -> dict:
         "failed": total_failed,
         "skipped": total_skipped,
         "errors": total_errors,
+        "commands_redriven": commands_redriven,
     }
