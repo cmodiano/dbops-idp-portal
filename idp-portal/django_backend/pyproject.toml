@@ -144,8 +144,6 @@ exclude = [
     "__pycache__/",
     ".*/tests\\.py$",
     "test_settings\\.py$",
-    "profiles/management/commands/check_profile_action_permission_parity\\.py$",
-    "profiles/management/commands/check_profile_target_permission_parity\\.py$",
 ]
 
 [tool.django-stubs]

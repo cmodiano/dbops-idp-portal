@@ -15,6 +15,7 @@ from django.db.models import F
 from django.utils import timezone
 
 from executions.models import ExecutionOutbox, OutboxEntryStatus
+from executions.observability import get_outbox_pending
 from executions.services.outbox import (
     APPROVAL_GRANTED,
     APPROVAL_REJECTED,
@@ -36,6 +37,13 @@ def process_outbox_entries(batch_size: int = 50) -> dict:
     Returns:
         Dict with dispatched/failed counts.
     """
+    # Story 78.16: Emit outbox pending metric before dispatching
+    outbox_pending_before = get_outbox_pending()
+    logger.info(
+        "process_outbox_entries_metrics",
+        outbox_pending=outbox_pending_before,
+    )
+
     dispatched = 0
     failed = 0
 
@@ -77,6 +85,7 @@ def process_outbox_entries(batch_size: int = 50) -> dict:
         "outbox_dispatch_complete",
         dispatched=dispatched,
         failed=failed,
+        outbox_pending_before=outbox_pending_before,
     )
     return {"dispatched": dispatched, "failed": failed}
 

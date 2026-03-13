@@ -696,10 +696,12 @@ def reconcile_stale_executions() -> dict:
     """
     from executions.models import Execution, ExecutionStatus  # noqa: PLC0415
     from executions.infra.work_queue import WorkQueue  # noqa: PLC0415
+    from executions.observability import get_command_backlog, get_runnable_queue_depth  # noqa: PLC0415
     from executions.services.workflow_commands import WorkflowCommandService  # noqa: PLC0415
 
     # 1. Reclaim expired leases before stale detection (Story 78.2)
-    WorkQueue.reclaim_expired()
+    # Story 78.16: Capture reclaimed count for runnable_expired_leases metric (AC2)
+    reclaimed_leases = WorkQueue.reclaim_expired()
 
     # 2. Re-drive pending commands (Story 78.6 — AC2)
     # Best-effort: log + continue if re-drive fails
@@ -717,6 +719,16 @@ def reconcile_stale_executions() -> dict:
             error=str(exc),
             exc_info=True,
         )
+
+    # Story 78.16: Emit metrics at reconcile start
+    command_backlog = get_command_backlog()
+    depth = get_runnable_queue_depth()
+    logger.info(
+        "reconcile_stale_executions_metrics",
+        command_backlog=command_backlog,
+        runnable_queue_depth=depth["pending"] + depth["running"],
+        runnable_expired_leases=reclaimed_leases,
+    )
 
     # 3. Stale detection
     cutoff = timezone.now() - timedelta(minutes=STALE_THRESHOLD_MINUTES)

@@ -948,8 +948,8 @@ development_status:
     78-12-profile-target-permission-normalisees: done # Code review 2026-03-13: 3 fixes (H1 sorted/unsorted comparison _permissions_differ, M1 double query get_filter_by_attribute_from_normalized, M2 or[] redondants) — 48/48 tests
     78-13-contraintes-json-tier2: done # Code review 2026-03-13: 4 fixes (H1 v_pk NUMBER, M1 troncature indicator, M2 verify script DRY+cas disabled, M3 commentaires SQLCODE) + L1 SET TIMING ON
     78-14-deprecation-colonnes-runtime-legacy: done # Code review 2026-03-13: 6 fixes (CRIT V135 idempotence DROP/ADD, H1 services.py comments, H2 test_audit_trail PENDING_APPROVAL, H3 test_rbac_security, M1 test_models, M2 test_parametrized) + L1 baseline (informatif)
-    78-15-suppression-clob-permissions-legacy: done # Code review 2026-03-13: 2 HIGH + 4 MEDIUM + 2 LOW — 6 fixes (H1 feature flags orphelins settings.py+test_settings.py, H2 sorted() tag_patterns _permissions_differ, M3 commentaire PENDING_APPROVAL, M4 test_story_78_15_contract.py 14 tests) — File List complété
-    78-16-observabilite-metriques-runbooks-alertes: backlog
+    78-15-suppression-clob-permissions-legacy: done # Code review 2026-03-13 (2 passes): H2 assertions tables normalisées + 2 tests replace (15 tests), M1 comptage 14→15, M2 rollback fichier inexistant, M4 rollback feature flags inexistants post-78.15, L1 pyproject.toml exclusions mortes — pyproject.toml ajouté au File List
+    78-16-observabilite-metriques-runbooks-alertes: done # Code review 2026-03-13: H1 runbook déplacé docs/operations/ (AC4), H2 runnable_expired_leases = reclaim_expired() return value, M1 pending filter mutuellement exclusif, M2 pyproject.toml File List, L1 assert_any_call
     epic-78-retrospective: optional
     # === Epic 79: Notifications enrichies — Variables, CC, pièces jointes, webhook Teams par step ===
     # Réf: docs/backend/epic-79-notifications-enrichies.md

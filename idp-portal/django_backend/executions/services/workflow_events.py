@@ -114,17 +114,31 @@ class WorkflowEventService:
         is_critical = event_type not in BEST_EFFORT_EVENT_TYPES
 
         if is_critical:
-            return cls._emit_inner(execution_id, event_type, entity_type, entity_id, payload)
+            try:
+                return cls._emit_inner(execution_id, event_type, entity_type, entity_id, payload)
+            except Exception:  # noqa: BLE001
+                # Story 78.16: structured metric for critical event append failures
+                logger.error(
+                    "workflow_event_emit_failed",
+                    execution_id=execution_id,
+                    event_type=event_type,
+                    entity_id=entity_id,
+                    event_append_failure=True,
+                    exc_info=True,
+                )
+                raise
 
         # Best-effort: swallow any exception
         try:
             return cls._emit_inner(execution_id, event_type, entity_type, entity_id, payload)
         except Exception:  # noqa: BLE001
+            # Story 78.16: structured metric for best-effort event append failures
             logger.warning(
                 "workflow_event_emit_failed",
                 execution_id=execution_id,
                 event_type=event_type,
                 entity_id=entity_id,
+                event_append_failure_best_effort=True,
                 exc_info=True,
             )
             return None

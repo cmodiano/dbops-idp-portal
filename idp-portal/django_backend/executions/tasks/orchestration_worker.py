@@ -25,6 +25,7 @@ from executions.models import (
 )
 from executions.domain.state_machine import assert_execution_transition
 from executions.infra.work_queue import WorkQueue
+from executions.observability import get_runnable_queue_depth
 
 logger = structlog.get_logger(__name__)
 
@@ -230,9 +231,19 @@ def process_runnable_steps(self: Any, batch_size: int = 5) -> dict:
     """
     worker_id = f"worker-{uuid.uuid4().hex[:8]}"
 
+    # Story 78.16: Emit queue depth metrics before claiming
+    depth = get_runnable_queue_depth()
+    logger.info(
+        "process_runnable_steps_metrics",
+        runnable_queue_depth=depth["pending"] + depth["running"],
+        runnable_pending=depth["pending"],
+        runnable_running=depth["running"],
+        runnable_expired_leases=depth["expired_leases"],
+    )
+
     claimed = WorkQueue.claim(batch_size=batch_size, worker_id=worker_id)
     if not claimed:
-        return {"processed": 0, "worker_id": worker_id}
+        return {"processed": 0, "worker_id": worker_id, "runnable_queue_depth": depth["pending"] + depth["running"]}
 
     processed = 0
     for runnable in claimed:
@@ -341,4 +352,9 @@ def process_runnable_steps(self: Any, batch_size: int = 5) -> dict:
 
         processed += 1
 
-    return {"processed": processed, "worker_id": worker_id}
+    return {
+        "processed": processed,
+        "worker_id": worker_id,
+        "runnable_queue_depth": depth["pending"] + depth["running"],
+        "runnable_expired_leases": depth["expired_leases"],
+    }

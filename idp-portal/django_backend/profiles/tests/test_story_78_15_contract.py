@@ -11,6 +11,14 @@ import pytest
 from django.test import TestCase
 
 from profiles.models import Profile, ProfileActionPermission, ProfileTargetPermission
+from profiles.models_action_permission_normalized import (
+    ProfileActionAllowlist,
+    ProfileActionEnv,
+)
+from profiles.models_target_permission_normalized import (
+    ProfileTargetAllowlist,
+    ProfileTargetPattern,
+)
 from profiles.services import ProfileService
 
 
@@ -59,6 +67,15 @@ class TestNormalizedWriteOnlyPath(TestCase):
         self.assertEqual(perm.permission_type, 'LIST')
         db_perm = ProfileActionPermission.objects.get(profile_id=self.profile.id)
         self.assertEqual(db_perm.permission_type, 'LIST')
+        # Verify normalized tables received the data (AC4 core assertion)
+        self.assertEqual(
+            sorted(ProfileActionAllowlist.objects.filter(profile_id=self.profile.id).values_list('action_id', flat=True)),
+            [1, 2, 3],
+        )
+        self.assertEqual(
+            list(ProfileActionEnv.objects.filter(profile_id=self.profile.id).values_list('environment', flat=True)),
+            ['dev'],
+        )
 
     def test_set_target_permissions_creates_header_row(self):
         perm = self.service.set_target_permissions(
@@ -69,6 +86,11 @@ class TestNormalizedWriteOnlyPath(TestCase):
         self.assertEqual(perm.permission_type, 'PATTERN')
         db_perm = ProfileTargetPermission.objects.get(profile_id=self.profile.id)
         self.assertEqual(db_perm.permission_type, 'PATTERN')
+        # Verify normalized tables received the data (AC4 core assertion)
+        self.assertEqual(
+            sorted(ProfileTargetPattern.objects.filter(profile_id=self.profile.id).values_list('pattern', flat=True)),
+            ['db-*', 'srv-*'],
+        )
 
     def test_action_permission_upsert_is_idempotent(self):
         """Calling set_action_permissions twice does not create duplicate header rows."""
@@ -84,6 +106,21 @@ class TestNormalizedWriteOnlyPath(TestCase):
             ProfileActionPermission.objects.filter(profile_id=self.profile.id).count(), 1
         )
 
+    def test_set_action_permissions_replaces_normalized_rows(self):
+        """Second call replaces normalized rows — no accumulation."""
+        self.service.set_action_permissions(
+            self.profile.id,
+            {'actions_type': 'list', 'action_ids': [10, 20]},
+        )
+        self.service.set_action_permissions(
+            self.profile.id,
+            {'actions_type': 'list', 'action_ids': [30]},
+        )
+        self.assertEqual(
+            sorted(ProfileActionAllowlist.objects.filter(profile_id=self.profile.id).values_list('action_id', flat=True)),
+            [30],
+        )
+
     def test_target_permission_upsert_is_idempotent(self):
         """Calling set_target_permissions twice does not create duplicate header rows."""
         self.service.set_target_permissions(
@@ -96,6 +133,21 @@ class TestNormalizedWriteOnlyPath(TestCase):
         )
         self.assertEqual(
             ProfileTargetPermission.objects.filter(profile_id=self.profile.id).count(), 1
+        )
+
+    def test_set_target_permissions_replaces_normalized_rows(self):
+        """Second call replaces normalized rows — no accumulation."""
+        self.service.set_target_permissions(
+            self.profile.id,
+            {'targets_type': 'list', 'target_names': ['srv-a', 'srv-b']},
+        )
+        self.service.set_target_permissions(
+            self.profile.id,
+            {'targets_type': 'list', 'target_names': ['srv-c']},
+        )
+        self.assertEqual(
+            sorted(ProfileTargetAllowlist.objects.filter(profile_id=self.profile.id).values_list('target_name', flat=True)),
+            ['srv-c'],
         )
 
 

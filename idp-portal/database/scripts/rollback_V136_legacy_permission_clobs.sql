@@ -9,13 +9,21 @@
 --   1. Stop application servers (prevent new writes)
 --   2. Execute this script on the Oracle database
 --   3. Restore the pre-78.15 application version (Docker image / deployment)
---   4. Re-enable feature flags:
+--      IMPORTANT: The feature flags PROFILE_ACTION_PERMISSIONS_NORMALIZED_ENABLED and
+--      PROFILE_TARGET_PERMISSIONS_NORMALIZED_ENABLED were removed from settings.py in
+--      story 78.15. They only exist in the pre-78.15 codebase. Step 3 (restore pre-78.15
+--      image) is therefore required BEFORE step 4 can work.
+--   4. Set feature flags in the restored pre-78.15 environment:
 --        PROFILE_ACTION_PERMISSIONS_NORMALIZED_ENABLED = True
 --        PROFILE_TARGET_PERMISSIONS_NORMALIZED_ENABLED = True
---      (to keep dual-write active and avoid data loss on new writes)
---   5. Backfill CLOB columns from normalized tables using:
---        idp-portal/database/scripts/backfill_clob_from_normalized.sql (if applicable)
---      OR re-run the application's sync_from_json logic.
+--      (to keep dual-write active in the legacy code path and avoid data loss)
+--   5. Backfill CLOB columns from normalized tables (manual step):
+--        The normalized tables (PROFILE_ACTION_ALLOWLIST, PROFILE_ACTION_TAG_PATTERNS,
+--        PROFILE_ACTION_ENVS, PROFILE_TARGET_ALLOWLIST, PROFILE_TARGET_PATTERNS,
+--        PROFILE_TARGET_ATTRIBUTE_FILTERS, PROFILE_TARGET_EXCLUSIONS) remain intact
+--        and hold authoritative data. No automated backfill script exists since the
+--        CLOB columns were the legacy representation — the pre-78.15 application code
+--        will write CLOB values on the next permission save for each profile.
 --   6. Validate parity checks before re-enabling reads from CLOB columns.
 --   7. Restart application servers.
 --
