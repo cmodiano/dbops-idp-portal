@@ -81,7 +81,7 @@ class WorkflowCommandService:
         """Traite les commandes pending en FIFO. Retourne le nombre traité.
 
         Utilise SELECT ... FOR UPDATE SKIP LOCKED pour la concurrence
-        multi-worker (même pattern que RunnableStepService.claim_batch).
+        multi-worker (même pattern que WorkQueue.claim).
 
         Args:
             batch_size: Nombre max de commandes à traiter par batch.

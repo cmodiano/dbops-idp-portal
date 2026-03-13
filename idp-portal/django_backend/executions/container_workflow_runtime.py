@@ -1271,10 +1271,8 @@ class ContainerWorkflowRuntime:
             correlation_id=self.correlation_id,
         )
 
-        # Validate transition legality before CAS (state_machine guards validity, CAS guards concurrency)
-        assert_execution_transition(self.execution.status, ExecutionStatus.RUNNING)
-
         # CAS transition SUBMITTED→RUNNING to prevent double-start (Story 71.7 AC#3)
+        # Note: no assert_execution_transition here — the CAS IS the guard for concurrency.
         updated = Execution.objects.filter(
             id=self.execution.id,
             status=ExecutionStatus.SUBMITTED,
@@ -1399,10 +1397,8 @@ class ContainerWorkflowRuntime:
             correlation_id=self.correlation_id,
         )
 
-        # Validate transition legality before CAS (state_machine guards validity, CAS guards concurrency)
-        assert_execution_transition(self.execution.status, ExecutionStatus.RUNNING)
-
         # CAS transition SUBMITTED→RUNNING to prevent double-start (Story 71.7 AC#3)
+        # Note: no assert_execution_transition here — the CAS IS the guard for concurrency.
         updated = Execution.objects.filter(
             id=self.execution.id,
             status=ExecutionStatus.SUBMITTED,

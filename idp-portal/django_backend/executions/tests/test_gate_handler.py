@@ -242,6 +242,7 @@ class TestExecuteHandlerStepWaitingProtocol:
         mock_execution.action = MagicMock()
 
         mock_step = MagicMock()
+        mock_step.status = ExecutionStepStatus.RUNNING
         mock_step.set_output = MagicMock()
         mock_step.save = MagicMock()
 
