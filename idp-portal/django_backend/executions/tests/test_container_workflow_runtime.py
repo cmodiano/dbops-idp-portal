@@ -608,9 +608,11 @@ class TestContainerWorkflowIntegration:
         parent_step = ExecutionStep.objects.get(execution=execution, step_order=1)
         output = parent_step.get_output()
         assert output is not None
-        assert output['child_execution_id'] == runtime.child_executions[0].id
-        assert output['referenced_action_id'] == action.id
-        assert output['referenced_action_name'] == action.name
+        # Story 77.1: output now uses standard format {raw_output, extracted_output, status_context}
+        raw = output.get('raw_output', output)
+        assert raw['child_execution_id'] == runtime.child_executions[0].id
+        assert raw['referenced_action_id'] == action.id
+        assert raw['referenced_action_name'] == action.name
 
     @patch('executions.container_workflow_runtime.AuditService')
     def test_invalid_execution_steps_format_fails(self, mock_audit):
@@ -732,8 +734,10 @@ class TestContainerWorkflowChildSteps:
 
         for i, parent_step in enumerate(parent_steps):
             output = parent_step.get_output()
-            assert output['child_execution_id'] == runtime.child_executions[i].id
-            assert output['child_status'] == ExecutionStatus.COMPLETED
+            # Story 77.1: output now uses standard format {raw_output, extracted_output, status_context}
+            raw = output.get('raw_output', output)
+            assert raw['child_execution_id'] == runtime.child_executions[i].id
+            assert raw['child_status'] == ExecutionStatus.COMPLETED
 
     @patch('executions.container_workflow_runtime.AuditService')
     def test_no_child_steps_without_simulation(self, mock_audit):

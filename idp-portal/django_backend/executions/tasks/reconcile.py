@@ -417,6 +417,7 @@ def _retry_non_platform_step(execution: Any, step: Any) -> bool:
     from executions.models import Execution, ExecutionStep, ExecutionStepStatus  # noqa: PLC0415
     from executions.output_extractor import OutputExtractor  # noqa: PLC0415
     from executions.template_resolver import StepTemplateResolver  # noqa: PLC0415
+    from executions.tasks.gates import _build_step_outputs_from_completed  # noqa: PLC0415
 
     raw_type = getattr(step, "step_type", None) or ""
     step_type = (getattr(raw_type, "value", raw_type) or "").lower() if raw_type else ""
@@ -466,6 +467,7 @@ def _retry_non_platform_step(execution: Any, step: Any) -> bool:
         return False
 
     # Rebuild _step_outputs from COMPLETED steps
+    # Story 77.1: Use _build_step_outputs_from_completed for consistent logic with gates.py.
     completed_steps = list(
         ExecutionStep.objects.filter(
             execution=execution,
@@ -473,20 +475,12 @@ def _retry_non_platform_step(execution: Any, step: Any) -> bool:
         ).order_by("step_order")
     )
     _step_outputs: dict = {}
-    extractor = OutputExtractor()
-    for db_step in completed_steps:
-        raw_output = db_step.get_output() or {}
-        cfg_id = db_step.config_step_id
-        if not cfg_id and db_step.step_name:
-            cfg_id = step_name_to_id.get(db_step.step_name)
-        if cfg_id:
-            cfg = _step_config_by_id.get(cfg_id, {})
-            output_mapping = cfg.get("output_mapping", {})
-            if isinstance(output_mapping, dict) and output_mapping:
-                extracted = extractor.extract(raw_output, output_mapping)
-            else:
-                extracted = raw_output
-            _step_outputs[cfg_id] = extracted
+    _build_step_outputs_from_completed(
+        completed_steps=completed_steps,
+        step_config_by_id=_step_config_by_id,
+        step_name_to_id=step_name_to_id,
+        step_outputs=_step_outputs,
+    )
 
     # Resolve input_mapping
     input_mapping = step_cfg.get("input_mapping", {})
@@ -544,6 +538,7 @@ def _retry_non_platform_step(execution: Any, step: Any) -> bool:
         return False
 
     # Success — update step and extract output
+    # Story 77.1: Persist standard format {raw_output, extracted_output, status_context}.
     raw_output = result.get("raw_output", result) if isinstance(result, dict) else {}
     if not isinstance(raw_output, dict):
         raw_output = {"result": raw_output}
@@ -560,10 +555,23 @@ def _retry_non_platform_step(execution: Any, step: Any) -> bool:
         _mark_step_failed(step, "Retry completed but handler returned FAILED status.")
         return False
 
+    output_mapping = step_cfg.get("output_mapping", {})
+    if not isinstance(output_mapping, dict):
+        output_mapping = {}
+    extractor = OutputExtractor()
+    extracted = extractor.extract(raw_output, output_mapping)
+
     step.status = ExecutionStepStatus.COMPLETED
     step.completed_at = timezone.now()
     step.error_message = None
-    step.set_output(raw_output)
+    step.set_output({
+        "raw_output": raw_output,
+        "extracted_output": extracted,
+        "status_context": {
+            "status": ExecutionStepStatus.COMPLETED,
+            "completed_at": step.completed_at.isoformat(),
+        },
+    })
     step.save(update_fields=["status", "completed_at", "error_message", "output"])
 
     Execution.objects.filter(id=execution_id).update(updated_at=timezone.now())
@@ -626,14 +634,35 @@ def _reconcile_schedule_step(execution: Any, step: Any) -> bool:
             if step.status not in (ExecutionStepStatus.COMPLETED, ExecutionStepStatus.FAILED):
                 step.status = ExecutionStepStatus.COMPLETED
                 step.completed_at = child.completed_at or timezone.now()
-                # AC2 Task 2.2: set output so _resume_container_workflow can rebuild _step_outputs
+                # Story 77.1: Persist standard format {raw_output, extracted_output, status_context}.
                 referenced_action = getattr(child, "action", None)
-                step.set_output({
+                raw_output = {
                     "child_execution_id": child.id,
                     "referenced_action_id": referenced_action.id if referenced_action else None,
                     "referenced_action_name": getattr(referenced_action, "name", None) if referenced_action else None,
                     "child_status": child.status,
                     "parameters_injected": False,  # unknown in reconcile context
+                }
+                # Get output_mapping from step config for extracted_output
+                step_cfg = next(
+                    (s for s in (execution.action.execution_steps or [])
+                     if isinstance(s, dict) and s.get("step_id") == step.config_step_id),
+                    {},
+                )
+                output_mapping = step_cfg.get("output_mapping", {}) or {}
+                if not isinstance(output_mapping, dict):
+                    output_mapping = {}
+                from executions.output_extractor import OutputExtractor  # noqa: PLC0415
+
+                extractor = OutputExtractor()
+                extracted = extractor.extract(raw_output, output_mapping)
+                step.set_output({
+                    "raw_output": raw_output,
+                    "extracted_output": extracted,
+                    "status_context": {
+                        "status": ExecutionStepStatus.COMPLETED,
+                        "completed_at": step.completed_at.isoformat(),
+                    },
                 })
                 step.save(update_fields=["status", "completed_at", "output"])
                 # Touch execution.updated_at to avoid immediate re-stale (Story 76.3 heartbeat)

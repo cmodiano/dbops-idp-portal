@@ -850,11 +850,12 @@ class TestReconcileScheduleStep:
         step.refresh_from_db()
         assert step.status == ExecutionStepStatus.COMPLETED
         assert step.completed_at is not None
-        # AC2 Task 2.2: output must be set for _resume_container_workflow
+        # AC2 Task 2.2 / Story 77.1: output uses standard format {raw_output, extracted_output, status_context}
         output = step.get_output()
         assert output is not None
-        assert output.get("child_execution_id") == child.id
-        assert output.get("child_status") == "COMPLETED"
+        raw = output.get("raw_output") or {}
+        assert raw.get("child_execution_id") == child.id
+        assert raw.get("child_status") == "COMPLETED"
 
     def test_child_failed_marks_step_failed_returns_false(self):
         """Child FAILED → step marqué FAILED, retourne False."""
@@ -1063,8 +1064,10 @@ class TestReconcileExecutionWithScheduleStep:
         assert result == "reattached"
         step.refresh_from_db()
         assert step.status == "COMPLETED"
-        assert step.get_output() is not None
-        assert step.get_output().get("child_execution_id") == child.id
+        output = step.get_output()
+        assert output is not None
+        raw = output.get("raw_output") or {}
+        assert raw.get("child_execution_id") == child.id
         # AC2: workflow continuation triggered immediately
         mock_resume.assert_called_once_with(parent, correlation_id="")
 
@@ -1130,7 +1133,11 @@ class TestRetryNonPlatformStep:
         assert result is True
         step.refresh_from_db()
         assert step.status == "COMPLETED"
-        assert step.get_output() == {"result": "ok"}
+        # Story 77.1: standard format {raw_output, extracted_output, status_context}
+        output = step.get_output()
+        assert output is not None
+        assert output.get("raw_output") == {"result": "ok"}
+        assert output.get("extracted_output") == {}
         mock_execute.assert_called_once()
 
     def test_http_request_running_no_platform_job_id_retry(self):

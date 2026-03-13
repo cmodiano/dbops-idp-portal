@@ -921,8 +921,8 @@ development_status:
     # === Epic 77: Renforcer le moteur de workflow pour une base durable et fiable ===
     # Réf: planning-artifacts/epic-77-workflow-engine-durability.md
     # Rapport comparaison workflow 2026-03-12 — I/O durable, types natifs, platform réel, output_mapping artifacts, on_commit, tests
-    epic-77: backlog
-    77-1-persister-outputs-handlers-steps: backlog
+    epic-77: in-progress
+    77-1-persister-outputs-handlers-steps: done # Code review 2026-03-13: 6 fixes (H1-H2, M1-M2-M4)
     77-2-preserver-types-natifs-input-mapping: backlog
     77-3-executer-steps-platform-chemin-reel-dispatch: backlog
     77-4-extraction-outputs-artifacts-reels-child-executions: backlog

@@ -802,25 +802,50 @@ class ContainerWorkflowRuntime:
 
             # Story 71.7 AC#4: Transaction 2 — finalize parent_step after execution
             with transaction.atomic():
-                parent_step.status = (
+                final_step_status = (
                     ExecutionStepStatus.FAILED
                     if child_execution.status == ExecutionStatus.FAILED
                     else ExecutionStepStatus.COMPLETED
                 )
+                parent_step.status = final_step_status
                 parent_step.completed_at = timezone.now()
-                parent_step.set_output({
+
+                # Story 77.1: Persist standard output structure for durable resume after gates.
+                # Metadata fields preserved in raw_output; Story 77.4 will enrich with real artifacts.
+                raw_output = {
                     'child_execution_id': child_execution.id,
                     'referenced_action_id': referenced_action.id,
                     'referenced_action_name': referenced_action.name,
                     'child_status': child_execution.status,
                     'parameters_injected': bool(child_params),
+                }
+                output_mapping = step.get('output_mapping', {})
+                if output_mapping and not isinstance(output_mapping, dict):
+                    logger.warning(
+                        "container_workflow_output_mapping_not_dict",
+                        execution_id=self.execution.id,
+                        step_id=step_id,
+                        output_mapping_type=type(output_mapping).__name__,
+                        correlation_id=self.correlation_id,
+                    )
+                    output_mapping = {}
+                extractor = OutputExtractor()
+                extracted = extractor.extract(raw_output, output_mapping)
+                parent_step.set_output({
+                    'raw_output': raw_output,
+                    'extracted_output': extracted,
+                    'status_context': {
+                        'status': final_step_status,
+                        'completed_at': parent_step.completed_at.isoformat(),
+                    },
                 })
                 parent_step.save()
 
             _broadcast_step(self.execution.id, parent_step)  # COMPLETED or FAILED
 
             if step_id is not None:
-                self._extract_and_store_output(step_id, parent_step, step.get('output_mapping', {}))
+                with self._step_outputs_lock:
+                    self._step_outputs[step_id] = extracted
 
             return cast(ExecutionStatus, child_execution.status)
         except Exception as exc:  # noqa: BLE001
@@ -958,9 +983,11 @@ class ContainerWorkflowRuntime:
         Extract output and finalize handler step status.
 
         Story 71.6: Extracted from _execute_handler_step (subtask 10.2).
+        Story 77.1: Persists standard {raw_output, extracted_output, status_context}
+        in ExecutionStep.output for durable resume after gates.
         """
-        if step_id is not None:
-            if not isinstance(output_mapping, dict):
+        if not isinstance(output_mapping, dict):
+            if step_id is not None:
                 logger.warning(
                     "container_workflow_output_mapping_not_dict",
                     execution_id=self.execution.id,
@@ -968,13 +995,16 @@ class ContainerWorkflowRuntime:
                     output_mapping_type=type(output_mapping).__name__,
                     correlation_id=self.correlation_id,
                 )
-                output_mapping = {}
-            extractor = OutputExtractor()
-            if isinstance(result, dict) and 'raw_output' in result:
-                raw_output = result.get('raw_output', {}) or {}
-            else:
-                raw_output = result if isinstance(result, dict) else {}
-            extracted = extractor.extract(raw_output, output_mapping)
+            output_mapping = {}
+
+        extractor = OutputExtractor()
+        if isinstance(result, dict) and 'raw_output' in result:
+            raw_output = result.get('raw_output', {}) or {}
+        else:
+            raw_output = result if isinstance(result, dict) else {}
+        extracted = extractor.extract(raw_output, output_mapping)
+
+        if step_id is not None:
             with self._step_outputs_lock:
                 self._step_outputs[step_id] = extracted
 
@@ -985,12 +1015,24 @@ class ContainerWorkflowRuntime:
             if isinstance(handler_status, ExecutionStatus):
                 result_execution_status = handler_status
 
-        parent_step.status = (
+        final_step_status = (
             ExecutionStepStatus.FAILED
             if result_execution_status == ExecutionStatus.FAILED
             else ExecutionStepStatus.COMPLETED
         )
+        parent_step.status = final_step_status
         parent_step.completed_at = timezone.now()
+
+        # Story 77.1: Persist standard output structure for durable resume after gates.
+        parent_step.set_output({
+            'raw_output': raw_output,
+            'extracted_output': extracted,
+            'status_context': {
+                'status': final_step_status,
+                'completed_at': parent_step.completed_at.isoformat(),
+            },
+        })
+
         parent_step.save()
         _broadcast_step(self.execution.id, parent_step)  # COMPLETED or FAILED
         return result_execution_status
