@@ -10,6 +10,7 @@ from typing import Any
 
 import structlog
 
+from django.conf import settings
 from django.db import transaction
 from django.db import IntegrityError
 from django.db.models import QuerySet
@@ -29,12 +30,15 @@ _AUDITED_PROFILE_FIELDS = (
 
 def _serialize_action_permissions(perm: ProfileActionPermission) -> dict[str, Any]:
     """Serialize ProfileActionPermission to dict for audit (Story 72.2)."""
+    from profiles.action_permission_repository import (
+        get_action_ids, get_tag_patterns, get_environments,
+    )
     type_map = {'LIST': 'list', 'PATTERN': 'pattern', 'ALL': 'all'}
     return {
         'actions_type': type_map.get(perm.permission_type, perm.permission_type.lower()),
-        'action_ids': perm.get_action_ids(),
-        'tag_patterns': perm.get_tag_patterns(),
-        'environments': perm.get_environments(),
+        'action_ids': get_action_ids(perm),
+        'tag_patterns': get_tag_patterns(perm),
+        'environments': get_environments(perm),
     }
 
 
@@ -448,6 +452,11 @@ class ProfileService:
             perm.set_environments(permission_data['environments'])
         perm.save()
 
+        # Story 78.11: Dual-write — sync normalized tables when feature flag enabled
+        if getattr(settings, 'PROFILE_ACTION_PERMISSIONS_NORMALIZED_ENABLED', False):
+            from profiles.action_permission_repository import sync_from_json
+            sync_from_json(profile_id)
+
         # Audit trail for permission changes — SOC1 compliance (PROF-MED-02 fix)
         if user and not skip_audit:
             AuditService.create_entry(
@@ -634,6 +643,12 @@ class ProfileService:
         # Aggregate action and target permissions in a single pass (PROF-HIGH-01 fix)
         action_permissions = []
         target_permissions = []
+        from profiles.action_permission_repository import (
+            get_action_ids as repo_get_action_ids,
+            get_tag_patterns as repo_get_tag_patterns,
+            get_environments as repo_get_environments,
+        )
+
         for profile in profiles:
             is_admin = getattr(profile, 'is_admin', 0) == 1
 
@@ -642,9 +657,9 @@ class ProfileService:
             if perm_a:
                 action_permissions.append({
                     'actions_type': perm_a.permission_type.lower(),
-                    'action_ids': perm_a.get_action_ids(),
-                    'tag_patterns': perm_a.get_tag_patterns(),
-                    'environments': perm_a.get_environments(),
+                    'action_ids': repo_get_action_ids(perm_a),
+                    'tag_patterns': repo_get_tag_patterns(perm_a),
+                    'environments': repo_get_environments(perm_a),
                 })
             elif is_admin:
                 # Admin profiles (DBOPS, DBA) without explicit ProfileActionPermission

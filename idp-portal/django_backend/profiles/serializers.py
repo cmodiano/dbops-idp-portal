@@ -216,11 +216,14 @@ class ProfileActionPermissionsSerializer(serializers.Serializer):
             type_map = {'LIST': 'list', 'PATTERN': 'pattern', 'ALL': 'all'}
             actions_type = type_map.get(instance.permission_type, 'all')
             
+            from profiles.action_permission_repository import (
+                get_action_ids, get_tag_patterns, get_environments,
+            )
             return {
                 'actions_type': actions_type,
-                'action_ids': instance.get_action_ids(),
-                'tag_patterns': instance.get_tag_patterns(),
-                'environments': instance.get_environments(),
+                'action_ids': get_action_ids(instance),
+                'tag_patterns': get_tag_patterns(instance),
+                'environments': get_environments(instance),
             }
         return super().to_representation(instance)
 

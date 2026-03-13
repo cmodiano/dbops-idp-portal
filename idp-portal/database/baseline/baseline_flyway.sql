@@ -2,21 +2,21 @@
 -- Baseline Schema V088 — IDP Portal
 -- ===========================================================================
 -- Date            : 2026-03-13
--- Version couverte: V000–V129 (incl. V122–V129 workflow tables, purge V126)
+-- Version couverte: V000–V131 (incl. V130–V131 profile action permission tables)
 --
 -- Usage           : NOUVEAUX ENVIRONNEMENTS UNIQUEMENT (base Oracle vierge)
 -- Interdit sur    : Environnements existants (dev, staging, prod) — INCHANGÉS
 --
 -- Procédure de déploiement :
 --   1. sqlplus idp_user/password@HOST:1521/XEPDB1 @database/baseline/baseline_flyway.sql
---   2. flyway -baselineVersion=129 -baselineDescription=baseline_flyway baseline
+--   2. flyway -baselineVersion=131 -baselineDescription=baseline_flyway baseline
 --
--- Ce script couvre TOUTES les migrations V000–V129. Aucune migration incrémentale
--- n'est nécessaire après application. État identique à V000→V129 sans phases intermédiaires.
+-- Ce script couvre TOUTES les migrations V000–V131. Aucune migration incrémentale
+-- n'est nécessaire après application. État identique à V000→V131 sans phases intermédiaires.
 -- ===========================================================================
 --
 -- Objets créés :
---   40 tables, indexes, contraintes, trigger, package PKG_IDP_MAINTENANCE, données de référence
+--   43 tables, indexes, contraintes, trigger, package PKG_IDP_MAINTENANCE, données de référence
 --
 -- Exclusions (éléments neutralisés par les migrations) :
 --   - SCHEMA_VERSION (créée V000, droppée V015)
@@ -772,6 +772,53 @@ COMMENT ON COLUMN PROFILE_ACTION_PERMISSIONS.TAG_PATTERNS_JSON IS 'JSON des moti
 COMMENT ON COLUMN PROFILE_ACTION_PERMISSIONS.ENVIRONMENTS_JSON IS 'JSON des environnements autorisés.';
 COMMENT ON COLUMN PROFILE_ACTION_PERMISSIONS.CREATED_AT IS 'Date de création.';
 COMMENT ON COLUMN PROFILE_ACTION_PERMISSIONS.UPDATED_AT IS 'Date de dernière mise à jour.';
+
+-- ---------------------------------------------------------------------------
+-- V130: PROFILE_ACTION_ALLOWLIST, PROFILE_ACTION_TAG_PATTERNS, PROFILE_ACTION_ENVS
+-- Story 78.11 — Normalisation des permissions action de profil
+-- ---------------------------------------------------------------------------
+CREATE TABLE PROFILE_ACTION_ALLOWLIST (
+    ID              NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    PROFILE_ID      NUMBER NOT NULL,
+    ACTION_ID       NUMBER NOT NULL,
+    CONSTRAINT FK_PAA_PROFILE FOREIGN KEY (PROFILE_ID)
+        REFERENCES PROFILE_ACTION_PERMISSIONS(PROFILE_ID) ON DELETE CASCADE,
+    CONSTRAINT UK_PAA_PROFILE_ACTION UNIQUE (PROFILE_ID, ACTION_ID)
+);
+
+COMMENT ON TABLE PROFILE_ACTION_ALLOWLIST IS 'Actions autorisées par profil — une ligne par action (normalisation de ACTION_IDS_JSON).';
+COMMENT ON COLUMN PROFILE_ACTION_ALLOWLIST.PROFILE_ID IS 'FK vers PROFILE_ACTION_PERMISSIONS — profil propriétaire.';
+COMMENT ON COLUMN PROFILE_ACTION_ALLOWLIST.ACTION_ID IS 'Référence logique vers ACTIONS_CATALOG.ID — action autorisée.';
+
+CREATE TABLE PROFILE_ACTION_TAG_PATTERNS (
+    ID              NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    PROFILE_ID      NUMBER NOT NULL,
+    TAG_PATTERN     VARCHAR2(255) NOT NULL,
+    CONSTRAINT FK_PATP_PROFILE FOREIGN KEY (PROFILE_ID)
+        REFERENCES PROFILE_ACTION_PERMISSIONS(PROFILE_ID) ON DELETE CASCADE,
+    CONSTRAINT UK_PATP_PROFILE_TAG UNIQUE (PROFILE_ID, TAG_PATTERN)
+);
+
+COMMENT ON TABLE PROFILE_ACTION_TAG_PATTERNS IS 'Tag patterns autorisés par profil — une ligne par pattern (normalisation de TAG_PATTERNS_JSON).';
+COMMENT ON COLUMN PROFILE_ACTION_TAG_PATTERNS.PROFILE_ID IS 'FK vers PROFILE_ACTION_PERMISSIONS — profil propriétaire.';
+COMMENT ON COLUMN PROFILE_ACTION_TAG_PATTERNS.TAG_PATTERN IS 'Pattern de tag autorisé (ex: oracle, provisioning).';
+
+CREATE TABLE PROFILE_ACTION_ENVS (
+    ID              NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    PROFILE_ID      NUMBER NOT NULL,
+    ENVIRONMENT     VARCHAR2(255) NOT NULL,
+    CONSTRAINT FK_PAE_PROFILE FOREIGN KEY (PROFILE_ID)
+        REFERENCES PROFILE_ACTION_PERMISSIONS(PROFILE_ID) ON DELETE CASCADE,
+    CONSTRAINT UK_PAE_PROFILE_ENV UNIQUE (PROFILE_ID, ENVIRONMENT)
+);
+
+COMMENT ON TABLE PROFILE_ACTION_ENVS IS 'Environnements autorisés par profil — une ligne par environnement (normalisation de ENVIRONMENTS_JSON).';
+COMMENT ON COLUMN PROFILE_ACTION_ENVS.PROFILE_ID IS 'FK vers PROFILE_ACTION_PERMISSIONS — profil propriétaire.';
+COMMENT ON COLUMN PROFILE_ACTION_ENVS.ENVIRONMENT IS 'Environnement autorisé (ex: dev, staging, prod).';
+
+CREATE INDEX IDX_PAA_PROFILE_ID ON PROFILE_ACTION_ALLOWLIST(PROFILE_ID);
+CREATE INDEX IDX_PATP_PROFILE_ID ON PROFILE_ACTION_TAG_PATTERNS(PROFILE_ID);
+CREATE INDEX IDX_PAE_PROFILE_ID ON PROFILE_ACTION_ENVS(PROFILE_ID);
 
 -- ---------------------------------------------------------------------------
 -- PROFILE_TARGET_PERMISSIONS (V012 + V060 + V071)
@@ -1805,6 +1852,63 @@ COMMENT ON COLUMN WORKFLOW_STEP_EDGES.FROM_STEP_ID IS 'FK vers WORKFLOW_STEPS �
 COMMENT ON COLUMN WORKFLOW_STEP_EDGES.TO_STEP_ID IS 'FK vers WORKFLOW_STEPS — step destination de la transition.';
 COMMENT ON COLUMN WORKFLOW_STEP_EDGES.EDGE_TYPE IS 'Type de transition: success ou error.';
 
+-- ---------------------------------------------------------------------------
+-- V131: Backfill PROFILE_ACTION_ALLOWLIST, PROFILE_ACTION_TAG_PATTERNS, PROFILE_ACTION_ENVS
+-- Story 78.11 — Sur base vierge, PROFILE_ACTION_PERMISSIONS est vide → boucle 0 itérations (no-op)
+-- ---------------------------------------------------------------------------
+DECLARE
+    v_batch_count   NUMBER := 0;
+
+    CURSOR c_perms IS
+        SELECT PROFILE_ID, ACTION_IDS_JSON, TAG_PATTERNS_JSON, ENVIRONMENTS_JSON
+        FROM PROFILE_ACTION_PERMISSIONS;
+
+BEGIN
+    FOR p IN c_perms LOOP
+        DELETE FROM PROFILE_ACTION_ALLOWLIST WHERE PROFILE_ID = p.PROFILE_ID;
+        DELETE FROM PROFILE_ACTION_TAG_PATTERNS WHERE PROFILE_ID = p.PROFILE_ID;
+        DELETE FROM PROFILE_ACTION_ENVS WHERE PROFILE_ID = p.PROFILE_ID;
+
+        IF p.ACTION_IDS_JSON IS NOT NULL
+           AND DBMS_LOB.GETLENGTH(p.ACTION_IDS_JSON) > 2 THEN
+            INSERT INTO PROFILE_ACTION_ALLOWLIST (PROFILE_ID, ACTION_ID)
+            SELECT p.PROFILE_ID, jt.action_id
+            FROM JSON_TABLE(p.ACTION_IDS_JSON, '$[*]'
+                COLUMNS (action_id NUMBER PATH '$')
+            ) jt
+            WHERE jt.action_id IS NOT NULL;
+        END IF;
+
+        IF p.TAG_PATTERNS_JSON IS NOT NULL
+           AND DBMS_LOB.GETLENGTH(p.TAG_PATTERNS_JSON) > 2 THEN
+            INSERT INTO PROFILE_ACTION_TAG_PATTERNS (PROFILE_ID, TAG_PATTERN)
+            SELECT p.PROFILE_ID, jt.tag_pattern
+            FROM JSON_TABLE(p.TAG_PATTERNS_JSON, '$[*]'
+                COLUMNS (tag_pattern VARCHAR2(255) PATH '$')
+            ) jt
+            WHERE jt.tag_pattern IS NOT NULL;
+        END IF;
+
+        IF p.ENVIRONMENTS_JSON IS NOT NULL
+           AND DBMS_LOB.GETLENGTH(p.ENVIRONMENTS_JSON) > 2 THEN
+            INSERT INTO PROFILE_ACTION_ENVS (PROFILE_ID, ENVIRONMENT)
+            SELECT p.PROFILE_ID, jt.environment
+            FROM JSON_TABLE(p.ENVIRONMENTS_JSON, '$[*]'
+                COLUMNS (environment VARCHAR2(255) PATH '$')
+            ) jt
+            WHERE jt.environment IS NOT NULL;
+        END IF;
+
+        v_batch_count := v_batch_count + 1;
+        IF MOD(v_batch_count, 100) = 0 THEN
+            COMMIT;
+        END IF;
+    END LOOP;
+
+    COMMIT;
+END;
+/
+
 -- ===========================================================================
 -- PHASE 5 : Données de référence
 -- ===========================================================================
@@ -1844,12 +1948,12 @@ COMMIT;
 -- FIN DU SCRIPT BASELINE V088
 -- ===========================================================================
 -- Après application de ce script :
---   flyway baseline -baselineVersion=129 -baselineDescription=baseline_flyway
+--   flyway baseline -baselineVersion=131 -baselineDescription=baseline_flyway
 --
--- Aucune migration incrémentale requise — état identique à V000→V129.
+-- Aucune migration incrémentale requise — état identique à V000→V131.
 --
 -- Validation rapide :
---   SELECT COUNT(*) FROM user_tables;             -- doit retourner 40
+--   SELECT COUNT(*) FROM user_tables;             -- doit retourner 43
 --   SELECT table_name FROM user_part_tables;      -- EXECUTIONS, EXECUTION_STEPS, AUDIT_LOG
 --   SELECT status FROM user_triggers WHERE trigger_name = 'TRG_AUDIT_LOG_IMMUTABLE'; -- ENABLED
 --   SELECT status FROM user_objects WHERE object_name = 'PKG_IDP_MAINTENANCE';       -- VALID

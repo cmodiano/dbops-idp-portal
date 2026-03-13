@@ -1,12 +1,12 @@
-# Baseline Schema V121 — IDP Portal
+# Baseline Schema V131 — IDP Portal
 
 ## Contexte
 
-Ce dossier contient le script de **baseline** du schéma Oracle de l'IDP Portal. Il consolide les migrations Flyway V000–V129 en un seul script d'initialisation pour les **nouveaux environnements**.
+Ce dossier contient le script de **baseline** du schéma Oracle de l'IDP Portal. Il consolide les migrations Flyway V000–V131 en un seul script d'initialisation pour les **nouveaux environnements**.
 
 | Fichier | Description |
 |---------|-------------|
-| `baseline_flyway.sql` | Script DDL+DML : tables, indexes, contraintes, trigger, package PKG_IDP_MAINTENANCE, données de référence (état V129) |
+| `baseline_flyway.sql` | Script DDL+DML : tables, indexes, contraintes, trigger, package PKG_IDP_MAINTENANCE, données de référence (état V131) |
 | `README.md` | Ce fichier — procédure de déploiement et validation |
 
 > **⚠️ IMPORTANT** : Ce script s'applique **UNIQUEMENT** sur une base Oracle vierge.
@@ -23,7 +23,7 @@ Ce dossier contient le script de **baseline** du schéma Oracle de l'IDP Portal.
 sqlplus idp_user/password@NEW_ENV:1521/XEPDB1 @database/baseline/baseline_flyway.sql
 ```
 
-> Le script crée les 40 tables (dont EXECUTIONS, EXECUTION_STEPS, AUDIT_LOG partitionnées, WORKFLOW_DEFINITIONS, WORKFLOW_STEPS, WORKFLOW_STEP_EDGES, et les tables Django auth/session/API), indexes, contraintes, le trigger d'immutabilité, le package PKG_IDP_MAINTENANCE et insère les données de référence (REF_ENGINES, REF_CATEGORIES).
+> Le script crée les 43 tables (dont EXECUTIONS, EXECUTION_STEPS, AUDIT_LOG partitionnées, WORKFLOW_DEFINITIONS, WORKFLOW_STEPS, WORKFLOW_STEP_EDGES, PROFILE_ACTION_ALLOWLIST, PROFILE_ACTION_TAG_PATTERNS, PROFILE_ACTION_ENVS, et les tables Django auth/session/API), indexes, contraintes, le trigger d'immutabilité, le package PKG_IDP_MAINTENANCE et insère les données de référence (REF_ENGINES, REF_CATEGORIES).
 
 ### Étape 2 : Déclarer la base au niveau V121 (commande Flyway `baseline`)
 
@@ -32,12 +32,12 @@ flyway \
   -url=jdbc:oracle:thin:@NEW_ENV:1521/XEPDB1 \
   -user=idp_user \
   -password=password \
-  -baselineVersion=129 \
+  -baselineVersion=131 \
   -baselineDescription=baseline_flyway \
   baseline
 ```
 
-> Cette commande enregistre une ligne dans `flyway_schema_history` indiquant que la base est déjà au niveau V129 (success=true). Flyway ne re-jouera pas V000–V129. **Aucune migration incrémentale n'est nécessaire pour V000–V129.** Les migrations futures (V130 et au-delà) devront être appliquées via `flyway migrate`.
+> Cette commande enregistre une ligne dans `flyway_schema_history` indiquant que la base est déjà au niveau V131 (success=true). Flyway ne re-jouera pas V000–V131. **Aucune migration incrémentale n'est nécessaire pour V000–V131.** Les migrations futures (V132 et au-delà) devront être appliquées via `flyway migrate`.
 
 ### Étape 3 : Vérifier le résultat
 
@@ -55,7 +55,7 @@ Le résultat attendu :
 +------------+---------+-------------------------------+--------+---------------------+----------+
 | Category   | Version | Description                   | Type   | Installed On        | State    |
 +------------+---------+-------------------------------+--------+---------------------+----------+
-| Versioned  | 129     | baseline schema v088          | BASELN | ...                 | Baseline |
+| Versioned  | 131     | baseline_flyway               | BASELN | ...                 | Baseline |
 +------------+---------+-------------------------------+--------+---------------------+----------+
 ```
 
@@ -65,10 +65,10 @@ Le résultat attendu :
 
 ```bash
 # Comportement normal — aucune modification
-flyway migrate  # Applique uniquement les nouvelles migrations (V120+ futures)
+flyway migrate  # Applique uniquement les nouvelles migrations (V132+ futures)
 ```
 
-Les environnements existants ont déjà V000–V120 (ou V121) dans `flyway_schema_history`. Ce script ne les affecte pas. Ils appliquent V121 via `flyway migrate`.
+Les environnements existants ont déjà V000–V130 (ou V131) dans `flyway_schema_history`. Ce script ne les affecte pas. Ils appliquent V131 via `flyway migrate`.
 
 ---
 
@@ -92,6 +92,7 @@ Cela garantit un stockage en UTC quel que soit le timezone de la base ou de la s
 | Phase 4 — Trigger | TRG_AUDIT_LOG_IMMUTABLE |
 | Phase 4b — Maintenance | IDP_MAINTENANCE_LOG, PKG_IDP_MAINTENANCE |
 | Phase 4c — V113–V129 | WORKFLOW_EVENTS, WORKFLOW_EVENT_COUNTER, RUNNABLE_STEPS (V123 leases), WORKFLOW_COMMANDS, EXECUTION_OUTBOX, WORKFLOW_DEFINITIONS, WORKFLOW_STEPS, WORKFLOW_STEP_EDGES |
+| Phase 4d — V130–V131 | PROFILE_ACTION_ALLOWLIST, PROFILE_ACTION_TAG_PATTERNS, PROFILE_ACTION_ENVS (normalisation permissions action) |
 
 ### Données de référence insérées
 
@@ -114,6 +115,7 @@ Cela garantit un stockage en UTC quel que soit le timezone de la base ou de la s
 | `WORKFLOW_COMMANDS` table (V124) | Command Store durable |
 | `EXECUTION_OUTBOX` table (V125) | Transactional outbox |
 | `WORKFLOW_DEFINITIONS`, `WORKFLOW_STEPS`, `WORKFLOW_STEP_EDGES` (V127–V129) | Définitions workflow normalisées |
+| `PROFILE_ACTION_ALLOWLIST`, `PROFILE_ACTION_TAG_PATTERNS`, `PROFILE_ACTION_ENVS` (V130–V131) | Permissions action profil normalisées |
 | CONFIG_SYNC_* audit types, reference_data/tags entity types | IaC Config Sync |
 | `OUTPUT_SCHEMA_ID` sur ACTIONS_CATALOG | Schéma d'output déclaré |
 | `CONFIG_STEP_ID` sur EXECUTION_STEPS | Correspondance étape ↔ définition workflow |
@@ -152,13 +154,13 @@ Pour valider que le schéma produit par `baseline_flyway.sql` est identique à c
 # 1. Démarrer deux instances Oracle Docker
 docker-compose up oracle-a oracle-b
 
-# 2. Sur oracle-a : appliquer la chaîne complète V000–V129
+# 2. Sur oracle-a : appliquer la chaîne complète V000–V131
 flyway -url=jdbc:oracle:thin:@oracle-a:1521/XEPDB1 migrate
 
 # 3. Sur oracle-b : appliquer le baseline uniquement
 sqlplus idp_user/password@oracle-b:1521/XEPDB1 @database/baseline/baseline_flyway.sql
 flyway -url=jdbc:oracle:thin:@oracle-b:1521/XEPDB1 \
-       -baselineVersion=129 \
+       -baselineVersion=131 \
        -baselineDescription=baseline_flyway \
        baseline
 
@@ -166,7 +168,7 @@ flyway -url=jdbc:oracle:thin:@oracle-b:1521/XEPDB1 \
 ./scripts/export_schema.sh oracle-a > /tmp/schema-a.sql
 ./scripts/export_schema.sh oracle-b > /tmp/schema-b.sql
 diff <(normalize.sh /tmp/schema-a.sql) <(normalize.sh /tmp/schema-b.sql)
-# Résultat attendu : 0 différences structurelles (état V129)
+# Résultat attendu : 0 différences structurelles (état V131)
 ```
 
 ---
@@ -175,7 +177,7 @@ diff <(normalize.sh /tmp/schema-a.sql) <(normalize.sh /tmp/schema-b.sql)
 
 | Vérification | Commande SQL | Critère de succès |
 |--------------|-------------|-------------------|
-| Nombre de tables | `SELECT COUNT(*) FROM user_tables` | 40 tables |
+| Nombre de tables | `SELECT COUNT(*) FROM user_tables` | 43 tables |
 | Trigger immutabilité | `SELECT status FROM user_triggers WHERE trigger_name = 'TRG_AUDIT_LOG_IMMUTABLE'` | ENABLED |
 | Données REF_ENGINES | `SELECT COUNT(*) FROM REF_ENGINES` | 6 lignes |
 | Données REF_CATEGORIES | `SELECT COUNT(*) FROM REF_CATEGORIES` | 6 lignes |
@@ -188,7 +190,7 @@ diff <(normalize.sh /tmp/schema-a.sql) <(normalize.sh /tmp/schema-b.sql)
 | WORKFLOW_EVENTS exists | `SELECT COUNT(*) FROM user_tables WHERE table_name = 'WORKFLOW_EVENTS'` | 1 |
 | RUNNABLE_STEPS exists | `SELECT COUNT(*) FROM user_tables WHERE table_name = 'RUNNABLE_STEPS'` | 1 |
 | WORKFLOW_DEFINITIONS exists | `SELECT COUNT(*) FROM user_tables WHERE table_name = 'WORKFLOW_DEFINITIONS'` | 1 |
-| Historique Flyway | `SELECT version, state FROM flyway_schema_history ORDER BY installed_rank` | baseline V129 uniquement |
+| Historique Flyway | `SELECT version, state FROM flyway_schema_history ORDER BY installed_rank` | baseline V131 uniquement |
 
 ---
 

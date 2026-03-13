@@ -807,6 +807,12 @@ WORKFLOW_NORMALIZED_DEFINITIONS_ENABLED = os.getenv(
     'WORKFLOW_NORMALIZED_DEFINITIONS_ENABLED', 'False'
 ).lower() == 'true'
 
+# Story 78.11: Feature flag for normalized profile action permissions
+# Default: False (read from JSON CLOB). Set to True to read from normalized tables.
+PROFILE_ACTION_PERMISSIONS_NORMALIZED_ENABLED = os.getenv(
+    'PROFILE_ACTION_PERMISSIONS_NORMALIZED_ENABLED', 'False'
+).lower() == 'true'
+
 # ============================================================================
 # External Services Configuration (Story M.8 - Health Check)
 # ============================================================================

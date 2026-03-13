@@ -13,6 +13,7 @@ from django.db.models import QuerySet
 
 from core.environment import EnvironmentHelper
 from inventory.query_executor import InventoryServiceError
+from profiles.action_permission_repository import get_environments as repo_get_environments
 from profiles.models import Profile
 
 logger = structlog.get_logger(__name__)
@@ -60,7 +61,7 @@ class RBACPermissionAggregator:
 
             action_perm = getattr(profile, 'profileactionpermission', None)
             if action_perm:
-                envs = action_perm.get_environments()
+                envs = repo_get_environments(action_perm)
                 if envs:
                     self._add_normalized_environments(envs, allowed_environments)
             elif is_admin:
@@ -184,7 +185,7 @@ class RBACPermissionAggregator:
         for profile in profiles:
             action_perm = getattr(profile, 'profileactionpermission', None)
             if action_perm:
-                envs = action_perm.get_environments()
+                envs = repo_get_environments(action_perm)
                 if envs:
                     self._add_normalized_environments(envs, allowed_environments)
 

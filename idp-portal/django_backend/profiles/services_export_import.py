@@ -13,6 +13,11 @@ from django.db import transaction
 from catalog.models import Action
 from core.exceptions import InvalidStateError
 from core.services_cac_utils import parse_yaml, serialize_to_yaml, update_sync_tracking, validate_envelope
+from profiles.action_permission_repository import (
+    get_action_ids as repo_get_action_ids,
+    get_tag_patterns as repo_get_tag_patterns,
+    get_environments as repo_get_environments,
+)
 from profiles.models import Profile
 from profiles.services import ProfileService
 
@@ -140,13 +145,13 @@ def export_profile_yaml(name: str) -> bytes:
     else:
         actions_type = _PERMISSION_TYPE_MAP.get(actions_perm.permission_type, "all")
         if actions_type == "list":
-            action_names = _resolve_action_ids_to_names(actions_perm.get_action_ids())
+            action_names = _resolve_action_ids_to_names(repo_get_action_ids(actions_perm))
             spec["actions"] = _build_actions_block(actions_type, action_names, None)
         else:
             spec["actions"] = _build_actions_block(
-                actions_type, None, actions_perm.get_tag_patterns()
+                actions_type, None, repo_get_tag_patterns(actions_perm)
             )
-        envs = actions_perm.get_environments()
+        envs = repo_get_environments(actions_perm)
         if envs:
             spec["environments"] = envs
 
@@ -206,11 +211,11 @@ def export_profiles_yaml() -> bytes:
         else:
             actions_type = _PERMISSION_TYPE_MAP.get(actions_perm.permission_type, "all")
             if actions_type == "list":
-                action_names = _resolve_action_ids_to_names(actions_perm.get_action_ids())
+                action_names = _resolve_action_ids_to_names(repo_get_action_ids(actions_perm))
                 actions_block = _build_actions_block(actions_type, action_names, None)
             else:
                 actions_block = _build_actions_block(
-                    actions_type, None, actions_perm.get_tag_patterns()
+                    actions_type, None, repo_get_tag_patterns(actions_perm)
                 )
 
         if targets_perm is None:
@@ -238,7 +243,7 @@ def export_profiles_yaml() -> bytes:
             "is_approver": bool(full.is_approver),
             "actions": actions_block,
             "targets": targets_block,
-            "environments": actions_perm.get_environments() if actions_perm else [],
+            "environments": repo_get_environments(actions_perm) if actions_perm else [],
         })
 
     root = {"profiles": profiles_data}
@@ -300,12 +305,12 @@ def _permissions_differ(
         return True
     if actions_perm and incoming_actions_type == "PATTERN":
         incoming_pt = tuple(actions_payload.get("tag_patterns") or [])
-        current_pt = tuple(actions_perm.get_tag_patterns() or [])
+        current_pt = tuple(repo_get_tag_patterns(actions_perm) or [])
         if incoming_pt != current_pt:
             return True
     if actions_perm and incoming_actions_type == "LIST":
         incoming_ids = tuple(sorted(actions_payload.get("action_ids") or []))
-        current_ids = tuple(sorted(actions_perm.get_action_ids() or []))
+        current_ids = tuple(sorted(repo_get_action_ids(actions_perm) or []))
         if incoming_ids != current_ids:
             return True
 
