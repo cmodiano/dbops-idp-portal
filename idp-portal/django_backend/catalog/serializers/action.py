@@ -243,9 +243,7 @@ class ActionSerializer(WorkflowEnrichmentMixin, ActionFieldValidationMixin, seri
     platform = serializers.CharField(max_length=50, allow_null=True, required=False)
     category = serializers.CharField(max_length=50, allow_null=True, required=False)
     item_type = serializers.ChoiceField(choices=ActionItemType.choices, default=ActionItemType.ACTION)
-    integration_id = serializers.IntegerField(
-        source='integration.id', read_only=True, allow_null=True
-    )
+    integration_id = serializers.IntegerField(read_only=True, allow_null=True)
     business_rule_policy_id = serializers.PrimaryKeyRelatedField(
         queryset=BusinessRulePolicy.objects.all(),
         source='business_rule_policy',
@@ -450,11 +448,20 @@ class ActionCreateSerializer(ActionFieldValidationMixin, serializers.Serializer)
     def validate(self, data: dict[str, Any]) -> dict[str, Any]:
         item_type = data.get('item_type', ActionItemType.ACTION)
         is_update = self.context.get('is_update', False)
-        # En mode update partiel, ne pas exiger engine/platform si absents
-        if item_type == ActionItemType.ACTION and not is_update:
-            if not data.get('engine'):
+        instance = self.context.get('instance')
+
+        if item_type == ActionItemType.ACTION:
+            # Effective values: from request data, or existing instance (for partial update)
+            if is_update and instance is not None:
+                effective_engine = data.get('engine') if 'engine' in data else getattr(instance, 'engine', None)
+                effective_platform = data.get('platform') if 'platform' in data else getattr(instance, 'platform', None)
+            else:
+                effective_engine = data.get('engine')
+                effective_platform = data.get('platform')
+
+            if not effective_engine:
                 raise serializers.ValidationError("engine is required for action type")
-            if not data.get('platform'):
+            if not effective_platform:
                 raise serializers.ValidationError("platform is required for action type")
 
         platform = data.get('platform')

@@ -1509,3 +1509,17 @@ class TestActionCreateValidateEnginePlatformRequired(TestCase):
             'item_type': ActionItemType.WORKFLOW,
         })
         self.assertEqual(result['name'], 'Workflow No Engine')
+
+    def test_validate_patch_workflow_to_action_without_engine_platform_raises(self):
+        """PATCH changing item_type workflow→action without engine/platform must raise ValidationError."""
+        from types import SimpleNamespace
+
+        # Simulate a workflow instance (engine/platform=None) — avoids DB NOT NULL in SQLite
+        workflow = SimpleNamespace(engine=None, platform=None)
+        s = ActionCreateSerializer(
+            data={'item_type': ActionItemType.ACTION},
+            partial=True,
+            context={'is_update': True, 'instance': workflow},
+        )
+        self.assertFalse(s.is_valid())
+        self.assertIn('engine is required', str(s.errors))

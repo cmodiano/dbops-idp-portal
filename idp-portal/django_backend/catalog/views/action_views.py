@@ -209,7 +209,11 @@ class ActionViewSet(viewsets.ModelViewSet):
             return Response({"data": response_serializer.data})
 
         # Handle other fields via ActionCreateSerializer (context is_update pour validation partielle)
-        serializer = ActionCreateSerializer(data=request.data, partial=partial, context={'is_update': True})
+        serializer = ActionCreateSerializer(
+            data=request.data,
+            partial=partial,
+            context={'is_update': True, 'instance': instance},
+        )
         serializer.is_valid(raise_exception=True)
         update_data = serializer.validated_data
         svc = self.get_catalog_service()
