@@ -23,7 +23,8 @@ from executions.models import (
     ExecutionStepStatus,
     ExecutionStepType,
 )
-from executions.services.runnable_steps import RunnableStepService
+from executions.domain.state_machine import assert_execution_transition
+from executions.infra.work_queue import WorkQueue
 
 logger = structlog.get_logger(__name__)
 
@@ -123,7 +124,7 @@ def _enqueue_next_steps(
             step_type=db_step_type,
             status=ExecutionStepStatus.PENDING,
         )
-        RunnableStepService.enqueue(exec_step)
+        WorkQueue.enqueue(exec_step)
         enqueued += 1
 
     return enqueued
@@ -162,6 +163,9 @@ def _finalize_execution_if_done(execution: Execution, outcome: ExecutionStatus) 
         # If the current step was cancelled, propagate
         if outcome == ExecutionStatus.CANCELLED:
             final_status = ExecutionStatus.CANCELLED
+
+        # Validate transition legality before CAS (state_machine guards validity, CAS guards concurrency)
+        assert_execution_transition(ExecutionStatus.RUNNING, final_status)
 
         # CAS: only update if still RUNNING
         update_fields: dict = {
@@ -226,7 +230,7 @@ def process_runnable_steps(self: Any, batch_size: int = 5) -> dict:
     """
     worker_id = f"worker-{uuid.uuid4().hex[:8]}"
 
-    claimed = RunnableStepService.claim_batch(worker_id=worker_id, limit=batch_size)
+    claimed = WorkQueue.claim(batch_size=batch_size, worker_id=worker_id)
     if not claimed:
         return {"processed": 0, "worker_id": worker_id}
 
@@ -242,7 +246,7 @@ def process_runnable_steps(self: Any, batch_size: int = 5) -> dict:
                 runnable_id=runnable.id,
                 execution_step_id=runnable.execution_step_id,
             )
-            RunnableStepService.delete(runnable.execution_step_id)
+            WorkQueue.release(runnable.execution_step_id)
             continue
 
         execution = exec_step.execution
@@ -257,7 +261,7 @@ def process_runnable_steps(self: Any, batch_size: int = 5) -> dict:
                 execution_step_id=exec_step.id,
                 status=exec_step.status,
             )
-            RunnableStepService.delete(runnable.execution_step_id)
+            WorkQueue.release(runnable.execution_step_id)
             continue
 
         # Skip if execution is no longer RUNNING
@@ -269,7 +273,7 @@ def process_runnable_steps(self: Any, batch_size: int = 5) -> dict:
                 execution_status=execution.status,
                 execution_step_id=exec_step.id,
             )
-            RunnableStepService.delete(runnable.execution_step_id)
+            WorkQueue.release(runnable.execution_step_id)
             continue
 
         # Build runtime and find step config
@@ -287,7 +291,7 @@ def process_runnable_steps(self: Any, batch_size: int = 5) -> dict:
             exec_step.completed_at = timezone.now()
             exec_step.error_message = f"Runtime build failed: {exc}"
             exec_step.save(update_fields=['status', 'completed_at', 'error_message'])
-            RunnableStepService.delete(runnable.execution_step_id)
+            WorkQueue.release(runnable.execution_step_id)
             _finalize_execution_if_done(execution, ExecutionStatus.FAILED)
             continue
 
@@ -302,7 +306,7 @@ def process_runnable_steps(self: Any, batch_size: int = 5) -> dict:
             exec_step.completed_at = timezone.now()
             exec_step.error_message = f"Step config not found: {exec_step.config_step_id}"
             exec_step.save(update_fields=['status', 'completed_at', 'error_message'])
-            RunnableStepService.delete(runnable.execution_step_id)
+            WorkQueue.release(runnable.execution_step_id)
             _finalize_execution_if_done(execution, ExecutionStatus.FAILED)
             continue
 
@@ -326,7 +330,7 @@ def process_runnable_steps(self: Any, batch_size: int = 5) -> dict:
             next_step_ids = []
 
         # Dequeue the processed step
-        RunnableStepService.delete(runnable.execution_step_id)
+        WorkQueue.release(runnable.execution_step_id)
 
         # Enqueue next steps (if not WAITING / no next)
         if next_step_ids:

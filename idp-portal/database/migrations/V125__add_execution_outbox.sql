@@ -1,6 +1,9 @@
 -- V125: Add EXECUTION_OUTBOX table for transactional outbox pattern (Story 78.7)
 -- Persists side-effects (notifications, websocket broadcast, event emission)
 -- in the same transaction as the business mutation, enabling reliable at-least-once delivery.
+--
+-- CREATED_AT: TO_TIMESTAMP(TO_CHAR(SYSTIMESTAMP AT TIME ZONE 'UTC', ...)) ensures
+-- UTC storage regardless of database or session timezone (convention: all timestamps in UTC).
 
 CREATE TABLE EXECUTION_OUTBOX (
     ID              NUMBER(19) GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -9,7 +12,7 @@ CREATE TABLE EXECUTION_OUTBOX (
     PAYLOAD         CLOB CHECK (PAYLOAD IS JSON),
     STATUS          VARCHAR2(20) DEFAULT 'pending' NOT NULL,
     IDEMPOTENCY_KEY VARCHAR2(255) NOT NULL UNIQUE,
-    CREATED_AT      TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    CREATED_AT      TIMESTAMP DEFAULT TO_TIMESTAMP(TO_CHAR(SYSTIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS.FF6'), 'YYYY-MM-DD HH24:MI:SS.FF6') NOT NULL,
     DISPATCHED_AT   TIMESTAMP,
     ATTEMPT_NO      NUMBER(10) DEFAULT 0 NOT NULL,
     MAX_ATTEMPTS    NUMBER(10) DEFAULT 3 NOT NULL,

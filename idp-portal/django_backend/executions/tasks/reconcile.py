@@ -4,7 +4,7 @@ executions/tasks/reconcile.py — Réconciliateur simplifié : crash recovery po
 Story 78.6 — Réconciliateur simplifié post-worker d'orchestration.
 
 Responsabilités (ce que fait le réconciliateur) :
-  1. Reclaim des leases expirés (RunnableStepService.reclaim_expired_leases) — crash recovery worker
+  1. Reclaim des leases expirés (WorkQueue.reclaim_expired) — crash recovery worker
   2. Re-drive des commandes pending (WorkflowCommandService.process_pending_commands) — commandes stuck
   3. Détection stale (RUNNING + cutoff) :
      - Step RUNNING avec platform_job_id réel → reattach poll (_reattach_poll)
@@ -213,7 +213,7 @@ def _enqueue_recovery_steps(execution: Any, correlation_id: str = "") -> str:
 
     Story 78.6 — Replaces _resume_container_workflow(). Instead of calling
     _execute_workflow_steps() (the old thread-based BFS loop), computes the next
-    wave and enqueues via RunnableStepService.enqueue(). The orchestration worker
+    wave and enqueues via WorkQueue.enqueue(). The orchestration worker
     (78.5) handles actual execution.
 
     If all steps are terminal and no next wave exists, finalizes the execution
@@ -355,19 +355,21 @@ def _reset_and_enqueue_step(step: Any) -> bool:
 
     Story 78.6 — Replaces _retry_non_platform_step(). Instead of executing the
     handler inline, resets the step status to PENDING and enqueues via
-    RunnableStepService.enqueue(). The orchestration worker (78.5) handles execution.
+    WorkQueue.enqueue(). The orchestration worker (78.5) handles execution.
 
     Returns True if the step was successfully enqueued, False otherwise.
     """
     from executions.models import ExecutionStepStatus  # noqa: PLC0415
-    from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
+    from executions.domain.state_machine import assert_step_transition  # noqa: PLC0415
+    from executions.infra.work_queue import WorkQueue  # noqa: PLC0415
 
     try:
+        assert_step_transition(step.status, ExecutionStepStatus.PENDING)
         step.status = ExecutionStepStatus.PENDING
         step.error_message = None
         step.save(update_fields=["status", "error_message"])
 
-        RunnableStepService.enqueue(step)
+        WorkQueue.enqueue(step)
 
         logger.info(
             "reconcile_step_reset_and_enqueued",
@@ -693,11 +695,11 @@ def reconcile_stale_executions() -> dict:
         dict with 'reattached', 'failed', 'skipped', 'errors' counts.
     """
     from executions.models import Execution, ExecutionStatus  # noqa: PLC0415
-    from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
+    from executions.infra.work_queue import WorkQueue  # noqa: PLC0415
     from executions.services.workflow_commands import WorkflowCommandService  # noqa: PLC0415
 
     # 1. Reclaim expired leases before stale detection (Story 78.2)
-    RunnableStepService.reclaim_expired_leases()
+    WorkQueue.reclaim_expired()
 
     # 2. Re-drive pending commands (Story 78.6 — AC2)
     # Best-effort: log + continue if re-drive fails

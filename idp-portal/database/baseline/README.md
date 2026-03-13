@@ -74,6 +74,14 @@ Les environnements existants ont déjà V000–V120 (ou V121) dans `flyway_schem
 
 ## Contenu de baseline_schema_v088.sql
 
+### Convention timestamps (UTC)
+
+Tous les colonnes `TIMESTAMP` avec valeur par défaut utilisent :
+```sql
+TO_TIMESTAMP(TO_CHAR(SYSTIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS.FF6'), 'YYYY-MM-DD HH24:MI:SS.FF6')
+```
+Cela garantit un stockage en UTC quel que soit le timezone de la base ou de la session.
+
 ### Tables créées (34)
 
 | Phase | Tables |

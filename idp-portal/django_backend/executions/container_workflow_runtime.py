@@ -32,7 +32,7 @@ from django.utils import timezone
 from catalog.models import Action, ActionItemType, ActionStatus
 from executions.models import (
     Execution, ExecutionStep, ExecutionStatus, ExecutionStepStatus,
-    ExecutionStepType,
+    ExecutionStepType, WorkflowEventType,
 )
 from executions.dtos import ExecutionRequest
 from executions.services import ExecutionService
@@ -57,6 +57,7 @@ from executions.container_routing import (
     get_next_step_ids as _routing_get_next_step_ids,
 )
 from executions.container_parallel import apply_join_policy as _parallel_apply_join_policy
+from executions.domain.state_machine import assert_execution_transition, assert_step_transition
 
 logger = structlog.get_logger(__name__)
 
@@ -1067,6 +1068,7 @@ class ContainerWorkflowRuntime:
                 'approval' if cond_type == 'approval_granted' else 'maintenance_window'
             )
         parent_step.set_output(gate_output)
+        assert_step_transition(parent_step.status, ExecutionStepStatus.WAITING)
         parent_step.status = ExecutionStepStatus.WAITING
         parent_step.save()
 
@@ -1087,8 +1089,17 @@ class ContainerWorkflowRuntime:
             if self._has_approval_notification_configured():
                 self._schedule_approval_notification()
             try:
-                from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
-                WorkflowEventService.emit_approval_requested(self.execution.id, parent_step)
+                from executions.infra.event_store import EventStore  # noqa: PLC0415
+                EventStore.append_event(
+                    execution_id=self.execution.id,
+                    event_type=WorkflowEventType.APPROVAL_REQUESTED,
+                    payload={
+                        "step_order": parent_step.step_order,
+                        "step_name": parent_step.step_name,
+                        "status": parent_step.status,
+                    },
+                    step_id=parent_step.id,
+                )
             except Exception as e:  # noqa: BLE001 — best-effort: must not fail runtime
                 logger.error(
                     "container_workflow_emit_approval_requested_failed",
@@ -1149,6 +1160,7 @@ class ContainerWorkflowRuntime:
             if result_execution_status == ExecutionStatus.FAILED
             else ExecutionStepStatus.COMPLETED
         )
+        assert_step_transition(parent_step.status, final_step_status)
         parent_step.status = final_step_status
         parent_step.completed_at = timezone.now()
 
@@ -1212,6 +1224,7 @@ class ContainerWorkflowRuntime:
                 execution_id=self.execution.id,
                 correlation_id=self.correlation_id,
             )
+            assert_step_transition(parent_step.status, ExecutionStepStatus.FAILED)
             parent_step.status = ExecutionStepStatus.FAILED
             parent_step.completed_at = timezone.now()
             parent_step.save()
@@ -1258,6 +1271,9 @@ class ContainerWorkflowRuntime:
             correlation_id=self.correlation_id,
         )
 
+        # Validate transition legality before CAS (state_machine guards validity, CAS guards concurrency)
+        assert_execution_transition(self.execution.status, ExecutionStatus.RUNNING)
+
         # CAS transition SUBMITTED→RUNNING to prevent double-start (Story 71.7 AC#3)
         updated = Execution.objects.filter(
             id=self.execution.id,
@@ -1283,6 +1299,7 @@ class ContainerWorkflowRuntime:
                 action_id=self.action.id,
                 correlation_id=self.correlation_id,
             )
+            assert_execution_transition(self.execution.status, ExecutionStatus.FAILED)
             self.execution.status = ExecutionStatus.FAILED
             self.execution.completed_at = timezone.now()
             self.execution.error_message = "Workflow has no steps"
@@ -1300,6 +1317,7 @@ class ContainerWorkflowRuntime:
                     execution_id=self.execution.id,
                     correlation_id=self.correlation_id,
                 )
+                assert_execution_transition(self.execution.status, ExecutionStatus.FAILED)
                 self.execution.status = ExecutionStatus.FAILED
                 self.execution.completed_at = timezone.now()
                 self.execution.error_message = str(WorkflowLegacyDisabledError())
@@ -1319,7 +1337,7 @@ class ContainerWorkflowRuntime:
             )
             return
 
-        from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
+        from executions.infra.work_queue import WorkQueue  # noqa: PLC0415
 
         enqueued_count = 0
         for step_id in initial_wave:
@@ -1346,11 +1364,12 @@ class ContainerWorkflowRuntime:
                 step_type=db_step_type,
                 status=ExecutionStepStatus.PENDING,
             )
-            RunnableStepService.enqueue(exec_step)
+            WorkQueue.enqueue(exec_step)
             enqueued_count += 1
 
         if enqueued_count == 0:
             # No root steps could be enqueued — mark FAILED
+            assert_execution_transition(self.execution.status, ExecutionStatus.FAILED)
             self.execution.status = ExecutionStatus.FAILED
             self.execution.completed_at = timezone.now()
             self.execution.error_message = "No root steps found to enqueue"
@@ -1380,6 +1399,9 @@ class ContainerWorkflowRuntime:
             correlation_id=self.correlation_id,
         )
 
+        # Validate transition legality before CAS (state_machine guards validity, CAS guards concurrency)
+        assert_execution_transition(self.execution.status, ExecutionStatus.RUNNING)
+
         # CAS transition SUBMITTED→RUNNING to prevent double-start (Story 71.7 AC#3)
         updated = Execution.objects.filter(
             id=self.execution.id,
@@ -1403,6 +1425,7 @@ class ContainerWorkflowRuntime:
             self.execution.refresh_from_db(fields=['status', 'started_at'])
 
         if not self.workflow_steps:
+            assert_execution_transition(self.execution.status, ExecutionStatus.FAILED)
             self.execution.status = ExecutionStatus.FAILED
             self.execution.completed_at = timezone.now()
             self.execution.error_message = "Workflow has no steps"
@@ -1516,7 +1539,8 @@ class ContainerWorkflowRuntime:
         # Heartbeat
         self._touch_heartbeat()
 
-        # Transition to RUNNING
+        # Transition to RUNNING (state_machine validates PENDING→RUNNING)
+        assert_step_transition(exec_step.status, ExecutionStepStatus.RUNNING)
         exec_step.status = ExecutionStepStatus.RUNNING
         exec_step.started_at = timezone.now()
         exec_step.save(update_fields=['status', 'started_at'])
@@ -1524,6 +1548,7 @@ class ContainerWorkflowRuntime:
 
         # Check cancellation
         if self._check_cancelled():
+            assert_step_transition(exec_step.status, ExecutionStepStatus.FAILED)
             exec_step.status = ExecutionStepStatus.FAILED
             exec_step.completed_at = timezone.now()
             exec_step.error_message = "Execution cancelled"
@@ -1549,6 +1574,7 @@ class ContainerWorkflowRuntime:
         condition_evaluator = StepConditionEvaluator()
         if not condition_evaluator.should_execute(step_config, self.execution):
             now = timezone.now()
+            assert_step_transition(exec_step.status, ExecutionStepStatus.SKIPPED)
             exec_step.status = ExecutionStepStatus.SKIPPED
             exec_step.completed_at = now
             exec_step.save(update_fields=['status', 'completed_at'])
@@ -1563,6 +1589,7 @@ class ContainerWorkflowRuntime:
         elif step_type in ('service_call', 'http_request', 'evaluation', 'gate'):
             status = self._worker_execute_handler(exec_step, step_config, step_type, resolved_params)
         else:
+            assert_step_transition(exec_step.status, ExecutionStepStatus.FAILED)
             exec_step.status = ExecutionStepStatus.FAILED
             exec_step.completed_at = timezone.now()
             exec_step.error_message = f"Unknown step_type: {step_type!r}"
@@ -1612,6 +1639,7 @@ class ContainerWorkflowRuntime:
                 if child_execution.status == ExecutionStatus.COMPLETED
                 else ExecutionStepStatus.FAILED
             )
+            assert_step_transition(exec_step.status, final_step_status)
             exec_step.status = final_step_status
             exec_step.completed_at = timezone.now()
 
@@ -1645,6 +1673,7 @@ class ContainerWorkflowRuntime:
             return cast(ExecutionStatus, child_execution.status)
         except Exception as exc:  # noqa: BLE001
             with transaction.atomic():
+                assert_step_transition(exec_step.status, ExecutionStepStatus.FAILED)
                 exec_step.status = ExecutionStepStatus.FAILED
                 exec_step.completed_at = timezone.now()
                 exec_step.error_message = f"Platform step failed: {exc}"
@@ -1688,6 +1717,7 @@ class ContainerWorkflowRuntime:
             case 'gate':
                 handler = GateHandler()
             case _:
+                assert_step_transition(exec_step.status, ExecutionStepStatus.FAILED)
                 exec_step.status = ExecutionStepStatus.FAILED
                 exec_step.completed_at = timezone.now()
                 exec_step.error_message = f"Unknown handler step_type: {step_type!r}"
@@ -1710,6 +1740,7 @@ class ContainerWorkflowRuntime:
                 execution_id=self.execution.id,
                 correlation_id=self.correlation_id,
             )
+            assert_step_transition(exec_step.status, ExecutionStepStatus.FAILED)
             exec_step.status = ExecutionStepStatus.FAILED
             exec_step.completed_at = timezone.now()
             exec_step.save(update_fields=['status', 'completed_at'])

@@ -171,7 +171,9 @@ class WorkflowCommandService:
             )
             return  # Idempotent: already processed
 
-        # Update step status
+        # Update step status (state_machine validates WAITING→COMPLETED)
+        from executions.domain.state_machine import assert_step_transition  # noqa: PLC0415
+        assert_step_transition(step.status, ExecutionStepStatus.COMPLETED)
         step.status = ExecutionStepStatus.COMPLETED
         step.completed_at = timezone.now()
         step.approval_comment = payload.get("comment", "")
@@ -256,6 +258,8 @@ class WorkflowCommandService:
             )
             return  # Idempotent
 
+        from executions.domain.state_machine import assert_step_transition  # noqa: PLC0415
+        assert_step_transition(step.status, ExecutionStepStatus.FAILED)
         step.status = ExecutionStepStatus.FAILED
         step.completed_at = timezone.now()
         step.approval_comment = payload.get("comment", "")
@@ -317,6 +321,10 @@ class WorkflowCommandService:
             )
             return  # Idempotent
 
+        # Validate transition legality before CAS
+        from executions.domain.state_machine import assert_execution_transition  # noqa: PLC0415
+        assert_execution_transition(execution.status, ExecutionStatus.CANCELLED)
+
         # CAS update to CANCELLED
         updated = Execution.objects.filter(
             id=execution.id,
@@ -349,8 +357,8 @@ class WorkflowCommandService:
         )
 
         # Dequeue all runnable steps for this execution
-        from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
-        RunnableStepService.delete_for_execution(execution.id)
+        from executions.infra.work_queue import WorkQueue  # noqa: PLC0415
+        WorkQueue.delete_for_execution(execution.id)
 
         # Mark in cancellation cache
         from executions.cancellation_cache import mark_cancelled  # noqa: PLC0415
@@ -393,14 +401,16 @@ class WorkflowCommandService:
         if step.status != ExecutionStepStatus.WAITING:
             return  # Idempotent
 
+        from executions.domain.state_machine import assert_step_transition  # noqa: PLC0415
+        assert_step_transition(step.status, ExecutionStepStatus.FAILED)
         step.status = ExecutionStepStatus.FAILED
         step.completed_at = timezone.now()
         step.error_message = "Step timed out"
         step.save()
 
         # Dequeue
-        from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
-        RunnableStepService.delete(step.id)
+        from executions.infra.work_queue import WorkQueue  # noqa: PLC0415
+        WorkQueue.release(step.id)
 
         # Route to error path
         execution = step.execution
@@ -482,7 +492,7 @@ class WorkflowCommandService:
         cls, execution: Execution, step_ids: list[str], all_steps: list,
     ) -> None:
         """Create PENDING ExecutionSteps for the given step_ids and enqueue them."""
-        from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
+        from executions.infra.work_queue import WorkQueue  # noqa: PLC0415
         from executions.container_workflow_runtime import ContainerWorkflowRuntime  # noqa: PLC0415
         from django.db.models import Max  # noqa: PLC0415
 
@@ -533,7 +543,7 @@ class WorkflowCommandService:
                 step_type=db_step_type,
                 status=ExecutionStepStatus.PENDING,
             )
-            RunnableStepService.enqueue(exec_step)
+            WorkQueue.enqueue(exec_step)
 
     @staticmethod
     def _finalize_if_done(execution: Execution) -> None:
