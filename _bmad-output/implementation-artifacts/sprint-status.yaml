@@ -935,7 +935,7 @@ development_status:
     # Fiabilité niveau entreprise : file pilote unique, séquence atomique, leases, normalisation CLOB, workers stateless
     epic-78: in-progress
     78-1-workflow-event-counter-sequence-atomique: done
-    78-2-runnable-steps-leases-reclaim: backlog
+    78-2-runnable-steps-leases-reclaim: done # Code review 2026-03-13: 3 MEDIUM fixes (M1 eligible_at test helper, M2 double logging, M3 max_attempts enforcement) — 17/17 tests
     78-3-alignement-config-step-id-model-schema: backlog
     78-4-workflow-commands-table: backlog
     78-5-dispatch-file-container-workflow-runtime: backlog

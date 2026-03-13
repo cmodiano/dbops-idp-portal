@@ -13,9 +13,12 @@ Usage:
 from __future__ import annotations
 
 import structlog
+from datetime import timedelta
 from typing import TYPE_CHECKING
 
+from django.conf import settings
 from django.db import IntegrityError, transaction
+from django.db.models import F, Q
 from django.utils import timezone
 
 from executions.models import RunnableStep
@@ -24,6 +27,9 @@ if TYPE_CHECKING:
     from executions.models import ExecutionStep
 
 logger = structlog.get_logger(__name__)
+
+
+LEASE_DURATION_SECONDS = getattr(settings, 'RUNNABLE_STEP_LEASE_SECONDS', 300)
 
 
 class RunnableStepService:
@@ -93,11 +99,17 @@ class RunnableStepService:
             List of claimed RunnableStep instances.
         """
         now = timezone.now()
+        lease_until = now + timedelta(seconds=LEASE_DURATION_SECONDS)
         try:
             with transaction.atomic():
                 qs = (
                     RunnableStep.objects
-                    .filter(claimed_at__isnull=True)
+                    .filter(eligible_at__lte=now)
+                    .filter(
+                        Q(claimed_until__isnull=True) |
+                        Q(claimed_until__lt=now)
+                    )
+                    .exclude(attempt_no__gte=F('max_attempts'))
                     .select_for_update(skip_locked=True)
                     .order_by('-priority', 'eligible_at')
                 )
@@ -110,11 +122,15 @@ class RunnableStepService:
                     RunnableStep.objects.filter(id__in=ids).update(
                         claimed_at=now,
                         claimed_by=worker_id,
+                        claimed_until=lease_until,
+                        attempt_no=F('attempt_no') + 1,
                     )
                     # Refresh instances to reflect the update
                     for r in batch:
                         r.claimed_at = now
                         r.claimed_by = worker_id
+                        r.claimed_until = lease_until
+                        r.attempt_no = (r.attempt_no or 0) + 1
 
                     logger.info(
                         "runnable_steps_claimed",
@@ -187,9 +203,34 @@ class RunnableStepService:
             raise
 
     @staticmethod
+    def reclaim_expired_leases() -> int:
+        """Reclaim steps whose lease has expired (worker crash recovery).
+
+        Resets claimed_at, claimed_by, claimed_until but preserves attempt_no
+        to track cumulative attempts across crashes.
+
+        Returns:
+            Number of rows reclaimed.
+        """
+        now = timezone.now()
+        updated = RunnableStep.objects.filter(
+            claimed_until__lt=now
+        ).update(
+            claimed_at=None,
+            claimed_by=None,
+            claimed_until=None,
+        )
+        if updated:
+            logger.info("runnable_steps_leases_reclaimed", count=updated)
+        return updated
+
+    @staticmethod
     def pending_count(execution_id: int | None = None) -> int:
-        """Count unclaimed runnable steps (for monitoring)."""
-        qs = RunnableStep.objects.filter(claimed_at__isnull=True)
+        """Count available runnable steps (unclaimed or lease expired)."""
+        now = timezone.now()
+        qs = RunnableStep.objects.filter(
+            Q(claimed_until__isnull=True) | Q(claimed_until__lt=now)
+        )
         if execution_id:
             qs = qs.filter(execution_id=execution_id)
         return qs.count()

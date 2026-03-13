@@ -901,6 +901,11 @@ def reconcile_stale_executions() -> dict:
         dict with 'reattached', 'failed', 'skipped', 'errors' counts.
     """
     from executions.models import Execution, ExecutionStatus  # noqa: PLC0415
+    from executions.services.runnable_steps import RunnableStepService  # noqa: PLC0415
+
+    # Reclaim expired leases before stale detection (Story 78.2)
+    # Note: reclaim_expired_leases() log déjà "runnable_steps_leases_reclaimed"
+    RunnableStepService.reclaim_expired_leases()
 
     cutoff = timezone.now() - timedelta(minutes=STALE_THRESHOLD_MINUTES)
 

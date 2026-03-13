@@ -3,6 +3,7 @@ import structlog
 from datetime import datetime
 from typing import Any, cast
 from django.db import models
+from django.utils import timezone
 from idp_auth.models import User
 from catalog.models import Action
 
@@ -718,13 +719,17 @@ class RunnableStep(models.Model):
     eligible_at = models.DateTimeField(auto_now_add=True, db_column='ELIGIBLE_AT')
     claimed_at = models.DateTimeField(null=True, blank=True, db_column='CLAIMED_AT')
     claimed_by = models.CharField(max_length=255, null=True, blank=True, db_column='CLAIMED_BY')
+    claimed_until = models.DateTimeField(null=True, blank=True, db_column='CLAIMED_UNTIL')
+    attempt_no = models.IntegerField(default=0, db_column='ATTEMPT_NO')
+    last_error = models.TextField(null=True, blank=True, db_column='LAST_ERROR')
+    max_attempts = models.IntegerField(default=3, db_column='MAX_ATTEMPTS')
     created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
 
     class Meta:
         db_table = 'RUNNABLE_STEPS'
         ordering = ['-priority', 'eligible_at']
         indexes = [
-            models.Index(fields=['claimed_at', '-priority', 'eligible_at'], name='idx_runnable_unclaimed'),
+            models.Index(fields=['eligible_at', 'claimed_until', '-priority'], name='idx_runnable_steps_lease'),
         ]
 
     def __str__(self) -> str:
@@ -732,5 +737,18 @@ class RunnableStep(models.Model):
 
     @property
     def is_claimed(self) -> bool:
-        """Whether this step has been claimed by a worker."""
-        return self.claimed_at is not None
+        """Active si lease non expiré."""
+        if self.claimed_until is None:
+            return False
+        return self.claimed_until > timezone.now()
+
+    @property
+    def is_lease_expired(self) -> bool:
+        """True si un claim existe mais le lease a expiré (crash worker)."""
+        if self.claimed_at is None or self.claimed_until is None:
+            return False
+        return self.claimed_until <= timezone.now()
+
+    @property
+    def has_exceeded_max_attempts(self) -> bool:
+        return self.attempt_no >= self.max_attempts
