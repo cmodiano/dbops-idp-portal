@@ -947,7 +947,7 @@ development_status:
     78-11-profile-action-permission-normalisees: done # Code review 2026-03-13: 4 fixes (H1 V131 DISTINCT doublons JSON, H2 sorted() JSON readers, M1 import hors boucle, M2 DRY tests conftest) — 36/36 tests
     78-12-profile-target-permission-normalisees: done # Code review 2026-03-13: 3 fixes (H1 sorted/unsorted comparison _permissions_differ, M1 double query get_filter_by_attribute_from_normalized, M2 or[] redondants) — 48/48 tests
     78-13-contraintes-json-tier2: done # Code review 2026-03-13: 4 fixes (H1 v_pk NUMBER, M1 troncature indicator, M2 verify script DRY+cas disabled, M3 commentaires SQLCODE) + L1 SET TIMING ON
-    78-14-deprecation-colonnes-runtime-legacy: backlog
+    78-14-deprecation-colonnes-runtime-legacy: done # Code review 2026-03-13: 6 fixes (CRIT V135 idempotence DROP/ADD, H1 services.py comments, H2 test_audit_trail PENDING_APPROVAL, H3 test_rbac_security, M1 test_models, M2 test_parametrized) + L1 baseline (informatif)
     78-15-suppression-clob-permissions-legacy: backlog
     78-16-observabilite-metriques-runbooks-alertes: backlog
     epic-78-retrospective: optional

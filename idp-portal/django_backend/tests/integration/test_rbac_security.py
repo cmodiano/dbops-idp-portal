@@ -329,16 +329,19 @@ class TestRBACEnvironmentPermissions(TestCase):
         self.assertIn('prod', envs)
 
     def test_prod_requires_approval(self):
-        """Test that prod executions require approval workflow."""
+        """Test that prod executions require approval workflow.
+        ADR-007: approval is now step-based (SUBMITTED + gate step), not PENDING_APPROVAL status.
+        DEPRECATED (78.14): PENDING_APPROVAL removed from DB CHECK (V135).
+        """
         execution = Execution.objects.create(
             action=self.action,
             user=self.user,
             environment='prod',
-            status=ExecutionStatus.PENDING_APPROVAL  # Must go through approval
+            status=ExecutionStatus.SUBMITTED  # ADR-007: approval via gate step, not status
         )
 
         self.assertEqual(execution.environment, 'prod')
-        self.assertEqual(execution.status, ExecutionStatus.PENDING_APPROVAL)
+        self.assertEqual(execution.status, ExecutionStatus.SUBMITTED)
 
 
 @pytest.mark.django_db

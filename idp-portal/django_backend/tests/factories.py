@@ -202,6 +202,7 @@ class ExecutionFactory(DjangoModelFactory):
     }))
     status = 'SUBMITTED'
     servicenow_change_id = None
+    # DEPRECATED (78.14, ADR-007) — Source of truth: ExecutionStep. Suppression Story 78.15.
     approved_by = None
     approved_at = None
     approval_comment = None

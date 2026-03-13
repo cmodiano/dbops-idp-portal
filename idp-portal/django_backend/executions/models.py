@@ -12,16 +12,16 @@ logger = structlog.get_logger(__name__)
 
 class ExecutionStatus(models.TextChoices):
     """
-    Execution status enum matching Oracle CHECK constraint (V023, V030, V057).
+    Execution status enum matching Oracle CHECK constraint (V023, V030, V057, V135).
 
     Status flow:
     - SUBMITTED: Successfully submitted to platform (AAP, ServiceNow, etc.)
     - INTEGRATION_ERROR: Failed to submit to platform (platform unreachable, API error, etc.)
       This is a PRE-execution failure — the execution never reached the platform.
       Distinct from FAILED which means the platform received and processed the request but it failed.
-    - PENDING_APPROVAL: DEPRECATED (ADR-007) — kept for Oracle DB CHECK constraint compatibility.
-      Approvals are now handled via ExecutionStep WAITING gates.
-      Will be removed in a future migration.
+    - PENDING_APPROVAL: DEPRECATED (78.14, ADR-007) — REMOVED FROM DB CHECK constraint (V135).
+      Kept in Python enum for backward-compat (audit log mapping, state machine dead-state).
+      Will be fully removed in Story 78.15.
     - RUNNING: Execution in progress on platform
     - COMPLETED: Execution finished successfully
     - FAILED: Execution failed during/after platform processing
@@ -30,6 +30,7 @@ class ExecutionStatus(models.TextChoices):
     """
     SUBMITTED = 'SUBMITTED', 'Submitted'
     INTEGRATION_ERROR = 'INTEGRATION_ERROR', 'Integration Error'  # Story 18.6 (V057)
+    # DEPRECATED (78.14, ADR-007) — REMOVED FROM DB CHECK (V135). Kept for audit/state_machine backward-compat.
     PENDING_APPROVAL = 'PENDING_APPROVAL', 'Pending Approval'
     RUNNING = 'RUNNING', 'Running'
     COMPLETED = 'COMPLETED', 'Completed'
@@ -134,8 +135,8 @@ class Execution(models.Model):
         db_column='SERVICENOW_CHANGE_ID'
     )
     # Approval workflow fields (V030)
-    # DEPRECATED ADR-007 (Story 57.12) — La source de vérité est ExecutionStep.approved_by depuis Story 57.1.
-    # Ce champ sera supprimé dans une release future. Ne plus écrire dans ce champ.
+    # DEPRECATED (78.14, ADR-007) — Source of truth: EXECUTION_STEPS.APPROVED_BY.
+    # Ne plus écrire. Suppression prévue Story 78.15. Lecture résiduelle: dashboard operations_approbations (backward-compat).
     approved_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
@@ -144,9 +145,9 @@ class Execution(models.Model):
         related_name='approved_executions',
         db_column='APPROVED_BY'
     )
-    # DEPRECATED ADR-007 (Story 57.12) — source de vérité: ExecutionStep.approved_at
+    # DEPRECATED (78.14, ADR-007) — Source of truth: EXECUTION_STEPS.APPROVED_AT. Suppression Story 78.15.
     approved_at = models.DateTimeField(null=True, blank=True, db_column='APPROVED_AT')
-    # DEPRECATED ADR-007 (Story 57.12) — source de vérité: ExecutionStep.approval_comment
+    # DEPRECATED (78.14, ADR-007) — Source of truth: EXECUTION_STEPS.APPROVAL_COMMENT. Suppression Story 78.15.
     approval_comment = models.CharField(
         max_length=1000,
         null=True,

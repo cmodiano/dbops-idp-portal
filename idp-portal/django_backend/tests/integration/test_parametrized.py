@@ -263,7 +263,8 @@ class TestParametrizedExecutionStatus:
 
     @pytest.mark.parametrize('status', [
         ExecutionStatus.SUBMITTED,
-        ExecutionStatus.PENDING_APPROVAL,
+        ExecutionStatus.INTEGRATION_ERROR,
+        # DEPRECATED (78.14): PENDING_APPROVAL removed from DB CHECK (V135) — not a valid DB status anymore
         ExecutionStatus.RUNNING,
         ExecutionStatus.COMPLETED,
         ExecutionStatus.FAILED,
@@ -271,7 +272,7 @@ class TestParametrizedExecutionStatus:
         ExecutionStatus.REJECTED,
     ])
     def test_all_execution_statuses(self, status):
-        """Test that all execution status values are valid."""
+        """Test that all execution status values are valid in DB CHECK constraint."""
         execution = Execution.objects.create(
             action=self.action,
             user=self.user,

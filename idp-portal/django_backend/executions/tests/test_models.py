@@ -53,7 +53,11 @@ class ExecutionModelTest(TestCase):
         self.assertEqual(execution.get_parameters(), params)
 
     def test_execution_approval_fields(self):
-        """Test approval workflow fields."""
+        """Test approval workflow fields.
+        DEPRECATED (78.14, ADR-007): approved_by/approval_comment on Execution are deprecated.
+        Source of truth is ExecutionStep. Fields kept for backward-compat reads only.
+        PENDING_APPROVAL removed from DB CHECK (V135) — use SUBMITTED instead.
+        """
         approver = User.objects.create(
             username='approver',
             profile='DBA'
@@ -62,7 +66,7 @@ class ExecutionModelTest(TestCase):
             action=self.action,
             user=self.user,
             environment='production',
-            status='PENDING_APPROVAL',
+            status='SUBMITTED',
             approved_by=approver,
             approval_comment='Approved for production'
         )
