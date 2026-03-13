@@ -945,8 +945,8 @@ development_status:
     78-9-consolidation-state-machine-persistence: done # Code review 2026-03-13: 9 fixes (H1 suppression assert CAS inutile, H2/H3 params fantômes WorkQueue, M1 10+ transitions non gardées, M2 guard _handle_cancel, M3 renommage release(), M4 validation entity_id EventStore, L1/L2 commentaires stale) — 57/57 tests + 2021 régression
     78-10-workflow-definitions-normalisees: done # Code review 2026-03-13: 4 fixes (H1-H3 parity check faux positifs nulls/empty arrays, M2 bulk_create edges, L1 test parity empty arrays). BLOQUANT: C1 fichiers non commités (_workflow_definition_test_helpers.py, test_story_78_10_dual_write.py + 3 fichiers modifiés non staged) — 37/37 tests
     78-11-profile-action-permission-normalisees: done # Code review 2026-03-13: 4 fixes (H1 V131 DISTINCT doublons JSON, H2 sorted() JSON readers, M1 import hors boucle, M2 DRY tests conftest) — 36/36 tests
-    78-12-profile-target-permission-normalisees: backlog
-    78-13-contraintes-json-tier2: backlog
+    78-12-profile-target-permission-normalisees: done # Code review 2026-03-13: 3 fixes (H1 sorted/unsorted comparison _permissions_differ, M1 double query get_filter_by_attribute_from_normalized, M2 or[] redondants) — 48/48 tests
+    78-13-contraintes-json-tier2: done # Code review 2026-03-13: 4 fixes (H1 v_pk NUMBER, M1 troncature indicator, M2 verify script DRY+cas disabled, M3 commentaires SQLCODE) + L1 SET TIMING ON
     78-14-deprecation-colonnes-runtime-legacy: backlog
     78-15-suppression-clob-permissions-legacy: backlog
     78-16-observabilite-metriques-runbooks-alertes: backlog
