@@ -916,9 +916,30 @@ class ContainerWorkflowRuntime:
                 parent_step.status = final_step_status
                 parent_step.completed_at = timezone.now()
 
-                # Story 77.1: Persist standard output structure for durable resume after gates.
-                # Metadata fields preserved in raw_output; Story 77.4 will enrich with real artifacts.
+                # Story 77.4: Enrich raw_output with real platform artifacts from child_step.
+                # child_platform_output may contain: artifacts, job_status, platform_logs,
+                # outputs, failed_tasks, changed_hosts, platform_job_id, etc.
+                # Guard: only query for item_type=ACTION — _run_child_execution creates exactly
+                # one PLATFORM tracking step in that case. For WORKFLOW items, the child
+                # execution may have its own PLATFORM steps (from its internal workflow steps)
+                # which must NOT be merged into the outer raw_output (AC3).
+                if referenced_action.item_type == ActionItemType.ACTION:
+                    child_platform_step = (
+                        ExecutionStep.objects.filter(
+                            execution=child_execution,
+                            step_type=ExecutionStepType.PLATFORM,
+                        )
+                        .order_by('step_order')
+                        .first()
+                    )
+                else:
+                    child_platform_step = None
+                child_platform_output = child_platform_step.get_output() if child_platform_step else {}
+
                 raw_output = {
+                    # Story 77.4: real platform data (artifacts, outputs, job_status, etc.) — merged first
+                    **(child_platform_output or {}),
+                    # Metadata fields — always present, take priority over any conflicting keys
                     'child_execution_id': child_execution.id,
                     'referenced_action_id': referenced_action.id,
                     'referenced_action_name': referenced_action.name,
