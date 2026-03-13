@@ -561,7 +561,7 @@ class ScheduledExecutionRecurringPatternView(APIView):
             details={
                 'recurring_pattern_id': rp.id,
                 'is_active': is_active,
-                'next_execution_date': rp.next_execution_date.isoformat() if rp.next_execution_date else None,
+                'next_execution_date': ensure_utc_isoformat(rp.next_execution_date),
             },
             correlation_id=get_correlation_id(),
         )

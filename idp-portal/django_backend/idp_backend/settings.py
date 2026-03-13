@@ -801,6 +801,12 @@ WORKFLOW_LEGACY_RUNTIME_ENABLED = os.getenv(
     'WORKFLOW_LEGACY_RUNTIME_ENABLED', 'False'
 ).lower() == 'true'
 
+# Story 78.10: Feature flag for normalized workflow definitions
+# Default: False (read from JSON CLOB). Set to True to read from normalized tables.
+WORKFLOW_NORMALIZED_DEFINITIONS_ENABLED = os.getenv(
+    'WORKFLOW_NORMALIZED_DEFINITIONS_ENABLED', 'False'
+).lower() == 'true'
+
 # ============================================================================
 # External Services Configuration (Story M.8 - Health Check)
 # ============================================================================

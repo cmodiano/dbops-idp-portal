@@ -16,6 +16,7 @@ from rest_framework.views import APIView
 from catalog.models import Action
 from core.exceptions import NotFoundError
 from core.middleware import get_correlation_id
+from core.utils import ensure_utc_isoformat
 from executions.models import Execution, ExecutionStatus
 from executions.serializers import (
     RemediationSuggestionSerializer,
@@ -178,8 +179,8 @@ class ExecutionRemediationContextView(APIView):
                     "action_id": child.action_id,
                     "action_name": child.action.name if child.action else None,
                     "status": child.status,
-                    "created_at": child.created_at.isoformat() if child.created_at else None,
-                    "completed_at": child.completed_at.isoformat() if child.completed_at else None,
+                    "created_at": ensure_utc_isoformat(child.created_at),
+                    "completed_at": ensure_utc_isoformat(child.completed_at),
                     "error_message": child.error_message,
                 }
             )

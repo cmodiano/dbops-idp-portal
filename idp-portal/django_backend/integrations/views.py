@@ -23,6 +23,7 @@ from core.exceptions import NotFoundError, InvalidStateError
 from core.models import AuditActionType, AuditEntityType
 from core.services import AuditService
 from core.middleware import get_correlation_id
+from core.utils import ensure_utc_isoformat
 
 logger = structlog.get_logger(__name__)
 
@@ -480,7 +481,7 @@ class IntegrationViewSet(viewsets.ViewSet):
                 entity_id=integration_id,
                 details={
                     'status': result.status.value,
-                    'checked_at': result.checked_at.isoformat(),
+                    'checked_at': ensure_utc_isoformat(result.checked_at),
                     'error_message': sanitized_error,
                 },
                 correlation_id=get_correlation_id(),
@@ -489,7 +490,7 @@ class IntegrationViewSet(viewsets.ViewSet):
         return Response({"data": {
             "status": result.status.value,
             "message": sanitized_error,
-            "checked_at": result.checked_at.isoformat(),
+            "checked_at": ensure_utc_isoformat(result.checked_at),
         }})
 
     @extend_schema(

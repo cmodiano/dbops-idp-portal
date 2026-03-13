@@ -25,6 +25,7 @@ from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.middleware import get_correlation_id
 from core.throttling import ApiKeyTokenThrottle
+from core.utils import ensure_utc_isoformat
 
 logger = structlog.get_logger(__name__)
 
@@ -217,7 +218,7 @@ class APIKeysView(APIView):
                     'id': api_key.id,
                     'name': api_key.name,
                     'scope': api_key.scope,
-                    'created_at': api_key.created_at.isoformat(),
+                    'created_at': ensure_utc_isoformat(api_key.created_at),
                     'raw_key': raw_key,
                 }
             },
