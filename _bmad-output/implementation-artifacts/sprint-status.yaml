@@ -926,7 +926,7 @@ development_status:
     77-2-preserver-types-natifs-input-mapping: done # Code review 2026-03-12: H1+M1+M2+M3 fixes
     77-3-executer-steps-platform-chemin-reel-dispatch: done # Code review 2026-03-12: M1-M4 fixes (enum, timeout test, patch redondant, imports, File List)
     77-4-extraction-outputs-artifacts-reels-child-executions: done # Code review 2026-03-12: fix C1 guard item_type==ACTION, +2 tests (regression + no-integration)
-    77-5-side-effects-approve-reject-on-commit: backlog
+    77-5-side-effects-approve-reject-on-commit: done # Code review 2026-03-13: M1 fix _eid shadowing in ApproveStepView, M2 rollback test rendu significatif (assertion callbacks), M3 test rollback reject ajouté (6/6 tests, 21/21 régression)
     77-6-tests-durabilite-workflow: backlog
     77-7-valider-supporter-gate-steps-fan-out-parallele: backlog
     epic-77-retrospective: optional
