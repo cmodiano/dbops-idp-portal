@@ -5,8 +5,10 @@ Story 67.1: Multi-target support — on_success_step_ids / on_error_step_ids (ar
             Removes parallel_group validation.
 Story 67.3: join_policy validation — all_success | one_success | all_done.
 Story 67.8: all_failed | one_failed.
+Story 77.7: Reject gate steps inside parallel branches (fan-out) at validation time.
 """
 
+from collections import deque
 from typing import Any
 from rest_framework import serializers
 
@@ -191,6 +193,10 @@ def validate_workflow_steps(steps: list[dict[str, Any]], action_id: int | None =
     if uses_branches_or_retry:
         _detect_workflow_cycles(steps)
 
+    # Story 77.7 AC#1-2: Detect gate steps inside parallel branches (fan-out)
+    if uses_branches_or_retry:
+        _detect_gates_in_parallel_branches(steps, step_ids)
+
     return steps
 
 
@@ -266,6 +272,80 @@ def _detect_workflow_cycles(steps: list[dict[str, Any]]) -> None:
                 rec_stack.discard(node)
                 if path and path[-1] == node:
                     path.pop()
+
+
+def _detect_gates_in_parallel_branches(steps: list[dict], step_ids: set[str]) -> None:
+    """
+    Story 77.7 AC1-2: Détecte les gate steps dans des branches parallèles (fan-out).
+
+    Algorithme :
+    1. Construire le graphe des prédécesseurs (in_degree) pour identifier les join points.
+    2. Pour chaque step avec 2+ on_success_step_ids ou 2+ on_error_step_ids (fan-out origin),
+       faire un BFS depuis les cibles parallèles (s'arrêter aux join points).
+    3. Si un step gate est trouvé dans la traversée → ValidationError.
+
+    Les join points (in_degree >= 2) marquent la convergence des branches et
+    sont exclus de la traversée (pas une erreur d'avoir un gate APRÈS le join).
+    """
+    if not steps:
+        return
+
+    # Construire step_map et in_degree
+    step_map: dict[str, dict] = {}
+    in_degree: dict[str, int] = {sid: 0 for sid in step_ids}
+    for step in steps:
+        sid = step.get('step_id')
+        if sid:
+            step_map[sid] = step
+        for target in (step.get('on_success_step_ids') or []):
+            if target in in_degree:
+                in_degree[target] += 1
+        for target in (step.get('on_error_step_ids') or []):
+            if target in in_degree:
+                in_degree[target] += 1
+
+    # Join points = steps avec 2+ prédécesseurs (convergence de branches)
+    join_points: set[str] = {sid for sid, deg in in_degree.items() if deg >= 2}
+
+    # Pour chaque fan-out origin : BFS sur les branches parallèles
+    for step in steps:
+        origin_id = step.get('step_id', '')
+
+        success_ids = step.get('on_success_step_ids') or []
+        error_ids = step.get('on_error_step_ids') or []
+
+        for ids_list in (success_ids, error_ids):
+            if len(ids_list) < 2:
+                continue  # Pas un fan-out (séquentiel ou vide)
+
+            # BFS depuis toutes les cibles simultanées du fan-out
+            visited: set[str] = set()
+            queue: deque[str] = deque(ids_list)
+
+            while queue:
+                current = queue.popleft()
+                if current in visited or current in join_points:
+                    continue
+                visited.add(current)
+
+                current_step = step_map.get(current)
+                if not current_step:
+                    continue
+
+                if current_step.get('step_type') == 'gate':
+                    raise serializers.ValidationError(
+                        f"Step '{current}': les gate steps ne sont pas supportés à l'intérieur "
+                        f"d'une branche parallèle (fan-out). Déplacez le gate en dehors de la "
+                        f"branche parallèle. (Fan-out originant du step '{origin_id}')"
+                    )
+
+                # Continuer BFS dans la sous-branche (exclure join_points et déjà visités)
+                for next_id in (
+                    (current_step.get('on_success_step_ids') or [])
+                    + (current_step.get('on_error_step_ids') or [])
+                ):
+                    if next_id not in visited and next_id not in join_points:
+                        queue.append(next_id)
 
 
 def validate_retry_constraints(step: dict[str, Any]) -> None:

@@ -1,16 +1,16 @@
-# Baseline Schema V119 — IDP Portal
+# Baseline Schema V121 — IDP Portal
 
 ## Contexte
 
-Ce dossier contient le script de **baseline** du schéma Oracle de l'IDP Portal. Il consolide les migrations Flyway V000–V119 en un seul script d'initialisation pour les **nouveaux environnements**.
+Ce dossier contient le script de **baseline** du schéma Oracle de l'IDP Portal. Il consolide les migrations Flyway V000–V121 en un seul script d'initialisation pour les **nouveaux environnements**.
 
 | Fichier | Description |
 |---------|-------------|
-| `baseline_schema_v088.sql` | Script DDL+DML : tables, indexes, contraintes, trigger, package PKG_IDP_MAINTENANCE, données de référence (état V119) |
+| `baseline_schema_v088.sql` | Script DDL+DML : tables, indexes, contraintes, trigger, package PKG_IDP_MAINTENANCE, données de référence (état V121) |
 | `README.md` | Ce fichier — procédure de déploiement et validation |
 
 > **⚠️ IMPORTANT** : Ce script s'applique **UNIQUEMENT** sur une base Oracle vierge.
-> Les environnements existants (dev, staging, prod) sont **inchangés** — ils continuent d'utiliser la chaîne V000–V118 via Flyway normalement.
+> Les environnements existants (dev, staging, prod) sont **inchangés** — ils continuent d'utiliser la chaîne V000–V120 via Flyway normalement.
 
 ---
 
@@ -23,21 +23,21 @@ Ce dossier contient le script de **baseline** du schéma Oracle de l'IDP Portal.
 sqlplus idp_user/password@NEW_ENV:1521/XEPDB1 @database/baseline/baseline_schema_v088.sql
 ```
 
-> Le script crée les 36 tables (dont EXECUTIONS, EXECUTION_STEPS, AUDIT_LOG partitionnées, et les tables Django auth/session/API), indexes, contraintes, le trigger d'immutabilité, le package PKG_IDP_MAINTENANCE et insère les données de référence (REF_ENGINES, REF_CATEGORIES).
+> Le script crée les 34 tables (dont EXECUTIONS, EXECUTION_STEPS, AUDIT_LOG partitionnées, et les tables Django auth/session/API), indexes, contraintes, le trigger d'immutabilité, le package PKG_IDP_MAINTENANCE et insère les données de référence (REF_ENGINES, REF_CATEGORIES).
 
-### Étape 2 : Déclarer la base au niveau V119 (commande Flyway `baseline`)
+### Étape 2 : Déclarer la base au niveau V121 (commande Flyway `baseline`)
 
 ```bash
 flyway \
   -url=jdbc:oracle:thin:@NEW_ENV:1521/XEPDB1 \
   -user=idp_user \
   -password=password \
-  -baselineVersion=119 \
+  -baselineVersion=121 \
   -baselineDescription=baseline_schema_v088 \
   baseline
 ```
 
-> Cette commande enregistre une ligne dans `flyway_schema_history` indiquant que la base est déjà au niveau V119 (success=true). Flyway ne re-jouera pas V000–V119. **Aucune migration incrémentale n'est nécessaire pour V000–V119.** Les migrations futures (V120 et au-delà) devront être appliquées via `flyway migrate`.
+> Cette commande enregistre une ligne dans `flyway_schema_history` indiquant que la base est déjà au niveau V121 (success=true). Flyway ne re-jouera pas V000–V121. **Aucune migration incrémentale n'est nécessaire pour V000–V121.** Les migrations futures (V122 et au-delà) devront être appliquées via `flyway migrate`.
 
 ### Étape 3 : Vérifier le résultat
 
@@ -55,7 +55,7 @@ Le résultat attendu :
 +------------+---------+-------------------------------+--------+---------------------+----------+
 | Category   | Version | Description                   | Type   | Installed On        | State    |
 +------------+---------+-------------------------------+--------+---------------------+----------+
-| Versioned  | 119     | baseline schema v088          | BASELN | ...                 | Baseline |
+| Versioned  | 121     | baseline schema v088          | BASELN | ...                 | Baseline |
 +------------+---------+-------------------------------+--------+---------------------+----------+
 ```
 
@@ -68,18 +68,18 @@ Le résultat attendu :
 flyway migrate  # Applique uniquement les nouvelles migrations (V120+ futures)
 ```
 
-Les environnements existants ont déjà V000–V118 (ou V119) dans `flyway_schema_history`. Ce script ne les affecte pas. Ils appliquent V119 via `flyway migrate`.
+Les environnements existants ont déjà V000–V120 (ou V121) dans `flyway_schema_history`. Ce script ne les affecte pas. Ils appliquent V121 via `flyway migrate`.
 
 ---
 
 ## Contenu de baseline_schema_v088.sql
 
-### Tables créées (36)
+### Tables créées (34)
 
 | Phase | Tables |
 |-------|--------|
 | Phase 1 — Sans FK entrantes | USERS, TAGS, PROFILES, INTEGRATIONS, REF_ENGINES, REF_CATEGORIES, INTEGRATION_TYPE_CATALOGUE, CORE_FEATURE_FLAGS, BUSINESS_RULE_POLICIES, OUTPUT_SCHEMAS, ACTIONS_CATALOG |
-| Phase 2 — Dépendantes d'ACTIONS_CATALOG/USERS | EXECUTION_LOG, USER_PERMISSIONS, ACTION_TAGS, USER_FAVORITES, ACTION_MUTEX, PROFILE_ACTION_PERMISSIONS, PROFILE_TARGET_PERMISSIONS, INTEGRATION_ACTIONS, AUDIT_LOG (partitionnée) |
+| Phase 2 — Dépendantes d'ACTIONS_CATALOG/USERS | ACTION_TAGS, USER_FAVORITES, ACTION_MUTEX, PROFILE_ACTION_PERMISSIONS, PROFILE_TARGET_PERMISSIONS, INTEGRATION_ACTIONS, AUDIT_LOG (partitionnée) |
 | Phase 3 — Exécutions | EXECUTIONS (partitionnée), EXECUTION_STEPS (reference partitioned), EXECUTION_TARGETS, SCHEDULED_EXECUTIONS, RECURRING_PATTERNS |
 | Phase 4 — Trigger | TRG_AUDIT_LOG_IMMUTABLE |
 | Phase 4b — Maintenance | IDP_MAINTENANCE_LOG, PKG_IDP_MAINTENANCE |
@@ -94,7 +94,7 @@ Les environnements existants ont déjà V000–V118 (ou V119) dans `flyway_schem
 | INTEGRATION_TYPE_CATALOGUE | 0 | Gérées par l'application (fixtures Django) |
 | INTEGRATION_ACTIONS | 0 | Gérées par l'application (fixtures Django) |
 
-### Ajouts V112–V119 (inclus dans le baseline)
+### Ajouts V112–V121 (inclus dans le baseline)
 
 | Élément | Description |
 |---------|-------------|
@@ -125,24 +125,27 @@ Les environnements existants ont déjà V000–V118 (ou V119) dans `flyway_schem
 | `CHK_EXECUTION_ENV` | Contrainte droppée V053 — env dicté par inventaire |
 | `CHK_SCHEDULED_ENV` | Contrainte droppée V053 |
 | `CK_INTEGRATIONS_TYPE` | Contrainte droppée V024 (TYPE libre depuis V024) |
+| `EXECUTION_LOG` | Table créée V006, droppée V121 |
+| `USER_PERMISSIONS` | Table créée V005, droppée V121 |
+| `IDX_EXECUTIONS_PENDING_APPROVAL` | Index créé V030, droppé V121 |
 
 ---
 
 ## Plan de validation — Procédure via Docker
 
-Pour valider que le schéma produit par `baseline_schema_v088.sql` est identique à celui produit par la chaîne V000–V119 :
+Pour valider que le schéma produit par `baseline_schema_v088.sql` est identique à celui produit par la chaîne V000–V121 :
 
 ```bash
 # 1. Démarrer deux instances Oracle Docker
 docker-compose up oracle-a oracle-b
 
-# 2. Sur oracle-a : appliquer la chaîne complète V000–V119
+# 2. Sur oracle-a : appliquer la chaîne complète V000–V121
 flyway -url=jdbc:oracle:thin:@oracle-a:1521/XEPDB1 migrate
 
 # 3. Sur oracle-b : appliquer le baseline uniquement
 sqlplus idp_user/password@oracle-b:1521/XEPDB1 @database/baseline/baseline_schema_v088.sql
 flyway -url=jdbc:oracle:thin:@oracle-b:1521/XEPDB1 \
-       -baselineVersion=119 \
+       -baselineVersion=121 \
        -baselineDescription=baseline_schema_v088 \
        baseline
 
@@ -159,7 +162,7 @@ diff <(normalize.sh /tmp/schema-a.sql) <(normalize.sh /tmp/schema-b.sql)
 
 | Vérification | Commande SQL | Critère de succès |
 |--------------|-------------|-------------------|
-| Nombre de tables | `SELECT COUNT(*) FROM user_tables` | 36 tables |
+| Nombre de tables | `SELECT COUNT(*) FROM user_tables` | 34 tables |
 | Trigger immutabilité | `SELECT status FROM user_triggers WHERE trigger_name = 'TRG_AUDIT_LOG_IMMUTABLE'` | ENABLED |
 | Données REF_ENGINES | `SELECT COUNT(*) FROM REF_ENGINES` | 6 lignes |
 | Données REF_CATEGORIES | `SELECT COUNT(*) FROM REF_CATEGORIES` | 6 lignes |
@@ -170,7 +173,7 @@ diff <(normalize.sh /tmp/schema-a.sql) <(normalize.sh /tmp/schema-b.sql)
 | Package purge | `SELECT status FROM user_objects WHERE object_name = 'PKG_IDP_MAINTENANCE'` | VALID |
 | WORKFLOW_EVENTS exists | `SELECT COUNT(*) FROM user_tables WHERE table_name = 'WORKFLOW_EVENTS'` | 1 |
 | RUNNABLE_STEPS exists | `SELECT COUNT(*) FROM user_tables WHERE table_name = 'RUNNABLE_STEPS'` | 1 |
-| Historique Flyway | `SELECT version, state FROM flyway_schema_history ORDER BY installed_rank` | baseline V119 uniquement |
+| Historique Flyway | `SELECT version, state FROM flyway_schema_history ORDER BY installed_rank` | baseline V121 uniquement |
 
 ---
 

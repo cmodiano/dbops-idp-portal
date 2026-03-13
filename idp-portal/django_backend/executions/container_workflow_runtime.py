@@ -570,9 +570,10 @@ class ContainerWorkflowRuntime:
                 for pending_id in pending_ids:
                     results[pending_id] = (ExecutionStatus.FAILED, [])
 
-        # Phase 1 limitation: gate steps returning RUNNING inside a fan-out are treated
-        # as FAILED (they cannot pause the fan-out — ThreadPoolExecutor has already joined).
-        # Full gate support in fan-out is deferred to a future story.
+        # Safety net: gate steps inside a fan-out are treated as FAILED.
+        # Story 77.7: workflows with gate steps in parallel branches are now rejected at validation
+        # (catalog/validation.py _detect_gates_in_parallel_branches). This path should no longer
+        # be reached for correctly validated workflows.
 
         # CANCELLED prioritaire sur tout
         if any(s == ExecutionStatus.CANCELLED for s, _ in results.values()):
@@ -1219,6 +1220,9 @@ class ContainerWorkflowRuntime:
         # Protocole WAITING pour gate steps (story 57.7)
         if isinstance(result, dict) and result.get('waiting'):
             if parallel_context is not None:
+                # Safety net — should be prevented by catalog/validation.py _detect_gates_in_parallel_branches
+                # Story 77.7: gate steps inside fan-out are rejected at validation; this path
+                # should no longer be reached for correctly validated workflows.
                 logger.warning(
                     "container_workflow_parallel_gate_not_supported",
                     step_name=step_name,

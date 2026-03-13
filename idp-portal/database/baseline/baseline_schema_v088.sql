@@ -1,15 +1,15 @@
 -- ===========================================================================
 -- Baseline Schema V088 — IDP Portal
 -- ===========================================================================
--- Date            : 2026-03-08
--- Version couverte: V000–V119 (incl. V112 IaC sync, V113 indexes+WORKFLOW_EVENTS+RUNNABLE_STEPS, V114–V119)
+-- Date            : 2026-03-13
+-- Version couverte: V000–V121 (incl. V120 UPDATED_AT, V121 drop legacy tables)
 --
 -- Usage           : NOUVEAUX ENVIRONNEMENTS UNIQUEMENT (base Oracle vierge)
 -- Interdit sur    : Environnements existants (dev, staging, prod) — INCHANGÉS
 --
 -- Procédure de déploiement :
 --   1. sqlplus idp_user/password@HOST:1521/XEPDB1 @database/baseline/baseline_schema_v088.sql
---   2. flyway -baselineVersion=119 -baselineDescription=baseline_schema_v088 baseline
+--   2. flyway -baselineVersion=121 -baselineDescription=baseline_schema_v088 baseline
 --
 -- Ce script couvre TOUTES les migrations V000–V119. Aucune migration incrémentale
 -- n'est nécessaire après application. État identique à V000→V119 sans phases intermédiaires.
@@ -21,6 +21,9 @@
 -- Exclusions (éléments neutralisés par les migrations) :
 --   - SCHEMA_VERSION (créée V000, droppée V015)
 --   - REF_PLATFORMS (créée V051, droppée V083)
+--   - EXECUTION_LOG (créée V006, droppée V121)
+--   - USER_PERMISSIONS (créée V005, droppée V121)
+--   - IDX_EXECUTIONS_PENDING_APPROVAL (créé V030, droppé V121)
 --   - Séquences legacy (droppées V016 — IDENTITY columns suffisent)
 --   - Colonne RBAC_POLICIES sur ACTIONS_CATALOG (droppée V013)
 --   - Colonne CHANGE_MODEL_CODE sur ACTIONS_CATALOG (droppée V019)
@@ -664,61 +667,6 @@ COMMENT ON COLUMN ACTIONS_CATALOG.LAST_SYNCED_HASH IS 'Hash de la dernière sync
 -- ===========================================================================
 
 -- ---------------------------------------------------------------------------
--- EXECUTION_LOG (V006) — table legacy, jamais supprimée
--- ---------------------------------------------------------------------------
-CREATE TABLE EXECUTION_LOG (
-    ID              NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    ACTION_ID       NUMBER NOT NULL,
-    USER_ID         VARCHAR2(100) NOT NULL,
-    ENVIRONMENT     VARCHAR2(50) NOT NULL,
-    STARTED_AT      TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
-    COMPLETED_AT    TIMESTAMP,
-    STATUS          VARCHAR2(20) DEFAULT 'running' NOT NULL,
-
-    CONSTRAINT FK_EXEC_LOG_ACTION FOREIGN KEY (ACTION_ID) REFERENCES ACTIONS_CATALOG(ID),
-    CONSTRAINT CK_EXEC_LOG_STATUS CHECK (STATUS IN ('running', 'success', 'failed', 'cancelled'))
-);
-
-CREATE INDEX IDX_EXEC_LOG_ACTION   ON EXECUTION_LOG(ACTION_ID);
-CREATE INDEX IDX_EXEC_LOG_USER     ON EXECUTION_LOG(USER_ID);
-CREATE INDEX IDX_EXEC_LOG_STARTED  ON EXECUTION_LOG(STARTED_AT);
-
-COMMENT ON TABLE EXECUTION_LOG IS 'Suivi des exécutions d''actions pour les statistiques du tableau de bord.';
-COMMENT ON COLUMN EXECUTION_LOG.ID IS 'Clé primaire, colonne IDENTITY.';
-COMMENT ON COLUMN EXECUTION_LOG.ACTION_ID IS 'FK vers ACTIONS_CATALOG.';
-COMMENT ON COLUMN EXECUTION_LOG.USER_ID IS 'Identifiant utilisateur.';
-COMMENT ON COLUMN EXECUTION_LOG.ENVIRONMENT IS 'Environnement (DEV, QA, PROD).';
-COMMENT ON COLUMN EXECUTION_LOG.STARTED_AT IS 'Date de début.';
-COMMENT ON COLUMN EXECUTION_LOG.COMPLETED_AT IS 'Date de fin.';
-COMMENT ON COLUMN EXECUTION_LOG.STATUS IS 'Statut : running, success, failed, cancelled.';
-
--- ---------------------------------------------------------------------------
--- USER_PERMISSIONS (V005)
--- ---------------------------------------------------------------------------
-CREATE TABLE USER_PERMISSIONS (
-    USER_ID     NUMBER NOT NULL,
-    ACTION_ID   NUMBER NOT NULL,
-    ENVIRONMENT VARCHAR2(20) NOT NULL,
-    GRANTED_BY  NUMBER,
-    GRANTED_AT  TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
-
-    CONSTRAINT PK_USER_PERMISSIONS PRIMARY KEY (USER_ID, ACTION_ID, ENVIRONMENT),
-    CONSTRAINT FK_USER_PERM_USER   FOREIGN KEY (USER_ID)   REFERENCES USERS(ID),
-    CONSTRAINT FK_USER_PERM_ACTION FOREIGN KEY (ACTION_ID) REFERENCES ACTIONS_CATALOG(ID) ON DELETE CASCADE,
-    CONSTRAINT CK_USER_PERM_ENV  CHECK (ENVIRONMENT IN ('DEV', 'QA', 'PROD'))
-);
-
-CREATE INDEX IDX_USER_PERM_USER   ON USER_PERMISSIONS(USER_ID);
-CREATE INDEX IDX_USER_PERM_ACTION ON USER_PERMISSIONS(ACTION_ID);
-
-COMMENT ON TABLE USER_PERMISSIONS IS 'Permissions utilisateur par action et environnement.';
-COMMENT ON COLUMN USER_PERMISSIONS.USER_ID IS 'FK vers USERS.';
-COMMENT ON COLUMN USER_PERMISSIONS.ACTION_ID IS 'FK vers ACTIONS_CATALOG.';
-COMMENT ON COLUMN USER_PERMISSIONS.ENVIRONMENT IS 'Environnement (DEV, QA, PROD).';
-COMMENT ON COLUMN USER_PERMISSIONS.GRANTED_BY IS 'FK vers USERS — utilisateur ayant accordé.';
-COMMENT ON COLUMN USER_PERMISSIONS.GRANTED_AT IS 'Date d''attribution.';
-
--- ---------------------------------------------------------------------------
 -- ACTION_TAGS (V007 + V042)
 -- V042 ajoute ID comme clé primaire surrogate (Django ORM compatibility)
 -- Créé directement avec l'état final (ID + UK ACTION_ID/TAG_ID)
@@ -1065,7 +1013,6 @@ CREATE INDEX IDX_EXECUTIONS_CREATED_ACTION ON EXECUTIONS(CREATED_AT, ACTION_ID) 
 CREATE INDEX IDX_EXECUTIONS_CREATED_USER   ON EXECUTIONS(CREATED_AT, USER_ID) LOCAL;
 CREATE INDEX IDX_EXECUTIONS_CREATED_STATUS ON EXECUTIONS(CREATED_AT, STATUS) LOCAL;
 CREATE INDEX IDX_EXECUTIONS_PARENT_ID      ON EXECUTIONS(PARENT_EXECUTION_ID);
-CREATE INDEX IDX_EXECUTIONS_PENDING_APPROVAL ON EXECUTIONS(CASE WHEN STATUS = 'PENDING_APPROVAL' THEN ID END);
 CREATE INDEX IDX_EXECUTIONS_CORRELATION ON EXECUTIONS(CORRELATION_ID);
 
 COMMENT ON TABLE EXECUTIONS IS 'Enregistrements d''exécution des actions. Partitionné par CREATED_AT (mensuel).';
