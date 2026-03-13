@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import json
 import structlog
-from typing import cast
 from django.db import models
 from django.db.models import Count, Q
 
@@ -151,7 +149,9 @@ class Profile(models.Model):
 class ProfileActionPermission(models.Model):
     """
     Profile action permission model mapping to Oracle PROFILE_ACTION_PERMISSIONS table (V011).
-    One row per profile: type (LIST/PATTERN/ALL), action_ids/tag_patterns/envs in JSON (CLOB).
+    One row per profile: type (LIST/PATTERN/ALL).
+    Data stored in normalized tables: PROFILE_ACTION_ALLOWLIST, PROFILE_ACTION_TAG_PATTERNS,
+    PROFILE_ACTION_ENVS (Story 78.11). Legacy CLOB columns dropped in V136 (Story 78.15).
     """
     profile = models.OneToOneField(
         Profile,
@@ -168,10 +168,6 @@ class ProfileActionPermission(models.Model):
         ],
         db_column='PERMISSION_TYPE'
     )
-    # CLOB fields - using TextField with JSON serialization helpers
-    action_ids_json = models.TextField(null=True, blank=True, db_column='ACTION_IDS_JSON')
-    tag_patterns_json = models.TextField(null=True, blank=True, db_column='TAG_PATTERNS_JSON')
-    environments_json = models.TextField(null=True, blank=True, db_column='ENVIRONMENTS_JSON')
     created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
     updated_at = models.DateTimeField(auto_now=True, db_column='UPDATED_AT')
 
@@ -181,67 +177,14 @@ class ProfileActionPermission(models.Model):
     def __str__(self) -> str:
         return f"{self.profile.name} - Action Permissions"
 
-    # JSON field helpers
-    def get_action_ids(self) -> list[int]:
-        """Deserialize JSON array from CLOB."""
-        if self.action_ids_json:
-            try:
-                return json.loads(self.action_ids_json)  # type: ignore[no-any-return]
-            except (json.JSONDecodeError, TypeError) as e:
-                logger.warning("Failed to deserialize action_ids", profile_id=self.profile_id, error=str(e))
-                return []
-        return []
-
-    def set_action_ids(self, value: list[int] | None) -> None:
-        """Serialize JSON array to CLOB."""
-        if value is not None:
-            self.action_ids_json = json.dumps(value)
-        else:
-            self.action_ids_json = None
-
-    def get_tag_patterns(self) -> list[str]:
-        """Deserialize JSON array from CLOB."""
-        if self.tag_patterns_json:
-            try:
-                return json.loads(self.tag_patterns_json)  # type: ignore[no-any-return]
-            except (json.JSONDecodeError, TypeError) as e:
-                logger.warning("Failed to deserialize tag_patterns", profile_id=self.profile_id, error=str(e))
-                return []
-        return []
-
-    def set_tag_patterns(self, value: list[str] | None) -> None:
-        """Serialize JSON array to CLOB."""
-        if value is not None:
-            self.tag_patterns_json = json.dumps(value)
-        else:
-            self.tag_patterns_json = None
-
-    def get_environments(self) -> list[str]:
-        """Deserialize JSON array from CLOB."""
-        if self.environments_json:
-            try:
-                return json.loads(self.environments_json)  # type: ignore[no-any-return]
-            except (json.JSONDecodeError, TypeError) as e:
-                logger.warning("Failed to deserialize environments", profile_id=self.profile_id, error=str(e))
-                return []
-        return []
-
-    def set_environments(self, value: list[str] | None) -> None:
-        """Serialize JSON array to CLOB."""
-        if value is not None:
-            self.environments_json = json.dumps(value)
-        else:
-            self.environments_json = None
-
 
 class ProfileTargetPermission(models.Model):
     """
     Profile target permission model mapping to Oracle PROFILE_TARGET_PERMISSIONS table (V012).
-    One row per profile: type (LIST/PATTERN/ALL), target_names/target_patterns in JSON (CLOB).
-
-    Story 23.4: Added filter_by_attribute_json for attribute-based RBAC filtering.
-    Format: {"engine_type": ["oracle", "sqlserver"], "zone": ["prod"], ...}
-    Keys are business concept names from InventoryMapper config (stable, not Oracle columns).
+    One row per profile: type (LIST/PATTERN/ALL).
+    Data stored in normalized tables: PROFILE_TARGET_ALLOWLIST, PROFILE_TARGET_PATTERNS,
+    PROFILE_TARGET_ATTRIBUTE_FILTERS, PROFILE_TARGET_EXCLUSIONS (Story 78.12).
+    Legacy CLOB columns dropped in V136 (Story 78.15).
     """
     profile = models.OneToOneField(
         Profile,
@@ -258,21 +201,6 @@ class ProfileTargetPermission(models.Model):
         ],
         db_column='PERMISSION_TYPE'
     )
-    # CLOB fields - using TextField with JSON serialization helpers
-    target_names_json = models.TextField(null=True, blank=True, db_column='TARGET_NAMES_JSON')
-    target_patterns_json = models.TextField(null=True, blank=True, db_column='TARGET_PATTERNS_JSON')
-    filter_by_attribute_json = models.TextField(
-        null=True,
-        blank=True,
-        db_column='FILTER_BY_ATTRIBUTE_JSON',
-        help_text='JSON dict filtering targets by inventory attributes. Format: {"engine_type": ["oracle"], ...}'
-    )
-    exclusion_patterns_json = models.TextField(
-        null=True,
-        blank=True,
-        db_column='EXCLUSION_PATTERNS_JSON',
-        help_text='JSON array filtering out targets matching any pattern. Applied after inclusion rules. Format: ["PROD-CRITICAL-*", "DR-*"]. Story 25.6'
-    )
     created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
     updated_at = models.DateTimeField(auto_now=True, db_column='UPDATED_AT')
 
@@ -281,114 +209,3 @@ class ProfileTargetPermission(models.Model):
 
     def __str__(self) -> str:
         return f"{self.profile.name} - Target Permissions"
-
-    # JSON field helpers
-    def get_target_names(self) -> list[str]:
-        """Deserialize JSON array from CLOB."""
-        if self.target_names_json:
-            try:
-                return json.loads(self.target_names_json)  # type: ignore[no-any-return]
-            except (json.JSONDecodeError, TypeError) as e:
-                logger.warning("Failed to deserialize target_names", profile_id=self.profile_id, error=str(e))
-                return []
-        return []
-
-    def set_target_names(self, value: list[str] | None) -> None:
-        """Serialize JSON array to CLOB."""
-        if value is not None:
-            self.target_names_json = json.dumps(value)
-        else:
-            self.target_names_json = None
-
-    def get_target_patterns(self) -> list[str]:
-        """Deserialize JSON array from CLOB."""
-        if self.target_patterns_json:
-            try:
-                return json.loads(self.target_patterns_json)  # type: ignore[no-any-return]
-            except (json.JSONDecodeError, TypeError) as e:
-                logger.warning("Failed to deserialize target_patterns", profile_id=self.profile_id, error=str(e))
-                return []
-        return []
-
-    def set_target_patterns(self, value: list[str] | None) -> None:
-        """Serialize JSON array to CLOB."""
-        if value is not None:
-            self.target_patterns_json = json.dumps(value)
-        else:
-            self.target_patterns_json = None
-
-    def get_filter_by_attribute(self) -> dict[str, list[str]] | None:
-        """
-        Deserialize filter_by_attribute from JSON CLOB.
-
-        Returns:
-            Dict mapping attribute concept keys to list of values, or None if not set.
-            Example: {"engine_type": ["oracle", "sqlserver"], "zone": ["prod"]}
-
-        Story 23.4 - RBAC filter by inventory attributes.
-        """
-        if self.filter_by_attribute_json:
-            try:
-                return cast("dict[str, list[str]] | None", json.loads(self.filter_by_attribute_json))
-            except (json.JSONDecodeError, TypeError) as e:
-                # Code review fix: JSON malformé = ERROR (corruption données), pas WARNING
-                logger.error("Failed to deserialize filter_by_attribute", profile_id=self.profile_id, error=str(e))
-                return None
-        return None
-
-    def set_filter_by_attribute(self, value: dict | None) -> None:
-        """
-        Serialize filter_by_attribute to JSON CLOB.
-
-        Args:
-            value: Dict mapping attribute keys to list of values, or None to clear.
-
-        Story 23.4 - RBAC filter by inventory attributes.
-        """
-        if value is not None:
-            self.filter_by_attribute_json = json.dumps(value)
-        else:
-            self.filter_by_attribute_json = None
-
-    def get_exclusion_patterns(self) -> list[str]:
-        """
-        Deserialize exclusion_patterns from JSON CLOB.
-
-        Returns:
-            List of exclusion patterns, or empty list if not set.
-            Example: ["PROD-CRITICAL-*", "DR-*"]
-
-        Story 25.6 - Deny explicit RBAC (exclusion patterns).
-        Code review fix: Use ERROR level for data corruption (consistency with filter_by_attribute).
-        """
-        if self.exclusion_patterns_json:
-            try:
-                patterns = json.loads(self.exclusion_patterns_json)
-                # Validate that it's a list of strings
-                if not isinstance(patterns, list):
-                    # Code review fix: ERROR (not WARNING) - this is data corruption
-                    logger.error("exclusion_patterns_data_corruption", profile_id=self.profile_id, reason="not a list")
-                    return []
-                # Filter out invalid patterns (non-string, empty)
-                valid_patterns = [p for p in patterns if isinstance(p, str) and p.strip()]
-                if len(valid_patterns) != len(patterns):
-                    logger.warning("exclusion_patterns_invalid_items_filtered", profile_id=self.profile_id)
-                return valid_patterns
-            except (json.JSONDecodeError, TypeError) as e:
-                logger.error("Failed to deserialize exclusion_patterns", profile_id=self.profile_id, error=str(e))
-                return []
-        return []
-
-    def set_exclusion_patterns(self, value: list[str] | None) -> None:
-        """
-        Serialize exclusion_patterns to JSON CLOB.
-
-        Args:
-            value: List of exclusion patterns (strings), or None to clear.
-
-        Story 25.6 - Deny explicit RBAC (exclusion patterns).
-        """
-        if value is not None:
-            self.exclusion_patterns_json = json.dumps(value)
-        else:
-            self.exclusion_patterns_json = None

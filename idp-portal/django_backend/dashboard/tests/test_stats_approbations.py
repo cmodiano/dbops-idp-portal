@@ -1,6 +1,6 @@
 """
 Tests pour DashboardStatsApprobationsView — Story 60.6.
-Source duale ADR-007: Execution.approved_at (legacy) + ExecutionStep gate (nouveau).
+ADR-007 (Story 78.15): Execution.approved_at supprimé. Source de vérité : ExecutionStep gate.
 """
 from __future__ import annotations
 
@@ -69,11 +69,15 @@ class TestDashboardStatsApprobationsStructure:
 
     def test_non_null_fields_have_float_types(self):
         """Avec des données, approval_rate et avg_approval_delay_s sont des floats."""
-        now = timezone.now()
         action = ActionFactory.create()
-        ExecutionFactory.create(
+        execution = ExecutionFactory.create(
             action=action, user=self.user, status='COMPLETED',
-            approved_at=now + timedelta(seconds=3600),
+        )
+        ExecutionStepFactory.create(
+            execution=execution,
+            step_type='gate',
+            status='COMPLETED',
+            approved_at=timezone.now() - timedelta(hours=1),
         )
         response = self.client.get(URL)
         data = response.data['data']
@@ -89,25 +93,13 @@ class TestDashboardStatsApprobationsApprovedCount:
         self.user = UserFactory.create(profile='DBOPS')
         self.client.force_authenticate(user=self.user)
 
-    def test_approved_count_legacy_path(self):
-        """Execution.approved_at non-null + status COMPLETED → comptée comme approuvée."""
-        action = ActionFactory.create()
-        ExecutionFactory.create(
-            action=action,
-            status='COMPLETED',
-            approved_at=timezone.now() - timedelta(hours=1),
-        )
-        response = self.client.get(URL)
-        assert response.data['data']['approved_count'] >= 1
-
-    def test_approved_count_new_gate_path(self):
+    def test_approved_count_gate_step(self):
         """Gate step COMPLETED avec approved_at non-null → execution comptée comme approuvée."""
         now = timezone.now()
         action = ActionFactory.create()
         execution = ExecutionFactory.create(
             action=action,
             status='COMPLETED',
-            approved_at=None,  # pas de legacy
         )
         ExecutionStepFactory.create(
             execution=execution,
@@ -122,13 +114,12 @@ class TestDashboardStatsApprobationsApprovedCount:
         response = self.client.get(URL)
         assert response.data['data']['approved_count'] == 0
 
-    def test_completed_without_approval_not_counted(self):
-        """COMPLETED sans approved_at ni gate step → ne compte PAS dans approved_count."""
+    def test_completed_without_gate_step_not_counted(self):
+        """COMPLETED sans gate step approuvé → ne compte PAS dans approved_count."""
         action = ActionFactory.create()
         ExecutionFactory.create(
             action=action,
             status='COMPLETED',
-            approved_at=None,
         )
         response = self.client.get(URL)
         assert response.data['data']['approved_count'] == 0
@@ -170,8 +161,11 @@ class TestDashboardStatsApprobationsRate:
 
     def test_approval_rate_100_when_all_approved(self):
         action = ActionFactory.create()
-        ExecutionFactory.create(
-            action=action, status='COMPLETED',
+        execution = ExecutionFactory.create(action=action, status='COMPLETED')
+        ExecutionStepFactory.create(
+            execution=execution,
+            step_type='gate',
+            status='COMPLETED',
             approved_at=timezone.now() - timedelta(hours=1),
         )
         response = self.client.get(URL)
@@ -179,24 +173,23 @@ class TestDashboardStatsApprobationsRate:
 
     def test_approval_rate_0_when_all_rejected(self):
         action = ActionFactory.create()
-        ExecutionFactory.create(
-            action=action, status='REJECTED',
-        )
+        ExecutionFactory.create(action=action, status='REJECTED')
         response = self.client.get(URL)
         assert response.data['data']['approval_rate'] == 0.0
 
     def test_approval_rate_computed_correctly(self):
-        """3 approuvées + 1 rejetée → taux = 75.0%"""
+        """3 approuvées (gate) + 1 rejetée → taux = 75.0%"""
         now = timezone.now()
         action = ActionFactory.create()
         for _ in range(3):
-            ExecutionFactory.create(
-                action=action, status='COMPLETED',
+            execution = ExecutionFactory.create(action=action, status='COMPLETED')
+            ExecutionStepFactory.create(
+                execution=execution,
+                step_type='gate',
+                status='COMPLETED',
                 approved_at=now - timedelta(hours=1),
             )
-        ExecutionFactory.create(
-            action=action, status='REJECTED',
-        )
+        ExecutionFactory.create(action=action, status='REJECTED')
         response = self.client.get(URL)
         assert response.data['data']['approval_rate'] == 75.0
 
@@ -213,41 +206,18 @@ class TestDashboardStatsApprobationsDelay:
         response = self.client.get(URL)
         assert response.data['data']['avg_approval_delay_s'] is None
 
-    def test_avg_delay_legacy_path(self):
-        """Délai = approved_at - created_at via Execution.approved_at.
-        approved_at 1h après created_at → delta positif (timestamps dans le passé).
-        """
+    def test_avg_delay_gate_step_path(self):
+        """Délai = step.approved_at - execution.created_at via gate step ADR-007."""
         from executions.models import Execution
 
         action = ActionFactory.create()
-        past_created = timezone.now() - timedelta(hours=2)
-        execution = ExecutionFactory.create(
-            action=action, status='COMPLETED',
-            approved_at=None,  # set after refresh
-        )
+        execution = ExecutionFactory.create(action=action, status='COMPLETED')
         execution.refresh_from_db()
+        # Force created_at to be 2h in the past so delta is positive
+        past_created = timezone.now() - timedelta(hours=2)
         Execution.objects.filter(id=execution.id).update(created_at=past_created)
         execution.refresh_from_db()
-        approved = execution.created_at + timedelta(seconds=3600)  # 1h après created_at
-        execution.approved_at = approved
-        execution.save()
-        response = self.client.get(URL)
-        delay = response.data['data']['avg_approval_delay_s']
-        assert delay is not None
-        expected_delay = (approved - execution.created_at).total_seconds()
-        assert delay == pytest.approx(expected_delay, abs=1.0)
-
-    def test_avg_delay_gate_step_path(self):
-        """Délai = step.approved_at - execution.created_at via gate step ADR-007.
-        step.approved_at dans le futur (> created_at auto_now_add) → delta positif.
-        """
-        action = ActionFactory.create()
-        execution = ExecutionFactory.create(
-            action=action, status='COMPLETED',
-            approved_at=None,  # pas de legacy
-        )
-        execution.refresh_from_db()
-        step_approved = execution.created_at + timedelta(seconds=1800)  # 30min après created_at
+        step_approved = execution.created_at + timedelta(seconds=1800)  # 30min after created_at
         ExecutionStepFactory.create(
             execution=execution,
             step_type='gate',
@@ -261,15 +231,18 @@ class TestDashboardStatsApprobationsDelay:
         assert delay == pytest.approx(expected_delay, abs=1.0)
 
     def test_avg_delay_excludes_negative_deltas(self):
-        """Délai négatif (approved_at < created_at) doit être exclu.
-        created_at est auto_now_add≈now ; approved_at très dans le passé → delta toujours négatif.
-        """
-        now = timezone.now()
+        """Délai négatif (step.approved_at < execution.created_at) doit être exclu."""
+
         action = ActionFactory.create()
-        # approved_at largement dans le passé → delta négatif vs created_at≈now
-        ExecutionFactory.create(
-            action=action, status='COMPLETED',
-            approved_at=now - timedelta(days=2),
+        execution = ExecutionFactory.create(action=action, status='COMPLETED')
+        execution.refresh_from_db()
+        # step approved far in the past → negative delta vs created_at≈now
+        step_approved = timezone.now() - timedelta(days=2)
+        ExecutionStepFactory.create(
+            execution=execution,
+            step_type='gate',
+            status='COMPLETED',
+            approved_at=step_approved,
         )
         response = self.client.get(URL)
         assert response.data['data']['avg_approval_delay_s'] is None
@@ -286,14 +259,19 @@ class TestDashboardStatsApprobationsRBAC:
         dba = UserFactory.create(profile='DBA')
         other = UserFactory.create(profile='DBA')
         action = ActionFactory.create()
-        # Approbation appartenant au DBA
-        ExecutionFactory.create(
-            user=dba, action=action, status='COMPLETED',
+
+        exec_dba = ExecutionFactory.create(user=dba, action=action, status='COMPLETED')
+        ExecutionStepFactory.create(
+            execution=exec_dba,
+            step_type='gate',
+            status='COMPLETED',
             approved_at=now - timedelta(hours=1),
         )
-        # Approbation appartenant à l'autre utilisateur (ne doit pas être visible)
-        ExecutionFactory.create(
-            user=other, action=action, status='COMPLETED',
+        exec_other = ExecutionFactory.create(user=other, action=action, status='COMPLETED')
+        ExecutionStepFactory.create(
+            execution=exec_other,
+            step_type='gate',
+            status='COMPLETED',
             approved_at=now - timedelta(hours=1),
         )
         self.client.force_authenticate(user=dba)
@@ -306,8 +284,11 @@ class TestDashboardStatsApprobationsRBAC:
         dba = UserFactory.create(profile='DBA')
         action = ActionFactory.create()
         for user in [dbops, dba]:
-            ExecutionFactory.create(
-                user=user, action=action, status='COMPLETED',
+            execution = ExecutionFactory.create(user=user, action=action, status='COMPLETED')
+            ExecutionStepFactory.create(
+                execution=execution,
+                step_type='gate',
+                status='COMPLETED',
                 approved_at=now - timedelta(hours=1),
             )
         self.client.force_authenticate(user=dbops)

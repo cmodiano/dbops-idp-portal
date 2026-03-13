@@ -356,7 +356,8 @@ class ExecutionWithTargetsTest(TestCase):
 
     def setUp(self):
         """Set up test data."""
-        from profiles.models import Profile, ProfileActionPermission, ProfileTargetPermission
+        from profiles.models import Profile
+        from profiles.services import ProfileService
 
         self.user = User.objects.create(
             username='testuser',
@@ -382,15 +383,14 @@ class ExecutionWithTargetsTest(TestCase):
             is_auditor=False
         )
         # Add action permissions with dev environment
-        ProfileActionPermission.objects.create(
-            profile=self.profile,
-            permission_type='ALL',
-            environments_json='["developpement", "certification", "production"]'
+        ProfileService().set_action_permissions(
+            self.profile.id,
+            {'actions_type': 'all', 'environments': ['developpement', 'certification', 'production']},
         )
         # Add target permissions (all targets)
-        ProfileTargetPermission.objects.create(
-            profile=self.profile,
-            permission_type='ALL'
+        ProfileService().set_target_permissions(
+            self.profile.id,
+            {'targets_type': 'all'},
         )
 
     def test_execution_stores_targets_in_parameters(self):

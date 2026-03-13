@@ -1,7 +1,7 @@
 """Dashboard stats operations and approbations views."""
 from __future__ import annotations
 
-from django.db.models import Count, Min, Q
+from django.db.models import Count, Min
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -125,8 +125,8 @@ class DashboardStatsApprobationsView(APIView):
     """GET /dashboard/stats-approbations/ -> {data: ApprobationsStats}
 
     Story 60.6: Statistiques du workflow d'approbation des exécutions.
-    Source duale ADR-007: Execution.approved_at (legacy) + ExecutionStep gate (nouveau).
-    - approved_count: exécutions COMPLETED avec approbation (legacy ou gate step)
+    Source ADR-007: ExecutionStep gate uniquement (Story 78.15 — Execution.approved_at supprimé).
+    - approved_count: exécutions COMPLETED avec gate step approuvé
     - rejected_count: exécutions REJECTED
     - approval_rate: taux d'approbation en % (null si aucune décision)
     - avg_approval_delay_s: délai moyen créé→approuvé en secondes (null si aucun approuvé)
@@ -147,16 +147,12 @@ class DashboardStatsApprobationsView(APIView):
         qs = apply_common_filters(qs, request=request, include_status=False)
         qs = qs.filter(created_at__gte=period_start, created_at__lt=period_end).distinct()
 
-        # 1. Exécutions approuvées — source duale (legacy Execution.approved_at + gate step ADR-007)
+        # 1. Exécutions approuvées — ADR-007: ExecutionStep gate step (Story 78.15)
         qs_approved = qs.filter(
-            status=ExecutionStatus.COMPLETED
-        ).filter(
-            Q(approved_at__isnull=False)
-            | Q(
-                executionstep__step_type=ExecutionStepType.GATE,
-                executionstep__status=ExecutionStepStatus.COMPLETED,
-                executionstep__approved_at__isnull=False,
-            )
+            status=ExecutionStatus.COMPLETED,
+            executionstep__step_type=ExecutionStepType.GATE,
+            executionstep__status=ExecutionStepStatus.COMPLETED,
+            executionstep__approved_at__isnull=False,
         ).distinct()
         # Oracle: .count() on distinct() fails with ORA-22848 (CLOB in comparison).
         # Use values('id').distinct() so only numeric id is selected for DISTINCT.
@@ -170,35 +166,9 @@ class DashboardStatsApprobationsView(APIView):
         approval_rate = round((approved_count / total_decided) * 100, 1) if total_decided > 0 else None
 
         # 4. Délai moyen d'approbation en secondes (Python loop — compatibilité Oracle)
+        # ADR-007: ExecutionStep.approved_at - Execution.created_at
         delays = []
-
-        # Chemin legacy: Execution.approved_at - created_at
-        # Include id so executions with identical timestamps remain distinct (matches gate path).
-        for _, created_at, approved_at in qs_approved.filter(
-            approved_at__isnull=False
-        ).values_list("id", "created_at", "approved_at"):
-            try:
-                if approved_at is None or created_at is None:
-                    continue
-                delta = (approved_at - created_at).total_seconds()
-                if delta >= 0:
-                    delays.append(delta)
-            except (TypeError, AttributeError) as e:
-                logger.debug(
-                    "approval_delay_calculation_skipped_legacy",
-                    created_at=created_at,
-                    approved_at=approved_at,
-                    error=str(e),
-                    error_type=type(e).__name__,
-                    correlation_id=get_correlation_id(),
-                )
-                continue
-
-        # Chemin nouveau (ADR-007): ExecutionStep.approved_at - Execution.created_at
-        # Exclure les exécutions déjà traitées via legacy (approved_at non-null sur Execution)
-        # Agrégation Min(approved_at) pour une seule ligne par exécution (déterministe).
         qs_gate = qs_approved.filter(
-            approved_at__isnull=True,
             executionstep__step_type=ExecutionStepType.GATE,
             executionstep__status=ExecutionStepStatus.COMPLETED,
             executionstep__approved_at__isnull=False,
@@ -214,7 +184,7 @@ class DashboardStatsApprobationsView(APIView):
                     delays.append(delta)
             except (TypeError, AttributeError) as e:
                 logger.debug(
-                    "approval_delay_calculation_skipped_gate",
+                    "approval_delay_calculation_skipped",
                     exec_created_at=exec_created_at,
                     step_approved_at=step_approved_at,
                     error=str(e),

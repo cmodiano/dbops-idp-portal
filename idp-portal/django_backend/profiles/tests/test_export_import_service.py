@@ -11,6 +11,13 @@ from unittest.mock import patch
 from catalog.models import Action
 from core.exceptions import InvalidStateError
 from profiles.models import Profile, ProfileActionPermission, ProfileTargetPermission
+from profiles.services import ProfileService
+from profiles.action_permission_repository import get_action_ids
+from profiles.target_permission_repository import (
+    get_exclusion_patterns,
+    get_filter_by_attribute,
+    get_target_patterns,
+)
 from profiles.services_export_import import (
     _build_actions_block,
     _build_targets_block,
@@ -352,12 +359,9 @@ class TestExportProfileYaml(TestCase):
         profile = Profile.objects.create(name="action-list-profile", ad_group="GRP-AL")
         action1 = Action.objects.create(name="oracle-patching-quarterly")
         action2 = Action.objects.create(name="oracle-provisioning")
-        ProfileActionPermission.objects.create(
-            profile=profile,
-            permission_type="LIST",
-            action_ids_json=f"[{action1.id}, {action2.id}]",
-            tag_patterns_json="[]",
-            environments_json="[]",
+        ProfileService().set_action_permissions(
+            profile.id,
+            {'actions_type': 'list', 'action_ids': [action1.id, action2.id]},
         )
 
         result = export_profile_yaml("action-list-profile")
@@ -374,12 +378,9 @@ class TestExportProfileYaml(TestCase):
         profile = Profile.objects.create(name="sorted-actions", ad_group="GRP-SA")
         a1 = Action.objects.create(name="z-action")
         a2 = Action.objects.create(name="a-action")
-        ProfileActionPermission.objects.create(
-            profile=profile,
-            permission_type="LIST",
-            action_ids_json=f"[{a1.id}, {a2.id}]",
-            tag_patterns_json="[]",
-            environments_json="[]",
+        ProfileService().set_action_permissions(
+            profile.id,
+            {'actions_type': 'list', 'action_ids': [a1.id, a2.id]},
         )
         result = export_profile_yaml("sorted-actions")
         parsed = yaml.safe_load(result.decode("utf-8"))
@@ -389,12 +390,9 @@ class TestExportProfileYaml(TestCase):
     def test_targets_exclusion_patterns_exported(self):
         """AC#2: exclusion_patterns in spec.targets when non-empty."""
         profile = Profile.objects.create(name="excl-profile", ad_group="GRP-EX")
-        ProfileTargetPermission.objects.create(
-            profile=profile,
-            permission_type="PATTERN",
-            target_names_json="[]",
-            target_patterns_json='["PROD-*"]',
-            exclusion_patterns_json='["PROD-CRITICAL-*"]',
+        ProfileService().set_target_permissions(
+            profile.id,
+            {'targets_type': 'pattern', 'target_patterns': ['PROD-*'], 'exclusion_patterns': ['PROD-CRITICAL-*']},
         )
         result = export_profile_yaml("excl-profile")
         parsed = yaml.safe_load(result.decode("utf-8"))
@@ -403,12 +401,9 @@ class TestExportProfileYaml(TestCase):
     def test_targets_filter_by_attribute_exported(self):
         """AC#2: filter_by_attribute in spec.targets when non-None."""
         profile = Profile.objects.create(name="fba-profile", ad_group="GRP-FBA")
-        ProfileTargetPermission.objects.create(
-            profile=profile,
-            permission_type="ALL",
-            target_names_json="[]",
-            target_patterns_json="[]",
-            filter_by_attribute_json='{"engine_type": ["oracle"]}',
+        ProfileService().set_target_permissions(
+            profile.id,
+            {'targets_type': 'all', 'filter_by_attribute': {'engine_type': ['oracle']}},
         )
         result = export_profile_yaml("fba-profile")
         parsed = yaml.safe_load(result.decode("utf-8"))
@@ -424,12 +419,9 @@ class TestExportProfileYaml(TestCase):
 
     def test_environments_in_spec(self):
         profile = Profile.objects.create(name="env-profile", ad_group="GRP-ENV")
-        ProfileActionPermission.objects.create(
-            profile=profile,
-            permission_type="ALL",
-            action_ids_json="[]",
-            tag_patterns_json="[]",
-            environments_json='["production", "staging"]',
+        ProfileService().set_action_permissions(
+            profile.id,
+            {'actions_type': 'all', 'environments': ['production', 'staging']},
         )
         result = export_profile_yaml("env-profile")
         parsed = yaml.safe_load(result.decode("utf-8"))
@@ -437,12 +429,9 @@ class TestExportProfileYaml(TestCase):
 
     def test_empty_environments_omitted(self):
         profile = Profile.objects.create(name="noenv-profile", ad_group="GRP-NEV")
-        ProfileActionPermission.objects.create(
-            profile=profile,
-            permission_type="ALL",
-            action_ids_json="[]",
-            tag_patterns_json="[]",
-            environments_json="[]",
+        ProfileService().set_action_permissions(
+            profile.id,
+            {'actions_type': 'all'},
         )
         result = export_profile_yaml("noenv-profile")
         parsed = yaml.safe_load(result.decode("utf-8"))
@@ -466,18 +455,13 @@ class TestExportProfilesYaml(TestCase):
         """AC#9: bulk export uses action_names instead of raw IDs."""
         profile = Profile.objects.create(name="BulkTest", ad_group="GRP-BULK", is_approver=1)
         action = Action.objects.create(name="bulk-action")
-        ProfileActionPermission.objects.create(
-            profile=profile,
-            permission_type="LIST",
-            action_ids_json=f"[{action.id}]",
-            tag_patterns_json="[]",
-            environments_json='["production"]',
+        ProfileService().set_action_permissions(
+            profile.id,
+            {'actions_type': 'list', 'action_ids': [action.id], 'environments': ['production']},
         )
-        ProfileTargetPermission.objects.create(
-            profile=profile,
-            permission_type="PATTERN",
-            target_names_json="[]",
-            target_patterns_json='["srv-*"]',
+        ProfileService().set_target_permissions(
+            profile.id,
+            {'targets_type': 'pattern', 'target_patterns': ['srv-*']},
         )
 
         result = export_profiles_yaml()
@@ -495,12 +479,9 @@ class TestExportProfilesYaml(TestCase):
     def test_export_bulk_includes_exclusion_patterns(self):
         """AC#9: exclusion_patterns exported in targets block."""
         profile = Profile.objects.create(name="BulkExcl", ad_group="GRP-BEXCL")
-        ProfileTargetPermission.objects.create(
-            profile=profile,
-            permission_type="PATTERN",
-            target_names_json="[]",
-            target_patterns_json='["PROD-*"]',
-            exclusion_patterns_json='["PROD-CRITICAL-*"]',
+        ProfileService().set_target_permissions(
+            profile.id,
+            {'targets_type': 'pattern', 'target_patterns': ['PROD-*'], 'exclusion_patterns': ['PROD-CRITICAL-*']},
         )
         result = export_profiles_yaml()
         parsed = yaml.safe_load(result.decode("utf-8"))
@@ -510,12 +491,9 @@ class TestExportProfilesYaml(TestCase):
     def test_export_bulk_includes_filter_by_attribute(self):
         """AC#9: filter_by_attribute exported in targets block."""
         profile = Profile.objects.create(name="BulkFBA", ad_group="GRP-BFBA")
-        ProfileTargetPermission.objects.create(
-            profile=profile,
-            permission_type="ALL",
-            target_names_json="[]",
-            target_patterns_json="[]",
-            filter_by_attribute_json='{"zone": ["prod"]}',
+        ProfileService().set_target_permissions(
+            profile.id,
+            {'targets_type': 'all', 'filter_by_attribute': {'zone': ['prod']}},
         )
         result = export_profiles_yaml()
         parsed = yaml.safe_load(result.decode("utf-8"))
@@ -585,9 +563,9 @@ class TestImportProfilesYaml(TestCase):
         action_perm = ProfileActionPermission.objects.get(profile=profile)
         target_perm = ProfileTargetPermission.objects.get(profile=profile)
         self.assertEqual(action_perm.permission_type, "LIST")
-        self.assertEqual(action_perm.get_action_ids(), [10, 20])
+        self.assertEqual(get_action_ids(action_perm), [10, 20])
         self.assertEqual(target_perm.permission_type, "PATTERN")
-        self.assertEqual(target_perm.get_target_patterns(), ["db-*"])
+        self.assertEqual(get_target_patterns(target_perm), ["db-*"])
 
     def test_import_invalid_yaml_syntax(self):
         with self.assertRaises(InvalidStateError) as ctx:
@@ -637,7 +615,7 @@ class TestImportProfilesYaml(TestCase):
         import_profiles_yaml(content)
         profile = Profile.objects.get(name="ExclFlat")
         target_perm = ProfileTargetPermission.objects.get(profile=profile)
-        self.assertEqual(target_perm.get_exclusion_patterns(), ["PROD-CRITICAL-*"])
+        self.assertEqual(get_exclusion_patterns(target_perm), ["PROD-CRITICAL-*"])
 
     def test_import_flat_filter_by_attribute(self):
         """AC#6: filter_by_attribute imported in flat format."""
@@ -650,7 +628,7 @@ class TestImportProfilesYaml(TestCase):
         import_profiles_yaml(content)
         profile = Profile.objects.get(name="FBAFlat")
         target_perm = ProfileTargetPermission.objects.get(profile=profile)
-        self.assertEqual(target_perm.get_filter_by_attribute(), {"engine_type": ["oracle"]})
+        self.assertEqual(get_filter_by_attribute(target_perm), {"engine_type": ["oracle"]})
 
     def test_import_mode_param_accepted(self):
         """mode parameter accepted without error."""
@@ -765,7 +743,7 @@ class TestImportProfileEnvelopeFormat(TestCase):
         import_profiles_yaml(content)
         profile = Profile.objects.get(name="env-action-names")
         action_perm = ProfileActionPermission.objects.get(profile=profile)
-        self.assertIn(action.id, action_perm.get_action_ids())
+        self.assertIn(action.id, get_action_ids(action_perm))
 
     def test_envelope_unknown_action_name_raises(self):
         """AC#5: unknown action_name raises REF_NOT_FOUND."""
@@ -803,7 +781,7 @@ class TestImportProfileEnvelopeFormat(TestCase):
         import_profiles_yaml(content)
         profile = Profile.objects.get(name="env-excl")
         target_perm = ProfileTargetPermission.objects.get(profile=profile)
-        self.assertEqual(target_perm.get_exclusion_patterns(), ["PROD-CRITICAL-*"])
+        self.assertEqual(get_exclusion_patterns(target_perm), ["PROD-CRITICAL-*"])
 
     def test_envelope_filter_by_attribute_imported(self):
         """AC#6: filter_by_attribute in spec.targets imported."""
@@ -817,7 +795,7 @@ class TestImportProfileEnvelopeFormat(TestCase):
         import_profiles_yaml(content)
         profile = Profile.objects.get(name="env-fba")
         target_perm = ProfileTargetPermission.objects.get(profile=profile)
-        self.assertEqual(target_perm.get_filter_by_attribute(), {"engine_type": ["oracle"]})
+        self.assertEqual(get_filter_by_attribute(target_perm), {"engine_type": ["oracle"]})
 
     def test_envelope_missing_ad_group_raises(self):
         """Envelope without ad_group raises INVALID_METADATA."""
@@ -880,20 +858,13 @@ class TestRoundTrip(TestCase):
             is_auditor=0,
             is_approver=1,
         )
-        ProfileActionPermission.objects.create(
-            profile=profile,
-            permission_type="LIST",
-            action_ids_json=f"[{action1.id}, {action2.id}]",
-            tag_patterns_json="[]",
-            environments_json='["production"]',
+        ProfileService().set_action_permissions(
+            profile.id,
+            {'actions_type': 'list', 'action_ids': [action1.id, action2.id], 'environments': ['production']},
         )
-        ProfileTargetPermission.objects.create(
-            profile=profile,
-            permission_type="PATTERN",
-            target_names_json="[]",
-            target_patterns_json='["PROD-*"]',
-            exclusion_patterns_json='["PROD-CRITICAL-*"]',
-            filter_by_attribute_json='{"engine_type": ["oracle"]}',
+        ProfileService().set_target_permissions(
+            profile.id,
+            {'targets_type': 'pattern', 'target_patterns': ['PROD-*'], 'exclusion_patterns': ['PROD-CRITICAL-*'], 'filter_by_attribute': {'engine_type': ['oracle']}},
         )
 
         # Export
@@ -916,14 +887,14 @@ class TestRoundTrip(TestCase):
 
         action_perm = ProfileActionPermission.objects.get(profile=reimported)
         self.assertEqual(action_perm.permission_type, "LIST")
-        reimported_ids = sorted(action_perm.get_action_ids())
+        reimported_ids = sorted(get_action_ids(action_perm))
         self.assertEqual(reimported_ids, sorted([action1.id, action2.id]))
 
         target_perm = ProfileTargetPermission.objects.get(profile=reimported)
         self.assertEqual(target_perm.permission_type, "PATTERN")
-        self.assertEqual(target_perm.get_target_patterns(), ["PROD-*"])
-        self.assertEqual(target_perm.get_exclusion_patterns(), ["PROD-CRITICAL-*"])
-        self.assertEqual(target_perm.get_filter_by_attribute(), {"engine_type": ["oracle"]})
+        self.assertEqual(get_target_patterns(target_perm), ["PROD-*"])
+        self.assertEqual(get_exclusion_patterns(target_perm), ["PROD-CRITICAL-*"])
+        self.assertEqual(get_filter_by_attribute(target_perm), {"engine_type": ["oracle"]})
 
 
 # ──────────────────────────────────────────────────────────────────

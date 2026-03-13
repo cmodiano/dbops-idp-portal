@@ -1,15 +1,13 @@
 """
-Story 78.11 — Tests for dual-write via set_action_permissions().
+Story 78.15 — Tests for direct normalized write via set_action_permissions().
 
-Tests: with feature flag True, JSON + normalized tables are both written.
-Tables managed by conftest.py session-scoped fixture.
+Story 78.11 dual-write has been removed: JSON CLOB columns no longer exist.
+These tests verify that set_action_permissions() writes exclusively to normalized tables.
 """
-import json
-
 import pytest
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
-from profiles.models import Profile, ProfileActionPermission
+from profiles.models import Profile
 from profiles.models_action_permission_normalized import (
     ProfileActionAllowlist,
     ProfileActionEnv,
@@ -19,16 +17,15 @@ from profiles.services import ProfileService
 
 
 @pytest.mark.django_db
-class DualWriteTest(TestCase):
+class DirectNormalizedWriteTest(TestCase):
     def setUp(self):
         self.profile = Profile.objects.create(
-            name='dual-write-test', ad_group='GRP-IDP-DW'
+            name='normalized-write-test', ad_group='GRP-IDP-DW'
         )
         self.service = ProfileService()
 
-    @override_settings(PROFILE_ACTION_PERMISSIONS_NORMALIZED_ENABLED=True)
-    def test_set_action_permissions_writes_json_and_normalized(self):
-        """With flag True, set_action_permissions writes both JSON and normalized tables."""
+    def test_set_action_permissions_writes_to_normalized_tables(self):
+        """set_action_permissions writes action IDs and environments to normalized tables."""
         self.service.set_action_permissions(
             self.profile.id,
             {
@@ -39,12 +36,6 @@ class DualWriteTest(TestCase):
             },
         )
 
-        # Verify JSON was written
-        perm = ProfileActionPermission.objects.get(profile_id=self.profile.id)
-        self.assertEqual(json.loads(perm.action_ids_json), [10, 20, 30])
-        self.assertEqual(json.loads(perm.environments_json), ['dev', 'prod'])
-
-        # Verify normalized tables were written
         self.assertEqual(
             sorted(ProfileActionAllowlist.objects.filter(
                 profile_id=self.profile.id
@@ -58,9 +49,8 @@ class DualWriteTest(TestCase):
             ['dev', 'prod'],
         )
 
-    @override_settings(PROFILE_ACTION_PERMISSIONS_NORMALIZED_ENABLED=True)
-    def test_update_permissions_syncs_normalized(self):
-        """Updating permissions re-syncs normalized tables."""
+    def test_update_permissions_replaces_normalized_data(self):
+        """Updating permissions deletes and replaces normalized table rows."""
         self.service.set_action_permissions(
             self.profile.id,
             {
@@ -73,7 +63,6 @@ class DualWriteTest(TestCase):
             ProfileActionAllowlist.objects.filter(profile_id=self.profile.id).count(), 2
         )
 
-        # Update
         self.service.set_action_permissions(
             self.profile.id,
             {
@@ -95,27 +84,6 @@ class DualWriteTest(TestCase):
             ['prod', 'staging'],
         )
 
-    def test_set_action_permissions_no_normalized_when_flag_false(self):
-        """With flag False (default), normalized tables are NOT written."""
-        self.service.set_action_permissions(
-            self.profile.id,
-            {
-                'actions_type': 'list',
-                'action_ids': [1, 2, 3],
-                'environments': ['dev'],
-            },
-        )
-
-        # JSON was written
-        perm = ProfileActionPermission.objects.get(profile_id=self.profile.id)
-        self.assertEqual(json.loads(perm.action_ids_json), [1, 2, 3])
-
-        # Normalized tables NOT written
-        self.assertEqual(
-            ProfileActionAllowlist.objects.filter(profile_id=self.profile.id).count(), 0
-        )
-
-    @override_settings(PROFILE_ACTION_PERMISSIONS_NORMALIZED_ENABLED=True)
     def test_pattern_type_with_tag_patterns(self):
         """Pattern type writes tag patterns to normalized tables."""
         self.service.set_action_permissions(
@@ -132,4 +100,22 @@ class DualWriteTest(TestCase):
                 profile_id=self.profile.id
             ).values_list('tag_pattern', flat=True)),
             ['oracle', 'provisioning'],
+        )
+
+    def test_empty_action_ids_clears_allowlist(self):
+        """Setting empty action_ids clears the allowlist."""
+        self.service.set_action_permissions(
+            self.profile.id,
+            {'actions_type': 'list', 'action_ids': [1, 2, 3]},
+        )
+        self.assertEqual(
+            ProfileActionAllowlist.objects.filter(profile_id=self.profile.id).count(), 3
+        )
+
+        self.service.set_action_permissions(
+            self.profile.id,
+            {'actions_type': 'all', 'action_ids': []},
+        )
+        self.assertEqual(
+            ProfileActionAllowlist.objects.filter(profile_id=self.profile.id).count(), 0
         )

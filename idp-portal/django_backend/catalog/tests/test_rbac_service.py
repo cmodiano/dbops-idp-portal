@@ -590,33 +590,28 @@ class TestGetPermissionsIntegration:
         Verifies ProfileService.get_cumulative_permissions (real DB) feeds
         CatalogRBACService.get_permissions() correctly.
         """
-        from profiles.models import Profile, ProfileActionPermission
+        from profiles.models import Profile
 
+        from profiles.services import ProfileService as _PS
         # Create DBA-SQL profile
         profile_sql = Profile.objects.create(
             name='DBA-SQL',
             ad_group='GRP-DBA-SQL',
         )
-        perm_sql = ProfileActionPermission.objects.create(
-            profile=profile_sql,
-            permission_type='PATTERN',
+        _PS().set_action_permissions(
+            profile_sql.id,
+            {'actions_type': 'pattern', 'tag_patterns': ['sql-server'], 'environments': ['dev', 'staging']},
         )
-        perm_sql.set_tag_patterns(['sql-server'])
-        perm_sql.set_environments(['dev', 'staging'])
-        perm_sql.save()
 
         # Create DBA-ORACLE profile
         profile_oracle = Profile.objects.create(
             name='DBA-ORACLE',
             ad_group='GRP-DBA-ORACLE',
         )
-        perm_oracle = ProfileActionPermission.objects.create(
-            profile=profile_oracle,
-            permission_type='PATTERN',
+        _PS().set_action_permissions(
+            profile_oracle.id,
+            {'actions_type': 'pattern', 'tag_patterns': ['oracle'], 'environments': ['prod']},
         )
-        perm_oracle.set_tag_patterns(['oracle'])
-        perm_oracle.set_environments(['prod'])
-        perm_oracle.save()
 
         # User with both AD groups (no mock on ProfileService)
         # MagicMock has get_ad_groups by default — override so get_user_ad_groups uses ad_groups
@@ -638,19 +633,20 @@ class TestGetPermissionsIntegration:
 
     def test_conflict_resolved_by_union_integration(self):
         """AC3 — Full integration: Profil 1 allows action 10, Profil 2 does not → union allows 10."""
-        from profiles.models import Profile, ProfileActionPermission
+        from profiles.models import Profile
+        from profiles.services import ProfileService as _PS2
 
         profile1 = Profile.objects.create(name='Profil-Allow', ad_group='GRP-ALLOW')
-        perm1 = ProfileActionPermission.objects.create(profile=profile1, permission_type='LIST')
-        perm1.set_action_ids([10])
-        perm1.set_environments(['dev'])
-        perm1.save()
+        _PS2().set_action_permissions(
+            profile1.id,
+            {'actions_type': 'list', 'action_ids': [10], 'environments': ['dev']},
+        )
 
         profile2 = Profile.objects.create(name='Profil-Deny', ad_group='GRP-DENY')
-        perm2 = ProfileActionPermission.objects.create(profile=profile2, permission_type='LIST')
-        perm2.set_action_ids([20])
-        perm2.set_environments(['staging'])
-        perm2.save()
+        _PS2().set_action_permissions(
+            profile2.id,
+            {'actions_type': 'list', 'action_ids': [20], 'environments': ['staging']},
+        )
 
         user = MagicMock()
         user.id = 99

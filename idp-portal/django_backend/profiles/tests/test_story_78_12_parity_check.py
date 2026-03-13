@@ -1,188 +1,120 @@
 """
-Story 78.12 — Tests for the parity check management command.
+Story 78.15 — Tests for normalized target permission integrity.
 
-Tests: parity OK for all permission types, divergence detection, NULL/empty normalization.
-Tables managed by conftest.py session-scoped fixture.
+The legacy parity check commands (JSON vs normalized) have been removed.
+These tests verify that the normalized target permission tables remain
+internally consistent after service operations.
 """
-import json
-from io import StringIO
 
 import pytest
-from django.core.management import call_command
 from django.test import TestCase
 
-from profiles.target_permission_repository import sync_from_json
-from profiles.models import Profile, ProfileTargetPermission
+from profiles.target_permission_repository import (
+    get_exclusion_patterns_from_normalized,
+    get_filter_by_attribute_from_normalized,
+    get_target_names_from_normalized,
+    get_target_patterns_from_normalized,
+)
+from profiles.models import Profile
 from profiles.models_target_permission_normalized import (
     ProfileTargetAllowlist,
-    ProfileTargetAttributeFilter,
 )
+from profiles.services import ProfileService
 
 
 @pytest.mark.django_db
-class ParityCheckTest(TestCase):
-    def _call_command(self, *args):
-        out = StringIO()
-        err = StringIO()
-        try:
-            call_command(
-                'check_profile_target_permission_parity',
-                *args,
-                stdout=out,
-                stderr=err,
+class NormalizedTargetPermissionIntegrityTest(TestCase):
+    """Test that target permission normalized tables remain consistent after service ops."""
+
+    def test_set_permissions_replaces_previous_data(self):
+        """set_target_permissions overwrites, not appends, existing data."""
+        profile = Profile.objects.create(name='t-replace-test', ad_group='GRP-IDP-TRT')
+        svc = ProfileService()
+
+        svc.set_target_permissions(
+            profile.id,
+            {'targets_type': 'list', 'target_names': ['server-1', 'server-2']},
+        )
+        svc.set_target_permissions(
+            profile.id,
+            {'targets_type': 'list', 'target_names': ['new-server']},
+        )
+
+        names = get_target_names_from_normalized(profile.id)
+        self.assertEqual(names, ['new-server'])
+
+    def test_all_type_no_target_names(self):
+        """ALL permission type → no target names in normalized table."""
+        profile = Profile.objects.create(name='t-all-type', ad_group='GRP-IDP-TAT')
+        ProfileService().set_target_permissions(
+            profile.id,
+            {'targets_type': 'all'},
+        )
+        self.assertEqual(get_target_names_from_normalized(profile.id), [])
+        self.assertEqual(get_target_patterns_from_normalized(profile.id), [])
+
+    def test_pattern_type(self):
+        """PATTERN permission type → target_patterns in normalized table."""
+        profile = Profile.objects.create(name='t-pattern-type', ad_group='GRP-IDP-TPT')
+        ProfileService().set_target_permissions(
+            profile.id,
+            {'targets_type': 'pattern', 'target_patterns': ['prod-*', 'staging-*']},
+        )
+        self.assertEqual(
+            sorted(get_target_patterns_from_normalized(profile.id)),
+            ['prod-*', 'staging-*'],
+        )
+
+    def test_filter_by_attribute_persisted(self):
+        """filter_by_attribute is correctly stored in normalized table."""
+        profile = Profile.objects.create(name='t-filter-test', ad_group='GRP-IDP-TFT')
+        ProfileService().set_target_permissions(
+            profile.id,
+            {
+                'targets_type': 'all',
+                'filter_by_attribute': {'engine_type': ['oracle', 'mysql'], 'zone': ['prod']},
+            },
+        )
+        result = get_filter_by_attribute_from_normalized(profile.id)
+        self.assertEqual(result['engine_type'], ['mysql', 'oracle'])
+        self.assertEqual(result['zone'], ['prod'])
+
+    def test_exclusion_patterns_persisted(self):
+        """exclusion_patterns are correctly stored in normalized table."""
+        profile = Profile.objects.create(name='t-excl-test', ad_group='GRP-IDP-TET')
+        ProfileService().set_target_permissions(
+            profile.id,
+            {'targets_type': 'all', 'exclusion_patterns': ['DR-*', 'BACKUP-*']},
+        )
+        self.assertEqual(
+            sorted(get_exclusion_patterns_from_normalized(profile.id)),
+            ['BACKUP-*', 'DR-*'],
+        )
+
+    def test_no_duplicate_entries(self):
+        """Repeated set_target_permissions never creates duplicate normalized rows."""
+        profile = Profile.objects.create(name='t-dup-test', ad_group='GRP-IDP-TDT')
+        svc = ProfileService()
+        for _ in range(3):
+            svc.set_target_permissions(
+                profile.id,
+                {'targets_type': 'list', 'target_names': ['server-1', 'server-2']},
             )
-            exit_code = 0
-        except SystemExit as e:
-            exit_code = e.code
-        return out.getvalue(), exit_code
-
-    def test_parity_ok_list_type(self):
-        """Profile with LIST + target_names: parity OK after sync."""
-        profile = Profile.objects.create(name='t-parity-list', ad_group='GRP-IDP-TPL')
-        ProfileTargetPermission.objects.create(
-            profile=profile,
-            permission_type='LIST',
-            target_names_json=json.dumps(['server-1', 'server-2']),
-        )
-        sync_from_json(profile.id)
-
-        output, exit_code = self._call_command()
-        self.assertEqual(exit_code, 0)
-        self.assertIn('PARITY CHECK PASSED', output)
-
-    def test_parity_ok_pattern_type(self):
-        """Profile with PATTERN + target_patterns: parity OK after sync."""
-        profile = Profile.objects.create(name='t-parity-pattern', ad_group='GRP-IDP-TPP')
-        ProfileTargetPermission.objects.create(
-            profile=profile,
-            permission_type='PATTERN',
-            target_patterns_json=json.dumps(['prod-*', 'staging-*']),
-        )
-        sync_from_json(profile.id)
-
-        output, exit_code = self._call_command()
-        self.assertEqual(exit_code, 0)
-
-    def test_parity_ok_filter_by_attribute(self):
-        """Profile with filter_by_attribute: parity OK after sync."""
-        profile = Profile.objects.create(name='t-parity-fa', ad_group='GRP-IDP-TPFA')
-        ProfileTargetPermission.objects.create(
-            profile=profile,
-            permission_type='ALL',
-            filter_by_attribute_json=json.dumps({'engine_type': ['oracle', 'mysql'], 'zone': ['prod']}),
-        )
-        sync_from_json(profile.id)
-
-        output, exit_code = self._call_command()
-        self.assertEqual(exit_code, 0)
-
-    def test_parity_ok_exclusion_patterns(self):
-        """Profile with exclusion_patterns: parity OK after sync."""
-        profile = Profile.objects.create(name='t-parity-excl', ad_group='GRP-IDP-TPE')
-        ProfileTargetPermission.objects.create(
-            profile=profile,
-            permission_type='ALL',
-            exclusion_patterns_json=json.dumps(['DR-*', 'BACKUP-*']),
-        )
-        sync_from_json(profile.id)
-
-        output, exit_code = self._call_command()
-        self.assertEqual(exit_code, 0)
-
-    def test_parity_ok_complete_profile(self):
-        """Profile with all fields populated: parity OK after sync."""
-        profile = Profile.objects.create(name='t-parity-full', ad_group='GRP-IDP-TPF')
-        ProfileTargetPermission.objects.create(
-            profile=profile,
-            permission_type='LIST',
-            target_names_json=json.dumps(['server-1', 'server-2']),
-            target_patterns_json=json.dumps(['staging-*']),
-            filter_by_attribute_json=json.dumps({'engine_type': ['oracle']}),
-            exclusion_patterns_json=json.dumps(['DR-*']),
-        )
-        sync_from_json(profile.id)
-
-        output, exit_code = self._call_command()
-        self.assertEqual(exit_code, 0)
-
-    def test_divergence_detected_target_names(self):
-        """Manually introduce divergence in target_names — parity check must detect it."""
-        profile = Profile.objects.create(name='t-parity-div-tn', ad_group='GRP-IDP-TPDT')
-        ProfileTargetPermission.objects.create(
-            profile=profile,
-            permission_type='LIST',
-            target_names_json=json.dumps(['server-1']),
-        )
-        sync_from_json(profile.id)
-
-        # Introduce divergence: add an extra entry to normalized table
-        ProfileTargetAllowlist.objects.create(profile_id=profile.id, target_name='extra-server')
-
-        output, exit_code = self._call_command()
-        self.assertEqual(exit_code, 1)
-        self.assertIn('PARITY CHECK FAILED', output)
-        self.assertIn('DIFF', output)
-
-    def test_divergence_detected_filter_by_attribute(self):
-        """Manually introduce divergence in filter_by_attribute — parity check must detect it."""
-        profile = Profile.objects.create(name='t-parity-div-fa', ad_group='GRP-IDP-TPDF')
-        ProfileTargetPermission.objects.create(
-            profile=profile,
-            permission_type='ALL',
-            filter_by_attribute_json=json.dumps({'zone': ['prod']}),
-        )
-        sync_from_json(profile.id)
-
-        # Introduce divergence: add an extra attribute filter
-        ProfileTargetAttributeFilter.objects.create(
-            profile_id=profile.id, attribute_key='zone', attribute_value='staging'
+        self.assertEqual(
+            ProfileTargetAllowlist.objects.filter(profile_id=profile.id).count(), 2
         )
 
-        output, exit_code = self._call_command()
-        self.assertEqual(exit_code, 1)
-        self.assertIn('PARITY CHECK FAILED', output)
-
-    def test_parity_ok_null_json_fields(self):
-        """Profile with NULL JSON → no normalized entries → parity OK."""
-        profile = Profile.objects.create(name='t-parity-null', ad_group='GRP-IDP-TPN')
-        ProfileTargetPermission.objects.create(
-            profile=profile,
-            permission_type='ALL',
-            target_names_json=None,
-            target_patterns_json=None,
-            filter_by_attribute_json=None,
-            exclusion_patterns_json=None,
+    def test_empty_permission_clears_normalized(self):
+        """Setting empty permissions removes all normalized entries."""
+        profile = Profile.objects.create(name='t-clear-test', ad_group='GRP-IDP-TCT')
+        svc = ProfileService()
+        svc.set_target_permissions(
+            profile.id,
+            {'targets_type': 'list', 'target_names': ['srv-1', 'srv-2']},
         )
-        sync_from_json(profile.id)
-
-        output, exit_code = self._call_command()
-        self.assertEqual(exit_code, 0)
-
-    def test_parity_ok_empty_json(self):
-        """Profile with empty arrays/dict → no normalized entries → parity OK."""
-        profile = Profile.objects.create(name='t-parity-empty', ad_group='GRP-IDP-TPEM')
-        ProfileTargetPermission.objects.create(
-            profile=profile,
-            permission_type='ALL',
-            target_names_json=json.dumps([]),
-            target_patterns_json=json.dumps([]),
-            filter_by_attribute_json=json.dumps({}),
-            exclusion_patterns_json=json.dumps([]),
+        svc.set_target_permissions(
+            profile.id,
+            {'targets_type': 'all', 'target_names': [], 'target_patterns': []},
         )
-        sync_from_json(profile.id)
-
-        output, exit_code = self._call_command()
-        self.assertEqual(exit_code, 0)
-
-    def test_verbose_flag(self):
-        """--verbose shows OK entries."""
-        profile = Profile.objects.create(name='t-parity-verbose', ad_group='GRP-IDP-TPV')
-        ProfileTargetPermission.objects.create(
-            profile=profile,
-            permission_type='ALL',
-        )
-        sync_from_json(profile.id)
-
-        output, exit_code = self._call_command('--verbose')
-        self.assertEqual(exit_code, 0)
-        self.assertIn('OK', output)
+        self.assertEqual(get_target_names_from_normalized(profile.id), [])
+        self.assertEqual(get_target_patterns_from_normalized(profile.id), [])

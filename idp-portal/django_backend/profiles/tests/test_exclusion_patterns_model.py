@@ -1,108 +1,85 @@
 """
-Tests for ProfileTargetPermission exclusion_patterns field helpers.
-Story 25.6 - Task 5.1: Unit tests for get_exclusion_patterns() / set_exclusion_patterns().
-"""
+Tests for ProfileTargetPermission exclusion patterns via normalized tables.
 
-import json
+Story 78.15: Legacy exclusion_patterns_json CLOB field removed.
+Exclusion patterns are now stored in PROFILE_TARGET_EXCLUSIONS table
+and managed via ProfileService.set_target_permissions().
+"""
+import pytest
 from django.test import TestCase
 from profiles.models import Profile, ProfileTargetPermission
+from profiles.models_target_permission_normalized import ProfileTargetExclusion
+from profiles.services import ProfileService
+from profiles.target_permission_repository import get_exclusion_patterns
 
 
-class TestExclusionPatternsModelHelpers(TestCase):
-    """Test get_exclusion_patterns() and set_exclusion_patterns() helpers."""
+@pytest.mark.django_db
+class TestExclusionPatternsNormalized(TestCase):
+    """Test exclusion patterns via normalized table (Story 78.15)."""
 
     def setUp(self):
-        """Create test profile and permission."""
         self.profile = Profile.objects.create(
-            name="Test Profile",
-            ad_group="test-group",
+            name="Test Profile Excl",
+            ad_group="test-group-excl",
             is_admin=0,
-            is_auditor=0
+            is_auditor=0,
         )
-        self.perm = ProfileTargetPermission.objects.create(
-            profile=self.profile,
-            permission_type='ALL'
-        )
+        self.service = ProfileService()
 
     def test_get_exclusion_patterns_returns_empty_when_none(self):
-        """Test get_exclusion_patterns() returns [] when field is None."""
-        self.perm.exclusion_patterns_json = None
-        result = self.perm.get_exclusion_patterns()
-        self.assertEqual(result, [])
-
-    def test_get_exclusion_patterns_returns_empty_when_empty_string(self):
-        """Test get_exclusion_patterns() returns [] when field is empty string."""
-        self.perm.exclusion_patterns_json = ''
-        result = self.perm.get_exclusion_patterns()
-        self.assertEqual(result, [])
+        """get_exclusion_patterns returns [] when no exclusion rows exist."""
+        self.service.set_target_permissions(
+            self.profile.id,
+            {'targets_type': 'all'},
+        )
+        perm = ProfileTargetPermission.objects.get(profile=self.profile)
+        self.assertEqual(get_exclusion_patterns(perm), [])
 
     def test_get_exclusion_patterns_valid_list(self):
-        """Test get_exclusion_patterns() deserializes valid JSON array."""
+        """Exclusion patterns are returned sorted from normalized table."""
         patterns = ["PROD-CRITICAL-*", "DR-*", "SERVER-123"]
-        self.perm.exclusion_patterns_json = json.dumps(patterns)
-        result = self.perm.get_exclusion_patterns()
-        self.assertEqual(result, patterns)
+        self.service.set_target_permissions(
+            self.profile.id,
+            {'targets_type': 'all', 'exclusion_patterns': patterns},
+        )
+        perm = ProfileTargetPermission.objects.get(profile=self.profile)
+        result = get_exclusion_patterns(perm)
+        self.assertEqual(sorted(result), sorted(patterns))
 
-    def test_get_exclusion_patterns_filters_invalid_entries(self):
-        """Test get_exclusion_patterns() filters out non-string and empty entries."""
-        # Mix of valid and invalid patterns
-        self.perm.exclusion_patterns_json = json.dumps([
-            "VALID-*",
-            123,  # Invalid: not a string
-            "",  # Invalid: empty
-            "  ",  # Invalid: whitespace only
-            None,  # Invalid: None
-            "ANOTHER-VALID",
-        ])
-        result = self.perm.get_exclusion_patterns()
-        # Should only return valid non-empty strings
-        self.assertEqual(result, ["VALID-*", "ANOTHER-VALID"])
-
-    def test_get_exclusion_patterns_with_special_characters(self):
-        """Test get_exclusion_patterns() handles patterns with special chars."""
-        patterns = ["PROD-*", "APP-[123]-*", "SERVER_?_BACKUP"]
-        self.perm.exclusion_patterns_json = json.dumps(patterns)
-        result = self.perm.get_exclusion_patterns()
-        self.assertEqual(result, patterns)
-
-    def test_get_exclusion_patterns_malformed_json_returns_empty(self):
-        """Test get_exclusion_patterns() returns [] on malformed JSON."""
-        self.perm.exclusion_patterns_json = "{invalid json"
-        self.perm.profile_id = self.profile.id  # Set for logging
-        result = self.perm.get_exclusion_patterns()
-        self.assertEqual(result, [])
-
-    def test_get_exclusion_patterns_not_a_list_returns_empty(self):
-        """Test get_exclusion_patterns() returns [] when JSON is not a list."""
-        self.perm.exclusion_patterns_json = json.dumps({"key": "value"})
-        self.perm.profile_id = self.profile.id
-        result = self.perm.get_exclusion_patterns()
-        self.assertEqual(result, [])
-
-    def test_set_exclusion_patterns_with_valid_list(self):
-        """Test set_exclusion_patterns() serializes list to JSON."""
+    def test_set_exclusion_patterns_stores_in_normalized_table(self):
+        """set_target_permissions stores exclusion patterns in normalized table."""
         patterns = ["PROD-CRITICAL-*", "DR-*"]
-        self.perm.set_exclusion_patterns(patterns)
-        self.assertEqual(self.perm.exclusion_patterns_json, json.dumps(patterns))
+        self.service.set_target_permissions(
+            self.profile.id,
+            {'targets_type': 'all', 'exclusion_patterns': patterns},
+        )
+        stored = list(ProfileTargetExclusion.objects.filter(
+            profile_id=self.profile.id
+        ).values_list('exclusion_pattern', flat=True))
+        self.assertEqual(sorted(stored), sorted(patterns))
 
-    def test_set_exclusion_patterns_with_none(self):
-        """Test set_exclusion_patterns(None) sets field to None."""
-        self.perm.set_exclusion_patterns(["TEMP-*"])  # Set something first
-        self.perm.set_exclusion_patterns(None)
-        self.assertIsNone(self.perm.exclusion_patterns_json)
+    def test_update_exclusion_patterns_replaces_previous(self):
+        """Updating target permissions replaces exclusion patterns in normalized table."""
+        self.service.set_target_permissions(
+            self.profile.id,
+            {'targets_type': 'all', 'exclusion_patterns': ['OLD-*']},
+        )
+        self.service.set_target_permissions(
+            self.profile.id,
+            {'targets_type': 'all', 'exclusion_patterns': ['NEW-A-*', 'NEW-B-*']},
+        )
+        stored = sorted(ProfileTargetExclusion.objects.filter(
+            profile_id=self.profile.id
+        ).values_list('exclusion_pattern', flat=True))
+        self.assertEqual(stored, ['NEW-A-*', 'NEW-B-*'])
 
-    def test_set_exclusion_patterns_with_empty_list(self):
-        """Test set_exclusion_patterns([]) serializes to empty array."""
-        self.perm.set_exclusion_patterns([])
-        self.assertEqual(self.perm.exclusion_patterns_json, json.dumps([]))
-
-    def test_round_trip_serialization(self):
-        """Test set → get round-trip preserves data."""
+    def test_round_trip_via_service(self):
+        """set_target_permissions → get_exclusion_patterns round-trip preserves data."""
         patterns = ["PROD-*", "STAGING-CRITICAL-*", "DR-*"]
-        self.perm.set_exclusion_patterns(patterns)
-        self.perm.save()
-        
-        # Reload from DB
-        self.perm.refresh_from_db()
-        result = self.perm.get_exclusion_patterns()
-        self.assertEqual(result, patterns)
+        self.service.set_target_permissions(
+            self.profile.id,
+            {'targets_type': 'all', 'exclusion_patterns': patterns},
+        )
+        perm = ProfileTargetPermission.objects.get(profile=self.profile)
+        result = get_exclusion_patterns(perm)
+        self.assertEqual(sorted(result), sorted(patterns))

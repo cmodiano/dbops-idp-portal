@@ -10,11 +10,21 @@ from typing import Any
 
 import structlog
 
-from django.conf import settings
 from django.db import transaction
 from django.db import IntegrityError
 from django.db.models import QuerySet
 from profiles.models import Profile, ProfileActionPermission, ProfileTargetPermission
+from profiles.models_action_permission_normalized import (
+    ProfileActionAllowlist,
+    ProfileActionEnv,
+    ProfileActionTagPattern,
+)
+from profiles.models_target_permission_normalized import (
+    ProfileTargetAllowlist,
+    ProfileTargetAttributeFilter,
+    ProfileTargetExclusion,
+    ProfileTargetPattern,
+)
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.middleware import get_correlation_id
@@ -439,27 +449,39 @@ class ProfileService:
         type_map = {'list': 'LIST', 'pattern': 'PATTERN', 'all': 'ALL'}
         permission_type = type_map.get(permission_data.get('actions_type', 'all'), 'ALL')
         
-        # Create or update permission
+        # Create or update permission header row
         perm, created = ProfileActionPermission.objects.update_or_create(
             profile=profile,
             defaults={
                 'permission_type': permission_type,
             }
         )
-        
-        # Set JSON fields
-        if 'action_ids' in permission_data:
-            perm.set_action_ids(permission_data['action_ids'])
-        if 'tag_patterns' in permission_data:
-            perm.set_tag_patterns(permission_data['tag_patterns'])
-        if 'environments' in permission_data:
-            perm.set_environments(permission_data['environments'])
-        perm.save()
 
-        # Story 78.11: Dual-write — sync normalized tables when feature flag enabled
-        if getattr(settings, 'PROFILE_ACTION_PERMISSIONS_NORMALIZED_ENABLED', False):
-            from profiles.action_permission_repository import sync_from_json
-            sync_from_json(profile_id)
+        # Write directly to normalized tables (Story 78.15: no more JSON CLOB)
+        ProfileActionAllowlist.objects.filter(profile_id=profile_id).delete()
+        ProfileActionTagPattern.objects.filter(profile_id=profile_id).delete()
+        ProfileActionEnv.objects.filter(profile_id=profile_id).delete()
+
+        action_ids = permission_data.get('action_ids') or []
+        if action_ids:
+            ProfileActionAllowlist.objects.bulk_create([
+                ProfileActionAllowlist(profile_id=profile_id, action_id=aid)
+                for aid in dict.fromkeys(action_ids)  # preserve order, deduplicate
+            ])
+
+        tag_patterns = permission_data.get('tag_patterns') or []
+        if tag_patterns:
+            ProfileActionTagPattern.objects.bulk_create([
+                ProfileActionTagPattern(profile_id=profile_id, tag_pattern=tp)
+                for tp in dict.fromkeys(tag_patterns)
+            ])
+
+        environments = permission_data.get('environments') or []
+        if environments:
+            ProfileActionEnv.objects.bulk_create([
+                ProfileActionEnv(profile_id=profile_id, environment=env)
+                for env in dict.fromkeys(environments)
+            ])
 
         # Audit trail for permission changes — SOC1 compliance (PROF-MED-02 fix)
         if user and not skip_audit:
@@ -545,30 +567,58 @@ class ProfileService:
         type_map = {'list': 'LIST', 'pattern': 'PATTERN', 'all': 'ALL'}
         permission_type = type_map.get(permission_data.get('targets_type', 'all'), 'ALL')
         
-        # Create or update permission
+        # Create or update permission header row
         perm, created = ProfileTargetPermission.objects.update_or_create(
             profile=profile,
             defaults={
                 'permission_type': permission_type,
             }
         )
-        
-        # Set JSON fields
-        if 'target_names' in permission_data:
-            perm.set_target_names(permission_data['target_names'])
-        if 'target_patterns' in permission_data:
-            perm.set_target_patterns(permission_data['target_patterns'])
-        if 'filter_by_attribute' in permission_data:
-            perm.set_filter_by_attribute(permission_data['filter_by_attribute'])
-        # Story 25.6: Persist exclusion_patterns
-        if 'exclusion_patterns' in permission_data:
-            perm.set_exclusion_patterns(permission_data['exclusion_patterns'])
-        perm.save()
 
-        # Story 78.12: Dual-write to normalized tables when feature flag is enabled
-        if getattr(settings, 'PROFILE_TARGET_PERMISSIONS_NORMALIZED_ENABLED', False):
-            from profiles.target_permission_repository import sync_from_json
-            sync_from_json(profile_id)
+        # Write directly to normalized tables (Story 78.15: no more JSON CLOB)
+        ProfileTargetAllowlist.objects.filter(profile_id=profile_id).delete()
+        ProfileTargetPattern.objects.filter(profile_id=profile_id).delete()
+        ProfileTargetAttributeFilter.objects.filter(profile_id=profile_id).delete()
+        ProfileTargetExclusion.objects.filter(profile_id=profile_id).delete()
+
+        target_names = permission_data.get('target_names') or []
+        if target_names:
+            ProfileTargetAllowlist.objects.bulk_create([
+                ProfileTargetAllowlist(profile_id=profile_id, target_name=name)
+                for name in dict.fromkeys(target_names)
+            ])
+
+        target_patterns = permission_data.get('target_patterns') or []
+        if target_patterns:
+            ProfileTargetPattern.objects.bulk_create([
+                ProfileTargetPattern(profile_id=profile_id, pattern=pat)
+                for pat in dict.fromkeys(target_patterns)
+            ])
+
+        filter_by_attribute = permission_data.get('filter_by_attribute') or {}
+        if filter_by_attribute:
+            seen: set[tuple[str, str]] = set()
+            attr_rows = []
+            for key, values in filter_by_attribute.items():
+                if isinstance(values, list):
+                    for val in values:
+                        pair = (key, val)
+                        if pair not in seen:
+                            seen.add(pair)
+                            attr_rows.append(ProfileTargetAttributeFilter(
+                                profile_id=profile_id,
+                                attribute_key=key,
+                                attribute_value=val,
+                            ))
+            if attr_rows:
+                ProfileTargetAttributeFilter.objects.bulk_create(attr_rows)
+
+        exclusion_patterns = permission_data.get('exclusion_patterns') or []
+        if exclusion_patterns:
+            ProfileTargetExclusion.objects.bulk_create([
+                ProfileTargetExclusion(profile_id=profile_id, exclusion_pattern=ep)
+                for ep in dict.fromkeys(exclusion_patterns)
+            ])
 
         # Audit trail for permission changes — SOC1 compliance (PROF-MED-02 fix)
         if user and not skip_audit:

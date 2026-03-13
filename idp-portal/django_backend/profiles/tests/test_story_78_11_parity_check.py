@@ -1,124 +1,100 @@
 """
-Story 78.11 — Tests for the parity check management command.
+Story 78.15 — Tests for normalized action permission integrity.
 
-Tests: parity OK for all permission types, divergence detection.
-Tables managed by conftest.py session-scoped fixture.
+The legacy parity check commands (JSON vs normalized) have been removed.
+These tests verify that the normalized action permission tables remain
+internally consistent after service operations.
 """
-import json
-from io import StringIO
 
 import pytest
-from django.core.management import call_command
 from django.test import TestCase
 
-from profiles.action_permission_repository import sync_from_json
-from profiles.models import Profile, ProfileActionPermission
+from profiles.action_permission_repository import (
+    get_action_ids_from_normalized,
+    get_environments_from_normalized,
+    get_tag_patterns_from_normalized,
+)
+from profiles.models import Profile
 from profiles.models_action_permission_normalized import (
     ProfileActionAllowlist,
 )
+from profiles.services import ProfileService
 
 
 @pytest.mark.django_db
-class ParityCheckTest(TestCase):
-    def _call_command(self, *args):
-        out = StringIO()
-        err = StringIO()
-        try:
-            call_command(
-                'check_profile_action_permission_parity',
-                *args,
-                stdout=out,
-                stderr=err,
+class NormalizedActionPermissionIntegrityTest(TestCase):
+    """Test that action permission normalized tables remain consistent after service ops."""
+
+    def test_set_permissions_replaces_previous_data(self):
+        """set_action_permissions overwrites, not appends, existing data."""
+        profile = Profile.objects.create(name='replace-test', ad_group='GRP-IDP-RT')
+        svc = ProfileService()
+
+        svc.set_action_permissions(
+            profile.id,
+            {'actions_type': 'list', 'action_ids': [1, 2, 3], 'environments': ['dev']},
+        )
+        svc.set_action_permissions(
+            profile.id,
+            {'actions_type': 'list', 'action_ids': [10, 20], 'environments': ['prod']},
+        )
+
+        action_ids = get_action_ids_from_normalized(profile.id)
+        self.assertEqual(sorted(action_ids), [10, 20])
+
+        envs = get_environments_from_normalized(profile.id)
+        self.assertEqual(envs, ['prod'])
+
+    def test_all_type_no_action_ids(self):
+        """ALL permission type → no action_ids in normalized table."""
+        profile = Profile.objects.create(name='all-type-test', ad_group='GRP-IDP-AT')
+        ProfileService().set_action_permissions(
+            profile.id,
+            {'actions_type': 'all', 'environments': ['dev', 'staging', 'prod']},
+        )
+        self.assertEqual(get_action_ids_from_normalized(profile.id), [])
+        self.assertEqual(
+            sorted(get_environments_from_normalized(profile.id)),
+            ['dev', 'prod', 'staging'],
+        )
+
+    def test_pattern_type(self):
+        """PATTERN permission type → tag_patterns in normalized table."""
+        profile = Profile.objects.create(name='pattern-type-test', ad_group='GRP-IDP-PTT')
+        ProfileService().set_action_permissions(
+            profile.id,
+            {'actions_type': 'pattern', 'tag_patterns': ['oracle', 'provisioning'], 'environments': ['prod']},
+        )
+        self.assertEqual(
+            sorted(get_tag_patterns_from_normalized(profile.id)),
+            ['oracle', 'provisioning'],
+        )
+        self.assertEqual(get_environments_from_normalized(profile.id), ['prod'])
+
+    def test_no_duplicate_entries(self):
+        """Repeated set_action_permissions never creates duplicate normalized rows."""
+        profile = Profile.objects.create(name='dup-test', ad_group='GRP-IDP-DT')
+        svc = ProfileService()
+        for _ in range(3):
+            svc.set_action_permissions(
+                profile.id,
+                {'actions_type': 'list', 'action_ids': [1, 2, 3]},
             )
-            exit_code = 0
-        except SystemExit as e:
-            exit_code = e.code
-        return out.getvalue(), exit_code
-
-    def test_parity_ok_list_type(self):
-        """Profile with LIST + action_ids: parity OK after sync."""
-        profile = Profile.objects.create(name='parity-list', ad_group='GRP-IDP-PL')
-        ProfileActionPermission.objects.create(
-            profile=profile,
-            permission_type='LIST',
-            action_ids_json=json.dumps([1, 3, 5]),
-            environments_json=json.dumps(['dev']),
+        self.assertEqual(
+            ProfileActionAllowlist.objects.filter(profile_id=profile.id).count(), 3
         )
-        sync_from_json(profile.id)
 
-        output, exit_code = self._call_command()
-        self.assertEqual(exit_code, 0)
-        self.assertIn('PARITY CHECK PASSED', output)
-
-    def test_parity_ok_pattern_type(self):
-        """Profile with PATTERN + tag_patterns: parity OK after sync."""
-        profile = Profile.objects.create(name='parity-pattern', ad_group='GRP-IDP-PP')
-        ProfileActionPermission.objects.create(
-            profile=profile,
-            permission_type='PATTERN',
-            tag_patterns_json=json.dumps(['oracle', 'provisioning']),
-            environments_json=json.dumps(['staging', 'prod']),
+    def test_empty_permission_clears_normalized(self):
+        """Setting empty permissions removes all normalized entries."""
+        profile = Profile.objects.create(name='clear-test', ad_group='GRP-IDP-CT')
+        svc = ProfileService()
+        svc.set_action_permissions(
+            profile.id,
+            {'actions_type': 'list', 'action_ids': [1, 2], 'environments': ['dev']},
         )
-        sync_from_json(profile.id)
-
-        output, exit_code = self._call_command()
-        self.assertEqual(exit_code, 0)
-
-    def test_parity_ok_all_type(self):
-        """Profile with ALL + environments: parity OK after sync."""
-        profile = Profile.objects.create(name='parity-all', ad_group='GRP-IDP-PA')
-        ProfileActionPermission.objects.create(
-            profile=profile,
-            permission_type='ALL',
-            environments_json=json.dumps(['dev', 'staging', 'prod']),
+        svc.set_action_permissions(
+            profile.id,
+            {'actions_type': 'all', 'action_ids': [], 'environments': []},
         )
-        sync_from_json(profile.id)
-
-        output, exit_code = self._call_command()
-        self.assertEqual(exit_code, 0)
-
-    def test_divergence_detected(self):
-        """Manually introduce divergence — parity check must detect it."""
-        profile = Profile.objects.create(name='parity-div', ad_group='GRP-IDP-PD')
-        ProfileActionPermission.objects.create(
-            profile=profile,
-            permission_type='LIST',
-            action_ids_json=json.dumps([1, 2, 3]),
-        )
-        sync_from_json(profile.id)
-
-        # Introduce divergence: add an extra entry to normalized table
-        ProfileActionAllowlist.objects.create(profile_id=profile.id, action_id=999)
-
-        output, exit_code = self._call_command()
-        self.assertEqual(exit_code, 1)
-        self.assertIn('PARITY CHECK FAILED', output)
-        self.assertIn('DIFF', output)
-
-    def test_parity_ok_null_json_fields(self):
-        """Profile with NULL JSON → no normalized entries → parity OK."""
-        profile = Profile.objects.create(name='parity-null', ad_group='GRP-IDP-PN')
-        ProfileActionPermission.objects.create(
-            profile=profile,
-            permission_type='ALL',
-            action_ids_json=None,
-            tag_patterns_json=None,
-            environments_json=None,
-        )
-        sync_from_json(profile.id)
-
-        output, exit_code = self._call_command()
-        self.assertEqual(exit_code, 0)
-
-    def test_verbose_flag(self):
-        """--verbose shows OK entries."""
-        profile = Profile.objects.create(name='parity-verbose', ad_group='GRP-IDP-PV')
-        ProfileActionPermission.objects.create(
-            profile=profile,
-            permission_type='ALL',
-        )
-        sync_from_json(profile.id)
-
-        output, exit_code = self._call_command('--verbose')
-        self.assertEqual(exit_code, 0)
-        self.assertIn('OK', output)
+        self.assertEqual(get_action_ids_from_normalized(profile.id), [])
+        self.assertEqual(get_environments_from_normalized(profile.id), [])

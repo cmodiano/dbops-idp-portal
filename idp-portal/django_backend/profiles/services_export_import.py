@@ -310,7 +310,7 @@ def _permissions_differ(
     if current_actions_type != incoming_actions_type:
         return True
     if actions_perm and incoming_actions_type == "PATTERN":
-        incoming_pt = tuple(actions_payload.get("tag_patterns") or [])
+        incoming_pt = tuple(sorted(actions_payload.get("tag_patterns") or []))
         current_pt = tuple(repo_get_tag_patterns(actions_perm) or [])
         if incoming_pt != current_pt:
             return True

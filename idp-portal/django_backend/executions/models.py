@@ -21,7 +21,7 @@ class ExecutionStatus(models.TextChoices):
       Distinct from FAILED which means the platform received and processed the request but it failed.
     - PENDING_APPROVAL: DEPRECATED (78.14, ADR-007) — REMOVED FROM DB CHECK constraint (V135).
       Kept in Python enum for backward-compat (audit log mapping, state machine dead-state).
-      Will be fully removed in Story 78.15.
+      Retained indefinitely to avoid breaking audit log queries on historical data.
     - RUNNING: Execution in progress on platform
     - COMPLETED: Execution finished successfully
     - FAILED: Execution failed during/after platform processing
@@ -100,10 +100,8 @@ class Execution(models.Model):
     Execution model mapping to Oracle EXECUTIONS table (V023, V030, V033).
     Represents an execution of an action.
 
-    Champs dépréciés (ADR-007, Story 57.12) :
-    - approved_by, approved_at, approval_comment : source de vérité migrée vers
-      ExecutionStep (Story 57.1 / V099). Conservés pour données historiques et
-      backward compat. Ne plus écrire dans ces champs, utiliser ExecutionStep.approved_* à la place.
+    Note (Story 78.15, V136): approved_by, approved_at, approval_comment were removed.
+    Source of truth is ExecutionStep.approved_by/at/approval_comment (ADR-007).
     """
     id = models.BigAutoField(primary_key=True, db_column='ID')
     action = models.ForeignKey(
@@ -133,26 +131,6 @@ class Execution(models.Model):
         null=True,
         blank=True,
         db_column='SERVICENOW_CHANGE_ID'
-    )
-    # Approval workflow fields (V030)
-    # DEPRECATED (78.14, ADR-007) — Source of truth: EXECUTION_STEPS.APPROVED_BY.
-    # Ne plus écrire. Suppression prévue Story 78.15. Lecture résiduelle: dashboard operations_approbations (backward-compat).
-    approved_by = models.ForeignKey(
-        User,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='approved_executions',
-        db_column='APPROVED_BY'
-    )
-    # DEPRECATED (78.14, ADR-007) — Source of truth: EXECUTION_STEPS.APPROVED_AT. Suppression Story 78.15.
-    approved_at = models.DateTimeField(null=True, blank=True, db_column='APPROVED_AT')
-    # DEPRECATED (78.14, ADR-007) — Source of truth: EXECUTION_STEPS.APPROVAL_COMMENT. Suppression Story 78.15.
-    approval_comment = models.CharField(
-        max_length=1000,
-        null=True,
-        blank=True,
-        db_column='APPROVAL_COMMENT'
     )
     # Parent execution for remediation (V033)
     parent_execution = models.ForeignKey(

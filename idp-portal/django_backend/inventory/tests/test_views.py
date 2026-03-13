@@ -8,7 +8,8 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 from rest_framework import status
 
-from profiles.models import Profile, ProfileActionPermission, ProfileTargetPermission
+from profiles.models import Profile, ProfileTargetPermission
+from profiles.services import ProfileService
 from inventory.services import InventoryServiceError
 
 
@@ -26,10 +27,9 @@ class TargetListViewTests(TestCase):
             ad_group='GRP-ADMIN',
             is_admin=1
         )
-        ProfileActionPermission.objects.create(
-            profile=self.profile,
-            permission_type='ALL',
-            environments_json='["developpement", "certification", "production"]'
+        ProfileService().set_action_permissions(
+            self.profile.id,
+            {'actions_type': 'all', 'environments': ['developpement', 'certification', 'production']},
         )
         ProfileTargetPermission.objects.create(
             profile=self.profile,
@@ -300,10 +300,9 @@ class TargetRBACTests(TestCase):
             description='Dev only access',
             ad_group='GRP-DEV-ONLY'
         )
-        ProfileActionPermission.objects.create(
-            profile=self.profile,
-            permission_type='ALL',
-            environments_json='["developpement"]'  # Only developpement access
+        ProfileService().set_action_permissions(
+            self.profile.id,
+            {'actions_type': 'all', 'environments': ['developpement']},
         )
         ProfileTargetPermission.objects.create(
             profile=self.profile,
@@ -364,15 +363,13 @@ class TargetPatternPermissionTests(TestCase):
             description='Web team access',
             ad_group='GRP-WEB-TEAM'
         )
-        ProfileActionPermission.objects.create(
-            profile=self.profile,
-            permission_type='ALL',
-            environments_json='["developpement", "certification", "production"]'
+        ProfileService().set_action_permissions(
+            self.profile.id,
+            {'actions_type': 'all', 'environments': ['developpement', 'certification', 'production']},
         )
-        ProfileTargetPermission.objects.create(
-            profile=self.profile,
-            permission_type='PATTERN',
-            target_patterns_json='["web-*"]'  # Only web-* targets
+        ProfileService().set_target_permissions(
+            self.profile.id,
+            {'targets_type': 'pattern', 'target_patterns': ['web-*']},
         )
 
         # Mock user
@@ -424,14 +421,13 @@ class TargetServiceErrorTests(TestCase):
             ad_group='GRP-ADMIN',
             is_admin=1
         )
-        ProfileActionPermission.objects.create(
-            profile=self.admin_profile,
-            permission_type='ALL',
-            environments_json='["developpement", "certification", "production"]'
+        ProfileService().set_action_permissions(
+            self.admin_profile.id,
+            {'actions_type': 'all', 'environments': ['developpement', 'certification', 'production']},
         )
-        ProfileTargetPermission.objects.create(
-            profile=self.admin_profile,
-            permission_type='ALL'
+        ProfileService().set_target_permissions(
+            self.admin_profile.id,
+            {'targets_type': 'all'},
         )
 
         self.admin_user = MagicMock()

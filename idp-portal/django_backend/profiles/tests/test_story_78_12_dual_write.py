@@ -1,15 +1,13 @@
 """
-Story 78.12 — Tests for dual-write via set_target_permissions().
+Story 78.15 — Tests for direct normalized write via set_target_permissions().
 
-Tests: with feature flag True, JSON + normalized tables are both written.
-Tables managed by conftest.py session-scoped fixture.
+Story 78.12 dual-write has been removed: JSON CLOB columns no longer exist.
+These tests verify that set_target_permissions() writes exclusively to normalized tables.
 """
-import json
-
 import pytest
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
-from profiles.models import Profile, ProfileTargetPermission
+from profiles.models import Profile
 from profiles.models_target_permission_normalized import (
     ProfileTargetAllowlist,
     ProfileTargetAttributeFilter,
@@ -20,16 +18,15 @@ from profiles.services import ProfileService
 
 
 @pytest.mark.django_db
-class DualWriteTest(TestCase):
+class DirectNormalizedWriteTargetTest(TestCase):
     def setUp(self):
         self.profile = Profile.objects.create(
-            name='t-dual-write', ad_group='GRP-IDP-TDW'
+            name='t-normalized-write', ad_group='GRP-IDP-TDW'
         )
         self.service = ProfileService()
 
-    @override_settings(PROFILE_TARGET_PERMISSIONS_NORMALIZED_ENABLED=True)
-    def test_set_target_permissions_writes_json_and_normalized(self):
-        """With flag True, set_target_permissions writes both JSON and normalized tables."""
+    def test_set_target_permissions_writes_to_normalized_tables(self):
+        """set_target_permissions writes target names, filters, exclusions to normalized tables."""
         self.service.set_target_permissions(
             self.profile.id,
             {
@@ -41,11 +38,6 @@ class DualWriteTest(TestCase):
             },
         )
 
-        # Verify JSON was written
-        perm = ProfileTargetPermission.objects.get(profile_id=self.profile.id)
-        self.assertEqual(json.loads(perm.target_names_json), ['server-1', 'server-2'])
-
-        # Verify normalized tables were written
         self.assertEqual(
             sorted(ProfileTargetAllowlist.objects.filter(
                 profile_id=self.profile.id
@@ -65,21 +57,16 @@ class DualWriteTest(TestCase):
             ['DR-*'],
         )
 
-    @override_settings(PROFILE_TARGET_PERMISSIONS_NORMALIZED_ENABLED=True)
-    def test_update_permissions_syncs_normalized(self):
-        """Updating permissions re-syncs normalized tables."""
+    def test_update_permissions_replaces_normalized_data(self):
+        """Updating permissions deletes and replaces normalized table rows."""
         self.service.set_target_permissions(
             self.profile.id,
-            {
-                'targets_type': 'list',
-                'target_names': ['srv-a', 'srv-b'],
-            },
+            {'targets_type': 'list', 'target_names': ['srv-a', 'srv-b']},
         )
         self.assertEqual(
             ProfileTargetAllowlist.objects.filter(profile_id=self.profile.id).count(), 2
         )
 
-        # Update
         self.service.set_target_permissions(
             self.profile.id,
             {
@@ -88,7 +75,6 @@ class DualWriteTest(TestCase):
                 'target_names': [],
             },
         )
-        # Old allowlist entries should be deleted
         self.assertEqual(
             ProfileTargetAllowlist.objects.filter(profile_id=self.profile.id).count(), 0
         )
@@ -99,28 +85,8 @@ class DualWriteTest(TestCase):
             ['prod-*'],
         )
 
-    def test_set_target_permissions_no_normalized_when_flag_false(self):
-        """With flag False (default), normalized tables are NOT written."""
-        self.service.set_target_permissions(
-            self.profile.id,
-            {
-                'targets_type': 'list',
-                'target_names': ['server-1'],
-            },
-        )
-
-        # JSON was written
-        perm = ProfileTargetPermission.objects.get(profile_id=self.profile.id)
-        self.assertEqual(json.loads(perm.target_names_json), ['server-1'])
-
-        # Normalized tables NOT written
-        self.assertEqual(
-            ProfileTargetAllowlist.objects.filter(profile_id=self.profile.id).count(), 0
-        )
-
-    @override_settings(PROFILE_TARGET_PERMISSIONS_NORMALIZED_ENABLED=True)
-    def test_pattern_type_with_patterns(self):
-        """Pattern type writes target patterns to normalized tables."""
+    def test_pattern_type_with_patterns_and_exclusions(self):
+        """Pattern type writes target patterns and exclusion patterns to normalized tables."""
         self.service.set_target_permissions(
             self.profile.id,
             {
@@ -143,7 +109,6 @@ class DualWriteTest(TestCase):
             ['CRITICAL-*'],
         )
 
-    @override_settings(PROFILE_TARGET_PERMISSIONS_NORMALIZED_ENABLED=True)
     def test_filter_by_attribute_with_multiple_keys(self):
         """filter_by_attribute with complex dict → correct rows in normalized table."""
         self.service.set_target_permissions(

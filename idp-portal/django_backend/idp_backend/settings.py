@@ -807,17 +807,9 @@ WORKFLOW_NORMALIZED_DEFINITIONS_ENABLED = os.getenv(
     'WORKFLOW_NORMALIZED_DEFINITIONS_ENABLED', 'False'
 ).lower() == 'true'
 
-# Story 78.11: Feature flag for normalized profile action permissions
-# Default: False (read from JSON CLOB). Set to True to read from normalized tables.
-PROFILE_ACTION_PERMISSIONS_NORMALIZED_ENABLED = os.getenv(
-    'PROFILE_ACTION_PERMISSIONS_NORMALIZED_ENABLED', 'False'
-).lower() == 'true'
-
-# Story 78.12: Feature flag for normalized profile target permissions
-# Default: False (read from JSON CLOB). Set to True to read from normalized tables.
-PROFILE_TARGET_PERMISSIONS_NORMALIZED_ENABLED = os.getenv(
-    'PROFILE_TARGET_PERMISSIONS_NORMALIZED_ENABLED', 'False'
-).lower() == 'true'
+# Story 78.15: PROFILE_ACTION_PERMISSIONS_NORMALIZED_ENABLED and
+# PROFILE_TARGET_PERMISSIONS_NORMALIZED_ENABLED feature flags removed.
+# Legacy CLOB columns dropped in V136. Reads come exclusively from normalized tables.
 
 # ============================================================================
 # External Services Configuration (Story M.8 - Health Check)

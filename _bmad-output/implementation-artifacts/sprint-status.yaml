@@ -948,7 +948,7 @@ development_status:
     78-12-profile-target-permission-normalisees: done # Code review 2026-03-13: 3 fixes (H1 sorted/unsorted comparison _permissions_differ, M1 double query get_filter_by_attribute_from_normalized, M2 or[] redondants) — 48/48 tests
     78-13-contraintes-json-tier2: done # Code review 2026-03-13: 4 fixes (H1 v_pk NUMBER, M1 troncature indicator, M2 verify script DRY+cas disabled, M3 commentaires SQLCODE) + L1 SET TIMING ON
     78-14-deprecation-colonnes-runtime-legacy: done # Code review 2026-03-13: 6 fixes (CRIT V135 idempotence DROP/ADD, H1 services.py comments, H2 test_audit_trail PENDING_APPROVAL, H3 test_rbac_security, M1 test_models, M2 test_parametrized) + L1 baseline (informatif)
-    78-15-suppression-clob-permissions-legacy: backlog
+    78-15-suppression-clob-permissions-legacy: done # Code review 2026-03-13: 2 HIGH + 4 MEDIUM + 2 LOW — 6 fixes (H1 feature flags orphelins settings.py+test_settings.py, H2 sorted() tag_patterns _permissions_differ, M3 commentaire PENDING_APPROVAL, M4 test_story_78_15_contract.py 14 tests) — File List complété
     78-16-observabilite-metriques-runbooks-alertes: backlog
     epic-78-retrospective: optional
     # === Epic 79: Notifications enrichies — Variables, CC, pièces jointes, webhook Teams par step ===

@@ -347,21 +347,22 @@ class TestParametrizedRBACCombinations:
     def test_environment_permission_combinations(self, permission_type, allowed_envs, can_execute_prod):
         """Test different environment permission combinations."""
         from profiles.models import ProfileActionPermission
-        import json
+        from profiles.services import ProfileService
+        from profiles.action_permission_repository import get_environments
 
         profile = Profile.objects.create(
             name=f'EnvProfile_{permission_type}_{len(allowed_envs)}',
             ad_group='CN=EnvProfile,OU=Groups,DC=corp,DC=com'
         )
 
-        ProfileActionPermission.objects.create(
-            profile=profile,
-            permission_type=permission_type,
-            environments_json=json.dumps(allowed_envs)
+        type_map = {'LIST': 'list', 'PATTERN': 'pattern', 'ALL': 'all'}
+        ProfileService().set_action_permissions(
+            profile.id,
+            {'actions_type': type_map.get(permission_type, 'all'), 'environments': allowed_envs},
         )
 
         perm = ProfileActionPermission.objects.get(profile=profile)
-        environments = perm.get_environments()
+        environments = get_environments(perm)
 
         assert ('prod' in environments) == can_execute_prod
 

@@ -144,6 +144,8 @@ exclude = [
     "__pycache__/",
     ".*/tests\\.py$",
     "test_settings\\.py$",
+    "profiles/management/commands/check_profile_action_permission_parity\\.py$",
+    "profiles/management/commands/check_profile_target_permission_parity\\.py$",
 ]
 
 [tool.django-stubs]
@@ -177,7 +179,7 @@ module = [
 ]
 ignore_missing_imports = true
 
-# Story 78.10–78.12: Normalized models (managed=False) — django-stubs false positives
+# Story 78.10–78.15: Normalized models (managed=False) — django-stubs false positives
 # on ForeignKey _id accessors and .objects manager for unmanaged models
 [[tool.mypy.overrides]]
 module = [
@@ -186,6 +188,7 @@ module = [
     "profiles.action_permission_repository",
     "profiles.models_target_permission_normalized",
     "profiles.target_permission_repository",
+    "profiles.services",
 ]
 disable_error_code = ["attr-defined"]
 
