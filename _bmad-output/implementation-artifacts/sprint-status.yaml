@@ -965,7 +965,7 @@ development_status:
     # Purge données, garde-fous dev, trace opérationnelle, validation QA
     epic-80: in-progress
     80-1-purge-tables-orchestration-reset: done # WORKFLOW_EVENT_COUNTER ajoutée (code review) ; validation manuelle Oracle dev requise
-    80-2-gardefous-environnement-dev: backlog # APP_ENV + --env=dev, interdiction staging/prod
+    80-2-gardefous-environnement-dev: done # double indicateur --reset, validation --env inconnue, doc section 5 complète
     80-3-trace-operationnelle-reset: backlog # Journaliser qui/quand a lancé le reset
     80-4-validation-qa-reset-reseed: backlog # Scénarios QA catalogue, executions, admin après reset
     epic-80-retrospective: optional

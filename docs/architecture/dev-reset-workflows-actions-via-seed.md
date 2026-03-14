@@ -78,10 +78,42 @@ Ce mode:
 
 ## 5) Garde-fous obligatoires
 
-1. **Interdiction hors dev**: jamais sur staging/prod.
-2. **Protection environnement**: conserver le check `APP_ENV` + `--env=dev`.
-3. **Trace operationnelle**: journaliser qui a lance le reset et quand.
-4. **Fenetre de maintenance dev**: annoncer le reset a l'equipe pour eviter les faux positifs QA.
+### 5.1 Valeurs d'environnement bloquées
+
+Le script refuse explicitement toute exécution si l'une des valeurs suivantes est détectée dans `APP_ENV` **ou** `--env` :
+
+- `staging`
+- `production`
+- `prod`
+
+Ces valeurs sont définies dans la constante `BLOCKED_ENVIRONMENTS` dans `seed_dev_data.py`.
+
+### 5.2 Logique de vérification (AND)
+
+La logique est **AND** (vérification en quatre étapes distinctes) :
+
+1. **Validation `--env`** : si `--env` est fourni, sa valeur doit être reconnue (présente dans `ALLOWED_ENVIRONMENTS` ou `BLOCKED_ENVIRONMENTS`). Toute valeur inconnue → `sys.exit(1)`.
+2. **Blocage explicite** : si `APP_ENV` **ou** `--env` contient une valeur bloquée → `sys.exit(1)` immédiat avec message indiquant la source et la valeur détectée.
+3. **Exigence dev** : au moins une des deux valeurs (`APP_ENV` ou `--env`) doit être dans `ALLOWED_ENVIRONMENTS` (`"development"`, `"dev"`). Si aucune n'est présente → `sys.exit(1)`.
+4. **Double indicateur pour `--reset`** : en mode `--reset` (opération destructive), **les deux** indicateurs (`APP_ENV` et `--env`) doivent être explicitement définis à une valeur dev. Si l'un des deux est absent → `sys.exit(1)`.
+
+Cette logique évite le cas où `--env=dev` masquerait silencieusement un `APP_ENV=staging`, et renforce la sécurité pour les opérations de purge.
+
+### 5.3 Messages d'erreur attendus
+
+| Situation | Message produit |
+|-----------|----------------|
+| `--env=foobar` (valeur inconnue) | `ERROR: Unrecognized --env value: 'foobar'.\nAccepted values: development, dev\nBlocked values: staging, production, prod` |
+| `APP_ENV=staging` | `ERROR: Refused to run on APP_ENV=staging.\nThis script is NEVER allowed on staging or production environments.\nDetected: APP_ENV=staging, --env=(not set)` |
+| `--env=prod` | `ERROR: Refused to run on --env=prod.\nThis script is NEVER allowed on staging or production environments.\nDetected: APP_ENV=(not set), --env=prod` |
+| Aucun indicateur dev | `ERROR: This script can only run in development environment.\nCurrent: APP_ENV=(not set), --env=(not set)\nUse --env=dev or set APP_ENV=development` |
+| `--reset` sans les deux indicateurs | `ERROR: --reset requires BOTH APP_ENV and --env to be explicitly set to a dev value.\nExample: APP_ENV=development python3 seed_dev_data.py --env=dev --reset` |
+| Environnement valide | `Environment check passed: {valeur_dev}` (valeur `--env` si fournie, sinon `APP_ENV`) |
+
+### 5.4 Autres garde-fous
+
+4. **Trace operationnelle**: journaliser qui a lance le reset et quand (story 80.3).
+5. **Fenetre de maintenance dev**: annoncer le reset a l'equipe pour eviter les faux positifs QA.
 
 ---
 

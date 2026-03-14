@@ -35,6 +35,7 @@ import oracledb
 # === Configuration ===
 
 ALLOWED_ENVIRONMENTS = ("development", "dev")
+BLOCKED_ENVIRONMENTS = ("staging", "production", "prod")
 
 
 def get_connection() -> oracledb.Connection:
@@ -52,13 +53,39 @@ def get_connection() -> oracledb.Connection:
 def check_environment(env_arg: str | None) -> None:
     """Verify we're running in development environment.
 
+    Rules:
+    - --env, if provided, must be a recognized value (allowed or blocked)
+    - APP_ENV must not be staging/prod/production
+    - --env must not be staging/prod/production
+    - At least one of APP_ENV or --env must be in ALLOWED_ENVIRONMENTS
+
     Raises:
-        SystemExit: If not in development environment
+        SystemExit: If not in development environment or staging/prod detected
     """
     app_env = os.environ.get("APP_ENV", "").lower()
-    env_check = env_arg.lower() if env_arg else app_env
+    env_flag = env_arg.lower() if env_arg else ""
 
-    if env_check not in ALLOWED_ENVIRONMENTS:
+    # Reject unrecognized --env values (must be explicitly allowed or blocked)
+    if env_flag and env_flag not in ALLOWED_ENVIRONMENTS and env_flag not in BLOCKED_ENVIRONMENTS:
+        print(
+            f"ERROR: Unrecognized --env value: '{env_flag}'.\n"
+            f"Accepted values: {', '.join(ALLOWED_ENVIRONMENTS)}\n"
+            f"Blocked values: {', '.join(BLOCKED_ENVIRONMENTS)}"
+        )
+        sys.exit(1)
+
+    # Explicit block: refuse staging/prod in either indicator
+    for value, source in [(app_env, "APP_ENV"), (env_flag, "--env")]:
+        if value and value in BLOCKED_ENVIRONMENTS:
+            print(
+                f"ERROR: Refused to run on {source}={value}.\n"
+                f"This script is NEVER allowed on staging or production environments.\n"
+                f"Detected: APP_ENV={app_env or '(not set)'}, --env={env_arg or '(not set)'}"
+            )
+            sys.exit(1)
+
+    # Require at least one dev indicator
+    if app_env not in ALLOWED_ENVIRONMENTS and env_flag not in ALLOWED_ENVIRONMENTS:
         print(
             f"ERROR: This script can only run in development environment.\n"
             f"Current: APP_ENV={app_env or '(not set)'}, --env={env_arg or '(not set)'}\n"
@@ -66,6 +93,7 @@ def check_environment(env_arg: str | None) -> None:
         )
         sys.exit(1)
 
+    env_check = env_flag if env_flag in ALLOWED_ENVIRONMENTS else app_env
     print(f"Environment check passed: {env_check}")
 
 
@@ -905,6 +933,18 @@ def main() -> None:
 
     # Check environment
     check_environment(args.env)
+
+    # --reset requires BOTH APP_ENV and --env to be explicitly set (user story 80.2)
+    if args.reset:
+        app_env_valid = os.environ.get("APP_ENV", "").lower() in ALLOWED_ENVIRONMENTS
+        env_arg_valid = bool(args.env) and args.env.lower() in ALLOWED_ENVIRONMENTS
+        if not app_env_valid or not env_arg_valid:
+            print(
+                "ERROR: --reset requires BOTH APP_ENV and --env to be explicitly set to a dev value.\n"
+                f"Current: APP_ENV={os.environ.get('APP_ENV') or '(not set)'}, --env={args.env or '(not set)'}\n"
+                "Example: APP_ENV=development python3 seed_dev_data.py --env=dev --reset"
+            )
+            sys.exit(1)
 
     print("\nConnecting to Oracle database...")
     try:
