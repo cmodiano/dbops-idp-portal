@@ -1,6 +1,7 @@
 """
 GateEvaluator service for evaluating gate_conditions on WAITING ExecutionSteps.
 Story 25.3: Evaluates conditions and determines if a step can transition WAITING → RUNNING.
+Story 82.5: Utilise gate_registry pour valider les types et déléguer via requires_manual_resolution.
 """
 from typing import Any
 
@@ -8,6 +9,7 @@ import structlog
 from django.utils import timezone
 
 from core.middleware import get_correlation_id
+from executions.gates.registry import gate_registry
 from inventory.services import InventoryService, InventoryServiceError
 
 logger = structlog.get_logger(__name__)
@@ -121,29 +123,42 @@ class GateEvaluator:
         all_satisfied = True
 
         for condition in gate_conditions:
-            gate_type = condition.get('type')
-            match gate_type:
-                case 'maintenance_window':
-                    # Story 25.4: if maintenance window is not required for this env, auto-satisfy.
-                    if not requires_maintenance_window:
-                        satisfied = True
-                        context = {'reason': "Plage de maintenance non requise pour cet environnement"}
-                    else:
-                        satisfied, context = self._check_maintenance_window(step, condition)
-                case 'approval_granted':
-                    # Approval gates ALWAYS require explicit user approval via POST /approve/.
-                    # env_config.requires_approval was for the old execution-level flow.
-                    # Gate steps with type approval_granted are never auto-satisfied by the
-                    # evaluator — the approve endpoint marks COMPLETED and resumes the workflow.
-                    satisfied = False
-                    context = {'reason': "En attente d'approbation explicite"}
-                case _:
-                    # Unsupported gate types are not satisfied (future stories)
-                    satisfied = False
-                    context = {'reason': f'Unsupported gate type: {gate_type}'}
+            # condition_type est la valeur runtime stockée par GateHandler (ex: 'approval_granted')
+            condition_type = condition.get('type')
+
+            # Valider via le registre (condition_type side) — Story 82.5
+            try:
+                definition = gate_registry.get_for_condition_type(condition_type)
+            except KeyError:
+                # Type véritablement inconnu du registre
+                satisfied = False
+                context = {'reason': f'Unsupported gate type: {condition_type}'}
+                gate_status.append({'type': condition_type, 'satisfied': satisfied, **context})
+                all_satisfied = False
+                continue
+
+            if definition.requires_manual_resolution:
+                # Gates nécessitant résolution humaine (ex: approval_granted)
+                # Jamais auto-satisfaits par le poll GateEvaluator.
+                satisfied = False
+                context = {'reason': "En attente d'approbation explicite"}
+            else:
+                # Gates auto-évalués
+                match condition_type:
+                    case 'maintenance_window':
+                        # Story 25.4: if maintenance window is not required for this env, auto-satisfy.
+                        if not requires_maintenance_window:
+                            satisfied = True
+                            context = {'reason': "Plage de maintenance non requise pour cet environnement"}
+                        else:
+                            satisfied, context = self._check_maintenance_window(step, condition)
+                    case _:
+                        # Enregistré mais pas encore de stratégie d'évaluation
+                        satisfied = False
+                        context = {'reason': f'No evaluator implemented for: {condition_type}'}
 
             gate_status.append({
-                'type': gate_type,
+                'type': condition_type,
                 'satisfied': satisfied,
                 **context,
             })

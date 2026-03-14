@@ -15,16 +15,9 @@ from capabilities.serializers import (
 from core.middleware import get_correlation_id
 from platforms.registry import platform_registry
 from services.definitions import service_definition_registry
-from executions.step_handlers.gate_handler import GateHandler
+from executions.gates.registry import gate_registry
 
 logger = structlog.get_logger(__name__)
-
-# Labels d'affichage pour chaque gate_type (clés de GateHandler.condition_type_map)
-# NOTE: Ces labels seront remplacés par GateDefinition.display_name en Story 82.5.
-_GATE_VARIANT_LABELS: dict[str, str] = {
-    'maintenance_window': 'Fenêtre de maintenance',
-    'approval': 'Approbation manuelle',
-}
 
 # Labels et catégories des step_types statiques
 _STEP_TYPES_STATIC = [
@@ -80,7 +73,7 @@ def get_workflow_steps_capabilities(request: Request) -> Response:
     """GET /api/v1/capabilities/workflow-steps
 
     Retourne les types de steps workflow avec leurs variants (gates).
-    NOTE: config_schema est {} à ce stade — sera enrichi en Story 82.5 (GateRegistry).
+    Variants gates dérivés de gate_registry (Story 82.5).
     """
     correlation_id = get_correlation_id()
     logger.info("capabilities_workflow_steps_requested", correlation_id=correlation_id)
@@ -94,16 +87,16 @@ def get_workflow_steps_capabilities(request: Request) -> Response:
             'config_schema': {},
         }
         if step_meta['code'] == 'gate':
-            # Variants dérivés de GateHandler.condition_type_map
-            # Clés = gate_type (ce que l'utilisateur configure), valeurs = condition_type (runtime)
-            entry['variants'] = [
-                {
+            # Variants dérivés de gate_registry (Story 82.5)
+            variants = []
+            for gate_type in gate_registry.list_types():
+                defn = gate_registry.get(gate_type)
+                variants.append({
                     'code': gate_type,
-                    'label': _GATE_VARIANT_LABELS.get(gate_type, gate_type),
-                    'config_schema': {},
-                }
-                for gate_type in GateHandler.condition_type_map
-            ]
+                    'label': defn.display_name,
+                    'config_schema': defn.config_schema,
+                })
+            entry['variants'] = variants
         step_types.append(entry)
 
     return Response({'data': {'step_types': step_types}})

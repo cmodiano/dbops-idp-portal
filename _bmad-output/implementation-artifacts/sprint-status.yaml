@@ -987,7 +987,7 @@ development_status:
     82-2-platform-definition-registry: done # platforms/definitions.py, PlatformRegistry, build_platform_runtime_config(), health checks dérivés, aliases unifiés — review: C1 trigger/execution_views platform_type normalization, H1 action.py AC4, M2 type annotations
     82-3-service-definition-registry: done # services/definitions.py, allowlist dérivée, service_call_handler générique, 28 tests unitaires — review: C1 test _ALLOWED_OPERATIONS→service_definition_registry mock, M1 __post_init__ frozenset validation, M2 commentaire SYNC mis à jour, L1 double lookup simplifié, L2 ServiceDefinition dans __all__
     82-4-api-capabilities-backend: done # GET /capabilities/integrations, /workflow-steps — 16/16 tests pass, code review OK 2026-03-14
-    82-5-gate-registry-definition: backlog # GateRegistry, GateDefinition, GateHandler/GateEvaluator refactor
+    82-5-gate-registry-definition: done # GateRegistry, GateDefinition, GateHandler/GateEvaluator refactor — code review OK 2026-03-14: M1 cache valid_condition_types, M2 double get() views, M3 hard-code approval→requires_manual_resolution, M4 test approval_granted satisfied=False, L1-L4 commentaires/naming
     82-6-frontend-capabilities-client: backlog # useCapabilities, ServiceCallStepConfig, GateStepConfig schema-driven
     82-7-action-wizard-formulaires-schema-driven: backlog # ActionWizard plateforme depuis capacités, validation inline
     82-8-actions-workflows-capabilities: backlog # Palette steps, validation config, consommateurs capacités

@@ -1,5 +1,5 @@
 """
-GateHandler — implémentation story 57.7
+GateHandler — Story 82.5: utilise gate_registry au lieu de condition_type_map.
 
 Handler pour les steps de type gate (ADR-007 §4e).
 Crée un step WAITING avec gate_conditions ; réutilise GateEvaluator et Celery Beat existants.
@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import structlog
 
+from executions.gates.registry import gate_registry
 from executions.models import Execution
 
 logger = structlog.get_logger(__name__)
@@ -19,20 +20,8 @@ class GateHandler:
     Construit les gate_conditions depuis le step_config et retourne
     un dict signalant WAITING à _execute_handler_step().
 
-    Types supportés :
-    - gate_type: maintenance_window → condition {'type': 'maintenance_window'}
-    - gate_type: approval           → condition {'type': 'approval_granted'} + context_from
-
-    Story 82.1 (AC1) : condition_type_map est un attribut de classe pour permettre
-    la vérification d'alignement avec VALID_GATE_CONDITION_TYPES en test.
+    Story 82.5: condition_type_map supprimé — gate_registry est la source de vérité.
     """
-
-    # Mapper gate_type (depuis step_config) → type de condition GateEvaluator
-    # Les valeurs de ce dict doivent correspondre exactement à VALID_GATE_CONDITION_TYPES.
-    condition_type_map: dict[str, str] = {
-        'maintenance_window': 'maintenance_window',
-        'approval': 'approval_granted',
-    }
 
     def execute(
         self,
@@ -58,17 +47,20 @@ class GateHandler:
         """
         gate_type = step_config.get('gate_type', 'maintenance_window')
 
-        # Mapper gate_type → type de condition GateEvaluator (voir condition_type_map de classe)
-        condition_type = self.condition_type_map.get(gate_type)
-        if condition_type is None:
+        # Résoudre condition_type via le registre (Story 82.5)
+        try:
+            definition = gate_registry.get(gate_type)
+            condition_type = definition.condition_type
+        except KeyError:
             logger.warning(
                 "gate_handler_unknown_gate_type",
                 gate_type=gate_type,
-                known_types=list(self.condition_type_map),
+                known_types=gate_registry.list_types(),
                 execution_id=execution.id,
                 correlation_id=correlation_id,
             )
-            condition_type = gate_type
+            condition_type = gate_type  # Fallback identique à l'ancien comportement
+            definition = None
 
         # Construire la condition de base
         condition: dict = {'type': condition_type}
@@ -83,9 +75,10 @@ class GateHandler:
         # Construire l'output du step (sera stocké par _execute_handler_step)
         gate_output: dict = {'gate_conditions': gate_conditions}
 
-        # Pour les gates approval : stocker context_from pour l'endpoint approve (story 57.8)
+        # Pour les gates à résolution manuelle : stocker context_from pour l'endpoint approve (story 57.8)
+        # Utilise requires_manual_resolution du registre au lieu du literal 'approval' (Story 82.5 code review)
         context_from = step_config.get('context_from', [])
-        if gate_type == 'approval' and context_from:
+        if context_from and definition is not None and definition.requires_manual_resolution:
             gate_output['context_from'] = context_from
             logger.info(
                 "gate_handler_approval_context",
