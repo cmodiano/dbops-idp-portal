@@ -383,6 +383,79 @@ class TestServiceCallHandler:
             )
 
     @patch("executions.step_handlers.service_call_handler.get_service_client")
+    def test_send_email_with_cc(self, mock_gsc):
+        """AC1, AC4 (story 79.2) : send_email avec cc dans resolved_params → send_email appelé avec cc.
+
+        Simule un step send_email où StepTemplateResolver a résolu input_mapping incluant cc.
+        Vérifie que le handler achemine cc vers send_email sans transformation.
+        """
+        mock_notification_service = MagicMock()
+        mock_notification_service.send_email.return_value = None
+        mock_gsc.return_value = mock_notification_service
+
+        step_config = {
+            "integration_type": "notification",
+            "operation": "send_email",
+        }
+        resolved_params = {
+            "recipient_email": "dba-team@company.com",
+            "subject": "Patch Oracle terminé",
+            "body": "L'exécution s'est terminée avec succès.",
+            "cc": "admin@company.com,team@company.com",
+        }
+
+        result = self.handler.execute(
+            step_config=step_config,
+            resolved_params=resolved_params,
+            execution=self._make_execution(),
+            step=step_config,
+            correlation_id="corr-79-2-cc",
+        )
+
+        mock_notification_service.send_email.assert_called_once_with(
+            recipient_email="dba-team@company.com",
+            subject="Patch Oracle terminé",
+            body="L'exécution s'est terminée avec succès.",
+            cc="admin@company.com,team@company.com",
+        )
+        assert result == {"result": None}
+
+    @patch("executions.step_handlers.service_call_handler.get_service_client")
+    def test_send_email_without_cc_unchanged(self, mock_gsc):
+        """AC1 (story 79.2) : send_email sans cc dans resolved_params → comportement inchangé (rétrocompatibilité).
+
+        Vérifie que l'absence de cc dans resolved_params ne casse pas l'appel send_email existant.
+        """
+        mock_notification_service = MagicMock()
+        mock_notification_service.send_email.return_value = None
+        mock_gsc.return_value = mock_notification_service
+
+        step_config = {
+            "integration_type": "notification",
+            "operation": "send_email",
+        }
+        resolved_params = {
+            "recipient_email": "dba@company.com",
+            "subject": "Notification sans CC",
+            "body": "Corps du message.",
+        }
+
+        result = self.handler.execute(
+            step_config=step_config,
+            resolved_params=resolved_params,
+            execution=self._make_execution(),
+            step=step_config,
+            correlation_id="corr-79-2-nocc",
+        )
+
+        mock_notification_service.send_email.assert_called_once_with(
+            recipient_email="dba@company.com",
+            subject="Notification sans CC",
+            body="Corps du message.",
+        )
+        assert result == {"result": None}
+
+    @patch("executions.step_handlers.service_call_handler.get_service_client")
     def test_send_teams_with_step_variable_input_mapping(self, mock_gsc):
         """AC1, AC4 (story 79.1) : send_teams appelé avec les valeurs résolues depuis steps.*.output.*
 

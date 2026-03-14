@@ -87,13 +87,13 @@ describe('NotificationTemplateEditor — send_email (AC3)', () => {
     );
   });
 
-  it('rend le VariablePicker sur les champs recipient_email, subject et body', () => {
+  it('rend le VariablePicker sur les champs recipient_email, cc, subject et body', () => {
     const { container } = render(
       <NotificationTemplateEditor {...defaultEmailProps} workflowId={1} />,
     );
-    // recipient_email + subject + body ont chacun un VariablePicker → au moins 3
+    // recipient_email + cc + subject + body ont chacun un VariablePicker → au moins 4 (AC3, story 79.2)
     const pickers = container.querySelectorAll('[data-testid="variable-picker-trigger"]');
-    expect(pickers.length).toBeGreaterThanOrEqual(3);
+    expect(pickers.length).toBeGreaterThanOrEqual(4);
   });
 
   it('rend le VariablePicker sur le champ recipient_email (AC2, AC3 — story 79.1)', () => {
@@ -104,15 +104,54 @@ describe('NotificationTemplateEditor — send_email (AC3)', () => {
         availableStepIds={['patch-step', 'check-step']}
       />,
     );
-    // recipient_email + subject + body ont chacun un VariablePicker → au moins 3
+    // recipient_email + cc + subject + body ont chacun un VariablePicker → au moins 4
     const pickers = container.querySelectorAll('[data-testid="variable-picker-trigger"]');
-    expect(pickers.length).toBeGreaterThanOrEqual(3);
+    expect(pickers.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('rend le champ CC avec VariablePicker (AC3 — story 79.2)', () => {
+    const { container } = render(
+      <NotificationTemplateEditor {...defaultEmailProps} workflowId={1} />,
+    );
+    expect(screen.getByText('CC (optionnel, séparé par virgule)')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/admin@company\.com/)).toBeInTheDocument();
+    // Au moins 4 VariablePickers : recipient_email, cc, subject, body
+    const pickers = container.querySelectorAll('[data-testid="variable-picker-trigger"]');
+    expect(pickers.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('appelle onChange avec la valeur CC sur modification', () => {
+    const onChange = vi.fn();
+    render(<NotificationTemplateEditor {...defaultEmailProps} onChange={onChange} />);
+    const ccInput = screen.getByPlaceholderText(/admin@company\.com/);
+    fireEvent.change(ccInput, { target: { value: 'cc@company.com' } });
+    expect(onChange).toHaveBeenCalledWith({ cc: 'cc@company.com' });
   });
 
   it('désactive les boutons de template quand disabled=true', () => {
     render(<NotificationTemplateEditor {...defaultEmailProps} disabled={true} />);
     expect(screen.getByText('✅ Succès').closest('button')).toBeDisabled();
     expect(screen.getByText('❌ Échec').closest('button')).toBeDisabled();
+  });
+
+  it('préserve la valeur CC lors du clic sur un template prédéfini (story 79.2)', () => {
+    const onChange = vi.fn();
+    render(
+      <NotificationTemplateEditor
+        {...defaultEmailProps}
+        value={{ cc: 'admin@company.com', recipient_email: 'dba@company.com' }}
+        onChange={onChange}
+      />,
+    );
+    fireEvent.click(screen.getByText('✅ Succès'));
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cc: 'admin@company.com',
+        recipient_email: 'dba@company.com',
+        subject: expect.stringContaining('action_name'),
+        body: expect.stringContaining('execution_id'),
+      }),
+    );
   });
 });
 

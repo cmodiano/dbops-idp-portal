@@ -956,7 +956,26 @@ development_status:
     # Variables {{ steps.* }}, CC email, pièces jointes, webhook Teams par step
     epic-79: in-progress
     79-1-variables-steps-notification: done
-    79-2-champ-cc-email: backlog
+    79-2-champ-cc-email: done
     79-3-pieces-jointes-email: backlog
     79-4-webhook-teams-par-step: backlog
     epic-79-retrospective: optional
+    # === Epic 80: Reset dev workflows/actions via seed ===
+    # Réf: docs/architecture/dev-reset-workflows-actions-via-seed.md, docs/backend/epic-80-reset-dev-workflows-actions-via-seed.md
+    # Purge données, garde-fous dev, trace opérationnelle, validation QA
+    epic-80: backlog
+    80-1-purge-tables-orchestration-reset: backlog # WORKFLOW_EVENTS, RUNNABLE_STEPS, WORKFLOW_COMMANDS, EXECUTION_OUTBOX avant EXECUTIONS
+    80-2-gardefous-environnement-dev: backlog # APP_ENV + --env=dev, interdiction staging/prod
+    80-3-trace-operationnelle-reset: backlog # Journaliser qui/quand a lancé le reset
+    80-4-validation-qa-reset-reseed: backlog # Scénarios QA catalogue, executions, admin après reset
+    epic-80-retrospective: optional
+    # === Epic 81: Decommission ancien code path workflow (dev-only) ===
+    # Réf: docs/architecture/dev-decommission-legacy-workflow-code-path.md, docs/backend/epic-81-decommission-legacy-workflow-code-path.md
+    # Suppression totale legacy — plateforme non utilisée, rien à conserver
+    # PR1 freeze, PR2 cutover, PR3 suppression fichiers+workflow_types, PR4 cleanup tests
+    epic-81: backlog
+    81-1-freeze-legacy-docstrings-ci: backlog # PR1 — docstrings, doc architecture, check CI
+    81-2-cutover-fonctionnel-suppression-appels-legacy: backlog # PR2 — gates.py old_style, container fallback thread (WORKFLOW_LEGACY_RUNTIME_ENABLED)
+    81-3-suppression-fichiers-legacy-config: backlog # PR3 — workflow_runtime, workflow_step_executor, workflow_retry, retry.py, workflow_types + settings
+    81-4-cleanup-tests-docs-observabilite: backlog # PR4 — 14+ tests legacy supprimés/migrés, KNOWN_ISSUES, ADR
+    epic-81-retrospective: optional

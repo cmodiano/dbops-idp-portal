@@ -17,21 +17,140 @@ class TestSendEmail:
     def setup_method(self) -> None:
         self.service = NotificationService()
 
-    @patch("services.notification_service.send_mail")
-    def test_send_email_ok(self, mock_send_mail: MagicMock) -> None:
-        """send_email appelle django send_mail avec les bons arguments."""
+    @patch("services.notification_service.settings")
+    @patch("services.notification_service.EmailMessage")
+    def test_send_email_ok(self, mock_email_class: MagicMock, mock_settings: MagicMock) -> None:
+        """send_email appelle EmailMessage avec les bons arguments."""
+        mock_settings.DEFAULT_FROM_EMAIL = "noreply@idp.test"
+        mock_instance = mock_email_class.return_value
+        mock_instance.send.return_value = None
         self.service.send_email("test@example.com", "Sujet", "Corps")
-        mock_send_mail.assert_called_once()
-        call_kwargs = mock_send_mail.call_args
-        assert call_kwargs.kwargs["subject"] == "Sujet"
-        assert call_kwargs.kwargs["recipient_list"] == ["test@example.com"]
+        mock_email_class.assert_called_once_with(
+            subject="Sujet",
+            body="Corps",
+            from_email="noreply@idp.test",
+            to=["test@example.com"],
+            cc=[],
+        )
+        mock_instance.send.assert_called_once()
 
-    @patch("services.notification_service.send_mail")
-    def test_send_email_failure_non_blocking(self, mock_send_mail: MagicMock) -> None:
+    @patch("services.notification_service.EmailMessage")
+    def test_send_email_failure_non_blocking(self, mock_email_class: MagicMock) -> None:
         """Une exception dans send_email ne doit pas se propager."""
-        mock_send_mail.side_effect = Exception("SMTP error")
+        mock_instance = mock_email_class.return_value
+        mock_instance.send.side_effect = Exception("SMTP error")
         # Ne lève pas d'exception
         self.service.send_email("test@example.com", "Sujet", "Corps")
+
+    @patch("services.notification_service.settings")
+    @patch("services.notification_service.EmailMessage")
+    def test_send_email_with_cc(self, mock_email_class: MagicMock, mock_settings: MagicMock) -> None:
+        """AC4 (story 79.2) : send_email avec cc → EmailMessage appelé avec cc=[...] correctement parsé."""
+        mock_settings.DEFAULT_FROM_EMAIL = "noreply@idp.test"
+        mock_instance = mock_email_class.return_value
+        mock_instance.send.return_value = None
+        self.service.send_email(
+            recipient_email="dba@company.com",
+            subject="Patch Oracle terminé",
+            body="L'exécution s'est terminée avec succès.",
+            cc="admin@company.com,team@company.com",
+        )
+        mock_email_class.assert_called_once_with(
+            subject="Patch Oracle terminé",
+            body="L'exécution s'est terminée avec succès.",
+            from_email="noreply@idp.test",
+            to=["dba@company.com"],
+            cc=["admin@company.com", "team@company.com"],
+        )
+        mock_instance.send.assert_called_once()
+
+    @patch("services.notification_service.settings")
+    @patch("services.notification_service.EmailMessage")
+    def test_send_email_with_cc_spaces_trimmed(self, mock_email_class: MagicMock, mock_settings: MagicMock) -> None:
+        """CC avec espaces autour des adresses → parsé et trimmé correctement."""
+        mock_settings.DEFAULT_FROM_EMAIL = "noreply@idp.test"
+        mock_instance = mock_email_class.return_value
+        mock_instance.send.return_value = None
+        self.service.send_email(
+            recipient_email="dba@company.com",
+            subject="Test",
+            body="Body",
+            cc=" admin@company.com , team@company.com ",
+        )
+        _, kwargs = mock_email_class.call_args
+        assert kwargs["cc"] == ["admin@company.com", "team@company.com"]
+
+    @patch("services.notification_service.settings")
+    @patch("services.notification_service.EmailMessage")
+    def test_send_email_without_cc_unchanged(self, mock_email_class: MagicMock, mock_settings: MagicMock) -> None:
+        """AC4 (story 79.2) : send_email sans cc → comportement inchangé (rétrocompatibilité)."""
+        mock_settings.DEFAULT_FROM_EMAIL = "noreply@idp.test"
+        mock_instance = mock_email_class.return_value
+        mock_instance.send.return_value = None
+        self.service.send_email(
+            recipient_email="dba@company.com",
+            subject="Sujet",
+            body="Corps",
+        )
+        _, kwargs = mock_email_class.call_args
+        assert kwargs["to"] == ["dba@company.com"]
+        assert kwargs["cc"] == []
+        mock_instance.send.assert_called_once()
+
+    @patch("services.notification_service.settings")
+    @patch("services.notification_service.EmailMessage")
+    def test_send_email_with_cc_none_treated_as_no_cc(self, mock_email_class: MagicMock, mock_settings: MagicMock) -> None:
+        """cc=None explicite → cc_list=[] (équivalent à pas de cc)."""
+        mock_settings.DEFAULT_FROM_EMAIL = "noreply@idp.test"
+        mock_instance = mock_email_class.return_value
+        mock_instance.send.return_value = None
+        self.service.send_email("dba@company.com", "Sujet", "Corps", cc=None)
+        _, kwargs = mock_email_class.call_args
+        assert kwargs["cc"] == []
+
+    @patch("services.notification_service.settings")
+    @patch("services.notification_service.EmailMessage")
+    def test_send_email_with_cc_empty_string_treated_as_no_cc(self, mock_email_class: MagicMock, mock_settings: MagicMock) -> None:
+        """cc='' (chaîne vide) → cc_list=[] (comportement identique à None)."""
+        mock_settings.DEFAULT_FROM_EMAIL = "noreply@idp.test"
+        mock_instance = mock_email_class.return_value
+        mock_instance.send.return_value = None
+        self.service.send_email("dba@company.com", "Sujet", "Corps", cc="")
+        _, kwargs = mock_email_class.call_args
+        assert kwargs["cc"] == []
+
+    @patch("services.notification_service.settings")
+    @patch("services.notification_service.EmailMessage")
+    def test_send_email_with_cc_single_address(self, mock_email_class: MagicMock, mock_settings: MagicMock) -> None:
+        """cc avec une seule adresse (sans virgule) → liste d'un élément."""
+        mock_settings.DEFAULT_FROM_EMAIL = "noreply@idp.test"
+        mock_instance = mock_email_class.return_value
+        mock_instance.send.return_value = None
+        self.service.send_email("dba@company.com", "Sujet", "Corps", cc="admin@company.com")
+        _, kwargs = mock_email_class.call_args
+        assert kwargs["cc"] == ["admin@company.com"]
+
+    @patch("services.notification_service.settings")
+    @patch("services.notification_service.EmailMessage")
+    def test_send_email_with_cc_whitespace_only_treated_as_no_cc(self, mock_email_class: MagicMock, mock_settings: MagicMock) -> None:
+        """cc=' ' (espaces seuls) → cc_list=[] (cas limite : truthy mais vide après strip)."""
+        mock_settings.DEFAULT_FROM_EMAIL = "noreply@idp.test"
+        mock_instance = mock_email_class.return_value
+        mock_instance.send.return_value = None
+        self.service.send_email("dba@company.com", "Sujet", "Corps", cc="   ")
+        _, kwargs = mock_email_class.call_args
+        assert kwargs["cc"] == []
+
+    @patch("services.notification_service.settings")
+    @patch("services.notification_service.EmailMessage")
+    def test_send_email_with_cc_only_separators_treated_as_no_cc(self, mock_email_class: MagicMock, mock_settings: MagicMock) -> None:
+        """cc=',,' (séparateurs seuls) → cc_list=[] (filtre les segments vides après strip)."""
+        mock_settings.DEFAULT_FROM_EMAIL = "noreply@idp.test"
+        mock_instance = mock_email_class.return_value
+        mock_instance.send.return_value = None
+        self.service.send_email("dba@company.com", "Sujet", "Corps", cc=",,")
+        _, kwargs = mock_email_class.call_args
+        assert kwargs["cc"] == []
 
 
 class TestSendTeams:
@@ -533,11 +652,13 @@ class TestNotify:
     def setup_method(self) -> None:
         self.service = NotificationService()
 
-    @patch("services.notification_service.send_mail")
-    def test_notify_dispatches_email(self, mock_send_mail: MagicMock) -> None:
+    @patch("services.notification_service.EmailMessage")
+    def test_notify_dispatches_email(self, mock_email_class: MagicMock) -> None:
         """notify('email', ...) dispatche vers send_email."""
+        mock_instance = mock_email_class.return_value
+        mock_instance.send.return_value = None
         self.service.notify("email", recipient_email="a@b.com", subject="S", body="B")
-        mock_send_mail.assert_called_once()
+        mock_instance.send.assert_called_once()
 
     def test_notify_unknown_type(self) -> None:
         """notify avec type inconnu ne lève pas d'exception."""

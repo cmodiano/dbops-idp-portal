@@ -12,7 +12,7 @@ from typing import Any
 import httpx
 import structlog
 from django.conf import settings
-from django.core.mail import send_mail
+from django.core.mail import EmailMessage
 
 logger = structlog.get_logger(__name__)
 
@@ -92,23 +92,32 @@ class NotificationService:
         recipient_email: str,
         subject: str,
         body: str,
+        cc: str | None = None,
         correlation_id: str | None = None,
     ) -> None:
-        """Envoie un email via django.core.mail.send_mail()."""
+        """Envoie un email via django.core.mail.EmailMessage.
+
+        Args:
+            cc: Adresses en copie, sous forme de chaîne séparée par virgule
+                (ex. ``"admin@company.com,team@company.com"``). None ou chaîne
+                vide → aucun destinataire CC.
+        """
         try:
-            send_mail(
+            cc_list = [addr.strip() for addr in cc.split(',') if addr.strip()] if cc else []
+            EmailMessage(
                 subject=subject,
-                message=body,
+                body=body,
                 from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[recipient_email],
-                fail_silently=False,
-            )
+                to=[recipient_email],
+                cc=cc_list,
+            ).send()
             # Log only the domain part to avoid PII in structured logs
             _domain = recipient_email.split("@")[-1] if "@" in recipient_email else "?"
             logger.info(
                 "notification_sent",
                 destination_type="email",
                 recipient_domain=_domain,
+                has_cc=bool(cc_list),
                 correlation_id=correlation_id,
             )
         except Exception as exc:  # noqa: BLE001 — best-effort-non-critical: email notification failure must not break caller

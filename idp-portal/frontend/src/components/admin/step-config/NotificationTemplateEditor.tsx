@@ -78,6 +78,7 @@ export const NotificationTemplateEditor: FC<NotificationTemplateEditorProps> = (
   const current = value ?? {};
 
   const recipientRef = useRef<InputRef>(null);
+  const ccRef = useRef<InputRef>(null);
   const subjectRef = useRef<InputRef>(null);
   const bodyRef = useRef<TextAreaRef>(null);
   const titleRef = useRef<InputRef>(null);
@@ -151,6 +152,29 @@ export const NotificationTemplateEditor: FC<NotificationTemplateEditorProps> = (
             disabled={disabled}
             onChange={(e) => handleChange('recipient_email', e.target.value)}
             placeholder="dba@company.com"
+          />
+        </div>
+
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 2 }}>
+            <Text type="secondary" style={{ fontSize: 12, flex: 1 }}>
+              CC (optionnel, séparé par virgule)
+            </Text>
+            <VariablePicker
+              workflowId={workflowId}
+              currentStepId={currentStepId}
+              availableStepIds={availableStepIds}
+              disabled={disabled}
+              onSelect={(expr) => insertAtCursor(ccRef, 'cc', expr)}
+            />
+          </div>
+          <Input
+            ref={ccRef}
+            size="small"
+            value={current.cc ?? ''}
+            disabled={disabled}
+            onChange={(e) => handleChange('cc', e.target.value)}
+            placeholder="admin@company.com,{{ steps.patch.output.contact_email }}"
           />
         </div>
 
