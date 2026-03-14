@@ -10,13 +10,14 @@ from rest_framework import serializers
 
 from integrations.models import Integration, IntegrationTypeCatalogue, IntegrationRole
 from inventory.services import InventoryService, InventoryServiceError as _InventoryServiceError
+from platforms.registry import platform_registry
 
 import structlog
 
 logger = structlog.get_logger(__name__)
 
-# Story 31.9: Alias mapping for legacy platform codes → catalogue codes
-# Canonical source — also used by business_rule_views.py
+# Story 82.2: PLATFORM_ALIAS remplacé par platform_registry.resolve_alias()
+# Conservé pour compatibilité avec les imports externes (ex: business_rule_views.py)
 PLATFORM_ALIAS: dict[str, str] = {
     'terraform': 'terraform_cloud',
     'tower': 'aap',
@@ -101,9 +102,9 @@ def validate_platform_integration_consistency(
             )
         })
 
-    # Story 31.9: Normalize platform code for matching (lower, spaces→underscores, alias)
+    # Story 31.9 / 82.2: Normalize platform code for matching (lower, spaces→underscores, alias)
     normalized_platform = platform.lower().replace(' ', '_')
-    normalized_platform = PLATFORM_ALIAS.get(normalized_platform, normalized_platform)
+    normalized_platform = platform_registry.resolve_alias(normalized_platform)
 
     # Check if normalized platform matches integration.type
     if normalized_platform != integration.type:

@@ -984,7 +984,7 @@ development_status:
     # Source de vérité unique, registres, API capacités, formulaires schema-driven
     epic-82: in-progress
     82-1-phase0-stabilisation-reduction-derive: done # FUTURE_GATE_TYPES, GateHandler.condition_type_map class attr, platform-canonical-codes.md, extensibility-compatibility-matrix.md — code review: frozenset, 7 tests, warning log
-    82-2-platform-definition-registry: backlog # platforms/definitions.py, health checks dérivés, runtime_config centralisé
+    82-2-platform-definition-registry: done # platforms/definitions.py, PlatformRegistry, build_platform_runtime_config(), health checks dérivés, aliases unifiés — review: C1 trigger/execution_views platform_type normalization, H1 action.py AC4, M2 type annotations
     82-3-service-definition-registry: backlog # services/definitions.py, allowlist dérivée, service_call_handler générique
     82-4-api-capabilities-backend: backlog # GET /capabilities/integrations, /workflow-steps
     82-5-gate-registry-definition: backlog # GateRegistry, GateDefinition, GateHandler/GateEvaluator refactor

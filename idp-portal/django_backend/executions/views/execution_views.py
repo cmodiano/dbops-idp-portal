@@ -389,12 +389,11 @@ class ExecutionCancelView(APIView):
                     message="Integration missing type field",
                     details={"integration_id": integration.id},
                 )
-            config = getattr(integration, "get_config", lambda: None)() or {}
-            platform_kwargs = {}
-            if "ssl_verify" in config:
-                platform_kwargs["ssl_verify"] = config["ssl_verify"]
-            if config.get("ca_bundle_path"):
-                platform_kwargs["ca_bundle_path"] = config["ca_bundle_path"]
+            # Story 82.2: kwargs runtime extraits via PlatformRegistry (remplace le bloc manuel)
+            from adapters.runtime_config import build_platform_runtime_config
+            from platforms.registry import platform_registry
+            platform_type = platform_registry.resolve_alias(platform_type)
+            platform_kwargs = build_platform_runtime_config(integration)
             adapter = get_platform_adapter(
                 platform_type=platform_type,
                 base_url=integration.base_url,
@@ -595,12 +594,9 @@ class ExecutionLogsView(APIView):
                 message="Integration missing type field",
                 details={"integration_id": integration.id},
             )
-        config = getattr(integration, "get_config", lambda: None)() or {}
-        platform_kwargs = {}
-        if "ssl_verify" in config:
-            platform_kwargs["ssl_verify"] = config["ssl_verify"]
-        if config.get("ca_bundle_path"):
-            platform_kwargs["ca_bundle_path"] = config["ca_bundle_path"]
+        # Story 82.2: kwargs runtime extraits via PlatformRegistry (remplace le bloc manuel)
+        from adapters.runtime_config import build_platform_runtime_config
+        platform_kwargs = build_platform_runtime_config(integration)
         adapter = get_platform_adapter(
             platform_type=platform_type,
             base_url=integration.base_url,

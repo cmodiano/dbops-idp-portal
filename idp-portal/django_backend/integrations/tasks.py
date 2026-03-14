@@ -22,19 +22,13 @@ from django.conf import settings
 if TYPE_CHECKING:
     from integrations.health_check import HealthCheckResult
 
+from platforms.registry import platform_registry  # Story 82.2: remplace les sets hardcodés
+
 logger = structlog.get_logger(__name__)
 
-# Correspondance type Integration → type dans les registres
-# Les aliases (azuredevops, terraform) sont normalisés vers les clés du registre.
-_ADAPTER_TYPE_ALIASES: dict[str, str] = {
-    "azuredevops": "azure_devops",
-    "terraform": "terraform_cloud",
-}
-
-# Types gérés par les adapters (AdapterRegistry)
-_ADAPTER_TYPES = {"aap", "tower", "azure_devops", "github_actions", "terraform_cloud"}
-
 # Types gérés par les services (ServiceRegistry)
+# Story 82.2 AC3 (partiel): _ADAPTER_TYPES et _ADAPTER_TYPE_ALIASES supprimés.
+# _SERVICE_TYPES conservé jusqu'à la création d'un ServiceRegistry (Story à venir).
 _SERVICE_TYPES = {"servicenow", "jira", "splunk"}
 
 # Vault est un service à instanciation spéciale (credentials directs)
@@ -71,7 +65,8 @@ def _resolve_and_check_adapter(integration) -> "HealthCheckResult":
     from integrations.health_check import IHealthCheckable, HealthCheckStatus, HealthCheckResult
     from django.utils import timezone
 
-    platform_type = _ADAPTER_TYPE_ALIASES.get(integration.type, integration.type)
+    # Story 82.2: normalisation via PlatformRegistry (remplace _ADAPTER_TYPE_ALIASES)
+    platform_type = platform_registry.resolve_alias(integration.type)
 
     try:
         auth_headers = build_auth_headers(integration)
@@ -88,17 +83,9 @@ def _resolve_and_check_adapter(integration) -> "HealthCheckResult":
             error_message=f"Erreur résolution credentials : {exc}",
         )
 
-    # github_actions requiert owner/repo depuis le config de l'intégration
-    platform_kwargs: dict = {}
-    if platform_type == "github_actions":
-        config = integration.get_config() or {}
-        platform_kwargs["owner"] = config.get("owner", "")
-        platform_kwargs["repo"] = config.get("repo", "")
-
-    # terraform_cloud requiert organization depuis le config de l'intégration
-    if platform_type == "terraform_cloud":
-        config = integration.get_config() or {}
-        platform_kwargs["organization"] = config.get("organization", "")
+    # Story 82.2: kwargs runtime extraits via PlatformRegistry (remplace les blocs if hardcodés)
+    from adapters.runtime_config import build_platform_runtime_config
+    platform_kwargs = build_platform_runtime_config(integration)
 
     try:
         adapter = get_platform_adapter(
@@ -253,11 +240,11 @@ def run_integration_health_check(self, integration_id: int) -> None:
         return
 
     itype = integration.type
-    # Normaliser aliases
-    normalized_type = _ADAPTER_TYPE_ALIASES.get(itype, itype)
+    # Story 82.2: normalisation via PlatformRegistry (remplace _ADAPTER_TYPE_ALIASES)
+    normalized_type = platform_registry.resolve_alias(itype)
 
     try:
-        if normalized_type in _ADAPTER_TYPES:
+        if platform_registry.is_registered(normalized_type):
             result = _resolve_and_check_adapter(integration)
         elif itype == _VAULT_TYPE:
             result = _resolve_and_check_vault(integration)

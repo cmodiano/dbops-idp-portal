@@ -745,14 +745,14 @@ class TestTaskTypeAliasResolution:
 
     def test_azuredevops_alias_dispatches_to_adapter(self, db):
         """Type 'azuredevops' est normalisé vers 'azure_devops' → dispatch vers adapter."""
-        from integrations.tasks import run_integration_health_check, _ADAPTER_TYPES, _ADAPTER_TYPE_ALIASES
+        from integrations.tasks import run_integration_health_check
+        from platforms.registry import platform_registry
 
         integration = self._create_integration(db, "azuredevops", "HC AzureDevOps Alias")
 
-        # Vérifier que l'alias existe dans la table
-        assert "azuredevops" in _ADAPTER_TYPE_ALIASES
-        assert _ADAPTER_TYPE_ALIASES["azuredevops"] == "azure_devops"
-        assert "azure_devops" in _ADAPTER_TYPES
+        # Story 82.2: aliases gérés par PlatformRegistry
+        assert platform_registry.resolve_alias("azuredevops") == "azure_devops"
+        assert platform_registry.is_registered("azure_devops")
 
         ok_result = HealthCheckResult(
             status=HealthCheckStatus.OK,
@@ -767,13 +767,14 @@ class TestTaskTypeAliasResolution:
 
     def test_terraform_alias_dispatches_to_adapter(self, db):
         """Type 'terraform' est normalisé vers 'terraform_cloud' → dispatch vers adapter."""
-        from integrations.tasks import run_integration_health_check, _ADAPTER_TYPES, _ADAPTER_TYPE_ALIASES
+        from integrations.tasks import run_integration_health_check
+        from platforms.registry import platform_registry
 
         integration = self._create_integration(db, "terraform", "HC Terraform Alias")
 
-        assert "terraform" in _ADAPTER_TYPE_ALIASES
-        assert _ADAPTER_TYPE_ALIASES["terraform"] == "terraform_cloud"
-        assert "terraform_cloud" in _ADAPTER_TYPES
+        # Story 82.2: aliases gérés par PlatformRegistry
+        assert platform_registry.resolve_alias("terraform") == "terraform_cloud"
+        assert platform_registry.is_registered("terraform_cloud")
 
         ok_result = HealthCheckResult(
             status=HealthCheckStatus.OK,

@@ -13,10 +13,10 @@ from integrations.models import Integration, IntegrationTypeCatalogue, Integrati
 from executions.utils import extract_workflow_referenced_action_ids
 
 from catalog.serializers.validators import (
-    PLATFORM_ALIAS,
     validate_parameters_schema_inventory,
     validate_platform_integration_consistency,
 )
+from platforms.registry import platform_registry
 
 # Step type → fields to copy from config (Audit #5 — 5c)
 # Story 63.12: platform steps support input_mapping/output_mapping
@@ -155,7 +155,7 @@ class ActionFieldValidationMixin:
         if value is None:
             return value
         normalized = value.lower().replace(' ', '_')
-        normalized = PLATFORM_ALIAS.get(normalized, normalized)
+        normalized = platform_registry.resolve_alias(normalized)
         if not IntegrationTypeCatalogue.objects.filter(
             code=normalized, is_active=True, integration_role=IntegrationRole.PLATFORM
         ).exists():
