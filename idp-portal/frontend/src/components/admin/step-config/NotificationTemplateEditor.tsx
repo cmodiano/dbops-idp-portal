@@ -81,6 +81,7 @@ export const NotificationTemplateEditor: FC<NotificationTemplateEditorProps> = (
   const ccRef = useRef<InputRef>(null);
   const subjectRef = useRef<InputRef>(null);
   const bodyRef = useRef<TextAreaRef>(null);
+  const attachmentsRef = useRef<InputRef>(null);
   const titleRef = useRef<InputRef>(null);
   const messageRef = useRef<TextAreaRef>(null);
 
@@ -221,6 +222,29 @@ export const NotificationTemplateEditor: FC<NotificationTemplateEditorProps> = (
             disabled={disabled}
             onChange={(e) => handleChange('body', e.target.value)}
             placeholder="Exécution {{ execution_id }} : {{ action_name }} terminé dans {{ environment }}."
+          />
+        </div>
+
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 2 }}>
+            <Text type="secondary" style={{ fontSize: 12, flex: 1 }}>
+              Pièce jointe (optionnel — chemin ou {'{{ steps.X.output.Y }}' })
+            </Text>
+            <VariablePicker
+              workflowId={workflowId}
+              currentStepId={currentStepId}
+              availableStepIds={availableStepIds}
+              disabled={disabled}
+              onSelect={(expr) => insertAtCursor(attachmentsRef, 'attachments', expr)}
+            />
+          </div>
+          <Input
+            ref={attachmentsRef}
+            size="small"
+            value={current.attachments ?? ''}
+            disabled={disabled}
+            onChange={(e) => handleChange('attachments', e.target.value)}
+            placeholder="{{ steps.patch.output.report_path }}"
           />
         </div>
       </div>

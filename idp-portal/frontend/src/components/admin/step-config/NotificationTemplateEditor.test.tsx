@@ -87,13 +87,13 @@ describe('NotificationTemplateEditor — send_email (AC3)', () => {
     );
   });
 
-  it('rend le VariablePicker sur les champs recipient_email, cc, subject et body', () => {
+  it('rend le VariablePicker sur les champs recipient_email, cc, subject, body et attachments', () => {
     const { container } = render(
       <NotificationTemplateEditor {...defaultEmailProps} workflowId={1} />,
     );
-    // recipient_email + cc + subject + body ont chacun un VariablePicker → au moins 4 (AC3, story 79.2)
+    // recipient_email + cc + subject + body + attachments ont chacun un VariablePicker → au moins 5 (AC3, story 79.3)
     const pickers = container.querySelectorAll('[data-testid="variable-picker-trigger"]');
-    expect(pickers.length).toBeGreaterThanOrEqual(4);
+    expect(pickers.length).toBeGreaterThanOrEqual(5);
   });
 
   it('rend le VariablePicker sur le champ recipient_email (AC2, AC3 — story 79.1)', () => {
@@ -104,9 +104,9 @@ describe('NotificationTemplateEditor — send_email (AC3)', () => {
         availableStepIds={['patch-step', 'check-step']}
       />,
     );
-    // recipient_email + cc + subject + body ont chacun un VariablePicker → au moins 4
+    // recipient_email + cc + subject + body + attachments ont chacun un VariablePicker → au moins 5
     const pickers = container.querySelectorAll('[data-testid="variable-picker-trigger"]');
-    expect(pickers.length).toBeGreaterThanOrEqual(4);
+    expect(pickers.length).toBeGreaterThanOrEqual(5);
   });
 
   it('rend le champ CC avec VariablePicker (AC3 — story 79.2)', () => {
@@ -115,9 +115,9 @@ describe('NotificationTemplateEditor — send_email (AC3)', () => {
     );
     expect(screen.getByText('CC (optionnel, séparé par virgule)')).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/admin@company\.com/)).toBeInTheDocument();
-    // Au moins 4 VariablePickers : recipient_email, cc, subject, body
+    // Au moins 5 VariablePickers : recipient_email, cc, subject, body, attachments
     const pickers = container.querySelectorAll('[data-testid="variable-picker-trigger"]');
-    expect(pickers.length).toBeGreaterThanOrEqual(4);
+    expect(pickers.length).toBeGreaterThanOrEqual(5);
   });
 
   it('appelle onChange avec la valeur CC sur modification', () => {
@@ -132,6 +132,33 @@ describe('NotificationTemplateEditor — send_email (AC3)', () => {
     render(<NotificationTemplateEditor {...defaultEmailProps} disabled={true} />);
     expect(screen.getByText('✅ Succès').closest('button')).toBeDisabled();
     expect(screen.getByText('❌ Échec').closest('button')).toBeDisabled();
+  });
+
+  it('rend le champ attachments avec VariablePicker (AC5 — story 79.3)', () => {
+    const { container } = render(
+      <NotificationTemplateEditor {...defaultEmailProps} workflowId={1} />,
+    );
+    // Le champ attachments doit être présent
+    expect(
+      screen.getByPlaceholderText('{{ steps.patch.output.report_path }}'),
+    ).toBeInTheDocument();
+    // Au moins 5 VariablePickers : recipient_email, cc, subject, body, attachments
+    const pickers = container.querySelectorAll('[data-testid="variable-picker-trigger"]');
+    expect(pickers.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('appelle onChange avec la valeur attachments sur modification (story 79.3)', () => {
+    const onChange = vi.fn();
+    render(<NotificationTemplateEditor {...defaultEmailProps} onChange={onChange} />);
+    const attachInput = screen.getByPlaceholderText('{{ steps.patch.output.report_path }}');
+    fireEvent.change(attachInput, { target: { value: '/data/report.txt' } });
+    expect(onChange).toHaveBeenCalledWith({ attachments: '/data/report.txt' });
+  });
+
+  it('désactive le champ attachments quand disabled=true (story 79.3)', () => {
+    render(<NotificationTemplateEditor {...defaultEmailProps} disabled={true} />);
+    const attachInput = screen.getByPlaceholderText('{{ steps.patch.output.report_path }}');
+    expect(attachInput.closest('input')).toBeDisabled();
   });
 
   it('préserve la valeur CC lors du clic sur un template prédéfini (story 79.2)', () => {

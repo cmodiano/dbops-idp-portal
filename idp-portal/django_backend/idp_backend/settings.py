@@ -828,6 +828,9 @@ DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'idp-portal@example.com')
 PAGE_INDIVIDUAL_API_URL = os.getenv('PAGE_INDIVIDUAL_API_URL', '')
 # Epic 56 — Décorrélation : canal page on-call (agnostique)
 PAGE_ONCALL_API_URL = os.getenv('PAGE_ONCALL_API_URL', '')
+# Story 79.3 — Email — limite de taille des pièces jointes (10 Mo par défaut)
+# Configurable via EMAIL_ATTACHMENT_MAX_SIZE_BYTES env var (octets entiers).
+EMAIL_ATTACHMENT_MAX_SIZE_BYTES: int = int(os.getenv('EMAIL_ATTACHMENT_MAX_SIZE_BYTES', str(10 * 1024 * 1024)))
 
 # Story 57.5 — ADR-007 http_request SSRF allowlist
 # Comma-separated list of allowed hostnames for http_request workflow steps.
