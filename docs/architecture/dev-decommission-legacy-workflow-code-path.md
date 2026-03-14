@@ -22,6 +22,22 @@ Contexte: environnement dev-only, sans contrainte de conservation historique.
 
 Contexte: plateforme non utilisee, dev uniquement — rien a conserver. Suppression totale du legacy.
 
+### 2.0 Règle de gel (PR1 — Story 81.1)
+
+> **⚠️ Aucun nouveau test ni nouveau code ne doit importer les modules legacy.**
+>
+> Modules interdits pour tout nouveau code :
+> - `executions.workflow_runtime` / `workflow_runtime`
+> - `executions.workflow_step_executor` / `workflow_step_executor`
+> - `executions.workflow_retry` / `workflow_retry`
+> - `executions.tasks.retry` / `retry_workflow_step`
+> - `executions.workflow_types` / `workflow_types`
+>
+> Tout nouveau test doit cibler le runtime cible :
+> `container_workflow_runtime`, `gate_handler`, `gates`.
+>
+> Cette règle est enforced par le job CI `check-no-new-legacy-imports`.
+
 ## 2.1 Modules legacy cibles (supprimer)
 
 - `executions/workflow_runtime.py`

@@ -1,4 +1,11 @@
-"""Exécution d'une étape de workflow : gates, adapter platform, évaluation policy — WorkflowRuntime."""
+"""
+Exécution d'une étape de workflow : gates, adapter platform, évaluation policy — WorkflowRuntime.
+
+⚠️  DECOMMISSION CIBLÉE — Ce module est en cours de décommissionnement.
+    Ne pas ajouter de nouveau code ni de nouveaux imports de ce module.
+    Suppression prévue dans Story 81.3 (PR3).
+    Voir: docs/architecture/dev-decommission-legacy-workflow-code-path.md
+"""
 from __future__ import annotations
 
 import structlog

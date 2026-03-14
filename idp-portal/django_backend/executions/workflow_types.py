@@ -3,6 +3,11 @@ Shared types for workflow runtime (Story 16.3, 34.7).
 
 Extracted from workflow_runtime for reuse by workflow_step_executor,
 workflow_retry, tasks/retry, and other execution modules.
+
+⚠️  DECOMMISSION CIBLÉE — Ce module est en cours de décommissionnement.
+    Ne pas ajouter de nouveau code ni de nouveaux imports de ce module.
+    Suppression prévue dans Story 81.3 (PR3).
+    Voir: docs/architecture/dev-decommission-legacy-workflow-code-path.md
 """
 from __future__ import annotations
 

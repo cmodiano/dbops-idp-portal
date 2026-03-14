@@ -1,4 +1,11 @@
-"""Gestion du retry avec backoff exponentiel via Celery — WorkflowRuntime."""
+"""
+Gestion du retry avec backoff exponentiel via Celery — WorkflowRuntime.
+
+⚠️  DECOMMISSION CIBLÉE — Ce module est en cours de décommissionnement.
+    Ne pas ajouter de nouveau code ni de nouveaux imports de ce module.
+    Suppression prévue dans Story 81.3 (PR3).
+    Voir: docs/architecture/dev-decommission-legacy-workflow-code-path.md
+"""
 from __future__ import annotations
 
 import structlog

@@ -3,6 +3,11 @@ executions/tasks/retry.py — Responsabilité unique : exécution asynchrone d'u
 de workflow avec backoff exponentiel via Celery.
 
 Expose : retry_workflow_step
+
+⚠️  DECOMMISSION CIBLÉE — Ce module est en cours de décommissionnement.
+    Ne pas ajouter de nouveau code ni de nouveaux imports de ce module.
+    Suppression prévue dans Story 81.3 (PR3).
+    Voir: docs/architecture/dev-decommission-legacy-workflow-code-path.md
 """
 from typing import Any
 
