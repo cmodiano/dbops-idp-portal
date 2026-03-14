@@ -16,6 +16,8 @@ Documentation d'architecture du projet IDP Portal.
 - [Configuration as Code – Stratégie](configuration-as-code-strategy.md) ✅ Document référence (Story 64-17)
 - [Configuration as Code – Implémentation](configuration-as-code-implementation-guide.md) ✅ Document référence (Story 64-17)
 - [Plan complet: Temporal-like orchestration sans Temporal](temporal-advantages-without-temporal-implementation-plan.md)
+- [Reset dev workflows/actions via seed](dev-reset-workflows-actions-via-seed.md)
+- [Decommission ancien code path workflow (dev-only)](dev-decommission-legacy-workflow-code-path.md)
 - [Infrastructure as Code – Stratégie](infrastructure-as-code-strategy.md) ⚠️ OBSOLÈTE — remplacé par configuration-as-code-strategy.md
 - [Infrastructure as Code – Implémentation](infrastructure-as-code-implementation-guide.md) ⚠️ OBSOLÈTE — remplacé par configuration-as-code-implementation-guide.md
 - [Analyse : Actions parallèles dans les workflows](parallel-workflow-actions-analysis.md)
