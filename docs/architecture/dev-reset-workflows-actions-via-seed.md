@@ -116,3 +116,13 @@ En contrepartie, l'equipe accepte explicitement la perte des donnees dev existan
 - aucune donnee legacy bloquante restante pour les workflows/actions
 - scenarios QA de base passants sur la nouvelle structure
 - decision documentee et partagee avec l'equipe
+
+---
+
+## 9) Complement decommission code path
+
+Le present document traite le reset de donnees.
+
+Le plan de suppression du code legacy est detaille ici:
+
+- [Decommission ancien code path workflow (dev-only)](dev-decommission-legacy-workflow-code-path.md)
