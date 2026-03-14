@@ -20,11 +20,17 @@ export interface PlatformCapability {
   supports_health_check: boolean;
 }
 
+/** Story 82.7 — opération d'un service avec label FR. */
+export interface ServiceOperation {
+  code: string;
+  label: string;
+}
+
 export interface ServiceCapability {
   code: string;
   display_name: string;
   credential_mode: 'integration' | 'credential_free';
-  operations: string[];
+  operations: ServiceOperation[];
   supports_health_check: boolean;
 }
 

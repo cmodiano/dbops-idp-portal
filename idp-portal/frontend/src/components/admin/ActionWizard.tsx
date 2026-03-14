@@ -22,6 +22,7 @@ import type {
   ExecutionStep,
   ItemType,
   WorkflowStep,
+  ConnectorType,
 } from '../../types/api';
 import { schemaToParameterList, parameterListToSchema } from '../../utils/parametersSchema';
 import { impactRulesToList, listToImpactRules } from '../../utils/impactRulesSchema';
@@ -32,12 +33,28 @@ import { useActionWizardState, ApiError } from '../../hooks/useActionWizardState
 import { useEngines } from '../../hooks/useEngines';
 import { usePlatformIntegrations } from '../../hooks/usePlatformIntegrations';
 import { useCategories } from '../../hooks/useCategories';
+import { useCapabilities } from '../../hooks/useCapabilities';
+import type { CapabilitiesState } from '../../hooks/useCapabilities';
+import type { PlatformCapability } from '../../services/capabilities_service';
 import { integrationTypeToPlatformCode, integrationToConnector } from '../../utils/integrationHelpers';
 import { useActionWizardValidation } from '../../hooks/useActionWizardValidation';
 import { WizardStep1General } from './WizardStep1General';
 import { WizardStep2Automatisme } from './WizardStep2Automatisme';
 import { WizardStep3ImpactChangement } from './WizardStep3ImpactChangement';
 import { OutputSchemaPanel } from './OutputSchemaPanel';
+
+/** Story 82.7 — lookup dans capabilities.platforms par code ou alias. */
+function getPlatformCapability(
+  integrationType: string,
+  capabilities: CapabilitiesState | null,
+): PlatformCapability | null {
+  if (!capabilities || !integrationType) return null;
+  return (
+    capabilities.platforms.find(
+      (p) => p.code === integrationType || p.aliases.includes(integrationType),
+    ) ?? null
+  );
+}
 
 const STEP_ITEMS = [
   { title: 'Général', content: 'Type, nom, moteur, intégration, tags' },
@@ -113,10 +130,18 @@ export function ActionWizard({
   const { integrationOptions, loading: integrationsLoading, getIntegrationById } = usePlatformIntegrations();
   // Story 2.30: Load categories from REF_CATEGORIES table
   const { categoryOptions, loading: categoriesLoading } = useCategories();
+  // Story 82.7: capacités backend pour dériver connector_type et action_platform_code
+  const { capabilities } = useCapabilities();
 
   // Story 31.1: Derive AAP check from selected integration
   const selectedIntegration = integrationId ? getIntegrationById(integrationId) : undefined;
-  const isPlatformAAP = selectedIntegration?.type === 'aap' || selectedIntegration?.type === 'tower';
+  // Story 82.7: lookup dans capabilities.platforms, fallback vers integrationToConnector
+  const platformCap = useMemo(
+    () => getPlatformCapability(selectedIntegration?.type ?? '', capabilities),
+    [selectedIntegration?.type, capabilities],
+  );
+  const connectorType: string =
+    platformCap?.connector_type ?? integrationToConnector(selectedIntegration?.type ?? '');
 
   // Inclure l'intégration courante dans les options si absente (ex: statut invalid, filtrée)
   const integrationOptionsWithCurrent = useMemo(() => {
@@ -324,10 +349,10 @@ export function ActionWizard({
           ? {}
           : {
               engine,
-              // Story 31.1: Derive platform from integration type, send both
+              // Story 31.1 / 82.7: Derive platform from capabilities (fallback intégrationHelpers)
               integration_id: integrationId,
               platform: integrationId
-                ? (integrationTypeToPlatformCode(getIntegrationById(integrationId)?.type ?? '') as ActionPlatform)
+                ? ((platformCap?.action_platform_code ?? integrationTypeToPlatformCode(getIntegrationById(integrationId)?.type ?? '')) as ActionPlatform)
                 : undefined,
               parameters_schema: parameterListToSchema(parameterList),
             }),
@@ -383,9 +408,9 @@ export function ActionWizard({
         } else {
           // Save execution steps for actions (only if draft or disabled)
           if (canEditSteps) {
-            // Story 31.1: Derive connector from integration type
+            // Story 31.1 / 82.7: Derive connector from capabilities (fallback integrationHelpers)
             const connector = integrationId
-              ? integrationToConnector(getIntegrationById(integrationId)?.type ?? '')
+              ? (platformCap?.connector_type ?? integrationToConnector(getIntegrationById(integrationId)?.type ?? ''))
               : 'none';
             const connector_config =
               connector === 'aap' && aapTemplateId != null && aapTemplateId >= 1
@@ -397,7 +422,7 @@ export function ActionWizard({
               order: 1,
               name: 'Exécution',
               type: 'execution',
-              connector_type: connector,
+              connector_type: connector as ConnectorType,
               connector_config: connector_config ?? undefined,
               conditional_environments: null,
             };
@@ -511,7 +536,7 @@ export function ActionWizard({
             <WizardStep2Automatisme
               isWorkflow={isWorkflow}
               isReadOnly={!!isReadOnly}
-              isPlatformAAP={isPlatformAAP}
+              connectorType={connectorType}
               integrationId={integrationId}
               aapResourceType={aapResourceType}
               setAapResourceType={setAapResourceType}

@@ -55,7 +55,60 @@ class TestIntegrationsCapabilities:
         url = reverse('capabilities:capabilities-integrations')
         data = auth_client.get(url).data['data']
         servicenow = next(s for s in data['services'] if s['code'] == 'servicenow')
-        assert 'create_change' in servicenow['operations']
+        op_codes = [op['code'] for op in servicenow['operations']]
+        assert 'create_change' in op_codes
+
+    def test_servicenow_operations_are_objects_with_code_and_label(self, auth_client):
+        """Story 82.7 — opérations retournées comme {code, label}."""
+        url = reverse('capabilities:capabilities-integrations')
+        data = auth_client.get(url).data['data']
+        servicenow = next(s for s in data['services'] if s['code'] == 'servicenow')
+        for op in servicenow['operations']:
+            assert 'code' in op
+            assert 'label' in op
+
+    def test_servicenow_create_change_has_fr_label(self, auth_client):
+        """Story 82.7 — label FR de create_change."""
+        url = reverse('capabilities:capabilities-integrations')
+        data = auth_client.get(url).data['data']
+        servicenow = next(s for s in data['services'] if s['code'] == 'servicenow')
+        create_change = next(op for op in servicenow['operations'] if op['code'] == 'create_change')
+        assert create_change['label'] == 'Créer un change'
+
+    def test_vault_get_secret_has_fr_label(self, auth_client):
+        """Story 82.7 — label FR de get_secret."""
+        url = reverse('capabilities:capabilities-integrations')
+        data = auth_client.get(url).data['data']
+        vault = next(s for s in data['services'] if s['code'] == 'vault')
+        get_secret = next(op for op in vault['operations'] if op['code'] == 'get_secret')
+        assert get_secret['label'] == 'Lire un secret'
+
+    def test_jira_operations_have_labels(self, auth_client):
+        """Story 82.7 — opérations Jira ont des labels FR."""
+        url = reverse('capabilities:capabilities-integrations')
+        data = auth_client.get(url).data['data']
+        jira = next(s for s in data['services'] if s['code'] == 'jira')
+        op_map = {op['code']: op['label'] for op in jira['operations']}
+        assert op_map['create_issue'] == 'Créer un ticket'
+        assert op_map['update_issue'] == 'Mettre à jour le ticket'
+        assert op_map['get_issue'] == 'Lire le ticket'
+
+    def test_notification_operations_have_labels(self, auth_client):
+        """Story 82.7 — opérations Notification ont des labels FR."""
+        url = reverse('capabilities:capabilities-integrations')
+        data = auth_client.get(url).data['data']
+        notification = next(s for s in data['services'] if s['code'] == 'notification')
+        op_map = {op['code']: op['label'] for op in notification['operations']}
+        assert op_map['send_email'] == 'Envoyer un email'
+        assert op_map['send_teams'] == 'Envoyer un message Teams'
+
+    def test_operations_sorted_alphabetically(self, auth_client):
+        """Story 82.7 — opérations triées alphabétiquement."""
+        url = reverse('capabilities:capabilities-integrations')
+        data = auth_client.get(url).data['data']
+        servicenow = next(s for s in data['services'] if s['code'] == 'servicenow')
+        op_codes = [op['code'] for op in servicenow['operations']]
+        assert op_codes == sorted(op_codes)
 
     def test_platform_has_expected_fields(self, auth_client):
         url = reverse('capabilities:capabilities-integrations')

@@ -59,7 +59,10 @@ def get_integrations_capabilities(request: Request) -> Response:
             'code': sdefn.code,
             'display_name': sdefn.display_name,
             'credential_mode': 'integration' if sdefn.requires_integration else 'credential_free',
-            'operations': sorted(sdefn.operations),
+            'operations': [
+                {'code': op, 'label': sdefn.get_operation_label(op)}
+                for op in sorted(sdefn.operations)
+            ],
             'supports_health_check': sdefn.supports_health_check,
         })
 

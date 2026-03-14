@@ -14,11 +14,16 @@ class PlatformCapabilitySerializer(serializers.Serializer):
     supports_health_check = serializers.BooleanField()
 
 
+class ServiceOperationSerializer(serializers.Serializer):
+    code = serializers.CharField()
+    label = serializers.CharField()  # type: ignore[assignment]
+
+
 class ServiceCapabilitySerializer(serializers.Serializer):
     code = serializers.CharField()
     display_name = serializers.CharField()
     credential_mode = serializers.ChoiceField(choices=['integration', 'credential_free'])
-    operations = serializers.ListField(child=serializers.CharField())
+    operations = ServiceOperationSerializer(many=True)
     supports_health_check = serializers.BooleanField()
 
 

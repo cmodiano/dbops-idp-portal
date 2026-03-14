@@ -39,7 +39,7 @@ describe('getIntegrationsCapabilities', () => {
           code: 'servicenow',
           display_name: 'ServiceNow',
           credential_mode: 'integration',
-          operations: ['create_change', 'update_change'],
+          operations: [{ code: 'create_change', label: 'Créer un changement' }, { code: 'update_change', label: 'Mettre à jour un changement' }],
           supports_health_check: false,
         },
       ],
@@ -53,7 +53,7 @@ describe('getIntegrationsCapabilities', () => {
     expect(result.platforms[0].code).toBe('aap');
     expect(result.services).toHaveLength(1);
     expect(result.services[0].code).toBe('servicenow');
-    expect(result.services[0].operations).toContain('create_change');
+    expect(result.services[0].operations[0].code).toBe('create_change');
   });
 
   it("retourne des listes vides si l'API retourne null", async () => {

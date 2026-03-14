@@ -74,6 +74,9 @@ service_definition_registry.register(ServiceDefinition(
     requires_integration=True,
     operations=frozenset({"get_secret"}),
     supports_health_check=True,
+    operation_labels={
+        "get_secret": "Lire un secret",  # pragma: allowlist secret
+    },
 ))
 service_definition_registry.register(ServiceDefinition(
     code="splunk",
@@ -91,6 +94,13 @@ service_definition_registry.register(ServiceDefinition(
         "get_change_status", "cancel_change",
     }),
     supports_health_check=True,
+    operation_labels={
+        "create_change": "Créer un change",
+        "update_change": "Mettre à jour le change",
+        "close_change": "Fermer le change",
+        "get_change_status": "Statut du change",
+        "cancel_change": "Annuler le change",
+    },
 ))
 service_definition_registry.register(ServiceDefinition(
     code="jira",
@@ -98,6 +108,11 @@ service_definition_registry.register(ServiceDefinition(
     requires_integration=True,
     operations=frozenset({"create_issue", "update_issue", "get_issue"}),
     supports_health_check=True,
+    operation_labels={
+        "create_issue": "Créer un ticket",
+        "update_issue": "Mettre à jour le ticket",
+        "get_issue": "Lire le ticket",
+    },
 ))
 service_definition_registry.register(ServiceDefinition(
     code="notification",
@@ -105,6 +120,11 @@ service_definition_registry.register(ServiceDefinition(
     requires_integration=False,
     operations=frozenset({"send_email", "send_teams", "notify_execution_event"}),
     supports_health_check=False,
+    operation_labels={
+        "send_email": "Envoyer un email",
+        "send_teams": "Envoyer un message Teams",
+        "notify_execution_event": "Notifier un événement d'exécution",
+    },
 ))
 
 

@@ -1,5 +1,6 @@
 """
 Story 82.3: Tests unitaires pour ServiceDefinition et ServiceDefinitionRegistry.
+Story 82.7: Tests pour operation_labels et get_operation_label.
 
 Vérifie l'enregistrement, le lookup, l'allowlist d'opérations, la détection
 credential-free, et la dérivation de _SERVICE_TYPES pour le routing health check.
@@ -196,3 +197,117 @@ class TestServiceDefinitionRegistrySingleton:
     def test_vault_requires_integration(self) -> None:
         defn = service_definition_registry.get("vault")
         assert defn.requires_integration is True
+
+
+# ---------------------------------------------------------------------------
+# Tests Story 82.7 — operation_labels et get_operation_label
+# ---------------------------------------------------------------------------
+
+class TestServiceDefinitionOperationLabels:
+    """Tests pour le champ operation_labels et la méthode get_operation_label (Story 82.7)."""
+
+    def test_operation_labels_default_empty(self) -> None:
+        """Sans operation_labels explicite, le dict est vide."""
+        defn = ServiceDefinition(
+            code="test",
+            display_name="Test",
+            requires_integration=True,
+            operations=frozenset({"op1"}),
+            supports_health_check=False,
+        )
+        assert defn.operation_labels == {}
+
+    def test_get_operation_label_returns_label(self) -> None:
+        """get_operation_label retourne le label FR si présent."""
+        defn = ServiceDefinition(
+            code="test",
+            display_name="Test",
+            requires_integration=True,
+            operations=frozenset({"op1"}),
+            supports_health_check=False,
+            operation_labels={"op1": "Mon opération"},
+        )
+        assert defn.get_operation_label("op1") == "Mon opération"
+
+    def test_operation_labels_immutable_via_mapping_proxy(self) -> None:
+        """operation_labels est rendu immuable via MappingProxyType après __post_init__."""
+        import pytest
+        defn = ServiceDefinition(
+            code="test",
+            display_name="Test",
+            requires_integration=True,
+            operations=frozenset({"op1"}),
+            supports_health_check=False,
+            operation_labels={"op1": "Op 1"},
+        )
+        with pytest.raises(TypeError):
+            defn.operation_labels["new_key"] = "should fail"  # type: ignore[index]
+
+    def test_get_operation_label_fallback_to_code(self) -> None:
+        """get_operation_label retourne le code si pas de label."""
+        defn = ServiceDefinition(
+            code="test",
+            display_name="Test",
+            requires_integration=True,
+            operations=frozenset({"op1", "op2"}),
+            supports_health_check=False,
+            operation_labels={"op1": "Op 1"},
+        )
+        assert defn.get_operation_label("op2") == "op2"
+
+
+class TestServiceDefinitionSingletonLabels:
+    """Tests des labels FR sur le singleton service_definition_registry (Story 82.7)."""
+
+    def test_servicenow_create_change_label(self) -> None:
+        defn = service_definition_registry.get("servicenow")
+        assert defn.get_operation_label("create_change") == "Créer un change"
+
+    def test_servicenow_update_change_label(self) -> None:
+        defn = service_definition_registry.get("servicenow")
+        assert defn.get_operation_label("update_change") == "Mettre à jour le change"
+
+    def test_servicenow_close_change_label(self) -> None:
+        defn = service_definition_registry.get("servicenow")
+        assert defn.get_operation_label("close_change") == "Fermer le change"
+
+    def test_servicenow_get_change_status_label(self) -> None:
+        defn = service_definition_registry.get("servicenow")
+        assert defn.get_operation_label("get_change_status") == "Statut du change"
+
+    def test_servicenow_cancel_change_label(self) -> None:
+        defn = service_definition_registry.get("servicenow")
+        assert defn.get_operation_label("cancel_change") == "Annuler le change"
+
+    def test_vault_get_secret_label(self) -> None:
+        defn = service_definition_registry.get("vault")
+        assert defn.get_operation_label("get_secret") == "Lire un secret"
+
+    def test_jira_create_issue_label(self) -> None:
+        defn = service_definition_registry.get("jira")
+        assert defn.get_operation_label("create_issue") == "Créer un ticket"
+
+    def test_jira_update_issue_label(self) -> None:
+        defn = service_definition_registry.get("jira")
+        assert defn.get_operation_label("update_issue") == "Mettre à jour le ticket"
+
+    def test_jira_get_issue_label(self) -> None:
+        defn = service_definition_registry.get("jira")
+        assert defn.get_operation_label("get_issue") == "Lire le ticket"
+
+    def test_notification_send_email_label(self) -> None:
+        defn = service_definition_registry.get("notification")
+        assert defn.get_operation_label("send_email") == "Envoyer un email"
+
+    def test_notification_send_teams_label(self) -> None:
+        defn = service_definition_registry.get("notification")
+        assert defn.get_operation_label("send_teams") == "Envoyer un message Teams"
+
+    def test_notification_notify_execution_event_label(self) -> None:
+        defn = service_definition_registry.get("notification")
+        assert defn.get_operation_label("notify_execution_event") == "Notifier un événement d'exécution"
+
+    def test_splunk_has_no_labels(self) -> None:
+        """Splunk n'a pas d'opérations → operation_labels vide."""
+        defn = service_definition_registry.get("splunk")
+        assert defn.operation_labels == {}

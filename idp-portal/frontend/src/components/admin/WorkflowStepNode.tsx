@@ -15,7 +15,7 @@ import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Badge, Divider, Tag, Tooltip, theme } from 'antd';
 import { CheckCircleOutlined, CloseCircleOutlined, HourglassOutlined, LoadingOutlined, MinusCircleOutlined } from '@ant-design/icons';
 import type { WorkflowStepType, ScheduleStepConfig } from '../../types/api';
-import { INTEGRATION_LABELS, OPERATION_LABELS } from './step-config/serviceCallConstants';
+import { INTEGRATION_LABELS } from './step-config/serviceCallConstants';
 
 // Story 57.13: Color codes and labels per step type
 const STEP_TYPE_COLORS: Record<WorkflowStepType, string> = {
@@ -119,9 +119,8 @@ const WorkflowStepNode: FC<NodeProps> = ({ data, selected }) => {
       const integration = nodeData.integration_type
         ? (INTEGRATION_LABELS[nodeData.integration_type] ?? nodeData.integration_type)
         : '?';
-      const op = nodeData.operation
-        ? (OPERATION_LABELS[nodeData.operation] ?? nodeData.operation)
-        : '?';
+      // Story 82.7: OPERATION_LABELS supprimé — affichage du code brut ; migration via capabilities en 82.8
+      const op = nodeData.operation ?? '?';
       return nodeData.name ?? `${integration} — ${op}`;
     }
     if (stepType === 'evaluation') {

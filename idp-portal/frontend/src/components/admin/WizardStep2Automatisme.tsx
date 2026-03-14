@@ -125,7 +125,8 @@ function WizardAAPTemplateSection({
 export interface WizardStep2AutomatismeProps {
   isWorkflow: boolean;
   isReadOnly: boolean;
-  isPlatformAAP: boolean;
+  /** Story 82.7: remplace isPlatformAAP: boolean — générique, dérivé depuis capabilities. */
+  connectorType: string;
   integrationId: number | undefined;
   aapResourceType: 'job_template' | 'workflow_job';
   setAapResourceType: (v: 'job_template' | 'workflow_job') => void;
@@ -144,7 +145,7 @@ export interface WizardStep2AutomatismeProps {
 export function WizardStep2Automatisme({
   isWorkflow,
   isReadOnly,
-  isPlatformAAP,
+  connectorType,
   integrationId,
   aapResourceType,
   setAapResourceType,
@@ -201,7 +202,7 @@ export function WizardStep2Automatisme({
         </Form.Item>
       ) : (
         <>
-          {isPlatformAAP && (
+          {connectorType === 'aap' && (
             <WizardAAPTemplateSection
               integrationId={integrationId}
               aapResourceType={aapResourceType}

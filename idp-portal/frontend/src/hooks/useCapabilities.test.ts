@@ -28,7 +28,7 @@ const mockIntegrationsData = {
       code: 'servicenow',
       display_name: 'ServiceNow',
       credential_mode: 'integration' as const,
-      operations: ['create_change'],
+      operations: [{ code: 'create_change', label: 'Créer un changement' }],
       supports_health_check: false,
     },
   ],

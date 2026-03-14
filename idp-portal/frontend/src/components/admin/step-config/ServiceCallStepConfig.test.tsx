@@ -19,17 +19,42 @@ const mockUseCapabilities = vi.mocked(useCapabilitiesModule.useCapabilities);
 import {
   SERVICE_CALL_OPERATIONS,
   INTEGRATION_LABELS,
-  OPERATION_LABELS,
 } from './serviceCallConstants';
 
-// Mock capabilities with services matching serviceCallConstants
+// Story 82.7: Mock capabilities with ServiceOperation[] (code + label)
 const mockCapabilitiesWithServices = {
   platforms: [],
   services: [
-    { code: 'servicenow', display_name: 'ServiceNow', credential_mode: 'integration' as const, operations: ['create_change', 'update_change', 'close_change', 'get_change_status', 'cancel_change'], supports_health_check: false },
-    { code: 'vault', display_name: 'HashiCorp Vault', credential_mode: 'integration' as const, operations: ['get_secret'], supports_health_check: false },
-    { code: 'jira', display_name: 'Jira', credential_mode: 'integration' as const, operations: ['create_issue', 'update_issue', 'get_issue'], supports_health_check: false },
-    { code: 'notification', display_name: 'Notification', credential_mode: 'credential_free' as const, operations: ['send_email', 'send_teams', 'notify_execution_event'], supports_health_check: false },
+    {
+      code: 'servicenow', display_name: 'ServiceNow', credential_mode: 'integration' as const, supports_health_check: false,
+      operations: [
+        { code: 'cancel_change', label: 'Annuler le change' },
+        { code: 'close_change', label: 'Fermer le change' },
+        { code: 'create_change', label: 'Créer un change' },
+        { code: 'get_change_status', label: 'Statut du change' },
+        { code: 'update_change', label: 'Mettre à jour le change' },
+      ],
+    },
+    {
+      code: 'vault', display_name: 'HashiCorp Vault', credential_mode: 'integration' as const, supports_health_check: false,
+      operations: [{ code: 'get_secret', label: 'Lire un secret' }],
+    },
+    {
+      code: 'jira', display_name: 'Jira', credential_mode: 'integration' as const, supports_health_check: false,
+      operations: [
+        { code: 'create_issue', label: 'Créer un ticket' },
+        { code: 'get_issue', label: 'Lire le ticket' },
+        { code: 'update_issue', label: 'Mettre à jour le ticket' },
+      ],
+    },
+    {
+      code: 'notification', display_name: 'Notification', credential_mode: 'credential_free' as const, supports_health_check: false,
+      operations: [
+        { code: 'notify_execution_event', label: "Notifier un événement d'exécution" },
+        { code: 'send_email', label: 'Envoyer un email' },
+        { code: 'send_teams', label: 'Envoyer un message Teams' },
+      ],
+    },
   ],
   stepTypes: [],
 };
@@ -160,12 +185,6 @@ describe('serviceCallConstants — notification (Story 16.9, AC6-7)', () => {
 
   it('INTEGRATION_LABELS.notification est "Notification"', () => {
     expect(INTEGRATION_LABELS.notification).toBe('Notification');
-  });
-
-  it('OPERATION_LABELS contient les libellés notification', () => {
-    expect(OPERATION_LABELS.send_email).toBe('Envoyer un email');
-    expect(OPERATION_LABELS.send_teams).toBe('Envoyer un message Teams');
-    expect(OPERATION_LABELS.notify_execution_event).toBe("Notifier un événement d'exécution");
   });
 
   it('non-régression: servicenow, vault, jira toujours présents dans les constantes', () => {
@@ -331,19 +350,20 @@ describe('ServiceCallStepConfig — useCapabilities integration (Story 82.6)', (
     expect(screen.getByText('ServiceNow')).toBeInTheDocument();
   });
 
-  it('utilise le fallback SERVICE_CALL_OPERATIONS si capabilities null', () => {
+  it('utilise le fallback SERVICE_CALL_OPERATIONS si capabilities null (labels = codes bruts, Story 82.7)', () => {
     mockUseCapabilities.mockReturnValue({
       capabilities: null,
       loading: false,
       error: null,
     });
 
-    // create_change est dans SERVICE_CALL_OPERATIONS.servicenow
+    // Story 82.7: sans capabilities, label = code brut (pas de FR labels)
     render(<ServiceCallStepConfig data={baseData} onUpdate={vi.fn()} />);
 
-    // Le composant rend sans erreur et affiche l'opération sélectionnée
+    // Le composant rend sans erreur
     expect(screen.getByTestId('service-call-step-config')).toBeInTheDocument();
-    expect(screen.getByText('Créer un change')).toBeInTheDocument();
+    // L'option sélectionnée affiche le code brut (fallback sans OPERATION_LABELS)
+    expect(screen.getByText('create_change')).toBeInTheDocument();
   });
 
   it('utilise le fallback SERVICE_CALL_OPERATIONS si integration_type absent des services backend', () => {
@@ -352,7 +372,7 @@ describe('ServiceCallStepConfig — useCapabilities integration (Story 82.6)', (
       capabilities: {
         platforms: [],
         services: [
-          { code: 'vault', display_name: 'HashiCorp Vault', credential_mode: 'integration' as const, operations: ['get_secret'], supports_health_check: false },
+          { code: 'vault', display_name: 'HashiCorp Vault', credential_mode: 'integration' as const, operations: [{ code: 'get_secret', label: 'Lire un secret' }], supports_health_check: false },
         ],
         stepTypes: [],
       },
@@ -360,10 +380,46 @@ describe('ServiceCallStepConfig — useCapabilities integration (Story 82.6)', (
       error: null,
     });
 
-    // data.integration_type = 'servicenow' (absent du backend)
+    // data.integration_type = 'servicenow' (absent du backend) → fallback SERVICE_CALL_OPERATIONS
+    // labels bruts (code = label) car OPERATION_LABELS supprimé
     render(<ServiceCallStepConfig data={baseData} onUpdate={vi.fn()} />);
 
-    // Doit afficher l'opération via fallback SERVICE_CALL_OPERATIONS.servicenow
+    // Doit afficher le code brut via fallback (pas de French label sans capabilities)
+    expect(screen.getByText('create_change')).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Story 82.7 — T8.5: labels opérations depuis {code, label} du hook
+// ---------------------------------------------------------------------------
+
+describe('ServiceCallStepConfig — operation labels depuis ServiceOperation (Story 82.7, T8.5)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithServices, loading: false, error: null });
+  });
+
+  it('label opération vient de {code, label} du hook — create_change → Créer un change', () => {
+    render(<ServiceCallStepConfig data={baseData} onUpdate={vi.fn()} />);
+    // Le select opération affiche le label FR de l'objet ServiceOperation
     expect(screen.getByText('Créer un change')).toBeInTheDocument();
+  });
+
+  it('label opération send_email → Envoyer un email via ServiceOperation du hook', () => {
+    const data = { ...baseData, integration_type: 'notification', operation: 'send_email' };
+    render(<ServiceCallStepConfig data={data} onUpdate={vi.fn()} />);
+    expect(screen.getByText('Envoyer un email')).toBeInTheDocument();
+  });
+
+  it('label opération get_secret → Lire un secret via ServiceOperation du hook', () => {
+    const data = { ...baseData, integration_type: 'vault', operation: 'get_secret' };
+    render(<ServiceCallStepConfig data={data} onUpdate={vi.fn()} />);
+    expect(screen.getByText('Lire un secret')).toBeInTheDocument();
+  });
+
+  it('label opération create_issue → Créer un ticket via ServiceOperation du hook', () => {
+    const data = { ...baseData, integration_type: 'jira', operation: 'create_issue' };
+    render(<ServiceCallStepConfig data={data} onUpdate={vi.fn()} />);
+    expect(screen.getByText('Créer un ticket')).toBeInTheDocument();
   });
 });

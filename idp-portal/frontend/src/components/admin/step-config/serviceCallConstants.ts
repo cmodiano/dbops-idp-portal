@@ -20,17 +20,3 @@ export const INTEGRATION_LABELS: Record<string, string> = {
   notification: 'Notification',
 };
 
-export const OPERATION_LABELS: Record<string, string> = {
-  create_change: 'Créer un change',
-  update_change: 'Mettre à jour le change',
-  close_change: 'Fermer le change',
-  get_change_status: 'Statut du change',
-  cancel_change: 'Annuler le change',
-  get_secret: 'Lire un secret', // pragma: allowlist secret
-  create_issue: 'Créer un ticket',
-  update_issue: 'Mettre à jour le ticket',
-  get_issue: 'Lire le ticket',
-  send_email: 'Envoyer un email',
-  send_teams: 'Envoyer un message Teams',
-  notify_execution_event: "Notifier un événement d'exécution",
-};

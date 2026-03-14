@@ -6,7 +6,9 @@ il doit être importable avant le chargement de l'ORM Django.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from types import MappingProxyType
 
 
 @dataclass(frozen=True)
@@ -22,6 +24,9 @@ class ServiceDefinition:
             frozenset() = service sans opérations service_call (health check uniquement).
         supports_health_check: True si le service implémente IHealthCheckable
             via le path service_registry.
+        operation_labels: Labels FR des opérations (code → label). Utilisé par l'API
+            capabilities pour exposer des labels localisés. Story 82.7.
+            Immuable via MappingProxyType (cohérence avec operations → frozenset).
     """
 
     code: str
@@ -29,11 +34,19 @@ class ServiceDefinition:
     requires_integration: bool
     operations: frozenset[str]
     supports_health_check: bool
+    operation_labels: Mapping[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not isinstance(self.operations, frozenset):  # pragma: no branch
             # Enforce immutability: convert set/list/tuple to frozenset
             object.__setattr__(self, "operations", frozenset(self.operations))  # type: ignore[unreachable]
+        # Enforce immutability of operation_labels (dict is mutable; MappingProxyType is not).
+        if not isinstance(self.operation_labels, MappingProxyType):
+            object.__setattr__(self, "operation_labels", MappingProxyType(self.operation_labels))
+
+    def get_operation_label(self, operation_code: str) -> str:
+        """Retourne le label FR d'une opération, fallback = code."""
+        return self.operation_labels.get(operation_code, operation_code)
 
 
 class ServiceDefinitionRegistry:

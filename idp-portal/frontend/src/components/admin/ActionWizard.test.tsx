@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ActionWizard } from './ActionWizard';
@@ -98,8 +98,50 @@ vi.mock('../../hooks/useAAPTemplates', () => ({
   useAAPTemplates: vi.fn(),
 }));
 
+// Story 82.7: mock useCapabilities pour capabilities-driven tests
+vi.mock('../../hooks/useCapabilities', () => ({
+  useCapabilities: vi.fn(),
+}));
+
 import { useAAPTemplates } from '../../hooks/useAAPTemplates';
+import * as useCapabilitiesModule from '../../hooks/useCapabilities';
 const mockUseAAPTemplates = useAAPTemplates as ReturnType<typeof vi.fn>;
+const mockUseCapabilities = vi.mocked(useCapabilitiesModule.useCapabilities);
+
+// Mock capabilities avec plateformes AAP et terraform
+const mockCapabilities = {
+  platforms: [
+    {
+      code: 'aap',
+      display_name: 'Ansible Automation Platform',
+      aliases: ['tower'],
+      icon: 'aap',
+      connector_type: 'aap',
+      action_platform_code: 'AAP',
+      supports_health_check: true,
+    },
+    {
+      code: 'terraform_cloud',
+      display_name: 'Terraform Cloud',
+      aliases: ['terraform'],
+      icon: 'terraform',
+      connector_type: 'terraform',
+      action_platform_code: 'Terraform',
+      supports_health_check: false,
+    },
+    {
+      code: 'github_actions',
+      display_name: 'GitHub Actions',
+      aliases: [],
+      icon: 'github_actions',
+      connector_type: 'github_actions',
+      action_platform_code: 'GitHub Actions',
+      supports_health_check: false,
+    },
+  ],
+  services: [],
+  stepTypes: [],
+};
 
 const defaultAAPMockWizard = {
   templates: [],
@@ -127,6 +169,8 @@ describe('ActionWizard', () => {
     vi.clearAllMocks();
     // M3 fix: default AAP mock (fallback = manual input)
     mockUseAAPTemplates.mockReturnValue(defaultAAPMockWizard);
+    // Story 82.7: default capabilities mock
+    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilities, loading: false, error: null });
   });
 
   describe('AC1: Ouverture du wizard', () => {
@@ -1435,6 +1479,141 @@ describe('ActionWizard — additional coverage', () => {
       // Enregistrer is disabled for published
       expect(screen.getByRole('button', { name: /Enregistrer/i })).toBeDisabled();
     }, 30000);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Story 82.7 — T8.1/T8.2/T8.3: ActionWizard capabilities-driven connectorType
+// ---------------------------------------------------------------------------
+
+describe('ActionWizard — capabilities-driven connectorType (Story 82.7)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseAAPTemplates.mockReturnValue(defaultAAPMockWizard);
+    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilities, loading: false, error: null });
+  });
+
+  const aapEditAction: ActionDetail = {
+    id: 1,
+    name: 'Action AAP',
+    description: 'Test',
+    item_type: 'action',
+    engine: 'Oracle',
+    platform: 'AAP',
+    integration_id: 1, // id 1 → type 'aap'
+    parameters_schema: null,
+    impact_rules: null,
+    default_impact_level: null,
+    status: 'draft',
+    created_by: null,
+    created_at: '',
+    updated_at: null,
+    execution_steps: null,
+    workflow_steps: null,
+    tags: [],
+  };
+
+  const githubEditAction: ActionDetail = {
+    ...aapEditAction,
+    id: 2,
+    name: 'Action GitHub',
+    platform: 'GitHub Actions',
+    integration_id: 2, // id 2 → type 'github_actions'
+  };
+
+  it('T8.1 — intégration AAP → section template visible (connectorType=aap depuis capabilities)', async () => {
+    await act(async () => {
+      render(<ActionWizard {...defaultProps} editAction={aapEditAction} />);
+    });
+    await waitFor(() => expect(screen.getByLabelText("Nom de l'action")).toHaveValue('Action AAP'));
+    const nextBtn = await screen.findByRole('button', { name: /Suivant/i });
+    await userEvent.setup().click(nextBtn);
+    await waitFor(() => {
+      expect(screen.getByText(/Quel automatisme appeler/i)).toBeInTheDocument();
+    }, { timeout: 8000 });
+  });
+
+  it('T8.2 — intégration non-AAP (github_actions) → section template cachée', async () => {
+    await act(async () => {
+      render(<ActionWizard {...defaultProps} editAction={githubEditAction} />);
+    });
+    await waitFor(() => expect(screen.getByLabelText("Nom de l'action")).toHaveValue('Action GitHub'));
+    const nextBtn = await screen.findByRole('button', { name: /Suivant/i });
+    await userEvent.setup().click(nextBtn);
+    await waitFor(() => {
+      expect(screen.queryByText(/Quel automatisme appeler/i)).not.toBeInTheDocument();
+    }, { timeout: 8000 });
+  });
+
+  it('T8.3 — capabilities null → fallback integrationToConnector, comportement AAP conservé', async () => {
+    // Capabilities null → fallback vers integrationHelpers (aap → 'aap' via integrationToConnector)
+    mockUseCapabilities.mockReturnValue({ capabilities: null, loading: false, error: null });
+    await act(async () => {
+      render(<ActionWizard {...defaultProps} editAction={aapEditAction} />);
+    });
+    await waitFor(() => expect(screen.getByLabelText("Nom de l'action")).toHaveValue('Action AAP'));
+    const nextBtn = await screen.findByRole('button', { name: /Suivant/i });
+    await userEvent.setup().click(nextBtn);
+    // Même sans capabilities, integrationToConnector('aap') → 'aap' → section visible
+    await waitFor(() => {
+      expect(screen.getByText(/Quel automatisme appeler/i)).toBeInTheDocument();
+    }, { timeout: 8000 });
+  });
+
+  it('T8.4 — capabilities override : connector_type non-standard depuis capabilities prime sur integrationHelpers', async () => {
+    // Mock capabilities where github_actions has connector_type='github_actions'
+    // but we override it to a fake 'aap' so the AAP section should become visible —
+    // prouvant que le code lit bien capabilities et non integrationHelpers.
+    mockUseCapabilities.mockReturnValue({
+      capabilities: {
+        ...mockCapabilities,
+        platforms: [
+          ...mockCapabilities.platforms.filter((p) => p.code !== 'github_actions'),
+          {
+            code: 'github_actions',
+            display_name: 'GitHub Actions',
+            aliases: [],
+            icon: 'github_actions',
+            connector_type: 'aap', // Override: capabilities retourne 'aap' pour github_actions
+            action_platform_code: 'GitHub Actions',
+            supports_health_check: false,
+          },
+        ],
+      },
+      loading: false,
+      error: null,
+    });
+    // Integration id 2 → type 'github_actions' — integrationHelpers retournerait 'github_actions'
+    // mais capabilities retourne 'aap' → section AAP doit être VISIBLE (capabilities prime)
+    const githubEditAction: ActionDetail = {
+      id: 2,
+      name: 'Action GitHub Override',
+      description: 'Test',
+      item_type: 'action',
+      engine: 'Oracle',
+      platform: 'GitHub Actions',
+      integration_id: 2,
+      parameters_schema: null,
+      impact_rules: null,
+      default_impact_level: null,
+      status: 'draft',
+      created_by: null,
+      created_at: '',
+      updated_at: null,
+      execution_steps: null,
+      workflow_steps: null,
+      tags: [],
+    };
+    await act(async () => {
+      render(<ActionWizard {...defaultProps} editAction={githubEditAction} />);
+    });
+    await waitFor(() => expect(screen.getByLabelText("Nom de l'action")).toHaveValue('Action GitHub Override'));
+    const nextBtn = await screen.findByRole('button', { name: /Suivant/i });
+    await userEvent.setup().click(nextBtn);
+    // Si capabilities prime (connector_type='aap'), la section AAP doit être visible
+    await waitFor(() => {
+      expect(screen.getByText(/Quel automatisme appeler/i)).toBeInTheDocument();
+    }, { timeout: 8000 });
   });
 });
 

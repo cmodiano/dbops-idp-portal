@@ -27,7 +27,7 @@ vi.mock('../../services/admin_service', () => ({
 const defaultProps: WizardStep2AutomatismeProps = {
   isWorkflow: false,
   isReadOnly: false,
-  isPlatformAAP: false,
+  connectorType: '',
   integrationId: undefined,
   aapResourceType: 'job_template' as const,
   setAapResourceType: vi.fn(),
@@ -55,8 +55,8 @@ describe('WizardStep2Automatisme', () => {
     expect(screen.getByText('Paramètres')).toBeInTheDocument();
   });
 
-  it('affiche le sélecteur de type AAP quand isPlatformAAP=true', () => {
-    renderWithForm({ ...defaultProps, isPlatformAAP: true, integrationId: 1 });
+  it('affiche le sélecteur de type AAP quand connectorType=aap (Story 82.7)', () => {
+    renderWithForm({ ...defaultProps, connectorType: 'aap', integrationId: 1 });
     expect(screen.getByText(/Quel automatisme appeler/i)).toBeInTheDocument();
     expect(screen.getByText(/Type de ressource/i)).toBeInTheDocument();
   });
@@ -89,14 +89,14 @@ describe('WizardStep2Automatisme — coverage extension', () => {
     expect(screen.queryByRole('button', { name: /Ajouter une étape/i })).not.toBeInTheDocument();
   });
 
-  it('affiche la section AAP en mode fallback quand integrationId est undefined et isPlatformAAP', () => {
+  it('affiche la section AAP en mode fallback quand integrationId est undefined et connectorType=aap', () => {
     vi.mocked(useAAPTemplatesModule.useAAPTemplates).mockReturnValue({
       templates: [],
       loading: false,
       fallback: true,
       error: null,
     });
-    renderWithForm({ ...defaultProps, isPlatformAAP: true, integrationId: undefined });
+    renderWithForm({ ...defaultProps, connectorType: 'aap', integrationId: undefined });
     // Shows manual input fallback
     expect(screen.getByLabelText('ID template AAP')).toBeInTheDocument();
   });
@@ -108,7 +108,7 @@ describe('WizardStep2Automatisme — coverage extension', () => {
       fallback: true,
       error: 'Connection failed',
     });
-    renderWithForm({ ...defaultProps, isPlatformAAP: true, integrationId: undefined });
+    renderWithForm({ ...defaultProps, connectorType: 'aap', integrationId: undefined });
     expect(screen.getByText(/Saisie manuelle/i)).toBeInTheDocument();
   });
 
@@ -119,7 +119,7 @@ describe('WizardStep2Automatisme — coverage extension', () => {
       fallback: false,
       error: null,
     });
-    renderWithForm({ ...defaultProps, isPlatformAAP: true, integrationId: 1 });
+    renderWithForm({ ...defaultProps, connectorType: 'aap', integrationId: 1 });
     // Shows the Select (non-fallback path, lines 92-108)
     expect(screen.getByLabelText('Template AAP')).toBeInTheDocument();
   });
@@ -132,7 +132,7 @@ describe('WizardStep2Automatisme — coverage extension', () => {
       error: null,
     });
     // aapTemplateId=99 which is NOT in templates array → adds "Template #99 (introuvable)"
-    renderWithForm({ ...defaultProps, isPlatformAAP: true, integrationId: 1, aapTemplateId: 99 });
+    renderWithForm({ ...defaultProps, connectorType: 'aap', integrationId: 1, aapTemplateId: 99 });
     // The select is rendered (the option gets added to the options array)
     expect(screen.getByLabelText('Template AAP')).toBeInTheDocument();
   });
@@ -145,7 +145,7 @@ describe('WizardStep2Automatisme — coverage extension', () => {
       fallback: true,
       error: null,
     });
-    renderWithForm({ ...defaultProps, isPlatformAAP: true, integrationId: 1, aapTemplateId: 5, setAapTemplateId });
+    renderWithForm({ ...defaultProps, connectorType: 'aap', integrationId: 1, aapTemplateId: 5, setAapTemplateId });
     const input = screen.getByLabelText('ID template AAP');
     fireEvent.change(input, { target: { value: '' } });
     expect(setAapTemplateId).toHaveBeenCalledWith(undefined);
@@ -158,7 +158,7 @@ describe('WizardStep2Automatisme — coverage extension', () => {
       fallback: true,
       error: null,
     });
-    renderWithForm({ ...defaultProps, isPlatformAAP: true, integrationId: 1, aapTemplateId: undefined });
+    renderWithForm({ ...defaultProps, connectorType: 'aap', integrationId: 1, aapTemplateId: undefined });
     // Help text should appear when aapTemplateId is null/undefined
     expect(screen.getByText(/ID du job template/i)).toBeInTheDocument();
   });
@@ -172,7 +172,7 @@ describe('WizardStep2Automatisme — coverage extension', () => {
       error: null,
     });
     const user = userEvent.setup({ pointerEventsCheck: 0 });
-    renderWithForm({ ...defaultProps, isPlatformAAP: true, integrationId: 1, setAapTemplateId });
+    renderWithForm({ ...defaultProps, connectorType: 'aap', integrationId: 1, setAapTemplateId });
     const select = screen.getByLabelText('Template AAP');
     await user.click(select);
     // Wait for dropdown to open, then click the option
@@ -192,7 +192,7 @@ describe('WizardStep2Automatisme — coverage extension', () => {
       error: null,
     });
     const user = userEvent.setup({ pointerEventsCheck: 0 });
-    renderWithForm({ ...defaultProps, isPlatformAAP: true, integrationId: 1 });
+    renderWithForm({ ...defaultProps, connectorType: 'aap', integrationId: 1 });
     const select = screen.getByLabelText('Template AAP');
     await user.click(select);
     // Type to trigger onSearch and filterOption
@@ -200,5 +200,44 @@ describe('WizardStep2Automatisme — coverage extension', () => {
     // Alpha Template should remain visible
     const option = await screen.findByText('Alpha Template');
     expect(option).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Story 82.7 — T8.4: connectorType prop (remplace isPlatformAAP)
+// ---------------------------------------------------------------------------
+
+describe('WizardStep2Automatisme — connectorType (Story 82.7, T8.4)', () => {
+  beforeEach(() => {
+    vi.mocked(useAAPTemplatesModule.useAAPTemplates).mockReturnValue({
+      templates: [],
+      loading: false,
+      fallback: false,
+      error: null,
+    });
+  });
+
+  it("connectorType='aap' → section WizardAAPTemplateSection visible", () => {
+    renderWithForm({ ...defaultProps, connectorType: 'aap', integrationId: 1 });
+    expect(screen.getByText(/Quel automatisme appeler/i)).toBeInTheDocument();
+    expect(screen.getByText(/Type de ressource/i)).toBeInTheDocument();
+  });
+
+  it("connectorType='terraform' → section WizardAAPTemplateSection cachée", () => {
+    renderWithForm({ ...defaultProps, connectorType: 'terraform', integrationId: 2 });
+    expect(screen.queryByText(/Quel automatisme appeler/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Type de ressource/i)).not.toBeInTheDocument();
+  });
+
+  it("connectorType='' (vide) → section WizardAAPTemplateSection cachée", () => {
+    renderWithForm({ ...defaultProps, connectorType: '', integrationId: 2 });
+    expect(screen.queryByText(/Quel automatisme appeler/i)).not.toBeInTheDocument();
+  });
+
+  it("connectorType='github_actions' → section WizardAAPTemplateSection cachée", () => {
+    renderWithForm({ ...defaultProps, connectorType: 'github_actions', integrationId: 3 });
+    expect(screen.queryByText(/Quel automatisme appeler/i)).not.toBeInTheDocument();
+    // Paramètres section toujours visible pour les non-AAP
+    expect(screen.getByText('Paramètres')).toBeInTheDocument();
   });
 });
