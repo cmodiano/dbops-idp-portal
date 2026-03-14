@@ -77,6 +77,7 @@ INSTALLED_APPS = [
     'reference',
     'help',  # Story 31.7 - Aide contextuelle
     'output_schemas',  # Story 63.1 - Infrastructure des Schémas d'Output
+    'capabilities',  # Story 82.4 - API de capacités backend
 ]
 
 # ─── Django Jazzmin Admin Theme (Story 45.2) ────────────────────────────────

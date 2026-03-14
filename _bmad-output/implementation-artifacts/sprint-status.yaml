@@ -986,7 +986,7 @@ development_status:
     82-1-phase0-stabilisation-reduction-derive: done # FUTURE_GATE_TYPES, GateHandler.condition_type_map class attr, platform-canonical-codes.md, extensibility-compatibility-matrix.md — code review: frozenset, 7 tests, warning log
     82-2-platform-definition-registry: done # platforms/definitions.py, PlatformRegistry, build_platform_runtime_config(), health checks dérivés, aliases unifiés — review: C1 trigger/execution_views platform_type normalization, H1 action.py AC4, M2 type annotations
     82-3-service-definition-registry: done # services/definitions.py, allowlist dérivée, service_call_handler générique, 28 tests unitaires — review: C1 test _ALLOWED_OPERATIONS→service_definition_registry mock, M1 __post_init__ frozenset validation, M2 commentaire SYNC mis à jour, L1 double lookup simplifié, L2 ServiceDefinition dans __all__
-    82-4-api-capabilities-backend: backlog # GET /capabilities/integrations, /workflow-steps
+    82-4-api-capabilities-backend: done # GET /capabilities/integrations, /workflow-steps — 16/16 tests pass, code review OK 2026-03-14
     82-5-gate-registry-definition: backlog # GateRegistry, GateDefinition, GateHandler/GateEvaluator refactor
     82-6-frontend-capabilities-client: backlog # useCapabilities, ServiceCallStepConfig, GateStepConfig schema-driven
     82-7-action-wizard-formulaires-schema-driven: backlog # ActionWizard plateforme depuis capacités, validation inline
