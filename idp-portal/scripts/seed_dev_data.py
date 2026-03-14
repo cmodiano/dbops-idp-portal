@@ -2,6 +2,7 @@
 """Seed development database with test data for frontend validation.
 
 Story 5.6 - Script de seed de données en base pour tests frontend
+Epic 80 (stories 80.1–80.4) - Reset + reseed dev : purge orchestration, garde-fous, trace, validation QA
 
 This script inserts a comprehensive test dataset covering:
 - Users (3): dbops1, dba1, user1
@@ -10,7 +11,7 @@ This script inserts a comprehensive test dataset covering:
 - Actions (8): Various with AAP/ServiceNow connectors
 - Integrations (2): AAP demo, ServiceNow demo
 - Favorites: User favorites on actions
-- Executions (15): Various statuses (SUBMITTED, RUNNING, COMPLETED, FAILED, CANCELLED)
+- Executions (15): Various statuses (SUBMITTED, RUNNING, COMPLETED, FAILED, CANCELLED, REJECTED)
 - Execution steps: Timeline data for some executions
 
 IMPORTANT: This script is for DEVELOPMENT ONLY.
@@ -402,7 +403,7 @@ EXECUTION_STATUSES = [
     ("RUNNING", 2),
     ("SUBMITTED", 2),
     ("CANCELLED", 1),
-    ("PENDING_APPROVAL", 1),
+    ("REJECTED", 1),  # PENDING_APPROVAL deprecated (ADR-007, story 78.14) — removed from CHK_EXECUTION_STATUS
 ]
 
 
@@ -852,6 +853,9 @@ def seed_execution_steps(conn: oracledb.Connection, execution_ids: list[int]) ->
                 step_status = "FAILED" if step_order == 3 else ("COMPLETED" if step_order < 3 else "SKIPPED")
             elif exec_status == "RUNNING":
                 step_status = "COMPLETED" if step_order < 3 else ("RUNNING" if step_order == 3 else "PENDING")
+            elif exec_status == "REJECTED":
+                # Rejected before execution: submission steps done, execution step and beyond skipped
+                step_status = "COMPLETED" if step_order < 3 else "SKIPPED"
             else:
                 step_status = default_status
 
