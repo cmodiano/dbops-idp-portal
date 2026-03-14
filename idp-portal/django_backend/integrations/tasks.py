@@ -23,16 +23,28 @@ if TYPE_CHECKING:
     from integrations.health_check import HealthCheckResult
 
 from platforms.registry import platform_registry  # Story 82.2: remplace les sets hardcodés
+from services.definitions import ServiceDefinition, service_definition_registry  # Story 82.3: source de vérité
 
 logger = structlog.get_logger(__name__)
 
-# Types gérés par les services (ServiceRegistry)
-# Story 82.2 AC3 (partiel): _ADAPTER_TYPES et _ADAPTER_TYPE_ALIASES supprimés.
-# _SERVICE_TYPES conservé jusqu'à la création d'un ServiceRegistry (Story à venir).
-_SERVICE_TYPES = {"servicenow", "jira", "splunk"}
-
 # Vault est un service à instanciation spéciale (credentials directs)
 _VAULT_TYPE = "vault"
+
+# Story 82.3: _SERVICE_TYPES dérivé depuis service_definition_registry.
+# Critères : supports_health_check=True, requires_integration=True, code != vault
+# (vault géré séparément par _resolve_and_check_vault).
+# Résultat attendu : frozenset({"servicenow", "jira", "splunk"})
+def _is_standard_health_check_service(defn: ServiceDefinition) -> bool:
+    return defn.supports_health_check and defn.requires_integration and defn.code != _VAULT_TYPE
+
+
+_SERVICE_TYPES: frozenset[str] = frozenset(
+    defn.code for defn in (
+        service_definition_registry.get(code)
+        for code in service_definition_registry.list_types()
+    )
+    if _is_standard_health_check_service(defn)
+)
 
 _MAX_HEALTH_ERROR_LENGTH = 500
 

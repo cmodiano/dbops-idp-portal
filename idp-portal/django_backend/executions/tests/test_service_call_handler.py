@@ -110,19 +110,27 @@ class TestServiceCallHandler:
             )
         assert exc_info.value.code == "SERVICE_INTEGRATION_MISSING"
 
-    @patch("executions.step_handlers.service_call_handler._ALLOWED_OPERATIONS", {
-        "servicenow": frozenset({"create_change", "update_change", "close_change", "get_change_status", "cancel_change", "nonexistent_op"}),
-        "vault": frozenset({"get_secret"}),
-        "jira": frozenset({"create_issue", "update_issue", "get_issue"}),
-    })
+    @patch("executions.step_handlers.service_call_handler.service_definition_registry")
     @patch("executions.step_handlers.service_call_handler.get_service_client")
     @patch("executions.step_handlers.service_call_handler.build_auth_headers")
     @patch("executions.step_handlers.service_call_handler.IntegrationService")
-    def test_nonexistent_operation_raises_value_error(self, mock_is_class, mock_bah, mock_gsc):
-        """AC#3 : opération inexistante sur le service → ValueError (allowlist OK, hasattr False)."""
+    def test_nonexistent_operation_raises_value_error(self, mock_is_class, mock_bah, mock_gsc, mock_registry):
+        """AC#3 : opération inexistante sur le service → ValueError (allowlist OK, hasattr False).
+
+        Story 82.3: _ALLOWED_OPERATIONS supprimé — on mock service_definition_registry pour
+        injecter 'nonexistent_op' dans l'allowlist sans modifier le registre global.
+        """
         integration = self._make_integration()
         mock_is_class.return_value.get_by_type.return_value = integration
         mock_bah.return_value = {}
+
+        # Allowlist inclut 'nonexistent_op' pour passer la vérification positive
+        mock_registry.get_allowed_operations.return_value = frozenset({
+            "create_change", "update_change", "close_change",
+            "get_change_status", "cancel_change", "nonexistent_op",
+        })
+        # servicenow nécessite un record Integration (non credential-free)
+        mock_registry.is_credential_free.return_value = False
 
         mock_service = MagicMock(spec=[])  # Pas d'attributs → hasattr retourne False
         mock_gsc.return_value = mock_service
