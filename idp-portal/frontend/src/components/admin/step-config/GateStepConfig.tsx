@@ -10,6 +10,7 @@ import type { FC } from 'react';
 import { Input, Select, Typography } from 'antd';
 import type { WorkflowStepNodeData } from '../WorkflowStepNode';
 import { useApproverProfiles } from '../../../hooks/useApproverProfiles';
+import { useWorkflowStepCapabilities } from '../../../hooks/useWorkflowStepCapabilities';
 
 const { Text } = Typography;
 
@@ -22,11 +23,6 @@ export interface GateStepConfigProps {
   /** Story 57.19: Pre-computed step options with readable labels (for context_from) */
   availableStepOptions?: { value: string; label: string }[];
 }
-
-const GATE_TYPE_OPTIONS = [
-  { value: 'maintenance_window', label: 'Fenêtre de maintenance' },
-  { value: 'approval', label: 'Approbation manuelle' },
-];
 
 const ON_TIMEOUT_OPTIONS = [
   { value: 'FAIL', label: 'Échouer le workflow' },
@@ -43,6 +39,9 @@ export const GateStepConfig: FC<GateStepConfigProps> = ({
   // Story 57.19: Use pre-computed options with labels if available, fallback to raw IDs
   const stepOptions = availableStepOptions ?? availableStepIds.map((id) => ({ value: id, label: id }));
   const { approverProfileOptions, loading: approverProfilesLoading } = useApproverProfiles(data.gate_type === 'approval');
+  // Story 82.6: gate variants depuis le backend (fallback local si API indisponible)
+  const { gateVariants, loading: gateLoading } = useWorkflowStepCapabilities();
+  const gateOptions = gateVariants.map((v) => ({ value: v.code, label: v.label }));
 
   return (
     <div data-testid="gate-step-config">
@@ -59,7 +58,8 @@ export const GateStepConfig: FC<GateStepConfigProps> = ({
           placeholder="Sélectionner un type"
           disabled={disabled}
           aria-label="Type de gate"
-          options={GATE_TYPE_OPTIONS}
+          loading={gateLoading}
+          options={gateOptions}
         />
       </div>
 

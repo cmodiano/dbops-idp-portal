@@ -16,6 +16,7 @@ import { NotificationTemplateEditor } from './NotificationTemplateEditor';
 import { ConditionConfig } from './ConditionConfig';
 import { MappingHelpPopover } from './MappingHelpPopover';
 import { useInputMappingWarnings } from '../../../hooks/useInputMappingWarnings';
+import { useCapabilities } from '../../../hooks/useCapabilities';
 import {
   SERVICE_CALL_OPERATIONS,
   INTEGRATION_LABELS,
@@ -44,9 +45,28 @@ export const ServiceCallStepConfig: FC<ServiceCallStepConfigProps> = ({
   availableStepIds,
   workflowId,
 }) => {
-  const availableOperations = data.integration_type
-    ? (SERVICE_CALL_OPERATIONS[data.integration_type] ?? [])
-    : [];
+  // Story 82.6: capacités backend pour les types et opérations d'intégration
+  const { capabilities, loading: capabilitiesLoading } = useCapabilities();
+
+  // Options integration_type : depuis le backend si dispo, sinon INTEGRATION_LABELS local (fallback)
+  const integrationTypeOptions = useMemo(() => {
+    if (capabilities?.services?.length) {
+      return capabilities.services.map((s) => ({ value: s.code, label: s.display_name }));
+    }
+    return Object.keys(INTEGRATION_LABELS).map((key) => ({ value: key, label: INTEGRATION_LABELS[key] }));
+  }, [capabilities]);
+
+  // Opérations disponibles : depuis le backend si dispo, sinon SERVICE_CALL_OPERATIONS local (fallback)
+  const availableOperations = useMemo(() => {
+    if (!data.integration_type) return [];
+    if (capabilities?.services?.length) {
+      const svc = capabilities.services.find((s) => s.code === data.integration_type);
+      // Si le service est trouvé dans le backend, utiliser ses opérations
+      if (svc) return svc.operations;
+      // integration_type non trouvé dans les services backend → fallback local
+    }
+    return SERVICE_CALL_OPERATIONS[data.integration_type] ?? [];
+  }, [data.integration_type, capabilities]);
 
   // Filtrer le step courant de la liste des étapes disponibles (AC4: "étapes précédentes")
   const filteredStepOptions = useMemo(
@@ -77,11 +97,9 @@ export const ServiceCallStepConfig: FC<ServiceCallStepConfigProps> = ({
           onChange={handleIntegrationChange}
           placeholder="Sélectionner une intégration"
           disabled={disabled}
+          loading={capabilitiesLoading}
           aria-label="Type d'intégration"
-          options={Object.keys(INTEGRATION_LABELS).map((key) => ({
-            value: key,
-            label: INTEGRATION_LABELS[key],
-          }))}
+          options={integrationTypeOptions}
         />
       </div>
 
@@ -97,6 +115,7 @@ export const ServiceCallStepConfig: FC<ServiceCallStepConfigProps> = ({
           onChange={(value) => onUpdate({ operation: value })}
           placeholder="Sélectionner une opération"
           disabled={disabled || !data.integration_type}
+          loading={capabilitiesLoading}
           aria-label="Opération"
           options={availableOperations.map((op) => ({
             value: op,

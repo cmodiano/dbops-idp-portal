@@ -15,6 +15,7 @@ import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Badge, Divider, Tag, Tooltip, theme } from 'antd';
 import { CheckCircleOutlined, CloseCircleOutlined, HourglassOutlined, LoadingOutlined, MinusCircleOutlined } from '@ant-design/icons';
 import type { WorkflowStepType, ScheduleStepConfig } from '../../types/api';
+import { INTEGRATION_LABELS, OPERATION_LABELS } from './step-config/serviceCallConstants';
 
 // Story 57.13: Color codes and labels per step type
 const STEP_TYPE_COLORS: Record<WorkflowStepType, string> = {
@@ -37,23 +38,6 @@ const STEP_TYPE_LABELS: Record<WorkflowStepType, string> = {
   parallel_group:     'Parallèle', // deprecated, rétro-compat
 };
 
-const INTEGRATION_LABELS: Record<string, string> = {
-  servicenow: 'ServiceNow',
-  vault: 'HashiCorp Vault',
-  jira: 'Jira',
-};
-
-const OPERATION_LABELS: Record<string, string> = {
-  create_change: 'Créer un change',
-  update_change: 'Mettre à jour le change',
-  close_change: 'Fermer le change',
-  get_change_status: 'Statut du change',
-  cancel_change: 'Annuler le change',
-  get_secret: 'Lire un secret', // pragma: allowlist secret
-  create_issue: 'Créer un ticket',
-  update_issue: 'Mettre à jour le ticket',
-  get_issue: 'Lire le ticket',
-};
 
 export interface WorkflowStepNodeData {
   action_id?: number | null;

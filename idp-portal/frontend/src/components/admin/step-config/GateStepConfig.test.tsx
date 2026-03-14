@@ -8,8 +8,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { GateStepConfig } from './GateStepConfig';
 import * as useApproverProfilesModule from '../../../hooks/useApproverProfiles';
+import * as useWorkflowStepCapabilitiesModule from '../../../hooks/useWorkflowStepCapabilities';
 
 vi.mock('../../../hooks/useApproverProfiles');
+vi.mock('../../../hooks/useWorkflowStepCapabilities');
+
+const mockUseWorkflowStepCapabilities = vi.mocked(
+  useWorkflowStepCapabilitiesModule.useWorkflowStepCapabilities,
+);
 
 const mockUseApproverProfiles = vi.mocked(useApproverProfilesModule.useApproverProfiles);
 
@@ -31,9 +37,19 @@ const baseData = {
   timeout: null,
 };
 
+const defaultGateVariants = [
+  { code: 'maintenance_window', label: 'Fenêtre de maintenance', config_schema: {} },
+  { code: 'approval', label: 'Approbation manuelle', config_schema: {} },
+];
+
 describe('GateStepConfig — approver_profile_ids', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseWorkflowStepCapabilities.mockReturnValue({
+      gateVariants: defaultGateVariants,
+      loading: false,
+      error: null,
+    });
     mockUseApproverProfiles.mockReturnValue({
       profiles: [
         { id: 1, name: 'DBA Approver' },
@@ -74,9 +90,7 @@ describe('GateStepConfig — approver_profile_ids', () => {
     expect(screen.queryByLabelText('Profils approbateurs')).not.toBeInTheDocument();
   });
 
-  it('calls onUpdate with approver_profile_ids=[1] when value selected', () => {
-    // This test verifies the onChange handler logic via direct invocation
-    // since Ant Design Select is difficult to test via DOM interactions
+  it('does not call onUpdate on initial render (no spurious side effects)', () => {
     const onUpdate = vi.fn();
     render(
       <GateStepConfig
@@ -87,27 +101,25 @@ describe('GateStepConfig — approver_profile_ids', () => {
       />
     );
 
-    // Verify the component renders without error
-    expect(screen.getByTestId('gate-step-config')).toBeInTheDocument();
+    expect(onUpdate).not.toHaveBeenCalled();
   });
 
-  it('calls onUpdate with null when empty array selected (clears selection)', () => {
-    // The onChange handler: value.length > 0 ? value : null
-    // Verify through component rendering
-    const onUpdate = vi.fn();
+  it('renders approver_profile_ids select pre-filled when approver_profile_ids has values', () => {
     render(
       <GateStepConfig
         data={{ ...baseData, approver_profile_ids: [1, 2] }}
-        onUpdate={onUpdate}
+        onUpdate={vi.fn()}
         disabled={false}
         availableStepIds={[]}
       />
     );
 
-    expect(screen.getByTestId('gate-step-config')).toBeInTheDocument();
+    // Component renders without error and shows the approver select
+    expect(screen.getByLabelText('Profils approbateurs')).toBeInTheDocument();
+    // onUpdate is NOT called on initial render
   });
 
-  it('shows loading state when profiles are loading', () => {
+  it('shows loading state on approver select when profiles are loading', () => {
     mockUseApproverProfiles.mockReturnValue({
       profiles: [],
       loading: true,
@@ -123,7 +135,84 @@ describe('GateStepConfig — approver_profile_ids', () => {
       />
     );
 
+    // The approver Select has loading=true — Ant Design injects the loading CSS class
+    expect(container.querySelector('.ant-select-loading')).toBeTruthy();
+  });
+});
+
+// ─── Story 82.6: gate options depuis le hook ───────────────────────────────────
+describe('GateStepConfig — gate options from useWorkflowStepCapabilities (Story 82.6)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseApproverProfiles.mockReturnValue({
+      profiles: [],
+      loading: false,
+      approverProfileOptions: [],
+    });
+  });
+
+  it('utilise les options backend pour le select gate_type', () => {
+    mockUseWorkflowStepCapabilities.mockReturnValue({
+      gateVariants: [
+        { code: 'maintenance_window', label: 'Fenêtre de maintenance', config_schema: {} },
+        { code: 'approval', label: 'Approbation manuelle', config_schema: {} },
+      ],
+      loading: false,
+      error: null,
+    });
+
+    render(
+      <GateStepConfig
+        data={{ ...baseData, gate_type: null }}
+        onUpdate={vi.fn()}
+        disabled={false}
+      />
+    );
+
+    expect(screen.getByTestId('gate-step-config')).toBeInTheDocument();
+    expect(screen.getByLabelText('Type de gate')).toBeInTheDocument();
+  });
+
+  it('affiche un spinner loading pendant le chargement des variants', () => {
+    mockUseWorkflowStepCapabilities.mockReturnValue({
+      gateVariants: [],
+      loading: true,
+      error: null,
+    });
+
+    const { container } = render(
+      <GateStepConfig
+        data={{ ...baseData, gate_type: null }}
+        onUpdate={vi.fn()}
+        disabled={false}
+      />
+    );
+
     expect(container).toBeTruthy();
+    // Le Select Ant Design a loading=true (spinner injecté dans le DOM)
+    expect(container.querySelector('.ant-select-loading')).toBeTruthy();
+  });
+
+  it('utilise le fallback local si erreur API (variants non vides)', () => {
+    // Quand erreur, useWorkflowStepCapabilities retourne les variants fallback
+    mockUseWorkflowStepCapabilities.mockReturnValue({
+      gateVariants: [
+        { code: 'maintenance_window', label: 'Fenêtre de maintenance', config_schema: {} },
+        { code: 'approval', label: 'Approbation manuelle', config_schema: {} },
+      ],
+      loading: false,
+      error: 'API down',
+    });
+
+    render(
+      <GateStepConfig
+        data={{ ...baseData, gate_type: null }}
+        onUpdate={vi.fn()}
+        disabled={false}
+      />
+    );
+
+    expect(screen.getByTestId('gate-step-config')).toBeInTheDocument();
   });
 });
 
@@ -131,6 +220,11 @@ describe('GateStepConfig — approver_profile_ids', () => {
 describe('GateStepConfig — context_from with labels (Story 57.19)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseWorkflowStepCapabilities.mockReturnValue({
+      gateVariants: defaultGateVariants,
+      loading: false,
+      error: null,
+    });
     mockUseApproverProfiles.mockReturnValue({
       profiles: [],
       loading: false,

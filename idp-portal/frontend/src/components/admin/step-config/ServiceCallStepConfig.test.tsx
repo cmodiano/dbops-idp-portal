@@ -4,18 +4,35 @@
  * and notification integration_type support.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ServiceCallStepConfig } from './ServiceCallStepConfig';
+import * as useCapabilitiesModule from '../../../hooks/useCapabilities';
 
 vi.mock('../../../hooks/useOutputSchemas', () => ({
   useOutputSchemas: () => ({ availableVariables: [], loading: false, error: null }),
 }));
+vi.mock('../../../hooks/useCapabilities');
+
+const mockUseCapabilities = vi.mocked(useCapabilitiesModule.useCapabilities);
+
 import {
   SERVICE_CALL_OPERATIONS,
   INTEGRATION_LABELS,
   OPERATION_LABELS,
 } from './serviceCallConstants';
+
+// Mock capabilities with services matching serviceCallConstants
+const mockCapabilitiesWithServices = {
+  platforms: [],
+  services: [
+    { code: 'servicenow', display_name: 'ServiceNow', credential_mode: 'integration' as const, operations: ['create_change', 'update_change', 'close_change', 'get_change_status', 'cancel_change'], supports_health_check: false },
+    { code: 'vault', display_name: 'HashiCorp Vault', credential_mode: 'integration' as const, operations: ['get_secret'], supports_health_check: false },
+    { code: 'jira', display_name: 'Jira', credential_mode: 'integration' as const, operations: ['create_issue', 'update_issue', 'get_issue'], supports_health_check: false },
+    { code: 'notification', display_name: 'Notification', credential_mode: 'credential_free' as const, operations: ['send_email', 'send_teams', 'notify_execution_event'], supports_health_check: false },
+  ],
+  stepTypes: [],
+};
 
 const baseData = {
   name: null,
@@ -35,6 +52,11 @@ const baseData = {
 };
 
 describe('ServiceCallStepConfig — MappingHelpPopover integration (Story 57.20)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithServices, loading: false, error: null });
+  });
+
   it('renders input mapping help icon', () => {
     render(<ServiceCallStepConfig data={baseData} onUpdate={vi.fn()} />);
     expect(screen.getByLabelText('Aide syntaxe input_mapping')).toBeInTheDocument();
@@ -75,6 +97,11 @@ describe('ServiceCallStepConfig — MappingHelpPopover integration (Story 57.20)
 });
 
 describe('ServiceCallStepConfig — validation warnings (Story 57.20, AC5)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithServices, loading: false, error: null });
+  });
+
   it('shows warning for invalid step reference', () => {
     const dataWithBadRef = {
       ...baseData,
@@ -118,6 +145,11 @@ describe('ServiceCallStepConfig — validation warnings (Story 57.20, AC5)', () 
 // ---------------------------------------------------------------------------
 
 describe('serviceCallConstants — notification (Story 16.9, AC6-7)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithServices, loading: false, error: null });
+  });
+
   it('SERVICE_CALL_OPERATIONS inclut notification avec 3 opérations', () => {
     expect(SERVICE_CALL_OPERATIONS.notification).toEqual([
       'send_email',
@@ -147,6 +179,11 @@ describe('serviceCallConstants — notification (Story 16.9, AC6-7)', () => {
 });
 
 describe('ServiceCallStepConfig — notification integration_type (Story 16.9, AC6-7)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithServices, loading: false, error: null });
+  });
+
   const notificationBase = {
     ...baseData,
     integration_type: 'notification',
@@ -189,6 +226,11 @@ describe('ServiceCallStepConfig — notification integration_type (Story 16.9, A
 const dataWithMapping = { ...baseData, input_mapping: { param1: 'value1' } };
 
 describe('ServiceCallStepConfig — VariablePicker (Story 63.3)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithServices, loading: false, error: null });
+  });
+
   it('passe workflowId au composant enfant via KeyValueEditor', () => {
     // Le VariablePicker est rendu par KeyValueEditor — avec au moins une ligne input_mapping
     // et workflowId fourni, il doit apparaître dans le DOM (via data-testid du trigger).
@@ -217,6 +259,11 @@ describe('ServiceCallStepConfig — VariablePicker (Story 63.3)', () => {
 // ---------------------------------------------------------------------------
 
 describe('ServiceCallStepConfig — NotificationTemplateEditor (Story 63.4, AC4)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithServices, loading: false, error: null });
+  });
+
   it('rend NotificationTemplateEditor pour notification send_email', () => {
     const data = {
       ...baseData,
@@ -246,5 +293,77 @@ describe('ServiceCallStepConfig — NotificationTemplateEditor (Story 63.4, AC4)
     expect(
       container.querySelector('[data-testid="notification-template-editor-teams"]'),
     ).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Story 82.6 — useCapabilities integration (T7.6)
+// ---------------------------------------------------------------------------
+
+describe('ServiceCallStepConfig — useCapabilities integration (Story 82.6)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('utilise les services du backend pour les options integration_type', () => {
+    mockUseCapabilities.mockReturnValue({
+      capabilities: mockCapabilitiesWithServices,
+      loading: false,
+      error: null,
+    });
+
+    render(<ServiceCallStepConfig data={baseData} onUpdate={vi.fn()} />);
+
+    // ServiceNow doit apparaître via les données backend
+    expect(screen.getByText('ServiceNow')).toBeInTheDocument();
+  });
+
+  it('utilise le fallback INTEGRATION_LABELS si capabilities null', () => {
+    mockUseCapabilities.mockReturnValue({
+      capabilities: null,
+      loading: false,
+      error: 'API down',
+    });
+
+    render(<ServiceCallStepConfig data={baseData} onUpdate={vi.fn()} />);
+
+    // Fallback local : ServiceNow via INTEGRATION_LABELS
+    expect(screen.getByText('ServiceNow')).toBeInTheDocument();
+  });
+
+  it('utilise le fallback SERVICE_CALL_OPERATIONS si capabilities null', () => {
+    mockUseCapabilities.mockReturnValue({
+      capabilities: null,
+      loading: false,
+      error: null,
+    });
+
+    // create_change est dans SERVICE_CALL_OPERATIONS.servicenow
+    render(<ServiceCallStepConfig data={baseData} onUpdate={vi.fn()} />);
+
+    // Le composant rend sans erreur et affiche l'opération sélectionnée
+    expect(screen.getByTestId('service-call-step-config')).toBeInTheDocument();
+    expect(screen.getByText('Créer un change')).toBeInTheDocument();
+  });
+
+  it('utilise le fallback SERVICE_CALL_OPERATIONS si integration_type absent des services backend', () => {
+    // Backend chargé mais ne contient pas "servicenow" (ex: configuration backend incomplète)
+    mockUseCapabilities.mockReturnValue({
+      capabilities: {
+        platforms: [],
+        services: [
+          { code: 'vault', display_name: 'HashiCorp Vault', credential_mode: 'integration' as const, operations: ['get_secret'], supports_health_check: false },
+        ],
+        stepTypes: [],
+      },
+      loading: false,
+      error: null,
+    });
+
+    // data.integration_type = 'servicenow' (absent du backend)
+    render(<ServiceCallStepConfig data={baseData} onUpdate={vi.fn()} />);
+
+    // Doit afficher l'opération via fallback SERVICE_CALL_OPERATIONS.servicenow
+    expect(screen.getByText('Créer un change')).toBeInTheDocument();
   });
 });
