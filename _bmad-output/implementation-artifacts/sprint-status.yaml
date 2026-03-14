@@ -982,8 +982,8 @@ development_status:
     # === Epic 82: Extensibilité gates, services et plateformes ===
     # Réf: docs/reference/extensibility-plan-gates-services-platforms.md, docs/backend/epic-82-extensibilite-gates-services-platforms.md
     # Source de vérité unique, registres, API capacités, formulaires schema-driven
-    epic-82: backlog
-    82-1-phase0-stabilisation-reduction-derive: backlog # Matrice compatibilité, alignement gates, recensement mappings
+    epic-82: in-progress
+    82-1-phase0-stabilisation-reduction-derive: done # FUTURE_GATE_TYPES, GateHandler.condition_type_map class attr, platform-canonical-codes.md, extensibility-compatibility-matrix.md — code review: frozenset, 7 tests, warning log
     82-2-platform-definition-registry: backlog # platforms/definitions.py, health checks dérivés, runtime_config centralisé
     82-3-service-definition-registry: backlog # services/definitions.py, allowlist dérivée, service_call_handler générique
     82-4-api-capabilities-backend: backlog # GET /capabilities/integrations, /workflow-steps

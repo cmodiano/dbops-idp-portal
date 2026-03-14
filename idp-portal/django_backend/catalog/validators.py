@@ -12,12 +12,15 @@ from rest_framework.exceptions import ValidationError
 logger = structlog.get_logger(__name__)
 
 
-VALID_GATE_CONDITION_TYPES = (
-    'maintenance_window',
-    'time_window',
-    'approval_granted',
-    'target_state',
-)
+# Types de gate réellement implémentés au runtime (Story 82.1 Phase 0 — AC1).
+# GateHandler les mappe depuis gate_type ; GateEvaluator les évalue.
+# frozenset : immuable + O(1) lookup, cohérent avec FUTURE_GATE_TYPES.
+VALID_GATE_CONDITION_TYPES = frozenset({'maintenance_window', 'approval_granted'})
+
+# Types de gate déclarés pour usage futur — NON implémentés au runtime.
+# Ne pas inclure dans VALID_GATE_CONDITION_TYPES tant qu'ils ne sont pas évalués
+# par GateEvaluator, au risque d'une gate silencieusement jamais satisfaite.
+FUTURE_GATE_TYPES = frozenset({'time_window', 'target_state'})
 
 VALID_ON_TIMEOUT_VALUES = ('FAIL', 'SKIP')
 
@@ -64,7 +67,7 @@ def validate_gate_conditions(gate_conditions: list) -> None:
         elif condition_type not in VALID_GATE_CONDITION_TYPES:
             errors.append(
                 f"Gate condition at index {idx}: 'type' must be one of: "
-                f"{', '.join(VALID_GATE_CONDITION_TYPES)}"
+                f"{', '.join(sorted(VALID_GATE_CONDITION_TYPES))}"
             )
 
         # Validate optional 'timeout_hours'

@@ -22,7 +22,17 @@ class GateHandler:
     Types supportés :
     - gate_type: maintenance_window → condition {'type': 'maintenance_window'}
     - gate_type: approval           → condition {'type': 'approval_granted'} + context_from
+
+    Story 82.1 (AC1) : condition_type_map est un attribut de classe pour permettre
+    la vérification d'alignement avec VALID_GATE_CONDITION_TYPES en test.
     """
+
+    # Mapper gate_type (depuis step_config) → type de condition GateEvaluator
+    # Les valeurs de ce dict doivent correspondre exactement à VALID_GATE_CONDITION_TYPES.
+    condition_type_map: dict[str, str] = {
+        'maintenance_window': 'maintenance_window',
+        'approval': 'approval_granted',
+    }
 
     def execute(
         self,
@@ -48,12 +58,17 @@ class GateHandler:
         """
         gate_type = step_config.get('gate_type', 'maintenance_window')
 
-        # Mapper gate_type → type de condition GateEvaluator
-        condition_type_map = {
-            'maintenance_window': 'maintenance_window',
-            'approval': 'approval_granted',
-        }
-        condition_type = condition_type_map.get(gate_type, gate_type)
+        # Mapper gate_type → type de condition GateEvaluator (voir condition_type_map de classe)
+        condition_type = self.condition_type_map.get(gate_type)
+        if condition_type is None:
+            logger.warning(
+                "gate_handler_unknown_gate_type",
+                gate_type=gate_type,
+                known_types=list(self.condition_type_map),
+                execution_id=execution.id,
+                correlation_id=correlation_id,
+            )
+            condition_type = gate_type
 
         # Construire la condition de base
         condition: dict = {'type': condition_type}
