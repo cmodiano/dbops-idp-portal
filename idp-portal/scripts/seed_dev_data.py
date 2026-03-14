@@ -24,8 +24,10 @@ Usage:
 """
 
 import argparse
+import getpass
 import json
 import os
+import socket
 import sys
 from datetime import datetime, timedelta
 
@@ -95,6 +97,20 @@ def check_environment(env_arg: str | None) -> None:
 
     env_check = env_flag if env_flag in ALLOWED_ENVIRONMENTS else app_env
     print(f"Environment check passed: {env_check}")
+
+
+def log_reset_start(env_arg: str | None) -> None:
+    """Log a structured trace at the start of a reset operation."""
+    app_env = os.environ.get("APP_ENV", "(not set)")
+    print(
+        f"\n{'='*60}\n"
+        f"RESET TRACE\n"
+        f"  User      : {getpass.getuser()}@{socket.gethostname()}\n"
+        f"  Timestamp : {datetime.now().isoformat(timespec='seconds')}\n"
+        f"  APP_ENV   : {app_env}\n"
+        f"  --env     : {env_arg or '(not set)'}\n"
+        f"{'='*60}\n"
+    )
 
 
 # === Seed Data Definitions ===
@@ -967,6 +983,7 @@ def main() -> None:
     try:
         # Reset if requested
         if args.reset:
+            log_reset_start(args.env)
             reset_data(conn)
         else:
             if has_seed_data(conn):

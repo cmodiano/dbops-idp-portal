@@ -966,7 +966,7 @@ development_status:
     epic-80: in-progress
     80-1-purge-tables-orchestration-reset: done # WORKFLOW_EVENT_COUNTER ajoutée (code review) ; validation manuelle Oracle dev requise
     80-2-gardefous-environnement-dev: done # double indicateur --reset, validation --env inconnue, doc section 5 complète
-    80-3-trace-operationnelle-reset: backlog # Journaliser qui/quand a lancé le reset
+    80-3-trace-operationnelle-reset: done # Journaliser qui/quand a lancé le reset
     80-4-validation-qa-reset-reseed: backlog # Scénarios QA catalogue, executions, admin après reset
     epic-80-retrospective: optional
     # === Epic 81: Decommission ancien code path workflow (dev-only) ===

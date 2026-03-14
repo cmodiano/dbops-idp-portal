@@ -110,10 +110,36 @@ Cette logique évite le cas où `--env=dev` masquerait silencieusement un `APP_E
 | `--reset` sans les deux indicateurs | `ERROR: --reset requires BOTH APP_ENV and --env to be explicitly set to a dev value.\nExample: APP_ENV=development python3 seed_dev_data.py --env=dev --reset` |
 | Environnement valide | `Environment check passed: {valeur_dev}` (valeur `--env` si fournie, sinon `APP_ENV`) |
 
-### 5.4 Autres garde-fous
+### 5.4 Trace opérationnelle du reset
 
-4. **Trace operationnelle**: journaliser qui a lance le reset et quand (story 80.3).
-5. **Fenetre de maintenance dev**: annoncer le reset a l'equipe pour eviter les faux positifs QA.
+À chaque exécution avec `--reset`, la fonction `log_reset_start(env_arg)` affiche un bloc structuré **avant** la première suppression. Ce log permet d'annoncer facilement le reset à l'équipe (copier-coller dans Slack/Teams).
+
+**Champs journalisés :**
+
+| Champ | Source | Description |
+|-------|--------|-------------|
+| `User` | `getpass.getuser()@socket.gethostname()` | Utilisateur OS et machine ayant lancé le script |
+| `Timestamp` | `datetime.now().isoformat(timespec='seconds')` | Date/heure locale au format ISO 8601 |
+| `APP_ENV` | `os.environ.get("APP_ENV", "(not set)")` | Variable d'environnement système |
+| `--env` | argument CLI `--env` | Valeur passée en ligne de commande |
+
+**Exemple de sortie :**
+
+```
+
+============================================================
+RESET TRACE
+  User      : cyrille@MacBook-Pro-de-Cyrille.local
+  Timestamp : 2026-03-14T10:30:45
+  APP_ENV   : development
+  --env     : dev
+============================================================
+
+```
+
+**Positionnement dans `main()` :** après la vérification double-indicateur (`check_environment` + garde-fous 80.2) et **avant** l'appel à `reset_data(conn)`.
+
+**Note de maintenance dev :** annoncer le reset à l'équipe (copier-coller du bloc ci-dessus dans Slack/Teams) pour éviter les faux positifs QA.
 
 ---
 
