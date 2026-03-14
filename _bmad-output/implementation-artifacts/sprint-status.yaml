@@ -958,7 +958,7 @@ development_status:
     79-1-variables-steps-notification: done
     79-2-champ-cc-email: done
     79-3-pieces-jointes-email: done
-    79-4-webhook-teams-par-step: backlog
+    79-4-webhook-teams-par-step: done
     epic-79-retrospective: optional
     # === Epic 80: Reset dev workflows/actions via seed ===
     # Réf: docs/architecture/dev-reset-workflows-actions-via-seed.md, docs/backend/epic-80-reset-dev-workflows-actions-via-seed.md

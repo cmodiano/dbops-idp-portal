@@ -384,6 +384,31 @@ class TestSendTeams:
         mock_post.side_effect = Exception("Connection error")
         self.service.send_teams("http://webhook.example.com", "Test message")
 
+    @patch("services.notification_service.httpx.post")
+    def test_send_teams_different_webhooks_per_step(self, mock_post: MagicMock) -> None:
+        """AC4 : deux send_teams avec webhooks distincts → httpx.post appelé sur les bonnes URLs."""
+        mock_response = MagicMock(status_code=200)
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        # Step 1 — channel ops
+        self.service.send_teams(
+            webhook_url="https://teams.example.com/webhook/ops",
+            message="Déploiement terminé",
+            title="Ops Alert",
+        )
+        # Step 2 — channel sécurité
+        self.service.send_teams(
+            webhook_url="https://teams.example.com/webhook/security",
+            message="Audit de sécurité complété",
+            title="Sec Alert",
+        )
+
+        assert mock_post.call_count == 2
+        call_urls = [call.args[0] for call in mock_post.call_args_list]
+        assert "https://teams.example.com/webhook/ops" in call_urls
+        assert "https://teams.example.com/webhook/security" in call_urls
+
 
 class TestSendPageIndividual:
     """Tests pour send_page_individual()."""

@@ -82,6 +82,7 @@ export const NotificationTemplateEditor: FC<NotificationTemplateEditorProps> = (
   const subjectRef = useRef<InputRef>(null);
   const bodyRef = useRef<TextAreaRef>(null);
   const attachmentsRef = useRef<InputRef>(null);
+  const webhookUrlRef = useRef<InputRef>(null);
   const titleRef = useRef<InputRef>(null);
   const messageRef = useRef<TextAreaRef>(null);
 
@@ -274,10 +275,20 @@ export const NotificationTemplateEditor: FC<NotificationTemplateEditorProps> = (
       </div>
 
       <div style={{ marginBottom: 8 }}>
-        <Text type="secondary" style={{ fontSize: 12 }}>
-          Webhook URL
-        </Text>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 2 }}>
+          <Text type="secondary" style={{ fontSize: 12, flex: 1 }}>
+            Webhook URL
+          </Text>
+          <VariablePicker
+            workflowId={workflowId}
+            currentStepId={currentStepId}
+            availableStepIds={availableStepIds}
+            disabled={disabled}
+            onSelect={(expr) => insertAtCursor(webhookUrlRef, 'webhook_url', expr)}
+          />
+        </div>
         <Input
+          ref={webhookUrlRef}
           size="small"
           value={current.webhook_url ?? ''}
           disabled={disabled}

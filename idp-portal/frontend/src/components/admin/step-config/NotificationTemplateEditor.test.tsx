@@ -215,12 +215,13 @@ describe('NotificationTemplateEditor — send_teams (AC3)', () => {
     );
   });
 
-  it('rend le VariablePicker sur le champ title et message', () => {
+  it('rend le VariablePicker sur les champs webhook_url, title et message', () => {
     const { container } = render(
       <NotificationTemplateEditor {...defaultTeamsProps} workflowId={1} />,
     );
+    // webhook_url + title + message → au moins 3 VariablePickers pour send_teams (AC3, story 79.4)
     const pickers = container.querySelectorAll('[data-testid="variable-picker-trigger"]');
-    expect(pickers.length).toBeGreaterThanOrEqual(2);
+    expect(pickers.length).toBeGreaterThanOrEqual(3);
   });
 
   it('rend le champ color optionnel', () => {
@@ -239,5 +240,30 @@ describe('NotificationTemplateEditor — send_teams (AC3)', () => {
   it('désactive les champs quand disabled=true', () => {
     render(<NotificationTemplateEditor {...defaultTeamsProps} disabled={true} />);
     expect(screen.getByPlaceholderText('https://...').closest('input')).toBeDisabled();
+  });
+
+  it('rend le VariablePicker sur le champ webhook_url (AC3 — story 79.4)', () => {
+    const { container } = render(
+      <NotificationTemplateEditor {...defaultTeamsProps} workflowId={1} />,
+    );
+    // webhook_url + title + message → au moins 3 VariablePickers pour send_teams
+    const pickers = container.querySelectorAll('[data-testid="variable-picker-trigger"]');
+    expect(pickers.length).toBeGreaterThanOrEqual(3);
+    // Vérifier que le champ webhook_url possède un picker adjacent (task 2.2 spec)
+    const webhookLabel = screen.getByText('Webhook URL');
+    expect(
+      webhookLabel.parentElement?.querySelector('[data-testid="variable-picker-trigger"]'),
+    ).toBeInTheDocument();
+  });
+
+  it('désactive le VariablePicker du champ webhook_url quand disabled=true (story 79.4)', () => {
+    const { container } = render(
+      <NotificationTemplateEditor {...defaultTeamsProps} disabled={true} workflowId={1} />,
+    );
+    const pickers = container.querySelectorAll('[data-testid="variable-picker-trigger"]');
+    // Tous les pickers doivent afficher cursor: not-allowed (VariablePicker disabled = style visuel)
+    pickers.forEach((picker) => {
+      expect(picker).toHaveStyle({ cursor: 'not-allowed' });
+    });
   });
 });
