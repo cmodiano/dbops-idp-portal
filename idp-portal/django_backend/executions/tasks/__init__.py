@@ -2,7 +2,6 @@
 Package executions/tasks — Celery tasks for workflow execution.
 
 Ce package regroupe les tâches Celery par responsabilité :
-- retry    : retry asynchrone des étapes de workflow
 - gates    : évaluation périodique des conditions WAITING
 - polling  : surveillance des jobs sur les plateformes externes
 - trigger  : déclenchement asynchrone des jobs sur les plateformes externes (Story 47.2)
@@ -18,7 +17,6 @@ from core.services import AuditService
 # Re-export logger at package level for test patchability (@patch("executions.tasks.logger"))
 logger = structlog.get_logger("executions.tasks")
 
-from executions.tasks.retry import retry_workflow_step  # noqa: E402
 from executions.tasks.gates import (  # noqa: E402
     evaluate_waiting_gates,
     _handle_gate_timeout,
@@ -44,7 +42,6 @@ from executions.tasks.outbox_dispatcher import process_outbox_entries  # noqa: E
 
 __all__ = [
     # Public tasks
-    "retry_workflow_step",
     "evaluate_waiting_gates",
     "poll_platform_job_status",
     "trigger_platform_job",

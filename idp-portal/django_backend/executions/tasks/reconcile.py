@@ -74,7 +74,7 @@ def _build_stale_filter(cutoff: Any) -> Q:
 def _build_adapter_kwargs(integration: Any) -> dict:
     """Extract platform-specific adapter kwargs from integration config.
 
-    Mirrors the logic in trigger.py and workflow_step_executor.py.
+    Mirrors the logic in trigger.py.
     """
     adapter_kwargs: dict = {}
     config = integration.get_config() if hasattr(integration, "get_config") else None

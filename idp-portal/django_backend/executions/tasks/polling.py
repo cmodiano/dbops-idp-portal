@@ -248,7 +248,7 @@ def _update_execution_from_poll(
                 output.update(output_fields)
 
             # Update step status when the platform job reaches a terminal state.
-            # The step is created as RUNNING in workflow_step_executor and stays RUNNING
+            # The step is created as RUNNING in trigger.py and stays RUNNING
             # until polling detects completion — update it here so DB and UI stay correct.
             _TERMINAL_STEP_STATUS: dict[str, ExecutionStepStatus] = {
                 "COMPLETED": ExecutionStepStatus.COMPLETED,

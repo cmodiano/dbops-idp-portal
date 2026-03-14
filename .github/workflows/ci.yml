@@ -29,11 +29,6 @@ jobs:
         run: |
           # Fichiers legacy whitelistés (leur propre contenu est autorisé)
           WHITELIST=(
-            "executions/workflow_runtime.py"
-            "executions/workflow_step_executor.py"
-            "executions/workflow_retry.py"
-            "executions/tasks/retry.py"
-            "executions/workflow_types.py"
             "executions/tests/test_workflow_runtime.py"
             "executions/tests/test_workflow_runtime_retry.py"
             "executions/tests/test_workflow_runtime_retry_slow.py"
@@ -49,7 +44,6 @@ jobs:
             "executions/tests/test_exception_handling.py"
             "executions/tests/test_websocket_broadcast.py"
             "executions/tests/test_story_78_8_desactivation_legacy.py"
-            "executions/tasks/__init__.py"
             "executions/tests/test_simulation_exception_handling.py"
             "idp_backend/tests/test_cors_security.py"
           )

@@ -108,7 +108,6 @@ def trigger_platform_job(
         auth_headers = build_auth_headers(integration, correlation_id)
 
         # Extraire platform_kwargs depuis la config de l'integration
-        # Même logique que workflow_step_executor.py lignes 404–412
         platform_type = integration.type
         platform_kwargs: dict[str, Any] = {}
         config = integration.get_config() if hasattr(integration, "get_config") else {}

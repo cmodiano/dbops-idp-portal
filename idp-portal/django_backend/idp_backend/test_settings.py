@@ -54,9 +54,6 @@ CELERY_TASK_EAGER_PROPAGATES = True
 # Story 20.3: Disable cancellation cache in tests by default
 WORKFLOW_RETRY_USE_CANCELLATION_CACHE = False
 
-# Story 78.8: Legacy runtime disabled by default in tests
-WORKFLOW_LEGACY_RUNTIME_ENABLED = False
-
 # Story 78.10: Normalized definitions disabled by default in tests
 WORKFLOW_NORMALIZED_DEFINITIONS_ENABLED = False
 

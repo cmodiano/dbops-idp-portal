@@ -722,7 +722,6 @@ CELERY_TASK_ROUTES = {
     # Tasks Beat restent sur default
     'executions.tasks.evaluate_waiting_gates': {'queue': 'default'},
     'executions.tasks.process_pending_scheduled_executions': {'queue': 'default'},
-    'executions.tasks.retry_workflow_step': {'queue': 'default'},
     # Story 47.2 — Trigger async ; la queue spécifique est passée via apply_async(queue=...) au runtime.
     'executions.tasks.trigger_platform_job': {'queue': 'default'},
     # Story 57.7 — Reprise workflow après gate (approbation) — doit être sur default (worker écoute cette queue)
@@ -740,7 +739,6 @@ CELERY_TASK_TIME_LIMITS = {
     "trigger_platform_job": {"soft": 600, "hard": 630},                    # 10min — external API call
     "poll_platform_job_status": {"soft": 300, "hard": 330},                # 5min — single poll cycle
     "process_pending_scheduled_executions": {"soft": 300, "hard": 330},    # 5min — batch
-    "retry_workflow_step": {"soft": 600, "hard": 630},                     # 10min — step execution
     "purge_old_platform_logs": {"soft": 900, "hard": 930},                 # 15min — bulk delete
     "purge_old_workflow_events": {"soft": 300, "hard": 330},               # 5min — bulk delete
     "evaluate_waiting_gates": {"soft": 300, "hard": 330},                  # 5min — batch eval
@@ -793,12 +791,6 @@ else:
 # Default: False (use refresh_from_db). Enable for production with >100 active workflows.
 WORKFLOW_RETRY_USE_CANCELLATION_CACHE = os.getenv(
     'WORKFLOW_RETRY_USE_CANCELLATION_CACHE', 'False'
-).lower() == 'true'
-
-# Story 78.8: Feature flag to disable legacy workflow runtime
-# Default: False (legacy disabled). Set to True for emergency rollback only.
-WORKFLOW_LEGACY_RUNTIME_ENABLED = os.getenv(
-    'WORKFLOW_LEGACY_RUNTIME_ENABLED', 'False'
 ).lower() == 'true'
 
 # Story 78.10: Feature flag for normalized workflow definitions

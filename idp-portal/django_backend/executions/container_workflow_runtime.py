@@ -11,7 +11,7 @@ detection, state management, and audit trail patterns.
 
 Architecture:
 - ContainerWorkflowRuntime: Orchestrator for container workflows
-- Reuses WorkflowExecutionState from workflow_runtime for state tracking
+- Manages workflow execution state internally for state tracking
 - Uses ExecutionService.create_execution for child executions
 - Supports workflow_step_parameters injection (Story 4.12)
 """
