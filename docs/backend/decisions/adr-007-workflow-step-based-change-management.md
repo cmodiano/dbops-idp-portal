@@ -65,15 +65,18 @@ L'approbation est un placeholder (`"non implemente"`).
 
 #### 3. L'evaluation de policies est un post-step hook, pas un step
 
-**Fichier :** `executions/workflow_step_executor.py:491-632`
+> ⚠️ **Fichier supprimé (Epic 81 PR3)** : `executions/workflow_step_executor.py` a été supprimé.
+> Le contexte ci-dessous est conservé à titre historique uniquement.
 
-Le `RuleEngine` (`executions/rule_engine.py`) analyse l'output d'un step via des
-`OutputInterpreters` (Terraform plan, AAP) et evalue des business rules. Mais le
-résultat ne peut que **bloquer** (WAITING pour approval) ou **laisser passer**.
-Il ne peut pas brancher vers un chemin different.
+~~**Fichier :** `executions/workflow_step_executor.py:491-632`~~
+
+Le `RuleEngine` (`executions/rule_engine.py`) analysait l'output d'un step via des
+`OutputInterpreters` (Terraform plan, AAP) et evaluait des business rules. Mais le
+résultat ne pouvait que **bloquer** (WAITING pour approval) ou **laisser passer**.
+Il ne pouvait pas brancher vers un chemin different.
 
 ```python
-# workflow_step_executor.py:567-569
+# workflow_step_executor.py:567-569 (fichier supprimé en Epic 81 PR3)
 if policy_decision.require_approval:
     execution_step.status = ExecutionStepStatus.WAITING  # bloque, pas de branchement
 ```
@@ -131,14 +134,18 @@ class ExecutionStepType(models.TextChoices):
 ```
 
 Le type `SERVICENOW` existe déjà dans l'enum mais n'est jamais utilise par les runtimes.
-Dans `container_workflow_runtime.py:214` et `workflow_step_executor.py:86,138`, tout
+Dans `container_workflow_runtime.py:214` et ~~`workflow_step_executor.py:86,138`~~ (supprimé Epic 81 PR3), tout
 est code en dur `step_type='platform'` ou `ExecutionStepType.PLATFORM`.
 
 #### 7. Le branchement existe mais est deconnecte des evaluations
 
-**Fichier :** `executions/workflow_runtime.py:241-315`
+> ⚠️ **Fichier supprimé (Epic 81 PR3)** : `executions/workflow_runtime.py` a été supprimé.
+> Le contexte ci-dessous est conservé à titre historique uniquement.
+
+~~**Fichier :** `executions/workflow_runtime.py:241-315`~~
 
 ```python
+# workflow_runtime.py:241-315 (fichier supprimé en Epic 81 PR3)
 def _resolve_next_step(self, current_step, outcome):
     if is_success and 'on_success_step_id' in current_step:
         return current_step.get('on_success_step_id')
@@ -146,9 +153,10 @@ def _resolve_next_step(self, current_step, outcome):
         return current_step.get('on_error_step_id')
 ```
 
-Le branchement conditionnel (`on_success_step_id` / `on_error_step_id`) existe dans
-`WorkflowRuntime` mais il est base sur le résultat du step **plateforme** (job AAP
-reussi/echoue), pas sur l'evaluation d'un output.
+Le branchement conditionnel (`on_success_step_id` / `on_error_step_id`) existait dans
+`WorkflowRuntime` mais il était base sur le résultat du step **plateforme** (job AAP
+reussi/echoue), pas sur l'evaluation d'un output. Cette logique a été intégrée dans
+`ContainerWorkflowRuntime` via les champs `on_success_step_ids` / `on_error_step_ids`.
 
 ### Resume du diagnostic
 
@@ -157,10 +165,10 @@ reussi/echoue), pas sur l'evaluation d'un output.
 | Change ServiceNow | Pre-hook (`container_workflow_runtime.py:470`) | Donnees statiques, invisible dans timeline |
 | Gate maintenance_window | Hook pre-step (`gate_evaluator.py:128`) | Bloque mais ne branche pas |
 | Gate approval | Placeholder (`gate_evaluator.py:135`) | Non implemente |
-| Evaluation policies | Post-step hook (`workflow_step_executor.py:491`) | Bloque mais ne branche pas |
+| Evaluation policies | Post-step hook (~~`workflow_step_executor.py:491`~~ — supprimé Epic 81) | Bloque mais ne branche pas |
 | Approbation | Statut global (`Execution.PENDING_APPROVAL`) | Pas de contexte, pas granulaire |
 | Output forwarding | Inexistant | Steps isoles, pas de chainage de données |
-| Branching | Existe (`workflow_runtime.py:241`) | Deconnecte des evaluations et gates |
+| Branching | ~~`workflow_runtime.py:241`~~ — supprimé Epic 81 | Intégré dans ContainerWorkflowRuntime |
 
 **Ces mécanismes fonctionnent individuellement mais ne forment pas un systeme integre.**
 
@@ -1187,8 +1195,8 @@ appelables.
 ## References
 
 - `executions/container_workflow_runtime.py` — Runtime actuel des workflows conteneur
-- `executions/workflow_runtime.py` — Runtime avec branching (on_success/on_error)
-- `executions/workflow_step_executor.py` — Executeur de steps avec policy evaluation
+- ~~`executions/workflow_runtime.py`~~ — Supprimé en Epic 81 PR3 (branching intégré dans ContainerWorkflowRuntime)
+- ~~`executions/workflow_step_executor.py`~~ — Supprimé en Epic 81 PR3
 - `executions/gate_evaluator.py` — Evaluateur de gates (maintenance_window, approval)
 - `executions/rule_engine.py` — Moteur de regles avec OutputInterpreters
 - `executions/models.py` — ExecutionStep, ExecutionStepType, ExecutionStepStatus

@@ -1,7 +1,10 @@
 # Decommission de l'ancien code path workflow (dev-only)
 
-Date: 2026-03-13  
-Statut: Plan d'execution (DEV uniquement)  
+> **✅ Decommission complété — 2026-03-14**
+> PR1 (freeze) + PR2 (cutover) + PR3 (suppression fichiers) + PR4 (cleanup tests/docs) — Epic 81 terminé.
+
+Date: 2026-03-13
+Statut: ✅ Complété (2026-03-14)
 Audience: Backend, QA, DevOps
 
 ---
@@ -36,7 +39,9 @@ Contexte: plateforme non utilisee, dev uniquement — rien a conserver. Suppress
 > Tout nouveau test doit cibler le runtime cible :
 > `container_workflow_runtime`, `gate_handler`, `gates`.
 >
-> Cette règle est enforced par le job CI `check-no-new-legacy-imports`.
+> ~~Cette règle était enforced par le job CI `check-no-new-legacy-imports`.~~
+> **PR4 (Story 81-4)** : Ce job CI a été supprimé — les modules legacy n'existent plus, tout import
+> accidentel lèvera un `ModuleNotFoundError` Python nativement à la collection pytest.
 
 ## 2.1 Modules legacy cibles (supprimer)
 

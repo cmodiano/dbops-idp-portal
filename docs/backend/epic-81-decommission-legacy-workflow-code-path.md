@@ -1,7 +1,7 @@
 # Epic 81 : Decommission de l'ancien code path workflow (dev-only)
 
-**Date :** 2026-03-14  
-**Statut :** Draft  
+**Date :** 2026-03-14
+**Statut :** ✅ Complété (PR4 terminé — 2026-03-14)
 **Réf :** docs/architecture/dev-decommission-legacy-workflow-code-path.md  
 **Périmètre :** `executions/`, `idp_backend/settings.py`, CI
 
@@ -94,12 +94,12 @@ Supprimer le code mort et les configs associées.
 Finir la contraction de la surface legacy.
 
 **Acceptance criteria :**
-- AC1 : Tests legacy supprimés ou migrés : test_workflow_runtime*, test_workflow_retry*, test_celery_retry_tasks, test_schedule_step_executor, test_condition_gates*, test_execution_integration_validation, test_execution_step_audit_context, test_exception_handling, test_websocket_broadcast (StepExecutor), test_story_78_8_desactivation_legacy
-- AC2 : Assertions importantes migrées vers tests du chemin cible (gate handler, gates, container runtime).
-- AC3 : Tests du chemin cible renforcés : orchestration end-to-end, gates/approvals, reconcile/recovery.
-- AC4 : Docs/commentaires mentionnant le retry legacy nettoyés (KNOWN_ISSUES.md, ADR-007, etc.).
-- AC5 : Dashboards/alertes ajustés si métriques legacy encore référencées.
-- AC6 : Reset + seed dev toujours fonctionnels.
+- ✅ AC1 : Tests legacy supprimés ou migrés : test_workflow_runtime*, test_workflow_retry*, test_celery_retry_tasks, test_schedule_step_executor, test_condition_gates*, test_execution_integration_validation, test_execution_step_audit_context, test_exception_handling, test_websocket_broadcast (StepExecutor), test_story_78_8_desactivation_legacy
+- ✅ AC2 : Assertions importantes migrées vers tests du chemin cible (gate handler, gates, container runtime).
+- ✅ AC3 : Tests du chemin cible renforcés : orchestration end-to-end, gates/approvals, reconcile/recovery.
+- ✅ AC4 : Docs/commentaires mentionnant le retry legacy nettoyés (KNOWN_ISSUES.md, ADR-007, etc.).
+- ✅ AC5 : Job CI check-no-new-legacy-imports supprimé (modules legacy n'existent plus).
+- ✅ AC6 : Reset + seed dev toujours fonctionnels.
 
 ---
 

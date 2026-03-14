@@ -207,6 +207,36 @@ class TestContainerWorkflowRuntimeBasic:
         assert execution.status == ExecutionStatus.FAILED
         assert "no steps" in execution.error_message.lower()
 
+    @patch('executions.container_workflow_runtime.AuditService')
+    def test_failed_step_no_fallback(self, mock_audit):
+        """AC3 (81-4): run() marque FAILED si initial_wave is None (steps sans step_id).
+
+        Post-PR2 : le fallback legacy a été supprimé dans run() (chemin queue-based).
+        Les steps sans step_id ne peuvent pas être routés → FAILED immédiat.
+        Testé via run() car run_sync() utilise le chemin séquentiel.
+        """
+        workflow = ActionFactory(
+            name="Legacy Steps Workflow",
+            status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.WORKFLOW,
+            execution_steps=[
+                {"order": 1, "name": "Legacy Step", "referenced_action_id": self.action_a.id},
+                # Pas de step_id → _determine_initial_wave() retourne None
+            ],
+            created_by=self.user,
+        )
+        execution = self._create_execution(action=workflow)
+        runtime = ContainerWorkflowRuntime(execution)
+
+        # Appeler run() — le chemin production (queue-based) qui vérifie initial_wave
+        runtime.run()
+
+        execution.refresh_from_db()
+        assert execution.status == ExecutionStatus.FAILED
+        assert "Legacy fallback removed" in execution.error_message
+        # Confirme qu'aucun child execution n'a été créé (FAILED avant dispatch)
+        assert not Execution.objects.filter(parent_execution_id=execution.id).exists()
+
 
 @pytest.mark.django_db
 class TestContainerWorkflowParameterInjection:

@@ -310,3 +310,27 @@ class TestGateEvaluatorMultipleConditions:
 
         assert satisfied is False
         assert 'Unsupported gate type' in gate_status['gates'][0]['reason']
+
+
+# =============================================================================
+# Migré depuis test_condition_gates.py (AC5) — Epic 81 PR4
+# =============================================================================
+
+
+class TestValidateGateConditionsMigrated:
+    """
+    Tests minimaux de validate_gate_conditions migrés depuis test_condition_gates.py.
+    Couvre le schéma valide et invalide (2 cas requis par AC2/AC3).
+    """
+
+    def test_valid_gate_condition_passes(self):
+        """Condition valide (type maintenance_window) ne lève pas d'exception."""
+        from catalog.validators import validate_gate_conditions
+        validate_gate_conditions([{'type': 'maintenance_window', 'timeout_hours': 48, 'on_timeout': 'FAIL'}])
+
+    def test_invalid_gate_condition_raises_validation_error(self):
+        """Condition sans 'type' lève ValidationError."""
+        from catalog.validators import validate_gate_conditions
+        from rest_framework.exceptions import ValidationError
+        with pytest.raises(ValidationError):
+            validate_gate_conditions([{'description': 'missing type field'}])

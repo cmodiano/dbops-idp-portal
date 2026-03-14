@@ -4,7 +4,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 from django.test import TransactionTestCase
 
-from tests.factories import UserFactory, ActionFactory
 
 
 class TestBroadcastStepUpdate(TransactionTestCase):
@@ -150,56 +149,6 @@ class TestBroadcastStepUpdate(TransactionTestCase):
         payload = call_args[1]
         assert payload["data"]["step_type"] == "gate"
 
-
-class TestBroadcastIntegrationWithStepExecutor(TransactionTestCase):
-    """Test intégration : workflow_step_executor crée étape WAITING et déclenche broadcast."""
-
-    def setUp(self):
-        self.user = UserFactory()
-        self.action = ActionFactory(item_type="workflow")
-        from executions.models import Execution, ExecutionStatus
-        self.execution = Execution.objects.create(
-            action=self.action, user=self.user,
-            environment="dev", status=ExecutionStatus.RUNNING,
-        )
-
-    @patch("executions.workflow_step_executor.AuditService.create_entry")
-    @patch("executions.gate_context.build_waiting_context", return_value={"gates": []})
-    @patch("executions.utils.websocket_broadcast.broadcast_step_update")
-    def test_waiting_step_triggers_broadcast(self, mock_broadcast, mock_ctx, mock_audit):
-        """workflow_step_executor.execute déclenche broadcast après création WAITING step."""
-        from executions.workflow_step_executor import StepExecutor
-        from executions.models import ExecutionStepStatus
-
-        executor = StepExecutor(self.execution, "test-corr")
-        step = {
-            'step_id': 'gate-step', 'name': 'Approbation', 'order': 1,
-            'gate_conditions': [{'type': 'approval_granted'}],
-        }
-        result = executor.execute(step, step_order=1, step_parameters={})
-
-        assert result.is_waiting
-        mock_broadcast.assert_called_once()
-
-        call_args = mock_broadcast.call_args
-        assert call_args[0][0] == self.execution.id  # execution_id en positional
-        broadcast_step = call_args[0][1]
-        assert broadcast_step.status == ExecutionStepStatus.WAITING
-
-    @patch("executions.workflow_step_executor.AuditService.create_entry")
-    @patch("executions.gate_context.build_waiting_context", return_value={"gates": []})
-    @patch("executions.utils.websocket_broadcast.broadcast_step_update")
-    def test_broadcast_called_with_step_type_gate(self, mock_broadcast, mock_ctx, mock_audit):
-        """Le step broadcasté a step_type='platform' (valeur par défaut gate_conditions)."""
-        from executions.workflow_step_executor import StepExecutor
-
-        executor = StepExecutor(self.execution, "test-corr")
-        step = {
-            'step_id': 'gate-step', 'name': 'Gate', 'order': 1,
-            'gate_conditions': [{'type': 'approval_granted'}],
-        }
-        executor.execute(step, step_order=1, step_parameters={})
-
-        broadcast_step = mock_broadcast.call_args[0][1]
-        # step sans step_type explicite → step_type_routing='platform' (défaut), step broadcasté avec 'platform'
-        assert broadcast_step.step_type == 'platform'
+# Note (Epic 81 PR4) : La classe TestBroadcastIntegrationWithStepExecutor a été supprimée.
+# Elle importait executions.workflow_step_executor (supprimé en PR3).
+# Les tests de broadcast_step_update ci-dessus (TestBroadcastStepUpdate) couvrent le comportement essentiel.

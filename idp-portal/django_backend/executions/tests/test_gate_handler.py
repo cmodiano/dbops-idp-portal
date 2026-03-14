@@ -574,6 +574,52 @@ class TestTransitionStepToRunningADR007:
         assert len(warning_calls) == 1
 
     @pytest.mark.django_db
+    def test_gate_resume_after_approval(self):
+        """AC3 (81-4): Step WAITING → RUNNING après approbation via _transition_step_to_running.
+
+        Vérifie spécifiquement le flow APPROVAL (gate_type='approval') :
+        - Le step en WAITING est transitionné (update appelé avec status implicite)
+        - resume_container_workflow_from_gate est dispatchée pour reprendre le workflow
+        - AuditService est appelé pour tracer la transition (observabilité)
+
+        Différence vs test_adr007_step_with_on_success_calls_resume_task :
+        - Ce test vérifie gate_type='approval' (vs maintenance_window)
+        - Vérifie l'appel AuditService (observabilité des approvals humains)
+        - Vérifie que filter().update() est appelé pour la transition de statut
+        """
+        from executions.tasks.gates import _transition_step_to_running
+        from executions.models import ExecutionStep
+
+        step_def = {
+            'name': 'Wait Approval',
+            'step_type': 'gate',
+            'gate_type': 'approval',
+            'on_success_step_ids': ['next-step'],
+        }
+        mock_step = self._make_step(step_name='Wait Approval', execution_steps=[step_def])
+        gate_status = {'satisfied': True, 'conditions': [], 'timeout_triggered': False}
+
+        with patch.object(ExecutionStep.objects, 'filter') as mock_filter:
+            mock_filter.return_value.update.return_value = 1
+            mock_step.refresh_from_db = MagicMock()
+
+            from executions.tasks.gates import resume_container_workflow_from_gate
+            with patch('executions.tasks.gates.AuditService') as mock_audit:
+                with patch.object(resume_container_workflow_from_gate, 'apply_async') as mock_apply:
+                    _transition_step_to_running(mock_step, gate_status, 'corr-approval')
+
+        # Vérifie que resume_container_workflow_from_gate a été dispatchée (workflow reprend)
+        mock_apply.assert_called_once_with(
+            args=[mock_step.execution_id, ['next-step']],
+            queue='default',
+        )
+        # Vérifie que la transition de statut a été persistée (WAITING → RUNNING)
+        mock_filter.assert_called()
+        mock_filter.return_value.update.assert_called()
+        # Vérifie l'observabilité : AuditService tracé la transition d'approbation
+        mock_audit.assert_called()
+
+    @pytest.mark.django_db
     def test_step_def_not_found_logs_error(self):
         """step_def=None (find_step_config introuvable) → gate_resume_step_def_not_found loggé, aucun dispatch (Story 81.2)."""
         from executions.tasks.gates import _resume_workflow_after_gate

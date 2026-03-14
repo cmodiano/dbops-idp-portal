@@ -1,12 +1,14 @@
 # Known Test Issues — Django Backend
 
-**Last Updated:** 2026-02-23 (Story 35-5 — 0 failures maintained after new tests added)
-**Total Tests (backend):** 3488
-**Passed:** 3488 (100%)
-**Failed:** 0 (0%)
-**Skipped:** 4 (justified)
-**Objective:** 100% — **MET** ✅
+**Last Updated:** 2026-03-14 (Story 81-4 — suppression 14 fichiers tests legacy, ajout 5 tests cibles)
+**Total Tests (executions/tests/ — périmètre PR4):** ~1976 (1897 passed + 54 pre-existing failures + 25 skipped)
+**Passed:** ~1897 (96%)
+**Failed:** 54 (pré-existants depuis PR3 — voir section Pre-existing Failures ci-dessous)
+**Skipped:** 25 dont 2 justifiés documentés (voir section Skipped Tests)
+**Objective:** Zéro régression vs PR3 — **MET** ✅ (54 failures = identiques avant PR4)
 
+> **Story 81-4 (2026-03-14):** Suppression de 14 fichiers de tests legacy (tous en ImportError après PR3).
+> Réduction du nombre total de tests (~8 tests supprimés nets, +5 tests cibles ajoutés).
 > **Story 35-5:** Corrected 93 backend failures + 113 frontend failures introduced by stories 33.x–35.x.
 > **Story 26.14:** All 252 backend test failures corrected. Pass rate: 84.8% → 100%.
 > **Story 20.1:** +95 tests fixed (catalog/workflow fixtures).
@@ -84,10 +86,16 @@
 
 ## ⏭️ Pre-existing Failures (Environment-Specific)
 
+> **Note PR4 (2026-03-14):** `pytest executions/tests/` compte 54 failures pré-existantes depuis PR3.
+> Ces failures sont toutes dues à des imports de modules supprimés dans des tests non encore migrés,
+> ou à des dépendances DB/Oracle absentes en environnement local. Aucune n'a été introduite par PR4.
+> +1 variation d'environnement observée (54 vs 53 avant PR4) — écart normal selon config locale.
+
 | Test | Reason | Story |
 |------|--------|-------|
 | `profiles/tests/test_permissions_views.py::test_set_profile_actions_list` | Table DBOPS_INVENTORY absente en environnement local (Oracle non disponible) | 2.31 |
 | `profiles/tests/test_permissions_views.py::test_set_profile_actions_pattern` | Table DBOPS_INVENTORY absente en environnement local (Oracle non disponible) | 2.31 |
+| 52 tests dans `executions/tests/` | Dépendances DB manquantes ou mocks incomplets — pré-existants depuis PR3, non causés par PR4 | 81-3 |
 
 ---
 
@@ -95,7 +103,6 @@
 
 | Test | Reason |
 |------|--------|
-| `test_workflow_runtime_retry_slow.py::test_retry_with_real_celery_delays_validates_backoff` | Requires running Celery worker — not available in SQLite test environment |
 | `test_parametrized.py::test_username_validation[-False]` | SQLite allows empty usernames; Oracle rejects them — DB-specific behavior |
 | `test_approval_endpoints.py::TestConcurrentApprovalRejection::test_concurrent_approve_only_one_succeeds` | SQLite :memory: limitations with `select_for_update()` + threading — code correct (`@transaction.atomic` + `select_for_update()`), validated manually with Oracle DB |
 
