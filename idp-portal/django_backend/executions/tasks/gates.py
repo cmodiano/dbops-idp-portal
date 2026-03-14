@@ -316,7 +316,7 @@ def _transition_step_to_running(step: ExecutionStep, gate_status: dict, correlat
     action = step.execution.action
     from executions.utils.step_config import find_step_config  # noqa: PLC0415
     step_def = find_step_config(action.execution_steps or [], step)
-    _resume_workflow_after_gate(step, action, step_def, correlation_id, old_style_step_def=step_def)
+    _resume_workflow_after_gate(step, action, step_def, correlation_id)
 
 
 def _update_waiting_context(step: ExecutionStep, gate_status: dict, correlation_id: str | None) -> None:
@@ -533,24 +533,22 @@ def _resume_workflow_after_gate(
     action: Any,
     step_def: dict | None,
     correlation_id: str | None,
-    old_style_step_def: dict | None = None,
 ) -> None:
     """
     Resume the workflow after a gate step is satisfied or timed out (SKIPPED).
 
     Handles ADR-007 container workflows (resume_container_workflow_from_gate or
-    complete execution) and old-style workflows (retry_workflow_step).
+    complete execution).
 
     Story 71.6: Extracted from _transition_step_to_running and _handle_gate_timeout
     to eliminate duplication (~20 LOC x2).
+    Story 81.2: Removed old-style workflow (retry_workflow_step) path.
 
     Args:
         step: The gate ExecutionStep
         action: The parent Action (with execution_steps)
         step_def: The step config dict from find_step_config (may be None)
         correlation_id: Correlation ID for logging
-        old_style_step_def: Step def to pass to retry_workflow_step for old-style workflows.
-                           If None, old-style path is a no-op.
     """
     execution_steps = action.execution_steps or []
 
@@ -589,17 +587,12 @@ def _resume_workflow_after_gate(
     elif is_adr007_step and not on_success_step_ids:
         # Gate is last step — complete execution
         _complete_execution_on_last_step(step, correlation_id)
-    elif old_style_step_def:
-        # Old-style workflow
-        import executions.tasks as _tasks
-        _tasks.retry_workflow_step.apply_async(
-            args=[step.execution_id, old_style_step_def, 1],
-        )
-        logger.info(
-            "gate_resume_old_style_workflow",
+    else:
+        # Story 81.2: old-style workflow path removed — this case should not occur
+        logger.warning(
+            "gate_resume_no_adr007_step",
             step_id=step.id,
             execution_id=step.execution_id,
-            step_def_id=old_style_step_def.get('step_id') or old_style_step_def.get('name'),
             correlation_id=correlation_id,
         )
 
@@ -694,10 +687,7 @@ def _handle_timeout_continuation(
         execution_steps = action.execution_steps or []
         from executions.utils.step_config import find_step_config  # noqa: PLC0415
         step_def = find_step_config(execution_steps, step)
-        old_style_next = (
-            _get_next_step_by_order(execution_steps, step_def) if step_def else None
-        )
-        _resume_workflow_after_gate(step, action, step_def, correlation_id, old_style_step_def=old_style_next)
+        _resume_workflow_after_gate(step, action, step_def, correlation_id)
     else:
         _mark_execution_failed(step.execution, step, correlation_id)
 

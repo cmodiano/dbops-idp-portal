@@ -25,7 +25,6 @@ import structlog
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any, List, NamedTuple, Union, cast
 
-from django.conf import settings
 from django.db import close_old_connections, transaction
 from django.utils import timezone
 
@@ -1306,34 +1305,19 @@ class ContainerWorkflowRuntime:
             return
 
         # Story 78.5: Enqueue root steps to RUNNABLE_STEPS (queue-based dispatch)
+        # Story 81.2: Legacy fallback removed — steps without step_id are now FAILED directly
         initial_wave = self._determine_initial_wave()
         if initial_wave is None:
-            # Story 78.8: Guard legacy fallback with feature flag
-            if not settings.WORKFLOW_LEGACY_RUNTIME_ENABLED:
-                from executions.exceptions import WorkflowLegacyDisabledError  # noqa: PLC0415
-                logger.warning(
-                    "container_workflow_legacy_fallback_blocked",
-                    execution_id=self.execution.id,
-                    correlation_id=self.correlation_id,
-                )
-                assert_execution_transition(self.execution.status, ExecutionStatus.FAILED)
-                self.execution.status = ExecutionStatus.FAILED
-                self.execution.completed_at = timezone.now()
-                self.execution.error_message = str(WorkflowLegacyDisabledError())
-                self.execution.save(update_fields=['status', 'completed_at', 'error_message'])
-                raise WorkflowLegacyDisabledError()
-            # Legacy fallback: steps without step_id — thread-based execution
-            thread = threading.Thread(
-                target=self._run_workflow_loop,
-                args=(self.execution.id,),
-                daemon=True,
-            )
-            thread.start()
-            logger.info(
-                "container_workflow_thread_started_legacy",
+            logger.error(
+                "container_workflow_no_initial_wave_failed",
                 execution_id=self.execution.id,
                 correlation_id=self.correlation_id,
             )
+            assert_execution_transition(self.execution.status, ExecutionStatus.FAILED)
+            self.execution.status = ExecutionStatus.FAILED
+            self.execution.completed_at = timezone.now()
+            self.execution.error_message = "No initial wave: workflow steps have no step_id. Legacy fallback removed."
+            self.execution.save(update_fields=["status", "completed_at", "error_message"])
             return
 
         from executions.infra.work_queue import WorkQueue  # noqa: PLC0415
@@ -1430,58 +1414,6 @@ class ContainerWorkflowRuntime:
             return ExecutionStatus.FAILED
 
         return self._execute_workflow_steps()
-
-    def _run_workflow_loop(self, execution_id: int) -> None:
-        """Background workflow execution loop (runs in a daemon thread)."""
-        try:
-            close_old_connections()
-
-            # Re-load execution from DB in this thread's connection
-            self.execution = Execution.objects.select_related('action').get(id=execution_id)
-            self.action = self.execution.action
-            self.workflow_steps = self._load_workflow_steps()
-            self.child_executions = []
-            self._step_order_counter = 0
-            self._transition_count = 0
-            self._step_outputs = {}
-            # Réinitialiser le lookup step_id → step (Story 67.2)
-            self._step_lookup_by_id = {
-                s['step_id']: s for s in self.workflow_steps if s.get('step_id')
-            }
-
-            self._execute_workflow_steps()
-
-        except Exception as e:  # noqa: BLE001 — catch-all-mark-failed: ensures parent execution is marked FAILED on any error
-            # Catch-all: ensure the parent execution is marked as FAILED
-            logger.error(
-                "container_workflow_thread_error",
-                execution_id=execution_id,
-                error=str(e),
-                error_type=type(e).__name__,
-                correlation_id=self.correlation_id,
-                exc_info=True,
-            )
-            # Story 71.7 AC#7: CAS pattern to avoid overwriting terminal status
-            try:
-                updated = Execution.objects.filter(
-                    id=execution_id,
-                ).exclude(
-                    status__in=[ExecutionStatus.COMPLETED, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED],
-                ).update(
-                    status=ExecutionStatus.FAILED,
-                    completed_at=timezone.now(),
-                    error_message=f"Workflow thread error: {e}",
-                )
-                if updated > 0:
-                    logger.info(
-                        "container_workflow_thread_error_marked_failed",
-                        execution_id=execution_id,
-                        correlation_id=self.correlation_id,
-                    )
-            except Exception as _:  # noqa: BLE001 — best-effort-non-critical: cleanup after thread error must not raise
-                logger.error("container_workflow_thread_cleanup_failed", execution_id=execution_id, exc_info=True)
-        finally:
-            close_old_connections()
 
     def _determine_initial_wave(self) -> list[str] | None:
         """
@@ -1893,7 +1825,7 @@ class ContainerWorkflowRuntime:
         }.get(final_status, AuditActionType.EXECUTION_FAILED)
 
         # Story 71.7 AC#1: Atomic update + audit to prevent inconsistent state
-        # CAS guard: do not overwrite a terminal status set by _run_workflow_loop error handler
+        # CAS guard: do not overwrite a terminal status set by a concurrent worker or upstream error path
         with transaction.atomic():
             updated = Execution.objects.filter(
                 id=self.execution.id,

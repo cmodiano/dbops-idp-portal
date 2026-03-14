@@ -456,7 +456,7 @@ class TestResumeContainerWorkflowFromGate:
 class TestTransitionStepToRunningADR007:
     """
     Tests de la logique ADR-007 dans _transition_step_to_running (story 57.7 — Task 5).
-    Couvre : dispatch resume_container_workflow_from_gate, completion gate final, old-style fallback.
+    Couvre : dispatch resume_container_workflow_from_gate, completion gate final, warning no-adr007 (Story 81.2).
     """
 
     def _make_step(self, step_name='Wait Gate', execution_id=1, execution_steps=None):
@@ -550,15 +550,14 @@ class TestTransitionStepToRunningADR007:
         assert 'completed_at' in update_call[1]
 
     @pytest.mark.django_db
-    def test_old_style_step_uses_retry_workflow_step(self):
-        """Step sans step_type → old-style → retry_workflow_step.apply_async."""
+    def test_non_adr007_step_logs_warning(self):
+        """Step sans step_type → not ADR-007 → warning logged, no legacy call (Story 81.2)."""
         from executions.tasks.gates import _transition_step_to_running
         from executions.models import ExecutionStep
-        import executions.tasks as _tasks
 
         step_def = {
             'name': 'Old Style Step',
-            # pas de step_type → old-style
+            # pas de step_type → not ADR-007
         }
         mock_step = self._make_step(step_name='Old Style Step', execution_steps=[step_def])
         gate_status = {'satisfied': True, 'conditions': []}
@@ -568,7 +567,22 @@ class TestTransitionStepToRunningADR007:
             mock_step.refresh_from_db = MagicMock()
 
             with patch('executions.tasks.gates.AuditService'):
-                with patch.object(_tasks, 'retry_workflow_step') as mock_retry:
+                with patch('executions.tasks.gates.logger') as mock_logger:
                     _transition_step_to_running(mock_step, gate_status, 'corr-123')
 
-        mock_retry.apply_async.assert_called_once_with(args=[mock_step.execution_id, step_def, 1])
+        warning_calls = [c for c in mock_logger.warning.call_args_list if c[0][0] == 'gate_resume_no_adr007_step']
+        assert len(warning_calls) == 1
+
+    @pytest.mark.django_db
+    def test_step_def_not_found_logs_error(self):
+        """step_def=None (find_step_config introuvable) → gate_resume_step_def_not_found loggé, aucun dispatch (Story 81.2)."""
+        from executions.tasks.gates import _resume_workflow_after_gate
+
+        mock_step = self._make_step(step_name='Unknown Step', execution_steps=[])
+        mock_step.step_name = 'Unknown Step'
+
+        with patch('executions.tasks.gates.logger') as mock_logger:
+            _resume_workflow_after_gate(mock_step, mock_step.execution.action, None, 'corr-test')
+
+        error_calls = [c for c in mock_logger.error.call_args_list if c[0][0] == 'gate_resume_step_def_not_found']
+        assert len(error_calls) == 1

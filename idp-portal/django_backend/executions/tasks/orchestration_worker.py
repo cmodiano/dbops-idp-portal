@@ -1,7 +1,7 @@
 """Orchestration worker — Story 78.5: queue-based step-by-step execution.
 
 Claims runnable steps, executes them via ContainerWorkflowRuntime, then
-enqueues the next steps. Replaces the thread-based _run_workflow_loop.
+enqueues the next steps. Successor to the thread-based legacy loop (removed Story 81.2).
 
 Usage (Celery Beat):
     process_runnable_steps.apply_async()

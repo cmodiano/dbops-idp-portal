@@ -266,5 +266,6 @@ class TestEvaluateWaitingGatesTask:
         step.refresh_from_db()
         assert step.status == ExecutionStepStatus.RUNNING
 
-        # retry_workflow_step NOT called (no step_def found)
+        # retry_workflow_step NOT appelé — old-style path supprimé Story 81.2.
+        # Avec execution_steps=None, step_def=None → _resume_workflow_after_gate logue gate_resume_step_def_not_found.
         assert mock_retry.apply_async.call_count == 0
