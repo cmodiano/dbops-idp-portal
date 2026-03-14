@@ -963,8 +963,8 @@ development_status:
     # === Epic 80: Reset dev workflows/actions via seed ===
     # Réf: docs/architecture/dev-reset-workflows-actions-via-seed.md, docs/backend/epic-80-reset-dev-workflows-actions-via-seed.md
     # Purge données, garde-fous dev, trace opérationnelle, validation QA
-    epic-80: backlog
-    80-1-purge-tables-orchestration-reset: backlog # WORKFLOW_EVENTS, RUNNABLE_STEPS, WORKFLOW_COMMANDS, EXECUTION_OUTBOX avant EXECUTIONS
+    epic-80: in-progress
+    80-1-purge-tables-orchestration-reset: done # WORKFLOW_EVENT_COUNTER ajoutée (code review) ; validation manuelle Oracle dev requise
     80-2-gardefous-environnement-dev: backlog # APP_ENV + --env=dev, interdiction staging/prod
     80-3-trace-operationnelle-reset: backlog # Journaliser qui/quand a lancé le reset
     80-4-validation-qa-reset-reseed: backlog # Scénarios QA catalogue, executions, admin après reset
@@ -979,3 +979,17 @@ development_status:
     81-3-suppression-fichiers-legacy-config: backlog # PR3 — workflow_runtime, workflow_step_executor, workflow_retry, retry.py, workflow_types + settings
     81-4-cleanup-tests-docs-observabilite: backlog # PR4 — 14+ tests legacy supprimés/migrés, KNOWN_ISSUES, ADR
     epic-81-retrospective: optional
+    # === Epic 82: Extensibilité gates, services et plateformes ===
+    # Réf: docs/reference/extensibility-plan-gates-services-platforms.md, docs/backend/epic-82-extensibilite-gates-services-platforms.md
+    # Source de vérité unique, registres, API capacités, formulaires schema-driven
+    epic-82: backlog
+    82-1-phase0-stabilisation-reduction-derive: backlog # Matrice compatibilité, alignement gates, recensement mappings
+    82-2-platform-definition-registry: backlog # platforms/definitions.py, health checks dérivés, runtime_config centralisé
+    82-3-service-definition-registry: backlog # services/definitions.py, allowlist dérivée, service_call_handler générique
+    82-4-api-capabilities-backend: backlog # GET /capabilities/integrations, /workflow-steps
+    82-5-gate-registry-definition: backlog # GateRegistry, GateDefinition, GateHandler/GateEvaluator refactor
+    82-6-frontend-capabilities-client: backlog # useCapabilities, ServiceCallStepConfig, GateStepConfig schema-driven
+    82-7-action-wizard-formulaires-schema-driven: backlog # ActionWizard plateforme depuis capacités, validation inline
+    82-8-actions-workflows-capabilities: backlog # Palette steps, validation config, consommateurs capacités
+    82-9-migration-nettoyage-constantes-legacy: backlog # Suppression mappings, aliases, tests E2E nouveau plugin
+    epic-82-retrospective: optional

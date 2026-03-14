@@ -823,3 +823,11 @@ Ordre recommande de mise en oeuvre :
 5. **Nettoyage des constantes legacy**
 
 Cet ordre maximise le gain d'extensibilite tout en limitant le risque de regression.
+
+---
+
+## Epic et stories
+
+L'Epic 82 et ses stories detaillees sont definis dans :
+
+- [Epic 82 : Extensibilite gates, services et plateformes](../backend/epic-82-extensibilite-gates-services-platforms.md)
