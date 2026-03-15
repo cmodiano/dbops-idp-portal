@@ -18,5 +18,6 @@ Guides, conventions et documentation de référence.
 - [Feature flags](feature-flags.md)
 - [Règles métier](business-rule-policies.md)
 - [Plan d'extensibilite gates/services/plateformes](extensibility-plan-gates-services-platforms.md)
+- [Extensibilite - remaining work state of the art](extensibility-remaining-work-state-of-the-art.md)
 - [Configuration linters](linters-configuration.md)
 - [Guide mapping inventaire](inventory-mapping-guide.md)
