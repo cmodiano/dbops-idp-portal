@@ -8,6 +8,10 @@ Story 33.1: OCP — replaced if/elif chains with ServiceRegistry.
   New services are registered here; get_service_client() delegates to
   the registry without any if/elif.
 
+Story 83.4: Migration des enregistrements ServiceDefinition vers operation_defs
+  (ServiceOperationDefinition). Suppression de operations=frozenset(...) et
+  operation_labels={...} remplacés par operation_defs=(...).
+
 Distinction:
 - Platform adapters (adapters/): Execute jobs/workflows on remote platforms
   (AAP, Tower, Azure DevOps, GitHub Actions, Terraform Cloud).
@@ -20,7 +24,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from services.definitions import ServiceDefinition, service_definition_registry
+from services.definitions import ServiceDefinition, ServiceOperationDefinition, service_definition_registry
 from services.registry import service_registry
 
 
@@ -72,59 +76,52 @@ service_definition_registry.register(ServiceDefinition(
     code="vault",
     display_name="HashiCorp Vault",
     requires_integration=True,
-    operations=frozenset({"get_secret"}),
+    operation_defs=(
+        ServiceOperationDefinition(code="get_secret", label="Lire un secret"),  # pragma: allowlist secret
+    ),
     supports_health_check=True,
-    operation_labels={
-        "get_secret": "Lire un secret",  # pragma: allowlist secret
-    },
 ))
 service_definition_registry.register(ServiceDefinition(
     code="splunk",
     display_name="Splunk",
     requires_integration=True,
-    operations=frozenset(),
+    operation_defs=(),
     supports_health_check=True,
 ))
 service_definition_registry.register(ServiceDefinition(
     code="servicenow",
     display_name="ServiceNow",
     requires_integration=True,
-    operations=frozenset({
-        "create_change", "update_change", "close_change",
-        "get_change_status", "cancel_change",
-    }),
+    operation_defs=(
+        ServiceOperationDefinition(code="create_change", label="Créer un change"),
+        ServiceOperationDefinition(code="update_change", label="Mettre à jour le change"),
+        ServiceOperationDefinition(code="close_change", label="Fermer le change"),
+        ServiceOperationDefinition(code="get_change_status", label="Statut du change"),
+        ServiceOperationDefinition(code="cancel_change", label="Annuler le change"),
+    ),
     supports_health_check=True,
-    operation_labels={
-        "create_change": "Créer un change",
-        "update_change": "Mettre à jour le change",
-        "close_change": "Fermer le change",
-        "get_change_status": "Statut du change",
-        "cancel_change": "Annuler le change",
-    },
 ))
 service_definition_registry.register(ServiceDefinition(
     code="jira",
     display_name="Jira",
     requires_integration=True,
-    operations=frozenset({"create_issue", "update_issue", "get_issue"}),
+    operation_defs=(
+        ServiceOperationDefinition(code="create_issue", label="Créer un ticket"),
+        ServiceOperationDefinition(code="update_issue", label="Mettre à jour le ticket"),
+        ServiceOperationDefinition(code="get_issue", label="Lire le ticket"),
+    ),
     supports_health_check=True,
-    operation_labels={
-        "create_issue": "Créer un ticket",
-        "update_issue": "Mettre à jour le ticket",
-        "get_issue": "Lire le ticket",
-    },
 ))
 service_definition_registry.register(ServiceDefinition(
     code="notification",
     display_name="Notification",
     requires_integration=False,
-    operations=frozenset({"send_email", "send_teams", "notify_execution_event"}),
+    operation_defs=(
+        ServiceOperationDefinition(code="send_email", label="Envoyer un email"),
+        ServiceOperationDefinition(code="send_teams", label="Envoyer un message Teams"),
+        ServiceOperationDefinition(code="notify_execution_event", label="Notifier un événement d'exécution"),
+    ),
     supports_health_check=False,
-    operation_labels={
-        "send_email": "Envoyer un email",
-        "send_teams": "Envoyer un message Teams",
-        "notify_execution_event": "Notifier un événement d'exécution",
-    },
 ))
 
 
@@ -154,7 +151,7 @@ del _registry_types, _definition_types
 
 # Re-exported for consumers who need to register custom services at runtime.
 # Preferred over importing from services.registry directly.
-__all__ = ["get_service_client", "SERVICE_TYPES", "service_registry", "service_definition_registry", "ServiceDefinition"]
+__all__ = ["get_service_client", "SERVICE_TYPES", "service_registry", "service_definition_registry", "ServiceDefinition", "ServiceOperationDefinition"]
 
 
 def get_service_client(

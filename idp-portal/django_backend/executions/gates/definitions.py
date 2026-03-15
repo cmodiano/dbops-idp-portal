@@ -1,6 +1,7 @@
 """
 Story 82.5: GateDefinition — source de vérité pour chaque type de gate.
 Story 83.2: GateEvaluationContext + GateEvaluationStrategy Protocol.
+Story 83.4: GateResolutionStrategy Protocol + resolution_strategy champ.
 
 Ce module ne doit importer aucun module Django (models, settings, etc.) —
 il doit être importable avant le chargement de l'ORM Django.
@@ -40,6 +41,18 @@ class GateEvaluationStrategy(Protocol):
     def evaluate(self, ctx: GateEvaluationContext) -> tuple[bool, dict]: ...
 
 
+@runtime_checkable
+class GateResolutionStrategy(Protocol):
+    """Protocol définissant une stratégie de résolution d'un gate manuel.
+
+    Toute classe implémentant cette méthode est compatible (duck typing).
+    Permet aux gates manuels d'avoir une logique de résolution programmatique
+    (ex: approbation automatique en environnement de test).
+    """
+
+    def resolve(self, ctx: GateEvaluationContext) -> tuple[bool, dict]: ...
+
+
 @dataclass(frozen=True)
 class GateDefinition:
     """Définition centralisée d'un type de gate workflow.
@@ -60,6 +73,8 @@ class GateDefinition:
             False = auto-évaluation par GateEvaluator.
         evaluation_strategy: Stratégie d'évaluation auto (Story 83.2).
             None pour les gates manuels ou non encore implémentés.
+        resolution_strategy: Stratégie de résolution pour les gates manuels (Story 83.4).
+            None pour les gates auto-évalués ou sans résolution programmatique définie.
     """
 
     gate_type: str
@@ -73,6 +88,9 @@ class GateDefinition:
     requires_manual_resolution: bool = False
     # compare=False, hash=False : évite TypeError si l'instance de stratégie n'est pas hashable.
     evaluation_strategy: GateEvaluationStrategy | None = field(
+        default=None, compare=False, hash=False
+    )
+    resolution_strategy: GateResolutionStrategy | None = field(
         default=None, compare=False, hash=False
     )
 

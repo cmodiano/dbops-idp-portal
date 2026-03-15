@@ -1,14 +1,34 @@
 """
 Story 82.3: ServiceDefinition — source de vérité pour chaque service.
+Story 83.4: ServiceOperationDefinition + migration de ServiceDefinition.
 
 Ce module ne doit importer aucun module Django (models, settings, etc.) —
 il doit être importable avant le chargement de l'ORM Django.
 """
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass, field
-from types import MappingProxyType
+
+
+@dataclass(frozen=True)
+class ServiceOperationDefinition:
+    """Définition d'une opération de service, avec ses schémas et hints UI.
+
+    Attributes:
+        code: Code canonique de l'opération (ex: 'create_change').
+        label: Label d'affichage FR (ex: 'Créer un change').
+        input_schema: Schéma JSON (draft-07) des paramètres d'entrée. {} = aucune contrainte.
+        output_schema: Schéma JSON de la réponse. {} = aucune contrainte.
+        ui_hints: Hints pour le rendu frontend (ex: {'widget': 'textarea'}). {} = par défaut.
+    """
+
+    code: str
+    label: str
+    # Note: frozen=True protège la référence mais pas le contenu du dict.
+    # Ces champs doivent être traités comme immuables — ne pas les muter après construction.
+    input_schema: dict = field(default_factory=dict)
+    output_schema: dict = field(default_factory=dict)
+    ui_hints: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -20,33 +40,30 @@ class ServiceDefinition:
         display_name: Nom d'affichage (ex: 'ServiceNow').
         requires_integration: True si le service nécessite un record Integration en BD.
             False = credential_free (ex: notification).
-        operations: Opérations autorisées pour service_call (liste positive).
-            frozenset() = service sans opérations service_call (health check uniquement).
+        operation_defs: Définitions des opérations autorisées pour service_call.
+            Chaque définition porte le code, le label FR et les schémas JSON.
+            tuple() = service sans opérations service_call (health check uniquement).
         supports_health_check: True si le service implémente IHealthCheckable
             via le path service_registry.
-        operation_labels: Labels FR des opérations (code → label). Utilisé par l'API
-            capabilities pour exposer des labels localisés. Story 82.7.
-            Immuable via MappingProxyType (cohérence avec operations → frozenset).
     """
 
     code: str
     display_name: str
     requires_integration: bool
-    operations: frozenset[str]
-    supports_health_check: bool
-    operation_labels: Mapping[str, str] = field(default_factory=dict)
+    operation_defs: tuple[ServiceOperationDefinition, ...] = field(default_factory=tuple)
+    supports_health_check: bool = False
 
-    def __post_init__(self) -> None:
-        if not isinstance(self.operations, frozenset):  # pragma: no branch
-            # Enforce immutability: convert set/list/tuple to frozenset
-            object.__setattr__(self, "operations", frozenset(self.operations))  # type: ignore[unreachable]
-        # Enforce immutability of operation_labels (dict is mutable; MappingProxyType is not).
-        if not isinstance(self.operation_labels, MappingProxyType):
-            object.__setattr__(self, "operation_labels", MappingProxyType(self.operation_labels))
+    @property
+    def operations(self) -> frozenset[str]:
+        """Codes des opérations autorisées — dérivé de operation_defs."""
+        return frozenset(op.code for op in self.operation_defs)
 
     def get_operation_label(self, operation_code: str) -> str:
         """Retourne le label FR d'une opération, fallback = code."""
-        return self.operation_labels.get(operation_code, operation_code)
+        for op in self.operation_defs:
+            if op.code == operation_code:
+                return op.label
+        return operation_code
 
 
 class ServiceDefinitionRegistry:
@@ -117,6 +134,31 @@ class ServiceDefinitionRegistry:
             return not self._registry[code].requires_integration
         except KeyError:
             return False  # type inconnu → non credential_free par défaut
+
+    def get_operation_def(self, service_code: str, operation_code: str) -> ServiceOperationDefinition:
+        """Retourne la définition d'une opération de service.
+
+        Args:
+            service_code: Code canonique du service.
+            operation_code: Code canonique de l'opération.
+
+        Raises:
+            KeyError: Si le service ou l'opération n'est pas enregistré.
+        """
+        try:
+            defn = self._registry[service_code]
+        except KeyError:
+            raise KeyError(
+                f"Service '{service_code}' not found in registry. "
+                f"Available: {sorted(self._registry)}"
+            )
+        for op in defn.operation_defs:
+            if op.code == operation_code:
+                return op
+        raise KeyError(
+            f"Operation '{operation_code}' not found in service '{service_code}'. "
+            f"Available: {[op.code for op in defn.operation_defs]}"
+        )
 
 
 # Singleton module-level — même pattern que platforms/registry.py

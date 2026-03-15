@@ -165,6 +165,55 @@ def test_terraform_cloud_metadata():
 
 
 # ─────────────────────────────────────────────
+# Tests Story 83.4 — runtime_config_schema et health_check_policy
+# ─────────────────────────────────────────────
+
+def test_platform_definition_runtime_config_schema_default():
+    """runtime_config_schema est {} par défaut."""
+    defn = PlatformDefinition(
+        code="test",
+        display_name="Test",
+        aliases=frozenset(),
+        icon="test",
+        connector_type="test",
+        action_platform_code="Test",
+        supports_health_check=False,
+    )
+    assert defn.runtime_config_schema == {}
+
+
+def test_platform_definition_health_check_policy_default():
+    """health_check_policy est {} par défaut."""
+    defn = PlatformDefinition(
+        code="test",
+        display_name="Test",
+        aliases=frozenset(),
+        icon="test",
+        connector_type="test",
+        action_platform_code="Test",
+        supports_health_check=False,
+    )
+    assert defn.health_check_policy == {}
+
+
+def test_platform_definition_new_fields_with_values():
+    """Construction avec runtime_config_schema et health_check_policy non vides."""
+    defn = PlatformDefinition(
+        code="test",
+        display_name="Test",
+        aliases=frozenset(),
+        icon="test",
+        connector_type="test",
+        action_platform_code="Test",
+        supports_health_check=True,
+        runtime_config_schema={"type": "object", "properties": {"token": {"type": "string"}}},
+        health_check_policy={"timeout_seconds": 30, "retry_count": 3},
+    )
+    assert defn.runtime_config_schema == {"type": "object", "properties": {"token": {"type": "string"}}}
+    assert defn.health_check_policy == {"timeout_seconds": 30, "retry_count": 3}
+
+
+# ─────────────────────────────────────────────
 # Tests PlatformRegistry isolé (instance fraîche)
 # ─────────────────────────────────────────────
 

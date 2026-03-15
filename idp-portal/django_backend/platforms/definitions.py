@@ -1,5 +1,6 @@
 """
 Story 82.2: PlatformDefinition — source de vérité pour chaque plateforme.
+Story 83.4: Enrichissement avec runtime_config_schema et health_check_policy.
 
 Ce module ne doit importer aucun module Django (models, settings, etc.) —
 il doit être importable avant le chargement de l'ORM Django.
@@ -29,6 +30,12 @@ class PlatformDefinition:
             attendue de action_config pour les actions de cette plateforme.
             `{}` signifie aucune contrainte (comportement actuel pour toutes les plateformes).
             Exposé via GET /api/v1/capabilities/integrations/ (Story 82.8, AC2).
+        runtime_config_schema: Schéma JSON (jsonschema draft-07) décrivant la structure
+            des paramètres de configuration runtime attendus. `{}` signifie aucune
+            contrainte. Destiné à l'exposition via capabilities (Story 83-5).
+        health_check_policy: Politique de health check de la plateforme
+            (ex: timeout_seconds, retry_count, endpoint_pattern). `{}` signifie
+            comportement par défaut. Destiné à l'exposition via capabilities (Story 83-5).
     """
 
     code: str
@@ -41,3 +48,5 @@ class PlatformDefinition:
     runtime_kwargs_required: tuple[str, ...] = field(default_factory=tuple)
     runtime_kwargs_optional: dict[str, object] = field(default_factory=dict)
     action_config_schema: dict = field(default_factory=dict)
+    runtime_config_schema: dict = field(default_factory=dict)
+    health_check_policy: dict = field(default_factory=dict)

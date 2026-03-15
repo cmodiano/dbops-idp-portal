@@ -1,15 +1,52 @@
 """
 Story 82.3: Tests unitaires pour ServiceDefinition et ServiceDefinitionRegistry.
 Story 82.7: Tests pour operation_labels et get_operation_label.
+Story 83.4: Tests pour ServiceOperationDefinition + migration vers operation_defs.
 
 Vérifie l'enregistrement, le lookup, l'allowlist d'opérations, la détection
 credential-free, et la dérivation de _SERVICE_TYPES pour le routing health check.
 """
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 
-from services.definitions import ServiceDefinition, ServiceDefinitionRegistry, service_definition_registry
+from services.definitions import ServiceDefinition, ServiceDefinitionRegistry, ServiceOperationDefinition, service_definition_registry
+
+
+# ---------------------------------------------------------------------------
+# Tests unitaires — ServiceOperationDefinition (Story 83.4)
+# ---------------------------------------------------------------------------
+
+class TestServiceOperationDefinition:
+    def test_service_operation_definition_defaults(self) -> None:
+        """input_schema, output_schema, ui_hints sont {} par défaut."""
+        op = ServiceOperationDefinition(code="test_op", label="Test Op")
+        assert op.input_schema == {}
+        assert op.output_schema == {}
+        assert op.ui_hints == {}
+
+    def test_service_operation_definition_frozen(self) -> None:
+        """ServiceOperationDefinition est immuable (frozen=True)."""
+        op = ServiceOperationDefinition(code="test_op", label="Test Op")
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            op.code = "modified"  # type: ignore[misc]
+
+    def test_service_operation_definition_construction_with_values(self) -> None:
+        """Construction avec toutes les valeurs."""
+        op = ServiceOperationDefinition(
+            code="create_change",
+            label="Créer un change",
+            input_schema={"type": "object"},
+            output_schema={"type": "object"},
+            ui_hints={"widget": "textarea"},
+        )
+        assert op.code == "create_change"
+        assert op.label == "Créer un change"
+        assert op.input_schema == {"type": "object"}
+        assert op.output_schema == {"type": "object"}
+        assert op.ui_hints == {"widget": "textarea"}
 
 
 # ---------------------------------------------------------------------------
@@ -23,22 +60,73 @@ class TestServiceDefinition:
             code="test",
             display_name="Test",
             requires_integration=True,
-            operations=frozenset({"op1"}),
+            operation_defs=(ServiceOperationDefinition(code="op1", label="Op 1"),),
             supports_health_check=False,
         )
-        with pytest.raises((AttributeError, TypeError)):
+        with pytest.raises(dataclasses.FrozenInstanceError):
             defn.code = "modified"  # type: ignore[misc]
 
-    def test_operations_is_frozenset(self) -> None:
-        """Le champ operations est un frozenset."""
+    def test_operation_defs_is_tuple(self) -> None:
+        """Le champ operation_defs est un tuple."""
         defn = ServiceDefinition(
             code="test",
             display_name="Test",
             requires_integration=True,
-            operations=frozenset({"op1", "op2"}),
+            operation_defs=(
+                ServiceOperationDefinition(code="op1", label="Op 1"),
+                ServiceOperationDefinition(code="op2", label="Op 2"),
+            ),
             supports_health_check=True,
         )
+        assert isinstance(defn.operation_defs, tuple)
+
+    def test_service_definition_operations_property(self) -> None:
+        """defn.operations retourne le frozenset des codes."""
+        defn = ServiceDefinition(
+            code="test",
+            display_name="Test",
+            requires_integration=True,
+            operation_defs=(
+                ServiceOperationDefinition(code="op1", label="Op 1"),
+                ServiceOperationDefinition(code="op2", label="Op 2"),
+            ),
+            supports_health_check=True,
+        )
+        assert defn.operations == frozenset({"op1", "op2"})
         assert isinstance(defn.operations, frozenset)
+
+    def test_service_definition_operations_property_empty(self) -> None:
+        """Sans operation_defs, operations retourne frozenset vide."""
+        defn = ServiceDefinition(
+            code="test",
+            display_name="Test",
+            requires_integration=True,
+        )
+        assert defn.operations == frozenset()
+
+    def test_service_definition_get_operation_label_from_defs(self) -> None:
+        """get_operation_label retourne le label dérivé de operation_defs."""
+        defn = ServiceDefinition(
+            code="test",
+            display_name="Test",
+            requires_integration=True,
+            operation_defs=(
+                ServiceOperationDefinition(code="op1", label="Mon opération"),
+            ),
+        )
+        assert defn.get_operation_label("op1") == "Mon opération"
+
+    def test_service_definition_get_operation_label_fallback(self) -> None:
+        """get_operation_label retourne le code si absent."""
+        defn = ServiceDefinition(
+            code="test",
+            display_name="Test",
+            requires_integration=True,
+            operation_defs=(
+                ServiceOperationDefinition(code="op1", label="Op 1"),
+            ),
+        )
+        assert defn.get_operation_label("op2") == "op2"
 
 
 # ---------------------------------------------------------------------------
@@ -54,14 +142,19 @@ class TestServiceDefinitionRegistryIsolated:
             code="svc_a",
             display_name="Service A",
             requires_integration=True,
-            operations=frozenset({"op1", "op2"}),
+            operation_defs=(
+                ServiceOperationDefinition(code="op1", label="Op 1"),
+                ServiceOperationDefinition(code="op2", label="Op 2"),
+            ),
             supports_health_check=True,
         ))
         reg.register(ServiceDefinition(
             code="svc_b",
             display_name="Service B",
             requires_integration=False,
-            operations=frozenset({"send"}),
+            operation_defs=(
+                ServiceOperationDefinition(code="send", label="Envoyer"),
+            ),
             supports_health_check=False,
         ))
         return reg
@@ -114,6 +207,25 @@ class TestServiceDefinitionRegistryIsolated:
         """Type inconnu → False (défaut sûr)."""
         reg = self._make_registry()
         assert reg.is_credential_free("nonexistent") is False
+
+    def test_get_operation_def_nominal(self) -> None:
+        """get_operation_def retourne la bonne définition."""
+        reg = self._make_registry()
+        op = reg.get_operation_def("svc_a", "op1")
+        assert op.code == "op1"
+        assert op.label == "Op 1"
+
+    def test_get_operation_def_unknown_operation_raises(self) -> None:
+        """get_operation_def lève KeyError si operation_code inconnu."""
+        reg = self._make_registry()
+        with pytest.raises(KeyError):
+            reg.get_operation_def("svc_a", "unknown_op")
+
+    def test_get_operation_def_unknown_service_raises(self) -> None:
+        """get_operation_def lève KeyError si service_code inconnu."""
+        reg = self._make_registry()
+        with pytest.raises(KeyError):
+            reg.get_operation_def("unknown_service", "op1")
 
 
 # ---------------------------------------------------------------------------
@@ -198,66 +310,36 @@ class TestServiceDefinitionRegistrySingleton:
         defn = service_definition_registry.get("vault")
         assert defn.requires_integration is True
 
+    def test_servicenow_has_five_operation_defs(self) -> None:
+        """servicenow a exactement 5 ServiceOperationDefinition."""
+        defn = service_definition_registry.get("servicenow")
+        assert len(defn.operation_defs) == 5
+        codes = {op.code for op in defn.operation_defs}
+        assert codes == {"create_change", "update_change", "close_change", "get_change_status", "cancel_change"}
+
+    def test_splunk_has_empty_operation_defs(self) -> None:
+        """Splunk n'a pas d'opérations."""
+        defn = service_definition_registry.get("splunk")
+        assert defn.operation_defs == ()
+
+    def test_get_operation_def_nominal(self) -> None:
+        """get_operation_def retourne la bonne définition pour servicenow."""
+        op = service_definition_registry.get_operation_def("servicenow", "create_change")
+        assert op.code == "create_change"
+        assert op.label == "Créer un change"
+
+    def test_get_operation_def_unknown_raises(self) -> None:
+        """get_operation_def lève KeyError si operation_code inconnu."""
+        with pytest.raises(KeyError):
+            service_definition_registry.get_operation_def("servicenow", "unknown_op")
+
 
 # ---------------------------------------------------------------------------
-# Tests Story 82.7 — operation_labels et get_operation_label
+# Tests labels FR sur le singleton service_definition_registry (Story 82.7 → 83.4)
 # ---------------------------------------------------------------------------
-
-class TestServiceDefinitionOperationLabels:
-    """Tests pour le champ operation_labels et la méthode get_operation_label (Story 82.7)."""
-
-    def test_operation_labels_default_empty(self) -> None:
-        """Sans operation_labels explicite, le dict est vide."""
-        defn = ServiceDefinition(
-            code="test",
-            display_name="Test",
-            requires_integration=True,
-            operations=frozenset({"op1"}),
-            supports_health_check=False,
-        )
-        assert defn.operation_labels == {}
-
-    def test_get_operation_label_returns_label(self) -> None:
-        """get_operation_label retourne le label FR si présent."""
-        defn = ServiceDefinition(
-            code="test",
-            display_name="Test",
-            requires_integration=True,
-            operations=frozenset({"op1"}),
-            supports_health_check=False,
-            operation_labels={"op1": "Mon opération"},
-        )
-        assert defn.get_operation_label("op1") == "Mon opération"
-
-    def test_operation_labels_immutable_via_mapping_proxy(self) -> None:
-        """operation_labels est rendu immuable via MappingProxyType après __post_init__."""
-        import pytest
-        defn = ServiceDefinition(
-            code="test",
-            display_name="Test",
-            requires_integration=True,
-            operations=frozenset({"op1"}),
-            supports_health_check=False,
-            operation_labels={"op1": "Op 1"},
-        )
-        with pytest.raises(TypeError):
-            defn.operation_labels["new_key"] = "should fail"  # type: ignore[index]
-
-    def test_get_operation_label_fallback_to_code(self) -> None:
-        """get_operation_label retourne le code si pas de label."""
-        defn = ServiceDefinition(
-            code="test",
-            display_name="Test",
-            requires_integration=True,
-            operations=frozenset({"op1", "op2"}),
-            supports_health_check=False,
-            operation_labels={"op1": "Op 1"},
-        )
-        assert defn.get_operation_label("op2") == "op2"
-
 
 class TestServiceDefinitionSingletonLabels:
-    """Tests des labels FR sur le singleton service_definition_registry (Story 82.7)."""
+    """Tests des labels FR dérivés de operation_defs."""
 
     def test_servicenow_create_change_label(self) -> None:
         defn = service_definition_registry.get("servicenow")
@@ -307,7 +389,8 @@ class TestServiceDefinitionSingletonLabels:
         defn = service_definition_registry.get("notification")
         assert defn.get_operation_label("notify_execution_event") == "Notifier un événement d'exécution"
 
-    def test_splunk_has_no_labels(self) -> None:
-        """Splunk n'a pas d'opérations → operation_labels vide."""
+    def test_splunk_has_no_operation_defs(self) -> None:
+        """Splunk n'a pas d'opérations → operation_defs vide."""
         defn = service_definition_registry.get("splunk")
-        assert defn.operation_labels == {}
+        assert defn.operation_defs == ()
+        assert defn.operations == frozenset()

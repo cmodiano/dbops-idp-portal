@@ -1,7 +1,7 @@
-"""Tests unitaires du GateRegistry — Story 82.5."""
+"""Tests unitaires du GateRegistry — Story 82.5, Story 83.4."""
 import pytest
 
-from executions.gates.definitions import GateDefinition, GateDefinitionRegistry
+from executions.gates.definitions import GateDefinition, GateDefinitionRegistry, GateResolutionStrategy
 from executions.gates.registry import gate_registry
 
 
@@ -103,3 +103,56 @@ class TestGateRegistrySingleton:
     def test_display_names(self):
         assert gate_registry.get('maintenance_window').display_name == 'Fenêtre de maintenance'
         assert gate_registry.get('approval').display_name == 'Approbation manuelle'
+
+    def test_maintenance_window_resolution_strategy_is_none(self):
+        """maintenance_window est auto-évalué → resolution_strategy=None."""
+        defn = gate_registry.get('maintenance_window')
+        assert defn.resolution_strategy is None
+
+    def test_approval_resolution_strategy_is_none(self):
+        """approval utilise endpoint /approve/ → resolution_strategy=None (non encore implémentée)."""
+        defn = gate_registry.get('approval')
+        assert defn.resolution_strategy is None
+
+
+class TestGateResolutionStrategy:
+    """Tests du Protocol GateResolutionStrategy (Story 83.4)."""
+
+    def test_gate_definition_has_resolution_strategy_field(self):
+        """GateDefinition a un champ resolution_strategy avec défaut None."""
+        defn = GateDefinition(
+            gate_type='test',
+            condition_type='test_condition',
+            display_name='Test',
+            category='test',
+        )
+        assert defn.resolution_strategy is None
+
+    def test_gate_resolution_strategy_is_runtime_checkable(self):
+        """GateResolutionStrategy est un Protocol runtime_checkable."""
+        class MockResolution:
+            def resolve(self, ctx):
+                return True, {}
+
+        assert isinstance(MockResolution(), GateResolutionStrategy)
+
+    def test_gate_definition_resolution_strategy_excluded_from_equality(self):
+        """resolution_strategy est compare=False → n'affecte pas l'égalité."""
+        class MockResolution:
+            def resolve(self, ctx):
+                return True, {}
+
+        defn1 = GateDefinition(
+            gate_type='test',
+            condition_type='test_condition',
+            display_name='Test',
+            category='test',
+        )
+        defn2 = GateDefinition(
+            gate_type='test',
+            condition_type='test_condition',
+            display_name='Test',
+            category='test',
+            resolution_strategy=MockResolution(),
+        )
+        assert defn1 == defn2
