@@ -205,87 +205,99 @@ Puis automatiquement :
 
 ## Etat actuel - ce qu'il reste a enlever
 
+Avant de lister le travail restant, il faut noter que plusieurs points importants ont
+deja ete **realises** sur `develop` :
+
+- validation ecriture integration basee sur le **catalogue actif**
+- **PlatformDefinition**, **ServiceDefinition**, **GateDefinition**
+- **workflow_step_registry**
+- **API de capacites** backend
+- enrichissement des services avec :
+  - `input_schema`
+  - `output_schema`
+  - `ui_hints`
+- **SchemaFormRenderer** cote frontend
+- rendu declaratif de :
+  - la configuration plateforme des actions
+  - certaines variantes de gate
+  - certaines operations de service via `ui_hints`
+- suppression des anciens helpers frontend dominants :
+  - `serviceCallConstants.ts`
+  - `integrationHelpers.ts`
+
+Le travail restant est donc plus cible qu'avant.
+
 ## A. Hardcoding restant cote backend
 
-### 1. Types d'integration encore verrouilles par enum
+### 1. Resolution manuelle des gates encore couplee a `approval_granted`
 
 Probleme :
 
-- la creation/mise a jour d'integration reste liee a `IntegrationType.choices`
+- l'evaluation auto des gates est maintenant basee sur des strategies
+- mais la resolution manuelle reste encore principalement couplee au gate d'approbation historique
 
-Exemple :
+Exemples :
 
-- `idp-portal/django_backend/integrations/serializers.py`
+- `idp-portal/django_backend/executions/views/approval_views.py`
+- references a `approval_granted` dans les services/outbox/runtime workflow
 
 Impact :
 
-- un nouveau type declare dans un registre reste bloque a l'ecriture tant que l'enum n'est pas modifie
+- un futur gate manuel risque encore de demander des ajouts specifiques hors de sa definition
 
 Travail restant :
 
-- remplacer la validation enum par une validation derivee :
-  - du catalogue actif
-  - ou du registre/capability backend
+- faire converger la resolution manuelle vers une logique plus generique
+- permettre qu'un gate manuel declare sa `resolution_strategy` ou son mode de resolution
+- reduire le couplage direct a `approval_granted`
 
-### 2. GateEvaluator encore partiellement code en dur
+### 2. Dispatch runtime des step types encore ferme
 
 Probleme :
 
-- le registre existe, mais l'evaluation contient encore des branches par type
+- le backend a maintenant un registre de definitions de step type pour les capabilities
+- mais le moteur d'execution reste encore base sur un `match step_type`
 
 Exemple :
 
-- `idp-portal/django_backend/executions/gate_evaluator.py`
+- `idp-portal/django_backend/executions/container_workflow_runtime.py`
 
 Impact :
 
-- une nouvelle definition de gate ne suffit pas encore a rendre le gate executable
+- un nouveau step type ne deviendra pas executable simplement en declarant sa definition
 
 Travail restant :
 
-- deplacer la logique d'evaluation dans les definitions/strategies de gate
-- faire du `GateEvaluator` un simple orchestrateur
+- introduire un registre de handlers runtime pour les step types
+- aligner definitions de capabilities et execution runtime
+- faire converger capabilities -> validation -> execution
 
-### 3. API de capacites encore trop legere
+### 3. Le schema existe, mais son usage n'est pas encore complet partout
 
 Probleme :
 
-- les services exposent surtout :
-  - code
-  - label
-  - operations
+- le backend expose deja :
+  - `action_config_schema`
+  - `runtime_config_schema`
+  - `health_check_policy`
+  - `input_schema`
+  - `output_schema`
+  - `ui_hints`
 
-mais pas encore assez de details pour rendre une UI totalement declarative.
+mais tous ces schemas ne sont pas encore exploites de maniere uniforme dans tous les flux.
 
-Exemple :
+Exemples :
 
 - `idp-portal/django_backend/capabilities/views.py`
+- `idp-portal/frontend/src/components/admin/step-config/ServiceCallStepConfig.tsx`
 
 Travail restant :
 
-- exposer pour chaque operation :
-  - input schema
-  - output schema
-  - ui hints
-  - contraintes
-  - valeurs par defaut
+- utiliser `input_schema` de service pour aller au-dela du simple key/value editor
+- standardiser la validation frontend a partir des schemas exposes
+- etendre les `ui_hints` quand un renderer specialise est vraiment necessaire
 
-### 4. Step types encore partiellement statiques
-
-Probleme :
-
-- certains `step_types` restent decrits a la main dans la vue capabilities
-
-Exemple :
-
-- `_STEP_TYPES_STATIC` dans `idp-portal/django_backend/capabilities/views.py`
-
-Travail restant :
-
-- centraliser les step definitions de la meme maniere que les gates/services/plateformes
-- faire du endpoint capabilities un simple reflecteur de definitions
-
-### 5. Heritage legacy `ActionPlatform`
+### 4. Heritage legacy `ActionPlatform` et mappings runtime encore presents
 
 Probleme :
 
@@ -303,33 +315,35 @@ Travail restant :
 - definir une cible de simplification :
   - soit supprimer `ActionPlatform`
   - soit le traiter comme detail de persistence derive automatiquement
+- reduire les conversions legacy au strict minimum
 
 ---
 
 ## B. Hardcoding restant cote frontend
 
-### 1. ActionWizard encore partiellement specifique plateforme
+### 1. ActionWizard est largement declaratif, mais garde une exception AAP
 
 Probleme :
 
-- l'ActionWizard utilise maintenant les capacites pour une partie du mapping
-- mais certains comportements restent specifiques, notamment autour de la configuration AAP
+- la configuration plateforme est maintenant pilotee par `action_config_schema`
+- mais le connecteur AAP garde un renderer UX et une serialisation runtime specifiques
 
-Exemple :
+Exemples :
 
 - `idp-portal/frontend/src/components/admin/ActionWizard.tsx`
+- `idp-portal/frontend/src/components/admin/WizardStep2Automatisme.tsx`
 
 Travail restant :
 
-- remplacer les blocs plateforme-specifiques par un rendu de `action_config_schema`
-- limiter les renderers specifiques aux cas vraiment exceptionnels
+- garder l'exception AAP uniquement si elle est vraiment necessaire
+- sinon converger vers un chemin de rendu/serialization plus uniforme
 
-### 2. GateStepConfig consomme des variants, mais pas encore un vrai schema
+### 2. GateStepConfig consomme maintenant le schema, mais pas encore via un renderer totalement generique
 
 Probleme :
 
-- les types de gates viennent du backend
-- mais le formulaire n'est pas encore construit a partir de `config_schema`
+- le composant s'appuie maintenant sur `config_schema`
+- mais il reste encore un rendu conditionnel "manuel" de certains champs
 
 Exemple :
 
@@ -337,62 +351,296 @@ Exemple :
 
 Travail restant :
 
-- rendre les champs conditionnels declaratifs
-- faire disparaitre la dependance aux noms specifiques comme `approval`
+- brancher ce composant sur un renderer de schema plus generique
+- supprimer la logique conditionnelle restante quand elle n'apporte pas de valeur UX
 
-### 3. WorkflowStepNode garde encore des labels de gates en dur
+### 3. Le workflow UI garde encore des types, titres et labels locaux
 
 Probleme :
 
-- le node workflow consomme deja les capacites pour les services
-- mais garde une partie du rendu de gate localement
+- `WorkflowStepNode` consomme maintenant les capacites pour gates et services
+- mais l'ecosysteme workflow garde encore plusieurs listes/types/titres locaux
 
-Exemple :
+Exemples :
 
-- `idp-portal/frontend/src/components/admin/WorkflowStepNode.tsx`
+- `WorkflowStepNode.tsx`
+- `StepConfigPanel.tsx`
+- `ActionPalette.tsx`
+- `workflowStepLabels.ts`
+- `workflowValidation.ts`
+- `types/api/catalog.ts`
 
 Travail restant :
 
-- rendre les labels/variants de gates derives du backend
-- rendre le titre et le badge dependants de metadata plutot que de `if gate_type === ...`
+- faire deriver autant que possible :
+  - les labels
+  - les titres
+  - la palette
+  - les contraintes de validation
+  depuis les capabilities backend
 
-### 4. Fallbacks frontend encore trop metier
+### 4. Validation workflow encore basee sur un `switch(stepType)`
 
 Probleme :
 
-- des fallbacks locaux restent presents pour les gates
+- le frontend valide encore les step types connus via un `switch`
 
 Exemple :
 
-- `idp-portal/frontend/src/hooks/useWorkflowStepCapabilities.ts`
+- `idp-portal/frontend/src/utils/workflowValidation.ts`
 
 Impact :
 
-- le frontend peut continuer a porter une verite implicite differente du backend
+- ajouter un nouveau step type demandera encore une modification frontend explicite
 
 Travail restant :
 
-- limiter les fallbacks a la resilience technique
-- ne jamais reintroduire une verite metier locale durable
+- faire consommer les contraintes de validation depuis l'API de capabilities
+- conserver uniquement les validations purement UI/graph si elles ne sont pas metier
 
-### 5. Le frontend n'a pas encore un renderer de schema commun
+### 5. Le renderer de schema existe, mais n'est pas encore utilise partout
 
 Probleme :
 
-- les composants consomment les capacites, mais il manque encore un moteur de rendu commun pour les schemas
+- `SchemaFormRenderer` existe maintenant
+- mais tous les flux n'en profitent pas encore
+
+Exemples :
+
+- `idp-portal/frontend/src/components/shared/SchemaFormRenderer.tsx`
+- `WizardStep2Automatisme.tsx`
+- `ServiceCallStepConfig.tsx`
+- `GateStepConfig.tsx`
 
 Travail restant :
 
-- creer un renderer simple pour :
-  - string
-  - number
-  - boolean
-  - enum
-  - array simple
-  - object simple
-  - mapping key/value
+- reutiliser davantage le renderer generique la ou les schemas le permettent
+- reserver les renderers specifiques aux cas UX justifies
 
-Le but est de couvrir 80 % des besoins sans branches specifiques.
+### 6. Palette et panneau de configuration encore fondes sur des listes connues
+
+Probleme :
+
+- la palette des special steps et les titres du panneau restent encore des constantes frontend
+
+Exemples :
+
+- `idp-portal/frontend/src/components/admin/ActionPalette.tsx`
+- `idp-portal/frontend/src/components/admin/StepConfigPanel.tsx`
+
+Travail restant :
+
+- faire deriver la palette depuis `workflow_step_registry`
+- faire deriver les titres du panneau depuis les labels exposes par le backend
+- supprimer les constantes UI qui font doublon avec les capabilities
+
+---
+
+## Roadmap cible - atteindre 9/10 par composant
+
+Cette section traduit le travail restant en **objectif de maturite**.
+
+### Echelle de lecture
+
+- **6/10** : extensible mais encore fragile ou trop manuel
+- **7/10** : bonne base, quelques duplications/cas speciaux
+- **8/10** : architecture solide, reste surtout du nettoyage cible
+- **9/10** : ajout localise, comprehensible, peu de couplage, faible risque de derive
+
+L'objectif ici n'est pas un 10/10 theorique.
+
+Le **9/10** vise une architecture :
+
+- simple
+- lisible
+- robuste
+- vraiment exploitable au quotidien
+
+### 1. Plateformes
+
+**Etat estime actuel : 8/10**
+
+Points forts deja acquis :
+
+- `PlatformDefinition`
+- `PlatformRegistry`
+- aliases centralises
+- `action_config_schema`
+- `runtime_config_schema`
+- `health_check_policy`
+- `ActionWizard` largement base sur les capabilities backend
+
+Ce qui manque pour 9/10 :
+
+1. **reduire l'exception AAP au strict minimum**
+   - conserver uniquement le renderer specialise si la recherche de templates AAP reste vraiment un besoin UX unique
+   - sinon aligner AAP sur le meme chemin declaratif que les autres plateformes
+
+2. **simplifier le legacy `ActionPlatform`**
+   - reduire les conversions residuelles entre :
+     - code integration
+     - `connector_type`
+     - code action
+   - idealement, garder un seul code metier et deriver le reste au plus pres de la persistence/runtime
+
+3. **faire converger execution runtime et definitions**
+   - utiliser davantage `PlatformDefinition` pour eviter tout mapping ou regle residuelle hors definition
+
+4. **completer l'usage des schemas**
+   - exploiter davantage `runtime_config_schema` et `health_check_policy`
+   - clarifier ce qui est purement descriptif vs effectivement applique
+
+**Definition pratique du 9/10 pour les plateformes**
+
+- ajouter une nouvelle plateforme = ecrire l'adapter + declarer la definition
+- pas de nouvelle constante frontend
+- pas de nouveau helper de mapping
+- pas de nouveau branchement hors exception runtime reellement justifiee
+
+### 2. Services
+
+**Etat estime actuel : 8/10**
+
+Points forts deja acquis :
+
+- `ServiceDefinition`
+- operations derivees du backend
+- `input_schema` / `output_schema` / `ui_hints`
+- plus de duplication majeure frontend/backend des operations
+
+Ce qui manque pour 9/10 :
+
+1. **rendre le formulaire d'operation vraiment schema-driven**
+   - aujourd'hui, le flux service_call reste encore proche d'un key/value editor generaliste
+   - il faut rendre les champs depuis `input_schema` quand le schema le permet
+
+2. **faire converger validation frontend/backend**
+   - le frontend doit exploiter plus directement les schemas exposes
+   - les erreurs de saisie doivent etre visibles avant le submit, pas seulement au runtime
+
+3. **mieux utiliser `ui_hints`**
+   - normaliser les hints utiles
+   - limiter les renderers specifiques a des cas bien identifies
+
+4. **clarifier les services non operationnels**
+   - exemple : services presents pour health check/consommation interne mais sans `service_call`
+   - leur role doit etre explicite dans les capabilities
+
+**Definition pratique du 9/10 pour les services**
+
+- ajouter un nouveau service = ecrire le client + declarer les operations
+- si les operations ont un schema standard, aucune modification frontend supplementaire
+- les labels, champs et validations viennent de l'API backend
+
+### 3. Gates
+
+**Etat estime actuel : 6.5/10**
+
+Points forts deja acquis :
+
+- `GateDefinition`
+- `GateRegistry`
+- strategies d'evaluation
+- variants exposes via capabilities
+- `GateStepConfig` deja partiellement derive de `config_schema`
+
+Ce qui manque pour 9/10 :
+
+1. **generaliser la resolution manuelle**
+   - supprimer le couplage dur a `approval_granted`
+   - permettre a un gate manuel de declarer sa resolution de maniere plus generique
+
+2. **mieux utiliser `config_schema` pour le rendu**
+   - brancher davantage `GateStepConfig` sur un renderer de schema
+   - ne garder du code conditionnel que si la valeur UX est evidente
+
+3. **reduire les references legacy**
+   - approval flow, outbox, events et runtime contiennent encore des references explicites au gate historique
+
+4. **stabiliser l'extension des gates manuels**
+   - un nouveau gate manuel ne doit pas exiger de chasse au tresor dans les views/services/tasks
+
+**Definition pratique du 9/10 pour les gates**
+
+- ajouter un nouveau gate auto-evalue = definition + strategie
+- ajouter un nouveau gate manuel = definition + mecanisme de resolution dedie
+- pas de nouveau `if gate_type == ...` disperse dans plusieurs couches
+
+### 4. Workflow UI / extensibilite des step types
+
+**Etat estime actuel : 6.5/10**
+
+C'est aujourd'hui la zone la plus importante a faire progresser.
+
+Points forts deja acquis :
+
+- capabilities workflow exposees par le backend
+- labels/variants de gates deja relies aux capabilities dans plusieurs composants
+- `SchemaFormRenderer` disponible
+
+Ce qui manque pour 9/10 :
+
+1. **palette backend-driven**
+   - `ActionPalette` ne doit plus embarquer une liste locale des special steps
+
+2. **titres/backend labels unifies**
+   - `StepConfigPanel`
+   - `workflowStepLabels`
+   - `WorkflowStepNode`
+   - ces composants doivent consommer le meme vocabulaire expose par le backend
+
+3. **validation backend-driven**
+   - `workflowValidation.ts` ne doit plus etre un `switch(stepType)` metier
+   - il doit lire les contraintes de validation depuis les capabilities
+
+4. **typing plus souple cote frontend**
+   - eviter que l'ajout d'un nouveau step type demande une cascade de modifications TypeScript purement descriptives
+   - conserver les unions strictes uniquement quand elles apportent un vrai gain de surete
+
+5. **aligner capabilities et execution**
+   - un step type expose au frontend doit correspondre a un handler runtime connu
+   - idealement via un registre de handlers backend
+
+**Definition pratique du 9/10 pour le workflow UI**
+
+- ajouter un nouveau step type standard = declaration backend + handler runtime + eventuel schema
+- la palette, le panneau, les labels et la validation frontend s'adaptent sans duplication locale majeure
+
+### 5. Backend orchestration / execution runtime
+
+**Etat estime actuel : 7/10**
+
+Points forts deja acquis :
+
+- definitions backend riches
+- capabilities bien exposees
+- evaluation gate plus modulaire
+
+Ce qui manque pour 9/10 :
+
+1. **remplacer le `match step_type` central**
+   - introduire un registre de handlers runtime pour les step types
+
+2. **aligner definitions et execution**
+   - ce qui est declarable dans capabilities doit correspondre a un chemin runtime clair
+
+3. **reduire le legacy d'approbation**
+   - limiter la logique speciale historique au strict necessaire
+
+**Definition pratique du 9/10 pour le runtime**
+
+- definition -> validation -> execution suit la meme structure mentale
+- on peut suivre un step type sans changer de paradigme entre capabilities et runtime
+
+### 6. Objectif global
+
+Pour atteindre une note globale proche de **9/10** sur l'ensemble du sujet, l'ordre recommande est :
+
+1. **runtime workflow handler registry**
+2. **manual gate resolution generic path**
+3. **workflow UI derive des capabilities**
+4. **service forms plus schema-driven**
+5. **reduction finale des compatibilites legacy plateforme/action**
 
 ---
 

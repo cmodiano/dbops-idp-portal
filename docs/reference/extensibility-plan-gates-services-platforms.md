@@ -48,20 +48,35 @@ Depuis la redaction initiale de ce document, une partie du refactoring a ete imp
   - les types exposes
   - le mapping `gate_type -> condition_type`
   - la validation
-- les **capacites backend** sont exposees au frontend pour les services, gates et une partie des plateformes
+- les **capacites backend** sont exposees au frontend pour les services, gates et les plateformes
 - la **normalisation des aliases plateforme** est mieux centralisee
 - les **kwargs runtime plateforme** sont mieux centralises via :
   - `idp-portal/django_backend/adapters/runtime_config.py`
+- les **writes d'integration** ne sont plus verrouilles par `IntegrationType.choices`
+- les **services** exposent maintenant :
+  - `input_schema`
+  - `output_schema`
+  - `ui_hints`
+- les **gates** utilisent maintenant une logique d'evaluation par strategie
+- les **types de steps workflow** ont maintenant leur propre registre backend
+- le frontend a maintenant :
+  - `useCapabilities`
+  - `useWorkflowStepCapabilities`
+  - `SchemaFormRenderer`
+- les anciens helpers frontend `serviceCallConstants.ts` et `integrationHelpers.ts` ont ete retires du chemin principal
 
 ### Ce qui reste incomplet
 
-- la creation/mise a jour des integrations utilise encore `IntegrationType.choices`
-  - `idp-portal/django_backend/integrations/serializers.py`
-- l'UI plateforme dans les **actions** n'est pas encore vraiment schema-driven
-- les **gates** exposent des variants mais pas encore une vraie logique de formulaire derivee de `config_schema`
-- `WorkflowStepNode.tsx` garde encore une partie du rendu des gates en dur
-- les capacites de services exposent surtout les **labels d'operations**, pas encore les schemas complets d'entree/sortie
-- ajouter une **nouvelle integration executable** demande encore du code backend pour l'adapter ou le client de service
+- la **resolution manuelle** des gates reste encore largement couplee a `approval_granted` et aux endpoints d'approbation existants
+- le **dispatch runtime** des `step_type` reste encore base sur un `match` explicite dans le moteur de workflow
+- le frontend garde encore des zones **workflow-specifiques** hard-codees :
+  - palette des special steps
+  - titres du panneau de configuration
+  - validation `switch(stepType)`
+  - labels de step dans certains utilitaires
+- le frontend n'utilise pas encore pleinement les **schemas d'operation de service** pour rendre les champs de saisie
+- la configuration plateforme est maintenant schema-driven pour le cas general, mais garde encore une **exception UX AAP**
+- ajouter une **nouvelle integration executable** demande toujours du code runtime backend pour l'adapter ou le client de service
 
 En consequence, ce document doit maintenant etre lu comme :
 
@@ -172,6 +187,13 @@ Autrement dit :
 ---
 
 ## Probleme actuel a resoudre
+
+Note importante :
+
+- les sections ci-dessous decrivent surtout le **probleme de depart** et la cible de refactoring
+- elles ne doivent plus etre lues comme un inventaire exact du `develop` actuel
+- pour l'etat courant et le travail restant, voir aussi :
+  - `docs/reference/extensibility-remaining-work-state-of-the-art.md`
 
 ## 1. Les integrations sont cataloguees, mais leur comportement reste hard-code
 
