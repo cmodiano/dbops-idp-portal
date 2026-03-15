@@ -189,11 +189,12 @@ GROUP BY STATUS;
 4. Pour réinitialiser des entrées FAILED en PENDING (retry forcé) :
 
 ```python
+from django.db.models import F
 from executions.models import ExecutionOutbox, OutboxEntryStatus
 # Réinitialiser les FAILED avec attempt_no < max_attempts
 reset_count = ExecutionOutbox.objects.filter(
     status=OutboxEntryStatus.FAILED,
-    attempt_no__lt=models.F('max_attempts'),
+    attempt_no__lt=F('max_attempts'),
 ).update(status=OutboxEntryStatus.PENDING, last_error=None)
 print(f"Entrées réinitialisées : {reset_count}")
 ```
