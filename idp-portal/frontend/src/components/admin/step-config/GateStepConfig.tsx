@@ -38,7 +38,7 @@ export const GateStepConfig: FC<GateStepConfigProps> = ({
 }) => {
   // Story 57.19: Use pre-computed options with labels if available, fallback to raw IDs
   const stepOptions = availableStepOptions ?? availableStepIds.map((id) => ({ value: id, label: id }));
-  // Story 82.6: gate variants depuis le backend (fallback local si API indisponible)
+  // Story 83-12: gate variants depuis le backend — résilience technique uniquement (liste vide si API indisponible, pas de fallback métier)
   const { gateVariants, loading: gateLoading } = useWorkflowStepCapabilities();
   const gateOptions = gateVariants.map((v) => ({ value: v.code, label: v.label }));
 

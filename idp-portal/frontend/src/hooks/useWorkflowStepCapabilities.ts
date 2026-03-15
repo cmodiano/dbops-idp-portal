@@ -1,17 +1,12 @@
 /**
- * useWorkflowStepCapabilities — Story 82.6, AC3.
+ * useWorkflowStepCapabilities — Story 83-12.
  *
  * Retourne les variants du step "gate" depuis les capacités backend.
- * Fallback vers GATE_TYPE_OPTIONS local si l'API échoue (résilience).
+ * Résilience technique uniquement : liste vide si API indisponible ou données absentes.
+ * Aucune vérité métier locale — le backend reste source de vérité unique.
  */
 import { useCapabilities } from './useCapabilities';
 import type { GateVariant } from '../services/capabilities_service';
-
-// Fallback local si API indisponible — comportement identique à l'existant
-const GATE_TYPE_OPTIONS_FALLBACK: GateVariant[] = [
-  { code: 'maintenance_window', label: 'Fenêtre de maintenance', config_schema: {} },
-  { code: 'approval', label: 'Approbation manuelle', config_schema: {} },
-];
 
 export function useWorkflowStepCapabilities(): {
   gateVariants: GateVariant[];
@@ -23,12 +18,12 @@ export function useWorkflowStepCapabilities(): {
   let gateVariants: GateVariant[];
 
   if (error) {
-    // Fallback si erreur API
-    gateVariants = GATE_TYPE_OPTIONS_FALLBACK;
+    // Résilience technique : erreur API → liste vide (pas de fallback métier)
+    gateVariants = [];
   } else if (capabilities) {
-    // Capacités chargées : rechercher le step gate (fallback si absent ou sans variants)
+    // Capacités chargées : rechercher le step gate
     const gateStep = capabilities.stepTypes.find((s) => s.code === 'gate');
-    gateVariants = gateStep?.variants ?? GATE_TYPE_OPTIONS_FALLBACK;
+    gateVariants = gateStep?.variants ?? [];
   } else {
     // Chargement en cours (capabilities null, pas d'erreur)
     gateVariants = [];

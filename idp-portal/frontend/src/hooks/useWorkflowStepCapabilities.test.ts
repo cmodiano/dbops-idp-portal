@@ -1,5 +1,6 @@
 /**
- * Tests for useWorkflowStepCapabilities — Story 82.6, AC7 (T7.4).
+ * Tests for useWorkflowStepCapabilities — Story 83-12.
+ * Résilience technique uniquement : pas de fallback métier local.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
@@ -50,7 +51,7 @@ describe('useWorkflowStepCapabilities', () => {
     expect(result.current.gateVariants[1].code).toBe('approval');
   });
 
-  it("retourne le fallback GATE_TYPE_OPTIONS si l'API échoue (erreur)", () => {
+  it('retourne gateVariants vide si API en erreur (résilience technique)', () => {
     mockUseCapabilities.mockReturnValue({
       capabilities: null,
       loading: false,
@@ -60,10 +61,9 @@ describe('useWorkflowStepCapabilities', () => {
     const { result } = renderHook(() => useWorkflowStepCapabilities());
 
     expect(result.current.error).toBe('API down');
-    // Fallback : les 2 gate types par défaut
-    expect(result.current.gateVariants).toHaveLength(2);
-    expect(result.current.gateVariants[0].code).toBe('maintenance_window');
-    expect(result.current.gateVariants[1].code).toBe('approval');
+    expect(result.current.loading).toBe(false);
+    // Résilience technique : pas de fallback métier, liste vide
+    expect(result.current.gateVariants).toHaveLength(0);
   });
 
   it('retourne gateVariants=[] pendant le chargement', () => {
@@ -79,7 +79,7 @@ describe('useWorkflowStepCapabilities', () => {
     expect(result.current.gateVariants).toHaveLength(0);
   });
 
-  it('utilise le fallback si stepTypes est vide (API retourne step_types=[])', () => {
+  it('retourne gateVariants vide si stepTypes est vide', () => {
     mockUseCapabilities.mockReturnValue({
       capabilities: {
         platforms: [],
@@ -92,12 +92,25 @@ describe('useWorkflowStepCapabilities', () => {
 
     const { result } = renderHook(() => useWorkflowStepCapabilities());
 
-    // Doit utiliser le fallback, pas retourner une liste vide
-    expect(result.current.gateVariants).toHaveLength(2);
-    expect(result.current.gateVariants[0].code).toBe('maintenance_window');
+    // Résilience technique : pas de fallback métier, liste vide
+    expect(result.current.gateVariants).toHaveLength(0);
   });
 
-  it("utilise le fallback si le step gate n'a pas de variants", () => {
+  it("l'erreur prend priorité sur les données obsolètes (error + capabilities non-null)", () => {
+    mockUseCapabilities.mockReturnValue({
+      capabilities: mockCapabilities, // données périmées encore présentes
+      loading: false,
+      error: 'API error', // erreur simultanée (ex: refetch échoué avec stale data)
+    });
+
+    const { result } = renderHook(() => useWorkflowStepCapabilities());
+
+    expect(result.current.error).toBe('API error');
+    // error doit gagner sur les données obsolètes — pas de fallback métier
+    expect(result.current.gateVariants).toHaveLength(0);
+  });
+
+  it("retourne gateVariants vide si le step gate n'a pas de variants", () => {
     mockUseCapabilities.mockReturnValue({
       capabilities: {
         platforms: [],
@@ -113,6 +126,7 @@ describe('useWorkflowStepCapabilities', () => {
 
     const { result } = renderHook(() => useWorkflowStepCapabilities());
 
-    expect(result.current.gateVariants).toHaveLength(2); // fallback
+    // Résilience technique : pas de fallback métier, liste vide
+    expect(result.current.gateVariants).toHaveLength(0);
   });
 });
