@@ -27,7 +27,7 @@ import { parameterListToSchema } from '../../utils/parametersSchema';
 import { listToImpactRules } from '../../utils/impactRulesSchema';
 import { useEngines } from '../../hooks/useEngines';
 import { usePlatformIntegrations } from '../../hooks/usePlatformIntegrations';
-import { integrationTypeToPlatformCode } from '../../utils/integrationHelpers';
+import { useCapabilities } from '../../hooks/useCapabilities';
 import { ParametersEditor } from './ParametersEditor';
 import { ImpactRulesEditor } from './ImpactRulesEditor';
 import SectionHelp from '../common/SectionHelp';
@@ -62,6 +62,7 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
   const { engineOptions, loading: enginesLoading } = useEngines();
   // Story 31.1: Load platform integrations
   const { integrationOptions, loading: integrationsLoading, getIntegrationById } = usePlatformIntegrations();
+  const { capabilities } = useCapabilities();
 
   const isEditMode = !!editAction;
   const isMin1280 = useMediaQuery(1280);
@@ -121,16 +122,13 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
         return;
       }
 
-      // Story 31.1: Derive platform from integration type, send both
+      // Story 31.1 / 82.9: Derive platform from capabilities
       const selectedIntegration = values.integration_id ? getIntegrationById(values.integration_id) : undefined;
-      const rawPlatform =
-        selectedIntegration?.type && String(selectedIntegration.type).trim() !== ''
-          ? integrationTypeToPlatformCode(selectedIntegration.type)
-          : undefined;
-      const derivedPlatform =
-        rawPlatform !== undefined && rawPlatform !== ''
-          ? (rawPlatform as ActionCreate['platform'])
-          : undefined;
+      const derivedPlatform = selectedIntegration?.type
+        ? (capabilities?.platforms?.find(
+            (p) => p.code === selectedIntegration.type || p.aliases.includes(selectedIntegration.type)
+          )?.action_platform_code as ActionCreate['platform'] | undefined)
+        : undefined;
 
       const action: ActionCreate = {
         name: values.name,

@@ -106,13 +106,13 @@ class TestActionPlatformIntegrationValidation(TestCase):
         self.assertTrue(serializer.is_valid(), serializer.errors)
 
     def test_platform_tower_integration_tower_ok(self):
-        """Tower + tower → OK."""
+        """Tower + tower integration → OK (tower est une plateforme distincte d'aap)."""
         serializer = ActionCreateSerializer(data={
             'name': 'Test Action',
             'item_type': 'action',
             'engine': 'Oracle',
             'platform': 'Tower',
-            'integration_id': self.integration_aap.id,  # Tower is alias for AAP (see _PLATFORM_ALIAS)
+            'integration_id': self.integration_tower.id,  # Tower is a canonical platform, not an alias for AAP
         })
         self.assertTrue(serializer.is_valid(), serializer.errors)
 

@@ -45,12 +45,25 @@ const defaultAAPMock = {
   error: null,
 };
 
+const defaultCapabilitiesMock = {
+  platforms: [
+    { code: 'servicenow', display_name: 'ServiceNow', aliases: [], icon: 'servicenow', connector_type: 'servicenow', action_platform_code: 'ServiceNow', supports_health_check: true, action_config_schema: {} },
+    { code: 'aap', display_name: 'AAP', aliases: [], icon: 'aap', connector_type: 'aap', action_platform_code: 'AAP', supports_health_check: true, action_config_schema: {} },
+    { code: 'azuredevops', display_name: 'Azure DevOps', aliases: [], icon: 'azuredevops', connector_type: 'azuredevops', action_platform_code: 'AzureDevOps', supports_health_check: false, action_config_schema: {} },
+    { code: 'jira', display_name: 'Jira', aliases: [], icon: 'jira', connector_type: 'jira', action_platform_code: 'Jira', supports_health_check: false, action_config_schema: {} },
+    { code: 'github_actions', display_name: 'GitHub Actions', aliases: [], icon: 'github_actions', connector_type: 'github_actions', action_platform_code: 'GitHub Actions', supports_health_check: false, action_config_schema: {} },
+    { code: 'terraform_cloud', display_name: 'Terraform', aliases: [], icon: 'terraform', connector_type: 'terraform', action_platform_code: 'Terraform', supports_health_check: false, action_config_schema: {} },
+  ],
+  services: [],
+  stepTypes: [],
+};
+
 describe('StepsEditor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseEnvironments.mockReturnValue(defaultEnvMock);
     mockUseAAPTemplates.mockReturnValue(defaultAAPMock);
-    mockUseCapabilities.mockReturnValue({ capabilities: null, loading: false, error: null });
+    mockUseCapabilities.mockReturnValue({ capabilities: defaultCapabilitiesMock, loading: false, error: null });
   });
 
   it('renders connector dropdown (Story 2.7)', async () => {
@@ -411,7 +424,7 @@ describe('StepsEditor - Additional coverage 55.7', () => {
     vi.clearAllMocks();
     mockUseEnvironments.mockReturnValue(defaultEnvMock);
     mockUseAAPTemplates.mockReturnValue(defaultAAPMock);
-    mockUseCapabilities.mockReturnValue({ capabilities: null, loading: false, error: null });
+    mockUseCapabilities.mockReturnValue({ capabilities: defaultCapabilitiesMock, loading: false, error: null });
   });
 
   it('servicenow avec conditional_environments non vide — pas de message validation', () => {
@@ -615,7 +628,7 @@ describe('StepsEditor - Extended coverage 55.6', () => {
     vi.clearAllMocks();
     mockUseEnvironments.mockReturnValue(defaultEnvMock);
     mockUseAAPTemplates.mockReturnValue(defaultAAPMock);
-    mockUseCapabilities.mockReturnValue({ capabilities: null, loading: false, error: null });
+    mockUseCapabilities.mockReturnValue({ capabilities: defaultCapabilitiesMock, loading: false, error: null });
   });
 
   it('handleRemoveStep — supprime la première étape parmi plusieurs, réordonne correctement', async () => {
@@ -795,7 +808,7 @@ describe('StepsEditor - Story 82.8: connectorOptions depuis capabilities', () =>
     expect(screen.getAllByText('Aucun').length).toBeGreaterThanOrEqual(1);
   });
 
-  it('T6.2 — capabilities null → fallback CONNECTOR_OPTIONS (liste locale)', async () => {
+  it('T6.2 — capabilities null → connectorOptions = [{ value: "none", label: "Aucun" }] (pas de liste locale)', async () => {
     const user = userEvent.setup();
     mockUseCapabilities.mockReturnValue({ capabilities: null, loading: false, error: null });
 
@@ -803,11 +816,10 @@ describe('StepsEditor - Story 82.8: connectorOptions depuis capabilities', () =>
     const connectorSelect = screen.getByLabelText(/Connecteur etape 1/i);
     await user.click(connectorSelect);
 
-    // CONNECTOR_OPTIONS locaux
-    expect(await screen.findByText('ServiceNow')).toBeInTheDocument();
-    expect(screen.getByText('AAP')).toBeInTheDocument();
-    // 'Aucun' peut apparaître plusieurs fois (valeur sélectionnée + option)
+    // Seule option 'Aucun' (pas de fallback CONNECTOR_OPTIONS)
     expect(screen.getAllByText('Aucun').length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText('ServiceNow')).not.toBeInTheDocument();
+    expect(screen.queryByText('AAP')).not.toBeInTheDocument();
   });
 
   it('T6.3 — dédupliquation connector_type — 2 plateformes avec même connector_type → une seule option', async () => {
@@ -848,5 +860,36 @@ describe('StepsEditor - Story 82.8: connectorOptions depuis capabilities', () =>
     expect(aapOptions).toHaveLength(1);
     // 'Ansible Tower' ne doit pas apparaître (dédupliqué)
     expect(screen.queryByText('Ansible Tower')).not.toBeInTheDocument();
+  });
+
+  it('T8.1 — nouveau platform dans capabilities mock → apparaît dans connectorOptions sans modification code', async () => {
+    const user = userEvent.setup();
+    const capabilitiesWithNewPlatform = {
+      platforms: [
+        {
+          code: 'my_new_platform',
+          display_name: 'My New Platform',
+          aliases: [],
+          icon: 'my_new_platform',
+          connector_type: 'my_new_platform',
+          action_platform_code: 'MyNewPlatform',
+          supports_health_check: false,
+          action_config_schema: {},
+        },
+      ],
+      services: [],
+      stepTypes: [],
+    };
+    mockUseCapabilities.mockReturnValue({ capabilities: capabilitiesWithNewPlatform, loading: false, error: null });
+
+    const steps: ExecutionStep[] = [
+      { order: 1, name: 'Step 1', type: 'execution', connector_type: 'none', connector_config: undefined, conditional_environments: null },
+    ];
+    render(<StepsEditor value={steps} onChange={vi.fn()} />);
+    const connectorSelect = screen.getByLabelText(/Connecteur etape 1/i);
+    await user.click(connectorSelect);
+
+    // Le nouveau platform doit apparaître sans aucune modification du code frontend
+    expect(await screen.findByText('My New Platform')).toBeInTheDocument();
   });
 });

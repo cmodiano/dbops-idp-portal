@@ -62,16 +62,6 @@ const STEP_TYPE_OPTIONS: { value: ExecutionStepType; label: string }[] = [
   { value: 'verification', label: 'Verification' },
 ];
 
-/** Connector options for execution steps (Story 2.7). Aligned with backend. */
-const CONNECTOR_OPTIONS: { value: ConnectorType; label: string }[] = [
-  { value: 'none', label: 'Aucun' },
-  { value: 'servicenow', label: 'ServiceNow' },
-  { value: 'aap', label: 'AAP' },
-  { value: 'azuredevops', label: 'Azure DevOps' },
-  { value: 'jira', label: 'Jira' },
-  { value: 'github_actions', label: 'GitHub Actions' },
-  { value: 'terraform', label: 'Terraform' },
-];
 
 /** Props for the sortable step card */
 interface SortableStepCardProps {
@@ -352,10 +342,10 @@ export const StepsEditor: FC<StepsEditorProps> = ({ value = EMPTY_STEPS, onChang
   const { environmentOptions, loading: environmentsLoading } = useEnvironments();
   const { capabilities } = useCapabilities();
 
-  // Story 82.8: connecteurs depuis capabilities.platforms (dédupliqués par connector_type)
+  // Story 82.8/82.9: connecteurs depuis capabilities.platforms (dédupliqués par connector_type, fallback local supprimé en 82.9)
   const connectorOptions = useMemo<{ value: ConnectorType; label: string }[]>(() => {
     const noneOption = { value: 'none' as ConnectorType, label: 'Aucun' };
-    if (!capabilities?.platforms?.length) return CONNECTOR_OPTIONS;
+    if (!capabilities?.platforms?.length) return [{ value: 'none' as ConnectorType, label: 'Aucun' }];
     const seen = new Set<string>();
     const platformOpts = capabilities.platforms
       .filter((p) => {

@@ -15,7 +15,6 @@ import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Badge, Divider, Tag, Tooltip, theme } from 'antd';
 import { CheckCircleOutlined, CloseCircleOutlined, HourglassOutlined, LoadingOutlined, MinusCircleOutlined } from '@ant-design/icons';
 import type { WorkflowStepType, ScheduleStepConfig } from '../../types/api';
-import { INTEGRATION_LABELS } from './step-config/serviceCallConstants';
 import { useCapabilities } from '../../hooks/useCapabilities';
 
 // Story 57.13: Color codes and labels per step type
@@ -118,10 +117,9 @@ const WorkflowStepNode: FC<NodeProps> = ({ data, selected }) => {
       return nodeData.name ?? nodeData.action_name ?? '';
     }
     if (stepType === 'service_call') {
-      // Story 82.8: labels depuis capabilities, fallback INTEGRATION_LABELS
       const serviceCap = capabilities?.services?.find((s) => s.code === nodeData.integration_type);
       const integration = nodeData.integration_type
-        ? (serviceCap?.display_name ?? INTEGRATION_LABELS[nodeData.integration_type] ?? nodeData.integration_type)
+        ? (serviceCap?.display_name ?? nodeData.integration_type)
         : '?';
       const opLabel = nodeData.operation
         ? (serviceCap?.operations.find((o) => o.code === nodeData.operation)?.label ?? nodeData.operation)

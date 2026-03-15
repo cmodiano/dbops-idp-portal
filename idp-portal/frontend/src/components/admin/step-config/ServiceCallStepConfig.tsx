@@ -4,8 +4,7 @@
  * Affiche : sélection integration_type, sélection operation (statique), éditeurs input/output_mapping, condition.
  *
  * Story 82.7: Les opérations sont désormais fournies par l'API capabilities (GET /capabilities/integrations/)
- * avec fallback local via SERVICE_CALL_OPERATIONS si l'API est indisponible. Le fallback reste
- * synchronisé avec service_call_handler.py#_ALLOWED_OPERATIONS.
+ * Les opérations sont fournies par l'API capabilities (GET /capabilities/integrations/).
  */
 
 import { useMemo } from 'react';
@@ -19,10 +18,6 @@ import { MappingHelpPopover } from './MappingHelpPopover';
 import { useInputMappingWarnings } from '../../../hooks/useInputMappingWarnings';
 import { useCapabilities } from '../../../hooks/useCapabilities';
 import type { ServiceOperation } from '../../../services/capabilities_service';
-import {
-  SERVICE_CALL_OPERATIONS,
-  INTEGRATION_LABELS,
-} from './serviceCallConstants';
 
 const { Text } = Typography;
 
@@ -49,25 +44,22 @@ export const ServiceCallStepConfig: FC<ServiceCallStepConfigProps> = ({
   // Story 82.6: capacités backend pour les types et opérations d'intégration
   const { capabilities, loading: capabilitiesLoading } = useCapabilities();
 
-  // Options integration_type : depuis le backend si dispo, sinon INTEGRATION_LABELS local (fallback)
+  // Options integration_type : depuis le backend si dispo, sinon liste vide
   const integrationTypeOptions = useMemo(() => {
     if (capabilities?.services?.length) {
       return capabilities.services.map((s) => ({ value: s.code, label: s.display_name }));
     }
-    return Object.keys(INTEGRATION_LABELS).map((key) => ({ value: key, label: INTEGRATION_LABELS[key] }));
+    return [];
   }, [capabilities]);
 
-  // Opérations disponibles : depuis le backend si dispo (ServiceOperation[]), sinon fallback local
+  // Opérations disponibles : depuis le backend si dispo, sinon liste vide
   const availableOperations = useMemo((): ServiceOperation[] => {
     if (!data.integration_type) return [];
     if (capabilities?.services?.length) {
       const svc = capabilities.services.find((s) => s.code === data.integration_type);
-      // Si le service est trouvé dans le backend, utiliser ses opérations avec labels
       if (svc) return svc.operations;
-      // integration_type non trouvé dans les services backend → fallback local
     }
-    // Fallback : opérations locales sans labels riches (code = label)
-    return (SERVICE_CALL_OPERATIONS[data.integration_type] ?? []).map((code) => ({ code, label: code }));
+    return [];
   }, [data.integration_type, capabilities]);
 
   // Filtrer le step courant de la liste des étapes disponibles (AC4: "étapes précédentes")

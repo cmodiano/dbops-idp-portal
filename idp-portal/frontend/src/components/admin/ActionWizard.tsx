@@ -36,7 +36,6 @@ import { useCategories } from '../../hooks/useCategories';
 import { useCapabilities } from '../../hooks/useCapabilities';
 import type { CapabilitiesState } from '../../hooks/useCapabilities';
 import type { PlatformCapability } from '../../services/capabilities_service';
-import { integrationTypeToPlatformCode, integrationToConnector } from '../../utils/integrationHelpers';
 import { useActionWizardValidation } from '../../hooks/useActionWizardValidation';
 import { WizardStep1General } from './WizardStep1General';
 import { WizardStep2Automatisme } from './WizardStep2Automatisme';
@@ -135,13 +134,12 @@ export function ActionWizard({
 
   // Story 31.1: Derive AAP check from selected integration
   const selectedIntegration = integrationId ? getIntegrationById(integrationId) : undefined;
-  // Story 82.7: lookup dans capabilities.platforms, fallback vers integrationToConnector
+  // Story 82.7/82.9: lookup dans capabilities.platforms — pas de fallback (supprimé en 82.9)
   const platformCap = useMemo(
     () => getPlatformCapability(selectedIntegration?.type ?? '', capabilities),
     [selectedIntegration?.type, capabilities],
   );
-  const connectorType: string =
-    platformCap?.connector_type ?? integrationToConnector(selectedIntegration?.type ?? '');
+  const connectorType: string = platformCap?.connector_type ?? 'none';
 
   // Inclure l'intégration courante dans les options si absente (ex: statut invalid, filtrée)
   const integrationOptionsWithCurrent = useMemo(() => {
@@ -349,10 +347,9 @@ export function ActionWizard({
           ? {}
           : {
               engine,
-              // Story 31.1 / 82.7: Derive platform from capabilities (fallback intégrationHelpers)
               integration_id: integrationId,
               platform: integrationId
-                ? ((platformCap?.action_platform_code ?? integrationTypeToPlatformCode(getIntegrationById(integrationId)?.type ?? '')) as ActionPlatform)
+                ? (platformCap?.action_platform_code as ActionPlatform ?? undefined)
                 : undefined,
               parameters_schema: parameterListToSchema(parameterList),
             }),
@@ -408,9 +405,8 @@ export function ActionWizard({
         } else {
           // Save execution steps for actions (only if draft or disabled)
           if (canEditSteps) {
-            // Story 31.1 / 82.7: Derive connector from capabilities (fallback integrationHelpers)
             const connector = integrationId
-              ? (platformCap?.connector_type ?? integrationToConnector(getIntegrationById(integrationId)?.type ?? ''))
+              ? (platformCap?.connector_type ?? 'none')
               : 'none';
             const connector_config =
               connector === 'aap' && aapTemplateId != null && aapTemplateId >= 1

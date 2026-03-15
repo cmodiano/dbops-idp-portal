@@ -1548,8 +1548,8 @@ describe('ActionWizard — capabilities-driven connectorType (Story 82.7)', () =
     }, { timeout: 8000 });
   });
 
-  it('T8.3 — capabilities null → fallback integrationToConnector, comportement AAP conservé', async () => {
-    // Capabilities null → fallback vers integrationHelpers (aap → 'aap' via integrationToConnector)
+  it('T8.3 — capabilities null → connectorType = "none" → section AAP non visible', async () => {
+    // Capabilities null → connectorType = 'none' (pas de fallback integrationHelpers)
     mockUseCapabilities.mockReturnValue({ capabilities: null, loading: false, error: null });
     await act(async () => {
       render(<ActionWizard {...defaultProps} editAction={aapEditAction} />);
@@ -1557,16 +1557,15 @@ describe('ActionWizard — capabilities-driven connectorType (Story 82.7)', () =
     await waitFor(() => expect(screen.getByLabelText("Nom de l'action")).toHaveValue('Action AAP'));
     const nextBtn = await screen.findByRole('button', { name: /Suivant/i });
     await userEvent.setup().click(nextBtn);
-    // Même sans capabilities, integrationToConnector('aap') → 'aap' → section visible
+    // Sans capabilities, connectorType = 'none' → section AAP non visible
     await waitFor(() => {
-      expect(screen.getByText(/Quel automatisme appeler/i)).toBeInTheDocument();
+      expect(screen.queryByText(/Quel automatisme appeler/i)).not.toBeInTheDocument();
     }, { timeout: 8000 });
   });
 
-  it('T8.4 — capabilities override : connector_type non-standard depuis capabilities prime sur integrationHelpers', async () => {
-    // Mock capabilities where github_actions has connector_type='github_actions'
-    // but we override it to a fake 'aap' so the AAP section should become visible —
-    // prouvant que le code lit bien capabilities et non integrationHelpers.
+  it('T8.4 — capabilities override : connector_type non-standard depuis capabilities prime (pas de fallback local)', async () => {
+    // Mock capabilities where github_actions has connector_type='aap' (override) —
+    // prouvant que le code lit bien capabilities et non un mapping local hard-codé.
     mockUseCapabilities.mockReturnValue({
       capabilities: {
         ...mockCapabilities,
@@ -1587,7 +1586,7 @@ describe('ActionWizard — capabilities-driven connectorType (Story 82.7)', () =
       loading: false,
       error: null,
     });
-    // Integration id 2 → type 'github_actions' — integrationHelpers retournerait 'github_actions'
+    // Integration id 2 → type 'github_actions' — un mapping local retournerait 'github_actions'
     // mais capabilities retourne 'aap' → section AAP doit être VISIBLE (capabilities prime)
     const githubEditAction: ActionDetail = {
       id: 2,

@@ -16,11 +16,6 @@ vi.mock('../../../hooks/useCapabilities');
 
 const mockUseCapabilities = vi.mocked(useCapabilitiesModule.useCapabilities);
 
-import {
-  SERVICE_CALL_OPERATIONS,
-  INTEGRATION_LABELS,
-} from './serviceCallConstants';
-
 // Story 82.7: Mock capabilities with ServiceOperation[] (code + label)
 const mockCapabilitiesWithServices = {
   platforms: [],
@@ -169,33 +164,6 @@ describe('ServiceCallStepConfig — validation warnings (Story 57.20, AC5)', () 
 // Story 16.9 — notification comme integration_type
 // ---------------------------------------------------------------------------
 
-describe('serviceCallConstants — notification (Story 16.9, AC6-7)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithServices, loading: false, error: null });
-  });
-
-  it('SERVICE_CALL_OPERATIONS inclut notification avec 3 opérations', () => {
-    expect(SERVICE_CALL_OPERATIONS.notification).toEqual([
-      'send_email',
-      'send_teams',
-      'notify_execution_event',
-    ]);
-  });
-
-  it('INTEGRATION_LABELS.notification est "Notification"', () => {
-    expect(INTEGRATION_LABELS.notification).toBe('Notification');
-  });
-
-  it('non-régression: servicenow, vault, jira toujours présents dans les constantes', () => {
-    expect(SERVICE_CALL_OPERATIONS.servicenow).toBeDefined();
-    expect(SERVICE_CALL_OPERATIONS.vault).toBeDefined();
-    expect(SERVICE_CALL_OPERATIONS.jira).toBeDefined();
-    expect(INTEGRATION_LABELS.servicenow).toBe('ServiceNow');
-    expect(INTEGRATION_LABELS.vault).toBe('HashiCorp Vault');
-    expect(INTEGRATION_LABELS.jira).toBe('Jira');
-  });
-});
 
 describe('ServiceCallStepConfig — notification integration_type (Story 16.9, AC6-7)', () => {
   beforeEach(() => {
@@ -337,7 +305,7 @@ describe('ServiceCallStepConfig — useCapabilities integration (Story 82.6)', (
     expect(screen.getByText('ServiceNow')).toBeInTheDocument();
   });
 
-  it('utilise le fallback INTEGRATION_LABELS si capabilities null', () => {
+  it('capabilities null → integrationTypeOptions = [] (pas de fallback INTEGRATION_LABELS)', () => {
     mockUseCapabilities.mockReturnValue({
       capabilities: null,
       loading: false,
@@ -346,28 +314,29 @@ describe('ServiceCallStepConfig — useCapabilities integration (Story 82.6)', (
 
     render(<ServiceCallStepConfig data={baseData} onUpdate={vi.fn()} />);
 
-    // Fallback local : ServiceNow via INTEGRATION_LABELS
-    expect(screen.getByText('ServiceNow')).toBeInTheDocument();
+    // Pas de fallback INTEGRATION_LABELS — options vides, 'ServiceNow' non affiché
+    expect(screen.queryByText('ServiceNow')).not.toBeInTheDocument();
+    // Le composant se rend sans erreur
+    expect(screen.getByTestId('service-call-step-config')).toBeInTheDocument();
   });
 
-  it('utilise le fallback SERVICE_CALL_OPERATIONS si capabilities null (labels = codes bruts, Story 82.7)', () => {
+  it('capabilities null → availableOperations = [] (pas de fallback SERVICE_CALL_OPERATIONS)', () => {
     mockUseCapabilities.mockReturnValue({
       capabilities: null,
       loading: false,
       error: null,
     });
 
-    // Story 82.7: sans capabilities, label = code brut (pas de FR labels)
     render(<ServiceCallStepConfig data={baseData} onUpdate={vi.fn()} />);
 
     // Le composant rend sans erreur
     expect(screen.getByTestId('service-call-step-config')).toBeInTheDocument();
-    // L'option sélectionnée affiche le code brut (fallback sans OPERATION_LABELS)
-    expect(screen.getByText('create_change')).toBeInTheDocument();
+    // Pas de liste d'opérations locales — l'opération sélectionnée peut apparaître comme valeur brute
+    expect(screen.queryByText('Créer un change')).not.toBeInTheDocument();
   });
 
-  it('utilise le fallback SERVICE_CALL_OPERATIONS si integration_type absent des services backend', () => {
-    // Backend chargé mais ne contient pas "servicenow" (ex: configuration backend incomplète)
+  it('integration_type absent des services backend → availableOperations = [] (pas de fallback local)', () => {
+    // Backend chargé mais ne contient pas "servicenow" → liste vide (pas de fallback)
     mockUseCapabilities.mockReturnValue({
       capabilities: {
         platforms: [],
@@ -380,12 +349,11 @@ describe('ServiceCallStepConfig — useCapabilities integration (Story 82.6)', (
       error: null,
     });
 
-    // data.integration_type = 'servicenow' (absent du backend) → fallback SERVICE_CALL_OPERATIONS
-    // labels bruts (code = label) car OPERATION_LABELS supprimé
     render(<ServiceCallStepConfig data={baseData} onUpdate={vi.fn()} />);
 
-    // Doit afficher le code brut via fallback (pas de French label sans capabilities)
-    expect(screen.getByText('create_change')).toBeInTheDocument();
+    // servicenow absent du backend → availableOperations = [] → pas de labels FR
+    expect(screen.queryByText('Créer un change')).not.toBeInTheDocument();
+    expect(screen.getByTestId('service-call-step-config')).toBeInTheDocument();
   });
 });
 
@@ -421,5 +389,34 @@ describe('ServiceCallStepConfig — operation labels depuis ServiceOperation (St
     const data = { ...baseData, integration_type: 'jira', operation: 'create_issue' };
     render(<ServiceCallStepConfig data={data} onUpdate={vi.fn()} />);
     expect(screen.getByText('Créer un ticket')).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Story 82.9 — T8.2: non-régression nouveau plugin visible partout
+// ---------------------------------------------------------------------------
+
+describe('ServiceCallStepConfig — T8.2: nouveau service dans capabilities → visible dans integrationTypeOptions', () => {
+  it('T8.2 — nouveau service dans capabilities mock → apparaît dans integrationTypeOptions sans modification code', () => {
+    const capabilitiesWithNewService = {
+      platforms: [],
+      services: [
+        {
+          code: 'my_new_service',
+          display_name: 'My New Service',
+          credential_mode: 'integration' as const,
+          supports_health_check: false,
+          operations: [],
+        },
+      ],
+      stepTypes: [],
+    };
+    mockUseCapabilities.mockReturnValue({ capabilities: capabilitiesWithNewService, loading: false, error: null });
+
+    const data = { ...baseData, integration_type: 'my_new_service', operation: null };
+    render(<ServiceCallStepConfig data={data} onUpdate={vi.fn()} />);
+
+    // Le nouveau service doit apparaître sans aucune modification du code frontend
+    expect(screen.getByText('My New Service')).toBeInTheDocument();
   });
 });

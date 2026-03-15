@@ -436,7 +436,7 @@ describe('WorkflowStepNode', () => {
       expect(screen.queryByText('create_change')).not.toBeInTheDocument();
     });
 
-    it('T6.6 — capabilities null → label intégration = INTEGRATION_LABELS fallback', () => {
+    it('T6.6 — capabilities null → label intégration = code brut (pas de fallback INTEGRATION_LABELS)', () => {
       mockUseCapabilities.mockReturnValue({ capabilities: null, loading: false, error: null });
 
       render(
@@ -451,14 +451,15 @@ describe('WorkflowStepNode', () => {
       );
 
       // Avec capabilities null :
-      // - integration = INTEGRATION_LABELS['servicenow'] = 'ServiceNow'
+      // - integration = code brut 'servicenow' (pas de fallback INTEGRATION_LABELS)
       // - opLabel = code brut 'create_change' (pas de label capabilities)
-      // - primaryTitle = 'ServiceNow — create_change'
+      // - primaryTitle = 'servicenow — create_change'
       const node = screen.getByRole('img');
-      expect(node.getAttribute('aria-label')).toBe('Étape: ServiceNow — create_change');
+      expect(node.getAttribute('aria-label')).toBe('Étape: servicenow — create_change');
 
-      // 'ServiceNow' doit apparaître depuis INTEGRATION_LABELS (pas depuis capabilities)
-      expect(screen.getByText(/ServiceNow — create_change/)).toBeInTheDocument();
+      // Code brut 'servicenow' affiché (pas 'ServiceNow')
+      expect(screen.getByText(/servicenow — create_change/)).toBeInTheDocument();
+      expect(screen.queryByText(/ServiceNow — create_change/)).not.toBeInTheDocument();
 
       // Le code brut de l'opération est affiché (pas de label capabilities)
       expect(screen.queryByText('Créer un change')).not.toBeInTheDocument();

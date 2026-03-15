@@ -23,7 +23,7 @@ logger = structlog.get_logger(__name__)
 # Opérations autorisées et détection credential-free dérivées de service_definition_registry.
 # Story 82.3: _ALLOWED_OPERATIONS et _CREDENTIAL_FREE_TYPES supprimés.
 # Source de vérité : services/definitions.py (service_definition_registry)
-# SYNC frontend : serviceCallConstants.ts doit rester cohérent avec les opérations enregistrées.
+# Story 82.9: serviceCallConstants.ts supprimé — le frontend lit désormais les opérations via l'API /capabilities/.
 
 
 class ServiceCallHandler:

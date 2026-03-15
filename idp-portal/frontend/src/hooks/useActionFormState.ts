@@ -27,7 +27,7 @@ import {
 export { ApiError } from '../services/api_client';
 import { schemaToParameterList, parameterListToSchema } from '../utils/parametersSchema';
 import { impactRulesToList } from '../utils/impactRulesSchema';
-import { integrationTypeToPlatformCode } from '../utils/integrationHelpers';
+import { useCapabilities } from './useCapabilities';
 
 type IntegrationLike = { id: number; type: string; name: string };
 
@@ -40,6 +40,7 @@ interface UseActionFormStateParams {
 
 export function useActionFormState({ open, editAction, form, getIntegrationById }: UseActionFormStateParams) {
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const { capabilities } = useCapabilities();
 
   const [stepsError, setStepsError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -89,7 +90,12 @@ export function useActionFormState({ open, editAction, form, getIntegrationById 
       description: (watchedDescription as string) || null,
       engine: (watchedEngine as ActionEngine) || null,
       platform: watchedIntegrationId
-        ? (integrationTypeToPlatformCode(getIntegrationById(watchedIntegrationId as number)?.type ?? '') as ActionPlatform)
+        ? (() => {
+            const intgType = getIntegrationById(watchedIntegrationId as number)?.type ?? '';
+            return (capabilities?.platforms?.find(
+              (p) => p.code === intgType || p.aliases.includes(intgType)
+            )?.action_platform_code as ActionPlatform) ?? null;
+          })()
         : null,
       impact_level: impactLevel,
       parameters_schema: parsedSchema,
@@ -108,6 +114,7 @@ export function useActionFormState({ open, editAction, form, getIntegrationById 
     selectedTags,
     watchedDocumentationMd,
     getIntegrationById,
+    capabilities,
   ]);
 
   // Focus sur le champ nom à l'ouverture (AC #7 accessibilité)

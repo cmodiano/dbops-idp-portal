@@ -991,5 +991,5 @@ development_status:
     82-6-frontend-capabilities-client: done # useCapabilities, ServiceCallStepConfig, GateStepConfig schema-driven — code review OK 2026-03-14: M1 fallback stepTypes vide, M2 fallback operations backend manquant, M3 pseudo-tests remplacés, M4 @internal annotation, L3 test concurrence
     82-7-action-wizard-formulaires-schema-driven: done # code review OK 2026-03-14: M1 operation_labels→MappingProxyType, M2 test desc périmée isPlatformAAP, M3 commentaire SYNC misleading, M4 test capabilities vs fallback (T8.4), M5 platformCap useMemo, L1 test mutation dict
     82-8-actions-workflows-capabilities: done # code review OK 2026-03-14: H1 test T6.6 assertion INTEGRATION_LABELS renforcée, H2 dead code action_config documenté, M1 SchemaError capturé, M2 tests intégration ActionSerializer ajoutés, M3 ActionCreateSerializer valide schéma, L1 docstring PlatformDefinition mise à jour
-    82-9-migration-nettoyage-constantes-legacy: backlog # Suppression mappings, aliases, tests E2E nouveau plugin
+    82-9-migration-nettoyage-constantes-legacy: done # Suppression mappings, aliases, tests E2E nouveau plugin
     epic-82-retrospective: optional

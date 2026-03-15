@@ -16,12 +16,6 @@ import structlog
 
 logger = structlog.get_logger(__name__)
 
-# Story 82.2: PLATFORM_ALIAS remplacé par platform_registry.resolve_alias()
-# Conservé pour compatibilité avec les imports externes (ex: business_rule_views.py)
-PLATFORM_ALIAS: dict[str, str] = {
-    'terraform': 'terraform_cloud',
-    'tower': 'aap',
-}
 
 VALID_INVENTORY_TYPES = ('servers', 'instances', 'databases')
 
