@@ -45,6 +45,8 @@ def get_integrations_capabilities(request: Request) -> Response:
             'action_platform_code': defn.action_platform_code,
             'supports_health_check': defn.supports_health_check,
             'action_config_schema': defn.action_config_schema,
+            'runtime_config_schema': defn.runtime_config_schema,
+            'health_check_policy': defn.health_check_policy,
         })
 
     services = []
@@ -55,8 +57,14 @@ def get_integrations_capabilities(request: Request) -> Response:
             'display_name': sdefn.display_name,
             'credential_mode': 'integration' if sdefn.requires_integration else 'credential_free',
             'operations': [
-                {'code': op, 'label': sdefn.get_operation_label(op)}
-                for op in sorted(sdefn.operations)
+                {
+                    'code': op_def.code,
+                    'label': op_def.label,
+                    'input_schema': op_def.input_schema,
+                    'output_schema': op_def.output_schema,
+                    'ui_hints': op_def.ui_hints,
+                }
+                for op_def in sorted(sdefn.operation_defs, key=lambda op: op.code)
             ],
             'supports_health_check': sdefn.supports_health_check,
         })

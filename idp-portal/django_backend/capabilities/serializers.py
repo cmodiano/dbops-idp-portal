@@ -13,11 +13,16 @@ class PlatformCapabilitySerializer(serializers.Serializer):
     action_platform_code = serializers.CharField()
     supports_health_check = serializers.BooleanField()
     action_config_schema = serializers.DictField(default=dict)
+    runtime_config_schema = serializers.DictField(default=dict)
+    health_check_policy = serializers.DictField(default=dict)
 
 
 class ServiceOperationSerializer(serializers.Serializer):
     code = serializers.CharField()
     label = serializers.CharField()  # type: ignore[assignment]
+    input_schema = serializers.DictField(default=dict)
+    output_schema = serializers.DictField(default=dict)
+    ui_hints = serializers.DictField(default=dict)
 
 
 class ServiceCapabilitySerializer(serializers.Serializer):

@@ -203,6 +203,88 @@ class TestWorkflowStepsCapabilities:
             assert 'constraints' in step
 
 
+class TestOperationSchemas:
+    """Story 83-5, AC1/AC5 — input_schema, output_schema, ui_hints par opération."""
+
+    def test_operation_has_input_schema_field(self, auth_client):
+        url = reverse('capabilities:capabilities-integrations')
+        data = auth_client.get(url).data['data']
+        for service in data['services']:
+            for op in service['operations']:
+                assert 'input_schema' in op
+
+    def test_operation_has_output_schema_field(self, auth_client):
+        url = reverse('capabilities:capabilities-integrations')
+        data = auth_client.get(url).data['data']
+        for service in data['services']:
+            for op in service['operations']:
+                assert 'output_schema' in op
+
+    def test_operation_has_ui_hints_field(self, auth_client):
+        url = reverse('capabilities:capabilities-integrations')
+        data = auth_client.get(url).data['data']
+        for service in data['services']:
+            for op in service['operations']:
+                assert 'ui_hints' in op
+
+    def test_operation_schemas_are_dicts(self, auth_client):
+        url = reverse('capabilities:capabilities-integrations')
+        data = auth_client.get(url).data['data']
+        for service in data['services']:
+            for op in service['operations']:
+                assert isinstance(op['input_schema'], dict)
+                assert isinstance(op['output_schema'], dict)
+                assert isinstance(op['ui_hints'], dict)
+
+    def test_operation_schemas_are_empty_by_default(self, auth_client):
+        """AC1.2 — input_schema, output_schema, ui_hints valent {} pour toutes les opérations actuelles."""
+        url = reverse('capabilities:capabilities-integrations')
+        data = auth_client.get(url).data['data']
+        for service in data['services']:
+            for op in service['operations']:
+                assert op['input_schema'] == {}, f"input_schema non vide pour {service['code']}.{op['code']}"
+                assert op['output_schema'] == {}, f"output_schema non vide pour {service['code']}.{op['code']}"
+                assert op['ui_hints'] == {}, f"ui_hints non vide pour {service['code']}.{op['code']}"
+
+    def test_splunk_has_no_operations(self, auth_client):
+        """Edge case AC1 — splunk n'a pas d'operation_defs, doit retourner une liste vide."""
+        url = reverse('capabilities:capabilities-integrations')
+        data = auth_client.get(url).data['data']
+        splunk = next(s for s in data['services'] if s['code'] == 'splunk')
+        assert splunk['operations'] == []
+
+
+class TestPlatformNewSchemaFields:
+    """Story 83-5, AC2/AC5 — runtime_config_schema, health_check_policy par plateforme."""
+
+    def test_platform_has_runtime_config_schema_field(self, auth_client):
+        url = reverse('capabilities:capabilities-integrations')
+        data = auth_client.get(url).data['data']
+        for platform in data['platforms']:
+            assert 'runtime_config_schema' in platform
+
+    def test_platform_has_health_check_policy_field(self, auth_client):
+        url = reverse('capabilities:capabilities-integrations')
+        data = auth_client.get(url).data['data']
+        for platform in data['platforms']:
+            assert 'health_check_policy' in platform
+
+    def test_platform_new_schema_fields_are_dicts(self, auth_client):
+        url = reverse('capabilities:capabilities-integrations')
+        data = auth_client.get(url).data['data']
+        for platform in data['platforms']:
+            assert isinstance(platform['runtime_config_schema'], dict)
+            assert isinstance(platform['health_check_policy'], dict)
+
+    def test_platform_new_schema_fields_are_empty_by_default(self, auth_client):
+        """AC2.2 — runtime_config_schema et health_check_policy valent {} pour toutes les plateformes actuelles."""
+        url = reverse('capabilities:capabilities-integrations')
+        data = auth_client.get(url).data['data']
+        for platform in data['platforms']:
+            assert platform['runtime_config_schema'] == {}, f"runtime_config_schema non vide pour {platform['code']}"
+            assert platform['health_check_policy'] == {}, f"health_check_policy non vide pour {platform['code']}"
+
+
 class TestIntegrationsCapabilitiesActionConfigSchema:
     """Story 82.8, AC2: action_config_schema dans chaque platform."""
 
