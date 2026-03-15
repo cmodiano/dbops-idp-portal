@@ -8,9 +8,7 @@ from typing import Any
 
 from rest_framework import serializers
 
-from integrations.models import Integration, IntegrationTypeCatalogue, IntegrationRole
 from inventory.services import InventoryService, InventoryServiceError as _InventoryServiceError
-from platforms.registry import platform_registry
 
 import structlog
 
@@ -61,53 +59,6 @@ def get_allowed_inventory_columns(inventory_type: str) -> tuple[str, ...]:
 
     # Fallback: use hardcoded list (backward compat — no inventory integration configured)
     return VALID_INVENTORY_VALUE_COLUMNS.get(inventory_type, ('id', 'name'))
-
-
-def validate_platform_integration_consistency(
-    platform: str | None,
-    integration: Integration | None,
-    integration_id: int | None = None
-) -> None:
-    """
-    Story 29.4: Validate platform ↔ integration.type consistency (DRY helper).
-
-    Raises:
-        serializers.ValidationError: If platform and integration are inconsistent.
-    """
-    # Skip validation if either field is missing
-    if not platform or not integration:
-        return
-
-    # Get integration type catalogue entry
-    try:
-        integration_type_cat = IntegrationTypeCatalogue.objects.get(code=integration.type)
-    except IntegrationTypeCatalogue.DoesNotExist:
-        # If type not in catalogue, skip validation (backward compatibility)
-        logger.warning("integration_type_not_in_catalogue", integration_type=integration.type, integration_id=integration.id)
-        return
-
-    # Only validate if integration is a platform (not a service)
-    if integration_type_cat.integration_role != IntegrationRole.PLATFORM:
-        raise serializers.ValidationError({
-            'integration_id': (
-                f"Integration '{integration.name}' is a service (type '{integration.type}'), "
-                f"but action.platform is set. Use integration for platforms only "
-                f"(AAP, GitHub Actions, etc.)."
-            )
-        })
-
-    # Story 31.9 / 82.2: Normalize platform code for matching (lower, spaces→underscores, alias)
-    normalized_platform = platform.lower().replace(' ', '_')
-    normalized_platform = platform_registry.resolve_alias(normalized_platform)
-
-    # Check if normalized platform matches integration.type
-    if normalized_platform != integration.type:
-        raise serializers.ValidationError({
-            'platform': (
-                f"Platform '{platform}' is inconsistent with integration type '{integration.type}'. "
-                f"Expected platform '{integration_type_cat.name}' for integration '{integration.name}'."
-            )
-        })
 
 
 def validate_parameters_schema_inventory(value: Any) -> Any:

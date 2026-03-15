@@ -292,6 +292,8 @@ const SortableStepCard: FC<SortableStepCardProps> = ({
             />
           </Form.Item>
 
+          {/* Cas exceptionnel connecteur servicenow : conditional_environments est une règle métier
+              requise par ServiceNow pour router les exécutions — non déclaratisable (Story 83-14) */}
           {step.connector_type === 'servicenow' && (
             <Form.Item
               label="Environnements"
@@ -323,7 +325,9 @@ const SortableStepCard: FC<SortableStepCardProps> = ({
             </Form.Item>
           )}
 
-          {/* Story 31.5: AAP template selector (list or manual fallback) */}
+          {/* Story 31.5: AAP template selector (list or manual fallback)
+              Cas exceptionnel connecteur aap : AAPTemplateSection est un composant UI
+              dédié à la sélection de templates depuis l'API AAP — non déclaratisable (Story 83-14) */}
           {step.connector_type === 'aap' && (
             <AAPTemplateSection
               step={step}

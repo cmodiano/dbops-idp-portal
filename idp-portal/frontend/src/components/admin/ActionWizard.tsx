@@ -47,6 +47,8 @@ function buildConnectorConfig(
   actionConfig: Record<string, unknown>,
 ): Record<string, unknown> | null {
   if (!platformCap || platformCap.connector_type === 'none') return null;
+  // Cas exceptionnel connecteur aap : transformation structurelle du payload runtime
+  // (template_id → job_template_id / workflow_job_template_id selon resource_type) — non déclaratisable (Story 83-14)
   if (platformCap.connector_type === 'aap') {
     const resource_type = (actionConfig.resource_type as string) ?? 'job_template';
     const template_id = actionConfig.template_id as number | undefined;
@@ -59,17 +61,15 @@ function buildConnectorConfig(
   return Object.keys(actionConfig).length > 0 ? actionConfig : null;
 }
 
-/** Story 82.7 — lookup dans capabilities.platforms par code ou alias. */
+/** Story 82.7 — lookup dans capabilities.platforms par code canonique.
+ *  Story 83-14: le lookup par alias supprimé — integrationType est toujours un code canonique
+ *  (integration.type depuis l'API, qui expose IntegrationTypeCatalogue.code). */
 function getPlatformCapability(
   integrationType: string,
   capabilities: CapabilitiesState | null,
 ): PlatformCapability | null {
   if (!capabilities || !integrationType) return null;
-  return (
-    capabilities.platforms.find(
-      (p) => p.code === integrationType || p.aliases.includes(integrationType),
-    ) ?? null
-  );
+  return capabilities.platforms.find((p) => p.code === integrationType) ?? null;
 }
 
 const STEP_ITEMS = [

@@ -162,6 +162,10 @@ platform_registry.register(PlatformDefinition(
 platform_registry.register(PlatformDefinition(
     code="azure_devops",
     display_name="Azure DevOps",
+    # Alias conservé pour rétrocompatibilité avec d'anciennes valeurs 'azuredevops' (sans underscore)
+    # potentiellement stockées en BD (integration.type). Consommé par tous les flux qui appellent
+    # resolve_alias(integration.type) : trigger.py:113, integrations/tasks.py:81+256,
+    # adapters/runtime_config.py:34, integrations/views.py:449, executions/views:395.
     aliases=frozenset({"azuredevops"}),
     icon="azuredevops",
     connector_type="azuredevops",
@@ -186,6 +190,9 @@ platform_registry.register(PlatformDefinition(
 platform_registry.register(PlatformDefinition(
     code="terraform_cloud",
     display_name="Terraform Cloud",
+    # Alias 'terraform' activement consommé par _validate_action_config_schema (action.py) :
+    # action_platform_code='Terraform' → normalisé 'terraform' → résolu 'terraform_cloud'.
+    # Également consommé par trigger.py / integrations/tasks.py pour des données BD historiques.
     aliases=frozenset({"terraform"}),
     icon="terraform",
     connector_type="terraform",

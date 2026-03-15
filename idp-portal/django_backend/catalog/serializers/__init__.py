@@ -6,7 +6,6 @@ from catalog.serializers.validators import (
     VALID_INVENTORY_TYPES,
     VALID_INVENTORY_VALUE_COLUMNS,
     validate_parameters_schema_inventory,
-    validate_platform_integration_consistency,
 )
 from catalog.serializers.action import (
     TagSerializer,
@@ -27,12 +26,7 @@ from catalog.serializers.business_rule import (
     BusinessRulePolicySerializer,
 )
 
-# Backward compatibility: tests import _validate_platform_integration_consistency
-_validate_platform_integration_consistency = validate_platform_integration_consistency
-
 __all__ = [
-    "validate_platform_integration_consistency",
-    "_validate_platform_integration_consistency",
     "VALID_INVENTORY_TYPES",
     "VALID_INVENTORY_VALUE_COLUMNS",
     "validate_parameters_schema_inventory",

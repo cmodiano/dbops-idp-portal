@@ -9,7 +9,7 @@ from drf_spectacular.types import OpenApiTypes
 
 from catalog.models import Action, Tag, ActionStatus, ActionItemType, BusinessRulePolicy
 from reference.models import RefEngine, RefCategory
-from integrations.models import Integration, IntegrationTypeCatalogue, IntegrationRole
+from integrations.models import Integration
 from executions.utils import extract_workflow_referenced_action_ids
 
 from catalog.serializers.validators import (
@@ -25,6 +25,8 @@ def _validate_action_config_schema(platform_code: str, action_config: dict | Non
     Si le schéma est non vide → validation jsonschema.
 
     AC5 Story 83-13: normalise le code avant lookup (platform_code peut être 'AAP', 'Azure DevOps', etc.)
+    Note Story 83-14: le flux 'Terraform' → lower+replace → 'terraform' → resolve_alias → 'terraform_cloud'
+    dépend activement de l'alias 'terraform' défini dans platforms/registry.py.
     """
     if not platform_code:
         return
@@ -177,25 +179,6 @@ class ActionFieldValidationMixin:
             active_engines = list(RefEngine.objects.active().values_list('code', flat=True))
             raise serializers.ValidationError(
                 f"Invalid engine '{value}'. Must be one of: {', '.join(active_engines)}"
-            )
-        return value
-
-    def validate_platform(self, value: str | None) -> str | None:
-        """Story 31.9: Validate platform against IntegrationTypeCatalogue (role=platform)."""
-        if value is None:
-            return value
-        normalized = value.lower().replace(' ', '_')
-        normalized = platform_registry.resolve_alias(normalized)
-        if not IntegrationTypeCatalogue.objects.filter(
-            code=normalized, is_active=True, integration_role=IntegrationRole.PLATFORM
-        ).exists():
-            active_codes = list(
-                IntegrationTypeCatalogue.objects.filter(
-                    is_active=True, integration_role=IntegrationRole.PLATFORM
-                ).values_list('code', flat=True)
-            )
-            raise serializers.ValidationError(
-                f"Invalid platform '{value}'. Must be one of: {', '.join(active_codes)}"
             )
         return value
 

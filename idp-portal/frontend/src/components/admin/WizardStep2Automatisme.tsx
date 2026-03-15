@@ -182,6 +182,8 @@ export function WizardStep2Automatisme({
 }: WizardStep2AutomatismeProps) {
 
   const hasSchema = hasPlatformConfigSchema(platformCap);
+  // Cas exceptionnel connecteur aap : WizardAAPTemplateSection nécessite un composant UI
+  // dédié pour lister et sélectionner les templates depuis l'API AAP — non déclaratisable (Story 83-14)
   const isAAP = platformCap?.connector_type === 'aap';
 
   return (
