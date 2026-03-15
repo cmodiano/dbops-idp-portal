@@ -217,70 +217,56 @@ class ActionSerializerCategoryValidationTests(TestCase):
         self.client.force_authenticate(user=self.user)
         RefCategory.objects.create(code='patching', label='Correctifs', display_order=20, is_active=1)
         RefCategory.objects.create(code='deprecated', label='Obsolète', display_order=99, is_active=0)
+        # Story 83-13: platform is derived from integration_id, not sent by client
+        from reference.models import RefEngine
+        from integrations.models import Integration, IntegrationTypeCatalogue, IntegrationRole
+        RefEngine.objects.get_or_create(code='Oracle', defaults={'label': 'Oracle', 'display_order': 1, 'is_active': 1})
+        IntegrationTypeCatalogue.objects.get_or_create(code='aap', defaults={'name': 'AAP', 'integration_role': IntegrationRole.PLATFORM, 'is_active': True})
+        self.integration = Integration.objects.create(name='test-aap-categories', type='aap', base_url='http://test')
 
     def test_create_action_with_valid_category(self):
         """Creating an action with a valid active category code should succeed."""
-        from reference.models import RefEngine
-        from integrations.models import IntegrationTypeCatalogue, IntegrationRole
-        RefEngine.objects.create(code='Oracle', label='Oracle', display_order=1, is_active=1)
-        IntegrationTypeCatalogue.objects.get_or_create(code='aap', defaults={'name': 'AAP', 'integration_role': IntegrationRole.PLATFORM, 'is_active': True})
-
         response = self.client.post('/api/v1/admin/actions/', {
             'name': 'Test Action Category',
             'description': 'Test',
             'item_type': 'action',
             'category': 'patching',
             'engine': 'Oracle',
-            'platform': 'AAP',
+            'integration_id': self.integration.id,
         }, format='json')
         self.assertIn(response.status_code, [status.HTTP_200_OK, status.HTTP_201_CREATED])
 
     def test_create_action_with_invalid_category(self):
         """Creating an action with a non-existent category should fail."""
-        from reference.models import RefEngine
-        from integrations.models import IntegrationTypeCatalogue, IntegrationRole
-        RefEngine.objects.create(code='Oracle', label='Oracle', display_order=1, is_active=1)
-        IntegrationTypeCatalogue.objects.get_or_create(code='aap', defaults={'name': 'AAP', 'integration_role': IntegrationRole.PLATFORM, 'is_active': True})
-
         response = self.client.post('/api/v1/admin/actions/', {
             'name': 'Test Action Bad Category',
             'description': 'Test',
             'item_type': 'action',
             'category': 'nonexistent',
             'engine': 'Oracle',
-            'platform': 'AAP',
+            'integration_id': self.integration.id,
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_create_action_with_inactive_category(self):
         """Creating an action with an inactive category should fail."""
-        from reference.models import RefEngine
-        from integrations.models import IntegrationTypeCatalogue, IntegrationRole
-        RefEngine.objects.create(code='Oracle', label='Oracle', display_order=1, is_active=1)
-        IntegrationTypeCatalogue.objects.get_or_create(code='aap', defaults={'name': 'AAP', 'integration_role': IntegrationRole.PLATFORM, 'is_active': True})
-
         response = self.client.post('/api/v1/admin/actions/', {
             'name': 'Test Action Inactive Category',
             'description': 'Test',
             'item_type': 'action',
             'category': 'deprecated',
             'engine': 'Oracle',
-            'platform': 'AAP',
+            'integration_id': self.integration.id,
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_create_action_with_null_category(self):
         """Creating an action with null category should succeed (optional)."""
-        from reference.models import RefEngine
-        from integrations.models import IntegrationTypeCatalogue, IntegrationRole
-        RefEngine.objects.create(code='Oracle', label='Oracle', display_order=1, is_active=1)
-        IntegrationTypeCatalogue.objects.get_or_create(code='aap', defaults={'name': 'AAP', 'integration_role': IntegrationRole.PLATFORM, 'is_active': True})
-
         response = self.client.post('/api/v1/admin/actions/', {
             'name': 'Test Action No Category',
             'description': 'Test',
             'item_type': 'action',
             'engine': 'Oracle',
-            'platform': 'AAP',
+            'integration_id': self.integration.id,
         }, format='json')
         self.assertIn(response.status_code, [status.HTTP_200_OK, status.HTTP_201_CREATED])

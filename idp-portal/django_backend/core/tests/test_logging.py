@@ -37,8 +37,13 @@ def test_configure_structlog_default_info_level():
 
     assert logging.getLogger().level == logging.INFO
 
-    # Nettoyage structlog
+    # Nettoyage structlog — reset_defaults() is followed by configure_structlog() to
+    # restore the stdlib LoggerFactory-based config; reset alone leaves structlog using
+    # PrintLoggerFactory which bypasses stdlib logging and breaks assertLogs() in later tests.
     structlog.reset_defaults()
+    with patch('core.logging._configure_splunk_handler'):
+        from core import logging as core_logging
+        core_logging.configure_structlog()
 
 
 # ---------------------------------------------------------------------------
@@ -56,6 +61,9 @@ def test_configure_structlog_debug_level():
     assert logging.getLogger().level == logging.DEBUG
 
     structlog.reset_defaults()
+    with patch('core.logging._configure_splunk_handler'):
+        from core import logging as core_logging
+        core_logging.configure_structlog()
 
 
 # ---------------------------------------------------------------------------

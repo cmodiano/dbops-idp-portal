@@ -490,7 +490,7 @@ class ActionCreateSerializer(ActionFieldValidationMixin, serializers.Serializer)
                 except Exception:
                     data['platform'] = getattr(instance, 'platform', None) or ''
             else:
-                data['platform'] = ''
+                data['platform'] = getattr(instance, 'platform', None) or ''
         elif integration_id:
             try:
                 integration = Integration.objects.get(id=integration_id)

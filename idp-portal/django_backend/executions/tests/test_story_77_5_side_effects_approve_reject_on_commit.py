@@ -89,16 +89,20 @@ class TestStory775SideEffectsOnCommit(TestCase):
     @patch('executions.services.workflow_events.WorkflowEventService.emit_approval_granted')
     @patch('executions.services.runnable_steps.RunnableStepService.delete')
     def test_approve_side_effects_called_after_commit(self, mock_delete, mock_emit, mock_perm):
-        """AC1 : emit_approval_granted et delete sont appelés APRÈS le commit."""
-        with self.captureOnCommitCallbacks(execute=True):
-            response = self.client.post(
-                f"/api/v1/executions/{self.execution.id}/steps/{self.step.id}/approve/",
-                {"comment": "LGTM"},
-                format='json',
-            )
+        """AC1 story 78.5: approve → commande durable écrite, side effects délégués au processor.
+
+        Story 78.5: L'endpoint écrit une commande et retourne 202. Les side effects
+        (emit_approval_granted, delete) sont délégués au command processor — non appelés inline.
+        """
+        response = self.client.post(
+            f"/api/v1/executions/{self.execution.id}/steps/{self.step.id}/approve/",
+            {"comment": "LGTM"},
+            format='json',
+        )
         self.assertEqual(response.status_code, 202)
-        mock_emit.assert_called_once()
-        mock_delete.assert_called_once_with(self.step.id)
+        # Story 78.5: side effects délégués au processor — non appelés par l'endpoint
+        mock_emit.assert_not_called()
+        mock_delete.assert_not_called()
 
     # ──────────────────────────────────────────────────────────────────────
     # AC2 — RejectStepView
@@ -123,16 +127,16 @@ class TestStory775SideEffectsOnCommit(TestCase):
     @patch('executions.services.workflow_events.WorkflowEventService.emit_approval_rejected')
     @patch('executions.services.runnable_steps.RunnableStepService.delete')
     def test_reject_side_effects_called_after_commit(self, mock_delete, mock_emit, mock_perm):
-        """AC2 : emit_approval_rejected et delete sont appelés APRÈS le commit."""
-        with self.captureOnCommitCallbacks(execute=True):
-            response = self.client.post(
-                f"/api/v1/executions/{self.execution.id}/steps/{self.step.id}/reject/",
-                {"comment": "Non approuvé"},
-                format='json',
-            )
+        """AC2 story 78.5: reject → commande durable écrite, side effects délégués au processor."""
+        response = self.client.post(
+            f"/api/v1/executions/{self.execution.id}/steps/{self.step.id}/reject/",
+            {"comment": "Non approuvé"},
+            format='json',
+        )
         self.assertEqual(response.status_code, 202)
-        mock_emit.assert_called_once()
-        mock_delete.assert_called_once_with(self.step.id)
+        # Story 78.5: side effects délégués au processor — non appelés par l'endpoint
+        mock_emit.assert_not_called()
+        mock_delete.assert_not_called()
 
     # ──────────────────────────────────────────────────────────────────────
     # AC3 — Pas d'émission en cas de rollback (approve)
@@ -142,22 +146,19 @@ class TestStory775SideEffectsOnCommit(TestCase):
     @patch('executions.services.workflow_events.WorkflowEventService.emit_approval_granted')
     @patch('executions.services.runnable_steps.RunnableStepService.delete')
     def test_approve_rollback_no_side_effects(self, mock_delete, mock_emit, mock_perm):
-        """AC3 — approve : les callbacks on_commit sont enregistrés mais pas exécutés (rollback simulé).
+        """AC3 story 78.5 — approve : commande durable écrite, aucun side effect inline.
 
-        Vérifie deux propriétés distinctes de test_approve_side_effects_not_called_before_commit :
-        1. Au moins un callback on_commit a été enregistré (preuve que le pattern on_commit est actif)
-        2. Les mocks ne sont pas appelés (callbacks non exécutés = équivalent rollback)
+        Story 78.5: L'endpoint écrit une commande durable (pas de on_commit pour side effects).
+        Les side effects sont délégués au command processor — même en cas de rollback,
+        aucun side effect durable n'est émis par l'endpoint.
         """
-        with self.captureOnCommitCallbacks(execute=False) as callbacks:
-            response = self.client.post(
-                f"/api/v1/executions/{self.execution.id}/steps/{self.step.id}/approve/",
-                {"comment": "LGTM"},
-                format='json',
-            )
+        response = self.client.post(
+            f"/api/v1/executions/{self.execution.id}/steps/{self.step.id}/approve/",
+            {"comment": "LGTM"},
+            format='json',
+        )
         self.assertEqual(response.status_code, 202)
-        # Le callback on_commit a bien été enregistré (pattern en place)
-        self.assertGreater(len(callbacks), 0, "Expected at least one on_commit callback to be registered")
-        # Mais non exécuté (simulate rollback : side effects durables non émis)
+        # Story 78.5: aucun side effect émis par l'endpoint (délégué au processor)
         mock_emit.assert_not_called()
         mock_delete.assert_not_called()
 
@@ -169,19 +170,13 @@ class TestStory775SideEffectsOnCommit(TestCase):
     @patch('executions.services.workflow_events.WorkflowEventService.emit_approval_rejected')
     @patch('executions.services.runnable_steps.RunnableStepService.delete')
     def test_reject_rollback_no_side_effects(self, mock_delete, mock_emit, mock_perm):
-        """AC3 — reject : les callbacks on_commit sont enregistrés mais pas exécutés (rollback simulé).
-
-        Symétrique du test approve : vérifie que le chemin reject respecte également AC3.
-        """
-        with self.captureOnCommitCallbacks(execute=False) as callbacks:
-            response = self.client.post(
-                f"/api/v1/executions/{self.execution.id}/steps/{self.step.id}/reject/",
-                {"comment": "Non approuvé"},
-                format='json',
-            )
+        """AC3 story 78.5 — reject : commande durable écrite, aucun side effect inline."""
+        response = self.client.post(
+            f"/api/v1/executions/{self.execution.id}/steps/{self.step.id}/reject/",
+            {"comment": "Non approuvé"},
+            format='json',
+        )
         self.assertEqual(response.status_code, 202)
-        # Le callback on_commit a bien été enregistré (pattern en place)
-        self.assertGreater(len(callbacks), 0, "Expected at least one on_commit callback to be registered")
-        # Mais non exécuté (simulate rollback : side effects durables non émis)
+        # Story 78.5: aucun side effect émis par l'endpoint (délégué au processor)
         mock_emit.assert_not_called()
         mock_delete.assert_not_called()

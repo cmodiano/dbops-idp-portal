@@ -461,9 +461,10 @@ class ListTargetsForUserMultiTableTests(TestCase):
             config=json.dumps(config),
         )
 
+    @patch('inventory.permission_aggregator.repo_get_environments', return_value=['production'])
     @patch('inventory.services.connection')
     @patch('inventory.services.Profile.objects')
-    def test_list_targets_uses_list_servers_when_multi_table(self, mock_profiles, mock_conn):
+    def test_list_targets_uses_list_servers_when_multi_table(self, mock_profiles, mock_conn, _mock_envs):
         """AC4: Uses list_servers instead of list_targets when multi-table config active."""
         self._create_inventory_db(MULTI_TABLE_CONFIG)
 
@@ -499,9 +500,10 @@ class ListTargetsForUserMultiTableTests(TestCase):
         self.assertFalse(rbac_truncated)
         self.assertEqual(results[0]['target_type'], 'server')
 
+    @patch('inventory.permission_aggregator.repo_get_environments', return_value=['production'])
     @patch('inventory.services.connection')
     @patch('inventory.services.Profile.objects')
-    def test_list_targets_falls_back_to_legacy_without_multi_table(self, mock_profiles, mock_conn):
+    def test_list_targets_falls_back_to_legacy_without_multi_table(self, mock_profiles, mock_conn, _mock_envs):
         """AC4: Falls back to list_targets when no multi-table config."""
         self._create_inventory_db(FLAT_TABLE_CONFIG)
 
@@ -531,9 +533,11 @@ class ListTargetsForUserMultiTableTests(TestCase):
 
         self.assertEqual(total, 1)
 
+    @patch('inventory.permission_aggregator.repo_get_target_names', return_value=['srv-prod-01'])
+    @patch('inventory.permission_aggregator.repo_get_environments', return_value=['production'])
     @patch('inventory.services.connection')
     @patch('inventory.services.Profile.objects')
-    def test_list_targets_multi_table_applies_rbac_filters(self, mock_profiles, mock_conn):
+    def test_list_targets_multi_table_applies_rbac_filters(self, mock_profiles, mock_conn, _mock_envs, _mock_names):
         """AC4: RBAC filters (LIST, PATTERN) still applied on multi-table servers."""
         self._create_inventory_db(MULTI_TABLE_CONFIG)
 
@@ -585,9 +589,10 @@ class ListTargetsForUserMultiTableTests(TestCase):
         self.assertEqual(total, 0)
         self.assertFalse(truncated)
 
+    @patch('inventory.permission_aggregator.repo_get_environments', return_value=['production', 'certification'])
     @patch('inventory.services.connection')
     @patch('inventory.services.Profile.objects')
-    def test_list_targets_multi_table_all_envs_fail_raises_error(self, mock_profiles, mock_conn):
+    def test_list_targets_multi_table_all_envs_fail_raises_error(self, mock_profiles, mock_conn, _mock_envs):
         """AC4: If all environments fail in multi-table mode, raises error instead of silent empty."""
         self._create_inventory_db(MULTI_TABLE_CONFIG)
 

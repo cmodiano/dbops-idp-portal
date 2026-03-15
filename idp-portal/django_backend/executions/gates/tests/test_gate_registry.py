@@ -120,6 +120,43 @@ class TestIsManualConditionType:
         assert registry.is_manual_condition_type('anything') is False
 
 
+class TestIsManualResolutionConditionViewHelper:
+    """Tests directs de _is_manual_resolution_condition depuis approval_views.py — Story 84.2 AC9.
+
+    Complète TestIsManualConditionType (qui teste gate_registry directement) en vérifiant
+    que le helper de la view délègue correctement au registre.
+    """
+
+    def test_known_manual_type_returns_true(self):
+        """approval_granted → True (même résultat que via gate_registry directement)."""
+        from executions.views.approval_views import _is_manual_resolution_condition
+        assert _is_manual_resolution_condition('approval_granted') is True
+
+    def test_known_auto_type_returns_false(self):
+        """maintenance_window → False."""
+        from executions.views.approval_views import _is_manual_resolution_condition
+        assert _is_manual_resolution_condition('maintenance_window') is False
+
+    def test_unknown_type_returns_false_no_exception(self):
+        """Type inconnu → False, pas d'exception."""
+        from executions.views.approval_views import _is_manual_resolution_condition
+        assert _is_manual_resolution_condition('unknown_type') is False
+
+    def test_empty_string_returns_false(self):
+        """Chaîne vide → False, pas d'exception."""
+        from executions.views.approval_views import _is_manual_resolution_condition
+        assert _is_manual_resolution_condition('') is False
+
+    def test_none_returns_false_no_exception(self):
+        """None (cas c.get('type', '') avec type=null en DB) → False, pas d'exception.
+
+        HIGH-2 fix: c.get('type', '') peut retourner None si la clé existe avec valeur null.
+        is_manual_condition_type accepte cette valeur sans lever d'exception (KeyError capturée).
+        """
+        from executions.views.approval_views import _is_manual_resolution_condition
+        assert _is_manual_resolution_condition(None) is False  # type: ignore[arg-type]
+
+
 class TestGateRegistrySingleton:
     """Tests sur le singleton gate_registry (état réel)."""
 

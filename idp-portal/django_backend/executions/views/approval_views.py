@@ -39,6 +39,10 @@ from idp_auth.models import User
 from rest_framework import serializers
 from drf_spectacular.utils import extend_schema, OpenApiParameter, inline_serializer
 
+# Story 84.2: Import module-level sûr ici — approval_views n'est pas importé par gates/registry
+# ni par definitions.py, donc pas de cycle. workflow_commands.py et tasks/gates.py utilisent
+# des imports lazy (noqa: PLC0415) car ces modules sont chargés dans des workers Celery où
+# l'ordre d'initialisation Django peut varier.
 from executions.gates.registry import gate_registry
 
 logger = structlog.get_logger(__name__)
@@ -55,12 +59,12 @@ def _is_manual_resolution_condition(condition_type: str) -> bool:
 
 
 def _enqueue_resume_with_retries(execution_id: int, step_ids: list[str], max_retries: int = 3) -> None:
-    """Enqueue resume_container_workflow_from_gate with retries on transient broker errors.
+    """Enqueue resume_container_workflow_from_gate avec jusqu'à max_retries tentatives.
 
     NEW-BE-G: Removed time.sleep() calls that blocked gunicorn workers for up to 1.5s on
-    broker failure. Celery's own retry mechanism handles transient broker unavailability.
-    We attempt the enqueue once and log on failure — the approval DB state is already
-    committed, so a dead-letter / monitoring alert can trigger manual retry.
+    broker failure. Retries are attempted immediately (no sleep between attempts) —
+    the approval DB state is already committed, so if all retries fail, a dead-letter /
+    monitoring alert can trigger manual retry.
     """
     for attempt in range(max_retries):
         try:

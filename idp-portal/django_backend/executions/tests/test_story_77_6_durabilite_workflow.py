@@ -610,29 +610,20 @@ class TestAC5RollbackApproveNoSideEffects(TestCase):
         self, mock_delete, mock_emit, mock_perm,
     ):
         """
-        AC5 (5.2) : captureOnCommitCallbacks(execute=False) — callbacks enregistrés
-        mais emit_approval_granted et delete non appelés (simulation rollback).
+        AC5 story 78.5 : approve → commande durable, aucun side effect inline.
 
-        Vérifie :
-        1. Au moins un callback on_commit enregistré (pattern en place)
-        2. emit_approval_granted non appelé avant commit
-        3. RunnableStepService.delete non appelé avant commit
+        Story 78.5: L'endpoint écrit une commande durable et retourne 202.
+        Les side effects (emit_approval_granted, delete) sont délégués au
+        command processor — non émis par l'endpoint même après commit.
         """
-        with self.captureOnCommitCallbacks(execute=False) as callbacks:
-            response = self.client.post(
-                f"/api/v1/executions/{self.execution.id}/steps/{self.step.id}/approve/",
-                {"comment": "AC5 test approve rollback 77.6"},
-                format='json',
-            )
+        response = self.client.post(
+            f"/api/v1/executions/{self.execution.id}/steps/{self.step.id}/approve/",
+            {"comment": "AC5 test approve rollback 77.6"},
+            format='json',
+        )
 
         self.assertEqual(response.status_code, 202)
 
-        # Le callback on_commit a bien été enregistré (pattern on_commit actif)
-        self.assertGreater(
-            len(callbacks), 0,
-            "AC5 : Au moins un callback on_commit doit être enregistré (pattern on_commit en place)"
-        )
-
-        # Les side effects durables ne sont PAS exécutés avant commit (= rollback safe)
+        # Story 78.5: aucun side effect émis par l'endpoint (délégué au processor)
         mock_emit.assert_not_called()
         mock_delete.assert_not_called()

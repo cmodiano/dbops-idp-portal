@@ -111,7 +111,7 @@ class TestTasksExceptionHandling:
         Story 81: retry_workflow_step removed — test now targets resume_container_workflow_from_gate.
         """
         mock_logger = mocker.patch('executions.tasks.gates.logger')
-        mocker.patch('executions.tasks.get_correlation_id', return_value='test-corr-id-123')
+        mocker.patch('executions.tasks.gates.get_correlation_id', return_value='test-corr-id-123')
         mocker.patch(
             'executions.cancellation_cache.is_cancelled',
             side_effect=RuntimeError("Redis down"),
