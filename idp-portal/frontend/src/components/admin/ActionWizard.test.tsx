@@ -342,9 +342,9 @@ describe('ActionWizard', () => {
         const payload = mockOnSubmit.mock.calls[0][0];
         expect(payload.name).toBe('Action à modifier');
         expect(payload.engine).toBe('Oracle');
-        // Story 31.1: integration_id sent, platform derived from integration type
+        // Story 83-13: integration_id sent, platform derived by backend (not in payload)
         expect(payload.integration_id).toBe(1);
-        expect(payload.platform).toBe('AAP');
+        expect(payload.platform).toBeUndefined();
         expect(payload.parameters_schema).toBeDefined();
         expect(payload.impact_rules).toBeDefined();
       });
@@ -395,9 +395,9 @@ describe('ActionWizard', () => {
         const payload = mockOnSubmit.mock.calls[0][0];
         expect(payload.name).toBe('Action à modifier');
         expect(payload.engine).toBe('Oracle');
-        // Story 31.1: integration_id sent, platform derived
+        // Story 83-13: integration_id sent, platform derived by backend (not in payload)
         expect(payload.integration_id).toBe(1);
-        expect(payload.platform).toBe('AAP');
+        expect(payload.platform).toBeUndefined();
         expect(payload.parameters_schema).toBeDefined();
         expect(payload.impact_rules).toBeDefined();
       });
@@ -801,7 +801,7 @@ describe('ActionWizard', () => {
       expect(screen.queryByLabelText('Plateforme')).not.toBeInTheDocument();
     });
 
-    it('envoie integration_id et platform dérivé dans le payload', async () => {
+    it('envoie integration_id sans platform dans le payload (Story 83-13: platform dérivé côté backend)', async () => {
       const user = userEvent.setup();
       const editAction: ActionDetail = {
         id: 10,
@@ -840,7 +840,8 @@ describe('ActionWizard', () => {
         expect(mockOnSubmit).toHaveBeenCalledTimes(1);
         const payload = mockOnSubmit.mock.calls[0][0];
         expect(payload.integration_id).toBe(1);
-        expect(payload.platform).toBe('AAP');
+        // Story 83-13: platform not sent by frontend — derived by backend from integration.type
+        expect(payload.platform).toBeUndefined();
       });
     });
 

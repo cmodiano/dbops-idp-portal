@@ -14,7 +14,6 @@ from executions.utils import extract_workflow_referenced_action_ids
 
 from catalog.serializers.validators import (
     validate_parameters_schema_inventory,
-    validate_platform_integration_consistency,
 )
 from platforms.registry import platform_registry
 
@@ -24,11 +23,15 @@ def _validate_action_config_schema(platform_code: str, action_config: dict | Non
 
     Si le schéma est vide ({}) → no-op (aucune contrainte).
     Si le schéma est non vide → validation jsonschema.
+
+    AC5 Story 83-13: normalise le code avant lookup (platform_code peut être 'AAP', 'Azure DevOps', etc.)
     """
     if not platform_code:
         return
     try:
-        defn = platform_registry.get(platform_code)
+        normalized = platform_code.lower().replace(' ', '_')
+        resolved = platform_registry.resolve_alias(normalized)
+        defn = platform_registry.get(resolved)
     except Exception:
         return  # Plateforme inconnue → laisse les autres validateurs gérer
 
@@ -309,19 +312,14 @@ class ActionSerializer(WorkflowEnrichmentMixin, ActionFieldValidationMixin, seri
 
     def validate(self, data: dict[str, Any]) -> dict[str, Any]:
         platform = data.get('platform')
-        integration = getattr(self.instance, 'integration', None) if self.instance else None
-        validate_platform_integration_consistency(platform, integration)
 
         # Story 82.8, AC3: validate action_config against platform schema.
-        # NOTE: The Action model does not yet have an `action_config` field — this is
-        # placeholder infrastructure for when that field is added. Currently, all platform
-        # schemas are {} so _validate_action_config_schema is always a no-op.
-        # TODO: Once Action.action_config is added to the model and serializer fields,
-        # remove this comment and ensure `action_config` is declared in Meta.fields.
-        if platform:
-            action_config = data.get('action_config') or (
-                getattr(self.instance, 'action_config', None) if self.instance else None
-            )
+        # NOTE: action_config field does not yet exist on the Action model — ne valider que si
+        # action_config est explicitement fourni (pas de validation implicite sur None).
+        action_config = data.get('action_config') or (
+            getattr(self.instance, 'action_config', None) if self.instance else None
+        )
+        if platform and action_config is not None:
             _validate_action_config_schema(platform, action_config)
 
         has_policy_fk = data.get('business_rule_policy') is not None
@@ -446,7 +444,7 @@ class ActionCreateSerializer(ActionFieldValidationMixin, serializers.Serializer)
     item_type = serializers.ChoiceField(choices=ActionItemType.choices, default=ActionItemType.ACTION)
     category = serializers.CharField(max_length=50, required=False, allow_null=True, allow_blank=True)
     engine = serializers.CharField(max_length=50, required=False, allow_null=True)
-    platform = serializers.CharField(max_length=50, required=False, allow_null=True)
+    # Story 83-13 AC2: platform n'est plus accepté dans les payloads externes — dérivé automatiquement
     integration_id = serializers.IntegerField(required=False, allow_null=True)
 
     def validate_category(self, value: str | None) -> str | None:
@@ -496,37 +494,58 @@ class ActionCreateSerializer(ActionFieldValidationMixin, serializers.Serializer)
         else:
             item_type = ActionItemType.ACTION
 
-        if item_type == ActionItemType.ACTION:
-            # Effective values: from request data, or existing instance (for partial update)
-            if is_update and instance is not None:
-                effective_engine = data.get('engine') if 'engine' in data else getattr(instance, 'engine', None)
-                effective_platform = data.get('platform') if 'platform' in data else getattr(instance, 'platform', None)
-            else:
-                effective_engine = data.get('engine')
-                effective_platform = data.get('platform')
-
-            if not effective_engine:
-                raise serializers.ValidationError("engine is required for action type")
-            if not effective_platform:
-                raise serializers.ValidationError("platform is required for action type")
-
-        platform = data.get('platform')
+        # Story 83-13 AC2/AC3: Dériver platform automatiquement depuis integration_id — jamais accepté du client
+        # Note: Action.platform est NOT NULL en BD — utiliser '' quand la plateforme ne peut être dérivée.
         integration_id = data.get('integration_id')
-        if platform and integration_id:
+        if is_update and instance is not None and 'integration_id' not in data:
+            # PATCH sans changement d'integration_id : dériver depuis l'integration existante
+            instance_integration = getattr(instance, 'integration', None)
+            if instance_integration:
+                try:
+                    defn = platform_registry.get(instance_integration.type)
+                    data['platform'] = defn.action_platform_code
+                except Exception:
+                    data['platform'] = getattr(instance, 'platform', None) or ''
+            else:
+                data['platform'] = ''
+        elif integration_id:
             try:
                 integration = Integration.objects.get(id=integration_id)
             except Integration.DoesNotExist:
                 raise serializers.ValidationError(
                     {'integration_id': 'Integration not found'}
                 )
-            validate_platform_integration_consistency(platform, integration, integration_id)
+            try:
+                defn = platform_registry.get(integration.type)
+                data['platform'] = defn.action_platform_code
+            except Exception:
+                data['platform'] = ''
+        else:
+            data['platform'] = ''
+
+        if item_type == ActionItemType.ACTION:
+            # Effective values: from request data, or existing instance (for partial update)
+            if is_update and instance is not None:
+                effective_engine = data.get('engine') if 'engine' in data else getattr(instance, 'engine', None)
+            else:
+                effective_engine = data.get('engine')
+            effective_platform = data.get('platform')
+
+            if not effective_engine:
+                raise serializers.ValidationError("engine is required for action type")
+            if not effective_platform:
+                raise serializers.ValidationError("platform is required for action type")
 
         # Story 82.8, AC3: validate action_config against platform schema.
-        # NOTE: action_config field does not yet exist on the Action model — no-op while all schemas are {}.
-        if platform:
-            action_config = data.get('action_config') or (
-                getattr(self.context.get('instance'), 'action_config', None)
-            )
+        # Story 83-13 AC5: platform_code est maintenant le code canonique (ex: 'AAP') — la normalisation
+        # dans _validate_action_config_schema sert de garde-fou défensif.
+        # NOTE: action_config field does not yet exist on the Action model — ne valider que si
+        # action_config est explicitement fourni dans le payload (pas de validation implicite sur None).
+        platform = data.get('platform')
+        action_config = data.get('action_config') or (
+            getattr(self.context.get('instance'), 'action_config', None)
+        )
+        if platform and action_config is not None:
             _validate_action_config_schema(platform, action_config)
 
         return data

@@ -14,7 +14,6 @@ import type {
   ActionCreate,
   ActionDetail,
   ActionResponse,
-  ActionPlatform,
   ActionEngine,
   ParameterDefinition,
   ImpactRuleDefinition,
@@ -360,15 +359,12 @@ export function ActionWizard({
         output_schema_id: outputSchemaId,
         // category: both actions and workflows (workflows: optional, backend defaults to 'autres')
         category: (captured?.category ?? (values as Record<string, unknown>).category ?? formValues.category) as string | undefined ?? null,
-        // Only include engine/platform/integration_id/parameters_schema for actions
+        // Only include engine/integration_id/parameters_schema for actions (platform derived by backend — Story 83-13)
         ...(isWorkflowSave
           ? {}
           : {
               engine,
               integration_id: integrationId,
-              platform: integrationId
-                ? (platformCap?.action_platform_code as ActionPlatform ?? undefined)
-                : undefined,
               parameters_schema: parameterListToSchema(parameterList),
             }),
       };

@@ -17,13 +17,6 @@ vi.mock('../utils/impactRulesSchema', () => ({
   impactRulesToList: vi.fn(() => []),
 }));
 
-vi.mock('./useCapabilities', () => ({
-  useCapabilities: vi.fn(() => ({ capabilities: null, loading: false, error: null })),
-}));
-
-import * as useCapabilitiesModule from './useCapabilities';
-const mockUseCapabilities = vi.mocked(useCapabilitiesModule.useCapabilities);
-
 const mockGetIntegrationById = vi.fn();
 
 function renderStateHook(open: boolean, editAction?: ActionDetail | null) {
@@ -126,51 +119,26 @@ describe('useActionFormState', () => {
     expect(result.current.defaultImpactLevel).toBe('high');
   });
 
-  // Story 82.9 — T3.6: previewData.platform dérivé via useCapabilities (pas via integrationHelpers)
-  it('T3.6 — previewData.platform dérivé depuis capabilities quand integration sélectionnée', () => {
-    mockUseCapabilities.mockReturnValue({
-      capabilities: {
-        platforms: [
-          {
-            code: 'aap',
-            display_name: 'AAP',
-            aliases: ['tower'],
-            icon: 'aap',
-            connector_type: 'aap',
-            action_platform_code: 'AAP',
-            supports_health_check: true,
-            action_config_schema: {},
-          },
-        ],
-        services: [],
-        stepTypes: [],
-      },
-      loading: false,
-      error: null,
-    });
+  // Story 83-13 — T3.6: previewData.platform toujours null (dérivé côté backend, pas frontend)
+  it('T3.6 — previewData.platform est null (platform dérivé par le backend, pas le frontend)', () => {
     mockGetIntegrationById.mockReturnValue({ id: 1, type: 'aap', name: 'Test AAP' });
 
     const { result } = renderHook(() => {
       const [form] = Form.useForm();
-      // Simuler un watchedIntegrationId en pré-remplissant le form
       form.setFieldsValue({ integration_id: 1 });
       return useActionFormState({ open: true, editAction: null, form, getIntegrationById: mockGetIntegrationById });
     });
 
-    // Quand capabilities contient aap et integration.type='aap', platform doit être 'AAP'
-    // Note: watchedIntegrationId étant null au premier render (Form.useWatch non déclenché),
-    // on vérifie que le hook fonctionne sans erreur et expose previewData
     expect(result.current.previewData).toBeDefined();
-    expect(result.current.previewData.platform).toBeNull(); // null car watchedIntegrationId non déclenché via Form
+    // Story 83-13: platform toujours null dans previewData — le backend dérive depuis integration.type
+    expect(result.current.previewData.platform).toBeNull();
   });
 
-  it('T3.6 — previewData.platform = null quand capabilities null (pas de fallback)', () => {
-    mockUseCapabilities.mockReturnValue({ capabilities: null, loading: false, error: null });
-    mockGetIntegrationById.mockReturnValue({ id: 1, type: 'aap', name: 'Test AAP' });
+  it('T3.6 — previewData.platform = null même sans integration sélectionnée', () => {
+    mockGetIntegrationById.mockReturnValue(undefined);
 
     const { result } = renderStateHook(true);
 
-    // Sans capabilities, platform doit être null (pas de fallback integrationHelpers)
     expect(result.current.previewData.platform).toBeNull();
   });
 });

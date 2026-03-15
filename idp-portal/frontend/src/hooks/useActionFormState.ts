@@ -9,7 +9,6 @@ import type {
   ActionDetail,
   ActionPreviewData,
   ActionEngine,
-  ActionPlatform,
   ExecutionStep,
   ImpactLevel,
   ImpactRuleDefinition,
@@ -27,7 +26,6 @@ import {
 export { ApiError } from '../services/api_client';
 import { schemaToParameterList, parameterListToSchema } from '../utils/parametersSchema';
 import { impactRulesToList } from '../utils/impactRulesSchema';
-import { useCapabilities } from './useCapabilities';
 
 type IntegrationLike = { id: number; type: string; name: string };
 
@@ -38,9 +36,8 @@ interface UseActionFormStateParams {
   getIntegrationById: (id: number) => IntegrationLike | undefined;
 }
 
-export function useActionFormState({ open, editAction, form, getIntegrationById }: UseActionFormStateParams) {
+export function useActionFormState({ open, editAction, form, getIntegrationById: _getIntegrationById }: UseActionFormStateParams) {
   const nameInputRef = useRef<HTMLInputElement>(null);
-  const { capabilities } = useCapabilities();
 
   const [stepsError, setStepsError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -89,14 +86,8 @@ export function useActionFormState({ open, editAction, form, getIntegrationById 
       name: (watchedName as string) || '',
       description: (watchedDescription as string) || null,
       engine: (watchedEngine as ActionEngine) || null,
-      platform: watchedIntegrationId
-        ? (() => {
-            const intgType = getIntegrationById(watchedIntegrationId as number)?.type ?? '';
-            return (capabilities?.platforms?.find(
-              (p) => p.code === intgType || p.aliases.includes(intgType)
-            )?.action_platform_code as ActionPlatform) ?? null;
-          })()
-        : null,
+      // Story 83-13: platform derived by backend — not computed in preview
+      platform: null,
       impact_level: impactLevel,
       parameters_schema: parsedSchema,
       tags: selectedTags,
@@ -106,15 +97,12 @@ export function useActionFormState({ open, editAction, form, getIntegrationById 
     watchedName,
     watchedDescription,
     watchedEngine,
-    watchedIntegrationId,
     parameterList,
     impactRulesList,
     previewEnvironment,
     defaultImpactLevel,
     selectedTags,
     watchedDocumentationMd,
-    getIntegrationById,
-    capabilities,
   ]);
 
   // Focus sur le champ nom à l'ouverture (AC #7 accessibilité)

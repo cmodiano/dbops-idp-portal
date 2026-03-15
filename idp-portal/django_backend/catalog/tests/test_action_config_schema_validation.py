@@ -112,24 +112,69 @@ class TestValidateActionConfigSchema:
             assert 'action_config' in exc_info.value.detail
 
 
-class TestActionSerializerIntegration:
-    """Tests d'intégration : _validate_action_config_schema est appelée depuis ActionSerializer (M2 code review)."""
+class TestValidateActionConfigSchemaNormalization:
+    """Story 83-13 AC5 : normalisation du platform_code avant lookup dans le registry."""
 
-    def test_action_serializer_validate_calls_schema_validation_when_platform_set(self):
-        """ActionSerializer.validate() appelle _validate_action_config_schema si platform est présent."""
+    def test_uppercase_aap_normalized_and_validated_valid(self):
+        """'AAP' normalisé → 'aap' → schema AAP validé avec config valide."""
+        # Utilise le vrai registry (pas de mock)
+        # Config valide pour AAP (template_id requis)
+        _validate_action_config_schema('AAP', {'template_id': 42})
+
+    def test_uppercase_aap_normalized_and_validated_invalid(self):
+        """'AAP' normalisé → 'aap' → schema AAP validé avec config invalide → ValidationError."""
+        with pytest.raises(drf_serializers.ValidationError) as exc_info:
+            _validate_action_config_schema('AAP', {'template_id': 'not_an_int'})
+        assert 'action_config' in exc_info.value.detail
+
+    def test_azure_devops_spaces_normalized(self):
+        """'Azure DevOps' normalisé → 'azure_devops' → schema vide → no-op."""
+        # azure_devops a un action_config_schema vide → pas de ValidationError
+        _validate_action_config_schema('Azure DevOps', {'anything': 'goes'})
+
+    def test_tower_uppercase_normalized(self):
+        """'Tower' normalisé → 'tower' → schema Tower validé avec config valide."""
+        _validate_action_config_schema('Tower', {'template_id': 1})
+
+    def test_tower_normalized_invalid_config(self):
+        """'Tower' normalisé → 'tower' → schema Tower validé avec config invalide → ValidationError."""
+        with pytest.raises(drf_serializers.ValidationError):
+            _validate_action_config_schema('Tower', {'template_id': -5})  # minimum: 1
+
+
+class TestActionSerializerIntegration:
+    """Tests d'intégration : _validate_action_config_schema est appelée depuis ActionSerializer (M2 code review).
+
+    Story 83-13: schema validation uniquement si action_config est explicitement fourni (pas None).
+    """
+
+    def test_action_serializer_validate_calls_schema_validation_when_platform_and_action_config_set(self):
+        """ActionSerializer.validate() appelle _validate_action_config_schema si platform ET action_config présents."""
         import catalog.serializers.action as action_module
 
         with patch.object(action_module, '_validate_action_config_schema') as mock_validate:
             from catalog.serializers.action import ActionSerializer
             s = ActionSerializer()
-            data = {'platform': 'aap'}
-            # Patch les autres validators qui nécessitent une BDD
-            with patch('catalog.serializers.validators.validate_platform_integration_consistency'):
-                try:
-                    s.validate(data)
-                except Exception:
-                    pass  # D'autres validations peuvent échouer — on vérifie juste l'appel
-            mock_validate.assert_called_once_with('aap', None)
+            data = {'platform': 'aap', 'action_config': {'template_id': 42}}
+            try:
+                s.validate(data)
+            except Exception:
+                pass  # D'autres validations peuvent échouer — on vérifie juste l'appel
+            mock_validate.assert_called_once_with('aap', {'template_id': 42})
+
+    def test_action_serializer_validate_skips_schema_validation_when_no_action_config(self):
+        """ActionSerializer.validate() ne valide pas le schema si action_config est absent (None)."""
+        import catalog.serializers.action as action_module
+
+        with patch.object(action_module, '_validate_action_config_schema') as mock_validate:
+            from catalog.serializers.action import ActionSerializer
+            s = ActionSerializer()
+            data = {'platform': 'aap'}  # action_config absent → pas de validation
+            try:
+                s.validate(data)
+            except Exception:
+                pass
+            mock_validate.assert_not_called()
 
     def test_action_serializer_validate_skips_schema_validation_when_no_platform(self):
         """ActionSerializer.validate() ne doit pas appeler _validate_action_config_schema si pas de platform."""
@@ -139,9 +184,8 @@ class TestActionSerializerIntegration:
             from catalog.serializers.action import ActionSerializer
             s = ActionSerializer()
             data = {}
-            with patch('catalog.serializers.validators.validate_platform_integration_consistency'):
-                try:
-                    s.validate(data)
-                except Exception:
-                    pass
+            try:
+                s.validate(data)
+            except Exception:
+                pass
             mock_validate.assert_not_called()

@@ -1014,6 +1014,6 @@ development_status:
     83-11-workflow-step-node-labels-backend: done # Rendre les labels/variants de gates dérivés du backend. Titre et badge dépendants de metadata plutôt que if gate_type === .... Fichier: WorkflowStepNode.tsx. Réf: extensibility-remaining-work-state-of-the-art.md § B.3
     # --- Phase 4: Simplifier et supprimer le legacy ---
     83-12-supprimer-fallbacks-metier-frontend: done # Limiter les fallbacks à la résilience technique. Ne jamais réintroduire une vérité métier locale durable. Fichier: useWorkflowStepCapabilities.ts. Réf: extensibility-remaining-work-state-of-the-art.md § B.4, § Roadmap Phase 4
-    83-13-clarifier-action-platform-legacy: backlog # Définir une cible de simplification: soit supprimer ActionPlatform, soit le traiter comme détail de persistance dérivé automatiquement. Réduire la couche de compatibilité code integration / connector type / code action. Réf: extensibility-remaining-work-state-of-the-art.md § A.5, § Roadmap Phase 4
+    83-13-clarifier-action-platform-legacy: done # platform dérivé automatiquement backend depuis integration.type — supprimé des payloads frontend. _validate_action_config_schema corrigée (normalisation code canonique). 60 backend + 62 frontend tests verts.
     83-14-nettoyage-helpers-mapping-aliases: backlog # Supprimer helpers de mapping devenus inutiles. Réduire les aliases résiduels. Comportement comprensible en suivant definitions → capabilities → UI/runtime. Réf: extensibility-remaining-work-state-of-the-art.md § Roadmap Phase 4
     epic-83-retrospective: optional

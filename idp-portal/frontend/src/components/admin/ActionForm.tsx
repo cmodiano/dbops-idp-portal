@@ -27,7 +27,6 @@ import { parameterListToSchema } from '../../utils/parametersSchema';
 import { listToImpactRules } from '../../utils/impactRulesSchema';
 import { useEngines } from '../../hooks/useEngines';
 import { usePlatformIntegrations } from '../../hooks/usePlatformIntegrations';
-import { useCapabilities } from '../../hooks/useCapabilities';
 import { ParametersEditor } from './ParametersEditor';
 import { ImpactRulesEditor } from './ImpactRulesEditor';
 import SectionHelp from '../common/SectionHelp';
@@ -62,7 +61,6 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
   const { engineOptions, loading: enginesLoading } = useEngines();
   // Story 31.1: Load platform integrations
   const { integrationOptions, loading: integrationsLoading, getIntegrationById } = usePlatformIntegrations();
-  const { capabilities } = useCapabilities();
 
   const isEditMode = !!editAction;
   const isMin1280 = useMediaQuery(1280);
@@ -122,20 +120,12 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
         return;
       }
 
-      // Story 31.1 / 82.9: Derive platform from capabilities
-      const selectedIntegration = values.integration_id ? getIntegrationById(values.integration_id) : undefined;
-      const derivedPlatform = selectedIntegration?.type
-        ? (capabilities?.platforms?.find(
-            (p) => p.code === selectedIntegration.type || p.aliases.includes(selectedIntegration.type)
-          )?.action_platform_code as ActionCreate['platform'] | undefined)
-        : undefined;
-
+      // Story 83-13: platform derived by backend from integration.type — not sent by frontend
       const action: ActionCreate = {
         name: values.name,
         description: values.description,
         engine: values.engine,
         integration_id: values.integration_id,
-        platform: derivedPlatform,
         parameters_schema: parameterListToSchema(parameterList),
         impact_rules: listToImpactRules(impactRulesList),
         default_impact_level: defaultImpactLevel,
