@@ -13,6 +13,7 @@ import { Divider, Select, Typography } from 'antd';
 import type { WorkflowStepNodeData } from '../WorkflowStepNode';
 import { KeyValueEditor } from './KeyValueEditor';
 import { NotificationTemplateEditor } from './NotificationTemplateEditor';
+import { SchemaInputMappingEditor } from './SchemaInputMappingEditor';
 import { ConditionConfig } from './ConditionConfig';
 import { MappingHelpPopover } from './MappingHelpPopover';
 import { useInputMappingWarnings } from '../../../hooks/useInputMappingWarnings';
@@ -44,10 +45,12 @@ export const ServiceCallStepConfig: FC<ServiceCallStepConfigProps> = ({
   // Story 82.6: capacités backend pour les types et opérations d'intégration
   const { capabilities, loading: capabilitiesLoading } = useCapabilities();
 
-  // Options integration_type : depuis le backend si dispo, sinon liste vide
+  // Options integration_type : filtrées sur supports_service_call=true
   const integrationTypeOptions = useMemo(() => {
     if (capabilities?.services?.length) {
-      return capabilities.services.map((s) => ({ value: s.code, label: s.display_name }));
+      return capabilities.services
+        .filter((s) => s.supports_service_call)
+        .map((s) => ({ value: s.code, label: s.display_name }));
     }
     return [];
   }, [capabilities]);
@@ -69,6 +72,12 @@ export const ServiceCallStepConfig: FC<ServiceCallStepConfigProps> = ({
   }, [data.operation, availableOperations]);
 
   const useNotificationRenderer = currentOperation?.ui_hints?.input_renderer === 'notification_template';
+
+  // Story 84-4: schema-driven si input_schema.properties non vide
+  const hasSchemaProperties = useMemo(() => {
+    const props = currentOperation?.input_schema?.properties as Record<string, unknown> | undefined;
+    return !!(props && Object.keys(props).length > 0);
+  }, [currentOperation]);
 
   // Filtrer le step courant de la liste des étapes disponibles (AC4: "étapes précédentes")
   const filteredStepOptions = useMemo(
@@ -143,6 +152,18 @@ export const ServiceCallStepConfig: FC<ServiceCallStepConfigProps> = ({
               currentStepId={data.step_id ?? ''}
               availableStepIds={availableStepIds}
               operation={data.operation ?? ''}
+            />
+          </>
+        ) : hasSchemaProperties && currentOperation ? (
+          <>
+            <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
+              Paramètres d'entrée <MappingHelpPopover type="input" availableSteps={filteredStepOptions} />
+            </Text>
+            <SchemaInputMappingEditor
+              schema={currentOperation.input_schema}
+              value={data.input_mapping as Record<string, string> | null}
+              onChange={(v) => onUpdate({ input_mapping: v })}
+              disabled={disabled}
             />
           </>
         ) : (

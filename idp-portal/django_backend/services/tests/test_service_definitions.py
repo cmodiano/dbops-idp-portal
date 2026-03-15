@@ -335,6 +335,115 @@ class TestServiceDefinitionRegistrySingleton:
 
 
 # ---------------------------------------------------------------------------
+# Tests Story 84-4 — input_schema et supports_service_call sur le singleton
+# ---------------------------------------------------------------------------
+
+class TestServiceDefinitionInputSchemaAndSupportsServiceCall:
+    """Story 84-4: input_schema sur les opérations et supports_service_call sur les services."""
+
+    def test_servicenow_create_change_input_schema_properties(self) -> None:
+        """AC1 — create_change a input_schema.properties avec short_description."""
+        op = service_definition_registry.get_operation_def("servicenow", "create_change")
+        assert op.input_schema.get("properties"), "input_schema.properties doit être non vide"
+        assert "short_description" in op.input_schema["properties"]
+
+    def test_servicenow_create_change_input_schema_required(self) -> None:
+        """AC1 — create_change a required=['short_description']."""
+        op = service_definition_registry.get_operation_def("servicenow", "create_change")
+        assert op.input_schema.get("required") == ["short_description"]
+
+    def test_servicenow_close_change_input_schema_required_change_id(self) -> None:
+        """AC1 — close_change a required=['change_id']."""
+        op = service_definition_registry.get_operation_def("servicenow", "close_change")
+        assert "change_id" in op.input_schema.get("required", [])
+        assert "change_id" in op.input_schema.get("properties", {})
+
+    def test_servicenow_cancel_change_input_schema(self) -> None:
+        """AC1 — cancel_change a required=['change_id'] et property reason."""
+        op = service_definition_registry.get_operation_def("servicenow", "cancel_change")
+        assert "change_id" in op.input_schema.get("required", [])
+        assert "reason" in op.input_schema.get("properties", {})
+
+    def test_servicenow_update_change_input_schema_stub(self) -> None:
+        """AC1 — update_change a un schéma minimal avec change_id."""
+        op = service_definition_registry.get_operation_def("servicenow", "update_change")
+        assert "change_id" in op.input_schema.get("properties", {})
+
+    def test_servicenow_get_change_status_input_schema_stub(self) -> None:
+        """AC1 — get_change_status a un schéma minimal avec change_id."""
+        op = service_definition_registry.get_operation_def("servicenow", "get_change_status")
+        assert "change_id" in op.input_schema.get("properties", {})
+
+    def test_vault_get_secret_input_schema_properties(self) -> None:
+        """AC2 — vault.get_secret a input_schema.properties avec credential_ref."""
+        op = service_definition_registry.get_operation_def("vault", "get_secret")
+        assert op.input_schema.get("properties"), "input_schema.properties doit être non vide"
+        assert "credential_ref" in op.input_schema["properties"]
+
+    def test_vault_get_secret_input_schema_required(self) -> None:
+        """AC2 — vault.get_secret a required=['credential_ref']."""
+        op = service_definition_registry.get_operation_def("vault", "get_secret")
+        assert op.input_schema.get("required") == ["credential_ref"]
+
+    def test_jira_create_issue_input_schema_required(self) -> None:
+        """AC2 — jira.create_issue a required=['project_key', 'issue_type', 'summary']."""
+        op = service_definition_registry.get_operation_def("jira", "create_issue")
+        required = op.input_schema.get("required", [])
+        assert "project_key" in required
+        assert "issue_type" in required
+        assert "summary" in required
+
+    def test_jira_update_issue_input_schema(self) -> None:
+        """AC2 — jira.update_issue a required=['issue_key']."""
+        op = service_definition_registry.get_operation_def("jira", "update_issue")
+        assert "issue_key" in op.input_schema.get("required", [])
+
+    def test_jira_get_issue_input_schema(self) -> None:
+        """AC2 — jira.get_issue a required=['issue_key']."""
+        op = service_definition_registry.get_operation_def("jira", "get_issue")
+        assert "issue_key" in op.input_schema.get("required", [])
+
+    def test_splunk_supports_service_call_false(self) -> None:
+        """AC3 — splunk n'a pas d'opérations → supports_service_call=False."""
+        defn = service_definition_registry.get("splunk")
+        assert defn.supports_service_call is False
+
+    def test_servicenow_supports_service_call_true(self) -> None:
+        """AC3 — servicenow a des opérations → supports_service_call=True."""
+        defn = service_definition_registry.get("servicenow")
+        assert defn.supports_service_call is True
+
+    def test_vault_supports_service_call_true(self) -> None:
+        """AC3 — vault a des opérations → supports_service_call=True."""
+        defn = service_definition_registry.get("vault")
+        assert defn.supports_service_call is True
+
+    def test_jira_supports_service_call_true(self) -> None:
+        """AC3 — jira a des opérations → supports_service_call=True."""
+        defn = service_definition_registry.get("jira")
+        assert defn.supports_service_call is True
+
+    def test_notification_supports_service_call_true(self) -> None:
+        """AC3 — notification a des opérations → supports_service_call=True."""
+        defn = service_definition_registry.get("notification")
+        assert defn.supports_service_call is True
+
+    def test_servicenow_create_change_change_type_has_enum(self) -> None:
+        """AC1 — change_type a un keyword enum JSON Schema draft-07."""
+        op = service_definition_registry.get_operation_def("servicenow", "create_change")
+        change_type = op.input_schema["properties"]["change_type"]
+        assert "enum" in change_type, "change_type doit avoir un keyword enum JSON Schema"
+        assert set(change_type["enum"]) == {"normal", "standard", "emergency"}
+
+    def test_servicenow_close_change_close_code_has_enum(self) -> None:
+        """AC1 — close_code a un keyword enum JSON Schema draft-07."""
+        op = service_definition_registry.get_operation_def("servicenow", "close_change")
+        close_code = op.input_schema["properties"]["close_code"]
+        assert "enum" in close_code, "close_code doit avoir un keyword enum JSON Schema"
+        assert set(close_code["enum"]) == {"successful", "successful_issues", "unsuccessful", "skipped"}
+
+
+# ---------------------------------------------------------------------------
 # Tests labels FR sur le singleton service_definition_registry (Story 82.7 → 83.4)
 # ---------------------------------------------------------------------------
 

@@ -66,6 +66,7 @@ def get_integrations_capabilities(request: Request) -> Response:
                 for op_def in sorted(sdefn.operation_defs, key=lambda op: op.code)
             ],
             'supports_health_check': sdefn.supports_health_check,
+            'supports_service_call': sdefn.supports_service_call,
         })
 
     return Response({'data': {'platforms': platforms, 'services': services}})

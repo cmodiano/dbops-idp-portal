@@ -31,6 +31,7 @@ class ServiceCapabilitySerializer(serializers.Serializer):
     credential_mode = serializers.ChoiceField(choices=['integration', 'credential_free'])
     operations = ServiceOperationSerializer(many=True)
     supports_health_check = serializers.BooleanField()
+    supports_service_call = serializers.BooleanField()
 
 
 class GateVariantSerializer(serializers.Serializer):

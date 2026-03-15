@@ -1024,7 +1024,7 @@ development_status:
     84-1-registre-handlers-runtime-step-types: done # R1,R2,W5 — Remplacer match step_type par registre handlers. Aligner definitions et execution.
     84-2-resolution-manuelle-generique-gates: done # G1,G3,G4,R3 — Découpler approval_granted, resolution_strategy déclaratif, réduire legacy
     84-3-workflow-ui-backend-driven: done # W1-W4 — Palette, titres, validation, typing depuis capabilities
-    84-4-formulaires-service-schema-driven-complets: backlog # S1-S4 — input_schema, validation F/B, ui_hints, services non opérationnels
+    84-4-formulaires-service-schema-driven-complets: done # S1-S4 — input_schema, validation F/B, ui_hints, services non opérationnels
     84-5-gate-step-config-renderer-generique: backlog # G2 — GateStepConfig branché sur SchemaFormRenderer
     84-6-reduire-exception-aap: backlog # P1 — AAP au strict minimum ou chemin déclaratif
     84-7-simplifier-action-platform-conversions-legacy: backlog # P2,P3 — Un seul code métier, PlatformDefinition

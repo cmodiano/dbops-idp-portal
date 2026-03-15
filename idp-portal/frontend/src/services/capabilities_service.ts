@@ -37,6 +37,7 @@ export interface ServiceCapability {
   credential_mode: 'integration' | 'credential_free';
   operations: ServiceOperation[];
   supports_health_check: boolean;
+  supports_service_call: boolean;
 }
 
 export interface GateVariant {

@@ -77,7 +77,21 @@ service_definition_registry.register(ServiceDefinition(
     display_name="HashiCorp Vault",
     requires_integration=True,
     operation_defs=(
-        ServiceOperationDefinition(code="get_secret", label="Lire un secret"),  # pragma: allowlist secret
+        ServiceOperationDefinition(  # pragma: allowlist secret
+            code="get_secret",
+            label="Lire un secret",
+            input_schema={
+                "type": "object",
+                "required": ["credential_ref"],
+                "properties": {
+                    "credential_ref": {
+                        "type": "string",
+                        "title": "Référence de secret Vault",
+                        "description": "Chemin du secret dans Vault (ex: secret/myapp/password)",
+                    },
+                },
+            },
+        ),
     ),
     supports_health_check=True,
 ))
@@ -93,11 +107,77 @@ service_definition_registry.register(ServiceDefinition(
     display_name="ServiceNow",
     requires_integration=True,
     operation_defs=(
-        ServiceOperationDefinition(code="create_change", label="Créer un change"),
-        ServiceOperationDefinition(code="update_change", label="Mettre à jour le change"),
-        ServiceOperationDefinition(code="close_change", label="Fermer le change"),
-        ServiceOperationDefinition(code="get_change_status", label="Statut du change"),
-        ServiceOperationDefinition(code="cancel_change", label="Annuler le change"),
+        ServiceOperationDefinition(
+            code="create_change",
+            label="Créer un change",
+            input_schema={
+                "type": "object",
+                "required": ["short_description"],
+                "properties": {
+                    "short_description": {"type": "string", "title": "Description courte"},
+                    "description": {"type": "string", "title": "Description détaillée"},
+                    "change_type": {
+                        "type": "string",
+                        "title": "Type de change",
+                        "description": "normal, standard ou emergency",
+                        "enum": ["normal", "standard", "emergency"],
+                    },
+                    "change_model_code": {"type": "string", "title": "Code modèle de change"},
+                },
+            },
+        ),
+        ServiceOperationDefinition(
+            code="update_change",
+            label="Mettre à jour le change",
+            input_schema={
+                "type": "object",
+                "required": ["change_id"],
+                "properties": {
+                    "change_id": {"type": "string", "title": "Identifiant du change (sys_id)"},
+                },
+            },
+        ),
+        ServiceOperationDefinition(
+            code="close_change",
+            label="Fermer le change",
+            input_schema={
+                "type": "object",
+                "required": ["change_id"],
+                "properties": {
+                    "change_id": {"type": "string", "title": "Identifiant du change (sys_id)"},
+                    "close_code": {
+                        "type": "string",
+                        "title": "Code de fermeture",
+                        "description": "successful, successful_issues, unsuccessful, skipped",
+                        "enum": ["successful", "successful_issues", "unsuccessful", "skipped"],
+                    },
+                    "close_notes": {"type": "string", "title": "Notes de fermeture"},
+                },
+            },
+        ),
+        ServiceOperationDefinition(
+            code="get_change_status",
+            label="Statut du change",
+            input_schema={
+                "type": "object",
+                "required": ["change_id"],
+                "properties": {
+                    "change_id": {"type": "string", "title": "Identifiant du change (sys_id)"},
+                },
+            },
+        ),
+        ServiceOperationDefinition(
+            code="cancel_change",
+            label="Annuler le change",
+            input_schema={
+                "type": "object",
+                "required": ["change_id"],
+                "properties": {
+                    "change_id": {"type": "string", "title": "Identifiant du change (sys_id)"},
+                    "reason": {"type": "string", "title": "Raison d'annulation"},
+                },
+            },
+        ),
     ),
     supports_health_check=True,
 ))
@@ -106,9 +186,47 @@ service_definition_registry.register(ServiceDefinition(
     display_name="Jira",
     requires_integration=True,
     operation_defs=(
-        ServiceOperationDefinition(code="create_issue", label="Créer un ticket"),
-        ServiceOperationDefinition(code="update_issue", label="Mettre à jour le ticket"),
-        ServiceOperationDefinition(code="get_issue", label="Lire le ticket"),
+        ServiceOperationDefinition(
+            code="create_issue",
+            label="Créer un ticket",
+            input_schema={
+                "type": "object",
+                "required": ["project_key", "issue_type", "summary"],
+                "properties": {
+                    "project_key": {"type": "string", "title": "Clé du projet Jira"},
+                    "issue_type": {
+                        "type": "string",
+                        "title": "Type de ticket",
+                        "description": "Bug, Task, Story, Epic",
+                    },
+                    "summary": {"type": "string", "title": "Résumé"},
+                    "description": {"type": "string", "title": "Description"},
+                    "assignee": {"type": "string", "title": "Assigné (username Jira)"},
+                },
+            },
+        ),
+        ServiceOperationDefinition(
+            code="update_issue",
+            label="Mettre à jour le ticket",
+            input_schema={
+                "type": "object",
+                "required": ["issue_key"],
+                "properties": {
+                    "issue_key": {"type": "string", "title": "Clé du ticket Jira (ex: PROJ-123)"},
+                },
+            },
+        ),
+        ServiceOperationDefinition(
+            code="get_issue",
+            label="Lire le ticket",
+            input_schema={
+                "type": "object",
+                "required": ["issue_key"],
+                "properties": {
+                    "issue_key": {"type": "string", "title": "Clé du ticket Jira (ex: PROJ-123)"},
+                },
+            },
+        ),
     ),
     supports_health_check=True,
 ))

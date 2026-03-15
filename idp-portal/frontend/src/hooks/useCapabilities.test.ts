@@ -31,6 +31,7 @@ const mockIntegrationsData = {
       credential_mode: 'integration' as const,
       operations: [{ code: 'create_change', label: 'Créer un changement', input_schema: {}, output_schema: {}, ui_hints: {} }],
       supports_health_check: false,
+      supports_service_call: true,
     },
   ],
 };

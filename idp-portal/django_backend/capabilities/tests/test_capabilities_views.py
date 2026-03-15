@@ -287,16 +287,21 @@ class TestOperationSchemas:
                 assert isinstance(op['output_schema'], dict)
                 assert isinstance(op['ui_hints'], dict)
 
-    def test_operation_schemas_are_empty_by_default(self, auth_client):
-        """AC1.2 — input_schema et output_schema valent {} pour toutes les opérations actuelles.
-        Story 83-10 : ui_hints peut être non-vide (ex: notification send_email/send_teams).
-        """
+    def test_operation_output_schema_empty_by_default(self, auth_client):
+        """output_schema vaut {} pour toutes les opérations actuelles (pas encore utilisé)."""
         url = reverse('capabilities:capabilities-integrations')
         data = auth_client.get(url).data['data']
         for service in data['services']:
             for op in service['operations']:
-                assert op['input_schema'] == {}, f"input_schema non vide pour {service['code']}.{op['code']}"
                 assert op['output_schema'] == {}, f"output_schema non vide pour {service['code']}.{op['code']}"
+
+    def test_notification_operations_input_schema_empty(self, auth_client):
+        """Story 84-4 — les opérations notification n'ont pas d'input_schema (ui_hints à la place)."""
+        url = reverse('capabilities:capabilities-integrations')
+        data = auth_client.get(url).data['data']
+        notification = next(s for s in data['services'] if s['code'] == 'notification')
+        for op in notification['operations']:
+            assert op['input_schema'] == {}, f"input_schema doit être vide pour notification.{op['code']}"
 
     def test_splunk_has_no_operations(self, auth_client):
         """Edge case AC1 — splunk n'a pas d'operation_defs, doit retourner une liste vide."""
@@ -304,6 +309,79 @@ class TestOperationSchemas:
         data = auth_client.get(url).data['data']
         splunk = next(s for s in data['services'] if s['code'] == 'splunk')
         assert splunk['operations'] == []
+
+
+class TestSupportsServiceCall:
+    """Story 84-4, AC3 — supports_service_call dans la réponse API."""
+
+    def test_servicenow_supports_service_call_true(self, auth_client):
+        """AC3 — servicenow a supports_service_call=true."""
+        url = reverse('capabilities:capabilities-integrations')
+        data = auth_client.get(url).data['data']
+        servicenow = next(s for s in data['services'] if s['code'] == 'servicenow')
+        assert servicenow['supports_service_call'] is True
+
+    def test_splunk_supports_service_call_false(self, auth_client):
+        """AC3 — splunk a supports_service_call=false (health check uniquement)."""
+        url = reverse('capabilities:capabilities-integrations')
+        data = auth_client.get(url).data['data']
+        splunk = next(s for s in data['services'] if s['code'] == 'splunk')
+        assert splunk['supports_service_call'] is False
+
+    def test_vault_supports_service_call_true(self, auth_client):
+        """AC3 — vault a supports_service_call=true."""
+        url = reverse('capabilities:capabilities-integrations')
+        data = auth_client.get(url).data['data']
+        vault = next(s for s in data['services'] if s['code'] == 'vault')
+        assert vault['supports_service_call'] is True
+
+    def test_all_services_have_supports_service_call_field(self, auth_client):
+        """AC3 — tous les services exposent supports_service_call."""
+        url = reverse('capabilities:capabilities-integrations')
+        data = auth_client.get(url).data['data']
+        for service in data['services']:
+            assert 'supports_service_call' in service, f"{service['code']} manque supports_service_call"
+
+
+class TestInputSchemaInCapabilities:
+    """Story 84-4, AC1/AC2 — input_schema non vide dans la réponse API."""
+
+    def test_servicenow_create_change_input_schema_properties_non_empty(self, auth_client):
+        """AC1 — servicenow.create_change expose input_schema.properties non vide."""
+        url = reverse('capabilities:capabilities-integrations')
+        data = auth_client.get(url).data['data']
+        servicenow = next(s for s in data['services'] if s['code'] == 'servicenow')
+        create_change = next(op for op in servicenow['operations'] if op['code'] == 'create_change')
+        assert create_change['input_schema'].get('properties'), "properties doit être non vide"
+        assert 'short_description' in create_change['input_schema']['properties']
+
+    def test_servicenow_create_change_required_contains_short_description(self, auth_client):
+        """AC1 — create_change.required contient short_description."""
+        url = reverse('capabilities:capabilities-integrations')
+        data = auth_client.get(url).data['data']
+        servicenow = next(s for s in data['services'] if s['code'] == 'servicenow')
+        create_change = next(op for op in servicenow['operations'] if op['code'] == 'create_change')
+        assert 'short_description' in create_change['input_schema'].get('required', [])
+
+    def test_vault_get_secret_input_schema_non_empty(self, auth_client):
+        """AC2 — vault.get_secret expose input_schema.properties avec credential_ref."""
+        url = reverse('capabilities:capabilities-integrations')
+        data = auth_client.get(url).data['data']
+        vault = next(s for s in data['services'] if s['code'] == 'vault')
+        get_secret = next(op for op in vault['operations'] if op['code'] == 'get_secret')
+        assert get_secret['input_schema'].get('properties'), "properties doit être non vide"
+        assert 'credential_ref' in get_secret['input_schema']['properties']
+
+    def test_jira_create_issue_input_schema_required(self, auth_client):
+        """AC2 — jira.create_issue.required contient project_key, issue_type, summary."""
+        url = reverse('capabilities:capabilities-integrations')
+        data = auth_client.get(url).data['data']
+        jira = next(s for s in data['services'] if s['code'] == 'jira')
+        create_issue = next(op for op in jira['operations'] if op['code'] == 'create_issue')
+        required = create_issue['input_schema'].get('required', [])
+        assert 'project_key' in required
+        assert 'issue_type' in required
+        assert 'summary' in required
 
 
 class TestPlatformNewSchemaFields:

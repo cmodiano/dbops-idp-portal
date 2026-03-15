@@ -58,6 +58,11 @@ class ServiceDefinition:
         """Codes des opérations autorisées — dérivé de operation_defs."""
         return frozenset(op.code for op in self.operation_defs)
 
+    @property
+    def supports_service_call(self) -> bool:
+        """True si le service expose des opérations service_call — dérivé de operation_defs."""
+        return bool(self.operation_defs)
+
     def get_operation_label(self, operation_code: str) -> str:
         """Retourne le label FR d'une opération, fallback = code."""
         for op in self.operation_defs:
