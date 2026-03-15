@@ -1,5 +1,6 @@
 """
 Story 82.5: GateDefinition — source de vérité pour chaque type de gate.
+Story 83.2: GateEvaluationContext + GateEvaluationStrategy Protocol.
 
 Ce module ne doit importer aucun module Django (models, settings, etc.) —
 il doit être importable avant le chargement de l'ORM Django.
@@ -7,6 +8,36 @@ il doit être importable avant le chargement de l'ORM Django.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any, Protocol, runtime_checkable
+
+
+@dataclass
+class GateEvaluationContext:
+    """Contexte passé à une GateEvaluationStrategy lors de l'évaluation.
+
+    Attributes:
+        step: Instance ExecutionStep en cours d'évaluation.
+        condition: dict gate_condition (avec 'type' et paramètres éventuels).
+        inventory_service: Service d'inventaire injecté (typé Any pour éviter
+            l'import circulaire avec inventory.services).
+        requires_maintenance_window: True si l'environnement cible requiert
+            une fenêtre de maintenance.
+    """
+
+    step: Any
+    condition: dict
+    inventory_service: Any
+    requires_maintenance_window: bool
+
+
+@runtime_checkable
+class GateEvaluationStrategy(Protocol):
+    """Protocol définissant une stratégie d'évaluation d'un gate auto-évalué.
+
+    Toute classe implémentant cette méthode est compatible (duck typing).
+    """
+
+    def evaluate(self, ctx: GateEvaluationContext) -> tuple[bool, dict]: ...
 
 
 @dataclass(frozen=True)
@@ -27,6 +58,8 @@ class GateDefinition:
         requires_manual_resolution: True si le gate ne peut être satisfait
             qu'en dehors du poll GateEvaluator (ex: endpoint /approve/).
             False = auto-évaluation par GateEvaluator.
+        evaluation_strategy: Stratégie d'évaluation auto (Story 83.2).
+            None pour les gates manuels ou non encore implémentés.
     """
 
     gate_type: str
@@ -38,6 +71,10 @@ class GateDefinition:
     config_schema: dict = field(default_factory=dict)
     supports_timeout: bool = False
     requires_manual_resolution: bool = False
+    # compare=False, hash=False : évite TypeError si l'instance de stratégie n'est pas hashable.
+    evaluation_strategy: GateEvaluationStrategy | None = field(
+        default=None, compare=False, hash=False
+    )
 
 
 class GateDefinitionRegistry:
