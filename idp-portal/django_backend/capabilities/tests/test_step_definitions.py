@@ -88,3 +88,24 @@ class TestWorkflowStepDefinitionIsolated:
     def test_default_constraints_is_empty_dict(self):
         defn = WorkflowStepDefinition(code='x', label='X', category='cat')
         assert defn.constraints == {}
+
+
+class TestVariantsBuilder:
+    """Story 83-6, AC1/AC2/AC6 — variants_builder sur WorkflowStepDefinition."""
+
+    def test_gate_has_variants_builder(self):
+        """AC6.1 : gate possède un variants_builder non-None."""
+        assert workflow_step_registry.get('gate').variants_builder is not None
+
+    def test_platform_has_no_variants_builder(self):
+        """AC6.1 : platform n'a pas de variants_builder."""
+        assert workflow_step_registry.get('platform').variants_builder is None
+
+    def test_service_call_has_no_variants_builder(self):
+        """AC6.1 : service_call n'a pas de variants_builder."""
+        assert workflow_step_registry.get('service_call').variants_builder is None
+
+    def test_default_variants_builder_is_none(self):
+        """AC1.3 : une WorkflowStepDefinition créée sans variants_builder a variants_builder is None."""
+        defn = WorkflowStepDefinition(code='x', label='X', category='cat')
+        assert defn.variants_builder is None

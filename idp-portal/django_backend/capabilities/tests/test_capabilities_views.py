@@ -285,6 +285,47 @@ class TestPlatformNewSchemaFields:
             assert platform['health_check_policy'] == {}, f"health_check_policy non vide pour {platform['code']}"
 
 
+class TestWorkflowStepsVariantsDerived:
+    """Story 83-6, AC5/AC6 — variants dérivés du gate_registry."""
+
+    def test_gate_variants_derived_from_registry(self, auth_client):
+        """AC6.2 : les codes des variants gate correspondent exactement à gate_registry.list_types()."""
+        from executions.gates.registry import gate_registry
+        url = reverse('capabilities:capabilities-workflow-steps')
+        data = auth_client.get(url).data['data']
+        gate = next(s for s in data['step_types'] if s['code'] == 'gate')
+        variant_codes = [v['code'] for v in gate['variants']]
+        assert variant_codes == gate_registry.list_types()
+        # Vérification des champs de chaque variant
+        for variant in gate['variants']:
+            gdefn = gate_registry.get(variant['code'])
+            assert variant['label'] == gdefn.display_name
+            assert variant['config_schema'] == gdefn.config_schema
+
+    def test_new_gate_in_registry_appears_in_variants(self, auth_client):
+        """Invariant 83-6 (AC5) : un nouveau gate dans gate_registry est auto-visible via l'API."""
+        from executions.gates.registry import gate_registry
+        from executions.gates.definitions import GateDefinition
+
+        fake_gate = GateDefinition(
+            gate_type='fake_gate',
+            condition_type='fake_condition',
+            display_name='Fake Gate',
+            category='test',
+        )
+        try:
+            gate_registry.register(fake_gate)
+            url = reverse('capabilities:capabilities-workflow-steps')
+            data = auth_client.get(url).data['data']
+            gate = next(s for s in data['step_types'] if s['code'] == 'gate')
+            variant_codes = {v['code'] for v in gate['variants']}
+            assert 'fake_gate' in variant_codes
+            assert len(variant_codes) == 3  # AC6.2 : 3 variants (maintenance_window, approval, fake_gate)
+        finally:
+            gate_registry._by_gate_type.pop('fake_gate', None)
+            gate_registry._by_condition_type.pop('fake_condition', None)
+
+
 class TestIntegrationsCapabilitiesActionConfigSchema:
     """Story 82.8, AC2: action_config_schema dans chaque platform."""
 

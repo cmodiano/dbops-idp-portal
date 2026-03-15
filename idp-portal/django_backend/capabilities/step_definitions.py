@@ -6,6 +6,7 @@ il doit être importable avant le chargement de l'ORM Django.
 """
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 
@@ -19,6 +20,8 @@ class WorkflowStepDefinition:
         category: Catégorie sémantique (ex: 'execution', 'integration', 'control').
         constraints: Contraintes métier (ex: {'requires_integration': True}).
         config_schema: Schéma JSON de configuration du step (vide {} à ce stade).
+        variants_builder: Callable retournant les variants du step type (ex: gates).
+            compare=False, hash=False : évite les erreurs de hashabilité sur les callables.
     """
 
     code: str
@@ -26,6 +29,9 @@ class WorkflowStepDefinition:
     category: str
     constraints: dict = field(default_factory=dict)
     config_schema: dict = field(default_factory=dict)
+    variants_builder: Callable[[], list[dict]] | None = field(
+        default=None, compare=False, hash=False
+    )
 
 
 class WorkflowStepDefinitionRegistry:
@@ -79,9 +85,28 @@ workflow_step_registry.register(WorkflowStepDefinition(
     constraints={'requires_service_integration': True},
 ))
 
+def _build_gate_variants() -> list[dict]:
+    """Retourne les variants du step gate depuis gate_registry.
+
+    Import lazy : gate_registry requiert Django initialisé (ORM via strategies.py).
+    Ce module doit rester importable avant l'ORM — l'import est donc différé à l'appel.
+    """
+    from executions.gates.registry import gate_registry  # noqa: PLC0415
+    return [
+        {
+            'code': gate_type,
+            'label': gdefn.display_name,
+            'config_schema': gdefn.config_schema,
+        }
+        for gate_type in gate_registry.list_types()
+        for gdefn in [gate_registry.get(gate_type)]
+    ]
+
+
 workflow_step_registry.register(WorkflowStepDefinition(
     code='gate',
     label='Attendre',
     category='control',
     constraints={},
+    variants_builder=_build_gate_variants,
 ))

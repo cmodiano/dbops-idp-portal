@@ -15,7 +15,6 @@ from capabilities.serializers import (
 from core.middleware import get_correlation_id
 from platforms.registry import platform_registry
 from services.definitions import service_definition_registry
-from executions.gates.registry import gate_registry
 from capabilities.step_definitions import workflow_step_registry
 
 logger = structlog.get_logger(__name__)
@@ -79,7 +78,7 @@ def get_workflow_steps_capabilities(request: Request) -> Response:
     """GET /api/v1/capabilities/workflow-steps
 
     Retourne les types de steps workflow avec leurs variants (gates).
-    Variants gates dérivés de gate_registry (Story 82.5).
+    Variants dérivés via variants_builder (Story 83-6) — aucun mapping hardcodé.
     """
     correlation_id = get_correlation_id()
     logger.info("capabilities_workflow_steps_requested", correlation_id=correlation_id)
@@ -94,17 +93,8 @@ def get_workflow_steps_capabilities(request: Request) -> Response:
             'config_schema': defn.config_schema,
             'constraints': defn.constraints,
         }
-        if defn.code == 'gate':
-            # Variants dérivés de gate_registry (Story 82.5)
-            variants = []
-            for gate_type in gate_registry.list_types():
-                gdefn = gate_registry.get(gate_type)
-                variants.append({
-                    'code': gate_type,
-                    'label': gdefn.display_name,
-                    'config_schema': gdefn.config_schema,
-                })
-            entry['variants'] = variants
+        if defn.variants_builder is not None:
+            entry['variants'] = defn.variants_builder()
         step_types.append(entry)
 
     return Response({'data': {'step_types': step_types}})
