@@ -130,9 +130,9 @@ const WorkflowStepNode: FC<NodeProps> = ({ data, selected }) => {
       return nodeData.name ?? (nodeData.policy_name ? nodeData.policy_name : `Politique #${nodeData.policy_id ?? '?'}`);
     }
     if (stepType === 'gate') {
-      if (nodeData.gate_type === 'maintenance_window') return nodeData.name ?? 'Fenêtre maintenance';
-      if (nodeData.gate_type === 'approval') return nodeData.name ?? 'Approbation';
-      return nodeData.name ?? 'Gate';
+      const gateStepCap = capabilities?.stepTypes?.find((s) => s.code === 'gate');
+      const gateVariant = gateStepCap?.variants?.find((v) => v.code === nodeData.gate_type);
+      return nodeData.name ?? gateVariant?.label ?? 'Gate';
     }
     if (stepType === 'http_request') {
       const url = nodeData.url ? nodeData.url.substring(0, 30) : '?';
@@ -143,6 +143,14 @@ const WorkflowStepNode: FC<NodeProps> = ({ data, selected }) => {
     }
     return nodeData.name ?? '';
   }, [stepType, nodeData, capabilities]);
+
+  // Story 83-11: Badge label dérivé du variant de gate (déclaratif)
+  const stepTypeBadgeLabel = useMemo(() => {
+    if (stepType !== 'gate') return STEP_TYPE_LABELS[stepType];
+    const gateStepCap = capabilities?.stepTypes?.find((s) => s.code === 'gate');
+    const gateVariant = gateStepCap?.variants?.find((v) => v.code === nodeData.gate_type);
+    return gateVariant?.label ?? STEP_TYPE_LABELS['gate'];
+  }, [stepType, capabilities, nodeData.gate_type]);
 
   // Execution status colors — subtle, professional palette
   const executionBorderColors: Record<string, string> = {
@@ -256,12 +264,12 @@ const WorkflowStepNode: FC<NodeProps> = ({ data, selected }) => {
           aria-label="Entrée"
         />
 
-        {/* Story 57.13: Step type badge */}
+        {/* Story 57.13: Step type badge — Story 83-11: badge label dérivé du variant de gate */}
         <Tag
           color={STEP_TYPE_COLORS[stepType]}
           style={{ fontSize: 10, padding: '0 4px', marginBottom: 4, display: 'inline-block', lineHeight: '16px' }}
         >
-          {STEP_TYPE_LABELS[stepType]}
+          {stepTypeBadgeLabel}
         </Tag>
 
         <div style={{ fontWeight: 600, marginBottom: 4, fontSize: 13, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

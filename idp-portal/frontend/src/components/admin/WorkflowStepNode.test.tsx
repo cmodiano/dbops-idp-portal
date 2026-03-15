@@ -373,6 +373,106 @@ describe('WorkflowStepNode', () => {
     });
   });
 
+  // Story 83-11: WorkflowStepNode — labels et badge de gate dérivés du backend
+  describe('Story 83-11: gate labels dérivés des capabilities', () => {
+    const mockCapabilitiesWithGates = {
+      platforms: [],
+      services: [],
+      stepTypes: [
+        {
+          code: 'gate',
+          label: 'Attendre',
+          category: 'control',
+          config_schema: {},
+          constraints: {},
+          variants: [
+            { code: 'maintenance_window', label: 'Fenêtre de maintenance', config_schema: {} },
+            { code: 'approval', label: 'Approbation manuelle', config_schema: { type: 'object', properties: {} } },
+          ],
+        },
+      ],
+    };
+
+    it('affiche_le_variant_label_maintenance_window_depuis_capabilities', () => {
+      mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithGates, loading: false, error: null });
+
+      render(
+        <WorkflowStepNode
+          {...makeProps({ step_type: 'gate', gate_type: 'maintenance_window', name: null })}
+        />,
+      );
+
+      // Doit apparaître au moins 2 fois : une fois comme titre, une fois comme badge
+      expect(screen.getAllByText('Fenêtre de maintenance').length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('affiche_le_variant_label_approval_depuis_capabilities', () => {
+      mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithGates, loading: false, error: null });
+
+      render(
+        <WorkflowStepNode
+          {...makeProps({ step_type: 'gate', gate_type: 'approval', name: null })}
+        />,
+      );
+
+      // Doit apparaître au moins 2 fois : une fois comme titre, une fois comme badge
+      expect(screen.getAllByText('Approbation manuelle').length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('gate_type_inconnu_fallback_gate', () => {
+      mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithGates, loading: false, error: null });
+
+      render(
+        <WorkflowStepNode
+          {...makeProps({ step_type: 'gate', gate_type: 'futur_gate', name: null })}
+        />,
+      );
+
+      expect(screen.getByText('Gate')).toBeInTheDocument();
+      expect(screen.getByText('Attendre')).toBeInTheDocument();
+    });
+
+    it('capabilities_null_gate_fallback', () => {
+      mockUseCapabilities.mockReturnValue({ capabilities: null, loading: false, error: null });
+
+      render(
+        <WorkflowStepNode
+          {...makeProps({ step_type: 'gate', gate_type: 'approval', name: null })}
+        />,
+      );
+
+      expect(screen.getByText('Gate')).toBeInTheDocument();
+      expect(screen.getByText('Attendre')).toBeInTheDocument();
+    });
+
+    it('gate_name_utilisateur_prioritaire_sur_variant', () => {
+      mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithGates, loading: false, error: null });
+
+      render(
+        <WorkflowStepNode
+          {...makeProps({ step_type: 'gate', gate_type: 'approval', name: 'Mon approbation' })}
+        />,
+      );
+
+      expect(screen.getByText('Mon approbation')).toBeInTheDocument();
+      expect(screen.getByText('Approbation manuelle')).toBeInTheDocument();
+    });
+
+    it('gate_type_null_fallback_gate', () => {
+      mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithGates, loading: false, error: null });
+
+      render(
+        <WorkflowStepNode
+          {...makeProps({ step_type: 'gate', gate_type: null, name: null })}
+        />,
+      );
+
+      // gate_type null (step gate nouvellement créé) → fallback titre 'Gate', badge 'Attendre'
+      expect(screen.getByText('Gate')).toBeInTheDocument();
+      expect(screen.getByText('Attendre')).toBeInTheDocument();
+    });
+  });
+
   // Story 82.8: WorkflowStepNode — labels service depuis capabilities
   describe('Story 82.8: WorkflowStepNode service_call labels depuis capabilities', () => {
     const mockCapabilities = {
