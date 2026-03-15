@@ -16,15 +16,9 @@ from core.middleware import get_correlation_id
 from platforms.registry import platform_registry
 from services.definitions import service_definition_registry
 from executions.gates.registry import gate_registry
+from capabilities.step_definitions import workflow_step_registry
 
 logger = structlog.get_logger(__name__)
-
-# Labels et catégories des step_types statiques
-_STEP_TYPES_STATIC = [
-    {'code': 'platform',     'label': 'Exécuter', 'category': 'execution',   'constraints': {'requires_integration': True}},
-    {'code': 'service_call', 'label': 'Service',  'category': 'integration', 'constraints': {'requires_service_integration': True}},
-    {'code': 'gate',         'label': 'Attendre', 'category': 'control',     'constraints': {}},
-]
 
 
 @extend_schema(tags=['capabilities'], summary='Capacités des intégrations', responses={200: IntegrationsCapabilityDataSerializer})
@@ -83,23 +77,24 @@ def get_workflow_steps_capabilities(request: Request) -> Response:
     logger.info("capabilities_workflow_steps_requested", correlation_id=correlation_id)
 
     step_types = []
-    for step_meta in _STEP_TYPES_STATIC:
+    for code in workflow_step_registry.list_types():
+        defn = workflow_step_registry.get(code)
         entry: dict = {
-            'code': step_meta['code'],
-            'label': step_meta['label'],
-            'category': step_meta['category'],
-            'config_schema': {},
-            'constraints': step_meta.get('constraints', {}),
+            'code': defn.code,
+            'label': defn.label,
+            'category': defn.category,
+            'config_schema': defn.config_schema,
+            'constraints': defn.constraints,
         }
-        if step_meta['code'] == 'gate':
+        if defn.code == 'gate':
             # Variants dérivés de gate_registry (Story 82.5)
             variants = []
             for gate_type in gate_registry.list_types():
-                defn = gate_registry.get(gate_type)
+                gdefn = gate_registry.get(gate_type)
                 variants.append({
                     'code': gate_type,
-                    'label': defn.display_name,
-                    'config_schema': defn.config_schema,
+                    'label': gdefn.display_name,
+                    'config_schema': gdefn.config_schema,
                 })
             entry['variants'] = variants
         step_types.append(entry)
