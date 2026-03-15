@@ -436,6 +436,214 @@ Travail restant :
 
 ---
 
+## Roadmap cible - atteindre 9/10 par composant
+
+Cette section traduit le travail restant en **objectif de maturite**.
+
+### Echelle de lecture
+
+- **6/10** : extensible mais encore fragile ou trop manuel
+- **7/10** : bonne base, quelques duplications/cas speciaux
+- **8/10** : architecture solide, reste surtout du nettoyage cible
+- **9/10** : ajout localise, comprehensible, peu de couplage, faible risque de derive
+
+L'objectif ici n'est pas un 10/10 theorique.
+
+Le **9/10** vise une architecture :
+
+- simple
+- lisible
+- robuste
+- vraiment exploitable au quotidien
+
+### 1. Plateformes
+
+**Etat estime actuel : 8/10**
+
+Points forts deja acquis :
+
+- `PlatformDefinition`
+- `PlatformRegistry`
+- aliases centralises
+- `action_config_schema`
+- `runtime_config_schema`
+- `health_check_policy`
+- `ActionWizard` largement base sur les capabilities backend
+
+Ce qui manque pour 9/10 :
+
+1. **reduire l'exception AAP au strict minimum**
+   - conserver uniquement le renderer specialise si la recherche de templates AAP reste vraiment un besoin UX unique
+   - sinon aligner AAP sur le meme chemin declaratif que les autres plateformes
+
+2. **simplifier le legacy `ActionPlatform`**
+   - reduire les conversions residuelles entre :
+     - code integration
+     - `connector_type`
+     - code action
+   - idealement, garder un seul code metier et deriver le reste au plus pres de la persistence/runtime
+
+3. **faire converger execution runtime et definitions**
+   - utiliser davantage `PlatformDefinition` pour eviter tout mapping ou regle residuelle hors definition
+
+4. **completer l'usage des schemas**
+   - exploiter davantage `runtime_config_schema` et `health_check_policy`
+   - clarifier ce qui est purement descriptif vs effectivement applique
+
+**Definition pratique du 9/10 pour les plateformes**
+
+- ajouter une nouvelle plateforme = ecrire l'adapter + declarer la definition
+- pas de nouvelle constante frontend
+- pas de nouveau helper de mapping
+- pas de nouveau branchement hors exception runtime reellement justifiee
+
+### 2. Services
+
+**Etat estime actuel : 8/10**
+
+Points forts deja acquis :
+
+- `ServiceDefinition`
+- operations derivees du backend
+- `input_schema` / `output_schema` / `ui_hints`
+- plus de duplication majeure frontend/backend des operations
+
+Ce qui manque pour 9/10 :
+
+1. **rendre le formulaire d'operation vraiment schema-driven**
+   - aujourd'hui, le flux service_call reste encore proche d'un key/value editor generaliste
+   - il faut rendre les champs depuis `input_schema` quand le schema le permet
+
+2. **faire converger validation frontend/backend**
+   - le frontend doit exploiter plus directement les schemas exposes
+   - les erreurs de saisie doivent etre visibles avant le submit, pas seulement au runtime
+
+3. **mieux utiliser `ui_hints`**
+   - normaliser les hints utiles
+   - limiter les renderers specifiques a des cas bien identifies
+
+4. **clarifier les services non operationnels**
+   - exemple : services presents pour health check/consommation interne mais sans `service_call`
+   - leur role doit etre explicite dans les capabilities
+
+**Definition pratique du 9/10 pour les services**
+
+- ajouter un nouveau service = ecrire le client + declarer les operations
+- si les operations ont un schema standard, aucune modification frontend supplementaire
+- les labels, champs et validations viennent de l'API backend
+
+### 3. Gates
+
+**Etat estime actuel : 6.5/10**
+
+Points forts deja acquis :
+
+- `GateDefinition`
+- `GateRegistry`
+- strategies d'evaluation
+- variants exposes via capabilities
+- `GateStepConfig` deja partiellement derive de `config_schema`
+
+Ce qui manque pour 9/10 :
+
+1. **generaliser la resolution manuelle**
+   - supprimer le couplage dur a `approval_granted`
+   - permettre a un gate manuel de declarer sa resolution de maniere plus generique
+
+2. **mieux utiliser `config_schema` pour le rendu**
+   - brancher davantage `GateStepConfig` sur un renderer de schema
+   - ne garder du code conditionnel que si la valeur UX est evidente
+
+3. **reduire les references legacy**
+   - approval flow, outbox, events et runtime contiennent encore des references explicites au gate historique
+
+4. **stabiliser l'extension des gates manuels**
+   - un nouveau gate manuel ne doit pas exiger de chasse au tresor dans les views/services/tasks
+
+**Definition pratique du 9/10 pour les gates**
+
+- ajouter un nouveau gate auto-evalue = definition + strategie
+- ajouter un nouveau gate manuel = definition + mecanisme de resolution dedie
+- pas de nouveau `if gate_type == ...` disperse dans plusieurs couches
+
+### 4. Workflow UI / extensibilite des step types
+
+**Etat estime actuel : 6.5/10**
+
+C'est aujourd'hui la zone la plus importante a faire progresser.
+
+Points forts deja acquis :
+
+- capabilities workflow exposees par le backend
+- labels/variants de gates deja relies aux capabilities dans plusieurs composants
+- `SchemaFormRenderer` disponible
+
+Ce qui manque pour 9/10 :
+
+1. **palette backend-driven**
+   - `ActionPalette` ne doit plus embarquer une liste locale des special steps
+
+2. **titres/backend labels unifies**
+   - `StepConfigPanel`
+   - `workflowStepLabels`
+   - `WorkflowStepNode`
+   - ces composants doivent consommer le meme vocabulaire expose par le backend
+
+3. **validation backend-driven**
+   - `workflowValidation.ts` ne doit plus etre un `switch(stepType)` metier
+   - il doit lire les contraintes de validation depuis les capabilities
+
+4. **typing plus souple cote frontend**
+   - eviter que l'ajout d'un nouveau step type demande une cascade de modifications TypeScript purement descriptives
+   - conserver les unions strictes uniquement quand elles apportent un vrai gain de surete
+
+5. **aligner capabilities et execution**
+   - un step type expose au frontend doit correspondre a un handler runtime connu
+   - idealement via un registre de handlers backend
+
+**Definition pratique du 9/10 pour le workflow UI**
+
+- ajouter un nouveau step type standard = declaration backend + handler runtime + eventuel schema
+- la palette, le panneau, les labels et la validation frontend s'adaptent sans duplication locale majeure
+
+### 5. Backend orchestration / execution runtime
+
+**Etat estime actuel : 7/10**
+
+Points forts deja acquis :
+
+- definitions backend riches
+- capabilities bien exposees
+- evaluation gate plus modulaire
+
+Ce qui manque pour 9/10 :
+
+1. **remplacer le `match step_type` central**
+   - introduire un registre de handlers runtime pour les step types
+
+2. **aligner definitions et execution**
+   - ce qui est declarable dans capabilities doit correspondre a un chemin runtime clair
+
+3. **reduire le legacy d'approbation**
+   - limiter la logique speciale historique au strict necessaire
+
+**Definition pratique du 9/10 pour le runtime**
+
+- definition -> validation -> execution suit la meme structure mentale
+- on peut suivre un step type sans changer de paradigme entre capabilities et runtime
+
+### 6. Objectif global
+
+Pour atteindre une note globale proche de **9/10** sur l'ensemble du sujet, l'ordre recommande est :
+
+1. **runtime workflow handler registry**
+2. **manual gate resolution generic path**
+3. **workflow UI derive des capabilities**
+4. **service forms plus schema-driven**
+5. **reduction finale des compatibilites legacy plateforme/action**
+
+---
+
 ## Architecture cible recommandee
 
 ## 1. Definitions simples cote backend
