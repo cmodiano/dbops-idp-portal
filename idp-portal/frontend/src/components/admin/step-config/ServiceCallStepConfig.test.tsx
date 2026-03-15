@@ -17,37 +17,38 @@ vi.mock('../../../hooks/useCapabilities');
 const mockUseCapabilities = vi.mocked(useCapabilitiesModule.useCapabilities);
 
 // Story 82.7: Mock capabilities with ServiceOperation[] (code + label)
+// Story 83-10: enrichi avec input_schema, output_schema, ui_hints
 const mockCapabilitiesWithServices = {
   platforms: [],
   services: [
     {
       code: 'servicenow', display_name: 'ServiceNow', credential_mode: 'integration' as const, supports_health_check: false,
       operations: [
-        { code: 'cancel_change', label: 'Annuler le change' },
-        { code: 'close_change', label: 'Fermer le change' },
-        { code: 'create_change', label: 'Créer un change' },
-        { code: 'get_change_status', label: 'Statut du change' },
-        { code: 'update_change', label: 'Mettre à jour le change' },
+        { code: 'cancel_change', label: 'Annuler le change', input_schema: {}, output_schema: {}, ui_hints: {} },
+        { code: 'close_change', label: 'Fermer le change', input_schema: {}, output_schema: {}, ui_hints: {} },
+        { code: 'create_change', label: 'Créer un change', input_schema: {}, output_schema: {}, ui_hints: {} },
+        { code: 'get_change_status', label: 'Statut du change', input_schema: {}, output_schema: {}, ui_hints: {} },
+        { code: 'update_change', label: 'Mettre à jour le change', input_schema: {}, output_schema: {}, ui_hints: {} },
       ],
     },
     {
       code: 'vault', display_name: 'HashiCorp Vault', credential_mode: 'integration' as const, supports_health_check: false,
-      operations: [{ code: 'get_secret', label: 'Lire un secret' }],
+      operations: [{ code: 'get_secret', label: 'Lire un secret', input_schema: {}, output_schema: {}, ui_hints: {} }],
     },
     {
       code: 'jira', display_name: 'Jira', credential_mode: 'integration' as const, supports_health_check: false,
       operations: [
-        { code: 'create_issue', label: 'Créer un ticket' },
-        { code: 'get_issue', label: 'Lire le ticket' },
-        { code: 'update_issue', label: 'Mettre à jour le ticket' },
+        { code: 'create_issue', label: 'Créer un ticket', input_schema: {}, output_schema: {}, ui_hints: {} },
+        { code: 'get_issue', label: 'Lire le ticket', input_schema: {}, output_schema: {}, ui_hints: {} },
+        { code: 'update_issue', label: 'Mettre à jour le ticket', input_schema: {}, output_schema: {}, ui_hints: {} },
       ],
     },
     {
       code: 'notification', display_name: 'Notification', credential_mode: 'credential_free' as const, supports_health_check: false,
       operations: [
-        { code: 'notify_execution_event', label: "Notifier un événement d'exécution" },
-        { code: 'send_email', label: 'Envoyer un email' },
-        { code: 'send_teams', label: 'Envoyer un message Teams' },
+        { code: 'notify_execution_event', label: "Notifier un événement d'exécution", input_schema: {}, output_schema: {}, ui_hints: {} },
+        { code: 'send_email', label: 'Envoyer un email', input_schema: {}, output_schema: {}, ui_hints: { input_renderer: 'notification_template' } },
+        { code: 'send_teams', label: 'Envoyer un message Teams', input_schema: {}, output_schema: {}, ui_hints: { input_renderer: 'notification_template' } },
       ],
     },
   ],
@@ -341,7 +342,7 @@ describe('ServiceCallStepConfig — useCapabilities integration (Story 82.6)', (
       capabilities: {
         platforms: [],
         services: [
-          { code: 'vault', display_name: 'HashiCorp Vault', credential_mode: 'integration' as const, operations: [{ code: 'get_secret', label: 'Lire un secret' }], supports_health_check: false },
+          { code: 'vault', display_name: 'HashiCorp Vault', credential_mode: 'integration' as const, operations: [{ code: 'get_secret', label: 'Lire un secret', input_schema: {}, output_schema: {}, ui_hints: {} }], supports_health_check: false },
         ],
         stepTypes: [],
       },
@@ -393,6 +394,75 @@ describe('ServiceCallStepConfig — operation labels depuis ServiceOperation (St
 });
 
 // ---------------------------------------------------------------------------
+// Story 83-10 — rendu déclaratif via ui_hints
+// ---------------------------------------------------------------------------
+
+describe('ServiceCallStepConfig — rendu déclaratif via ui_hints (Story 83-10)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithServices, loading: false, error: null });
+  });
+
+  it('renders_notification_editor_when_ui_hints_declares_notification_template', () => {
+    // Service hypothétique (code ≠ 'notification') avec ui_hints notification_template.
+    // Utilise un code d'opération distinct ('send_message') pour prouver que la logique
+    // déclarative ne dépend plus NI de integration_type === 'notification' NI d'un code
+    // d'opération hardcodé — uniquement de ui_hints.input_renderer.
+    // NotificationTemplateEditor reçoit 'send_message' (branche else → teams template).
+    const capabilitiesWithSlack = {
+      platforms: [],
+      services: [
+        {
+          code: 'slack',
+          display_name: 'Slack',
+          credential_mode: 'integration' as const,
+          supports_health_check: false,
+          operations: [
+            {
+              code: 'send_message',
+              label: 'Envoyer un message Slack',
+              input_schema: {},
+              output_schema: {},
+              ui_hints: { input_renderer: 'notification_template' },
+            },
+          ],
+        },
+      ],
+      stepTypes: [],
+    };
+    mockUseCapabilities.mockReturnValue({ capabilities: capabilitiesWithSlack, loading: false, error: null });
+
+    const { container } = render(
+      <ServiceCallStepConfig
+        data={{ ...baseData, integration_type: 'slack', operation: 'send_message' }}
+        onUpdate={vi.fn()}
+        disabled={false}
+      />,
+    );
+
+    // NotificationTemplateEditor rendu (pas KeyValueEditor) — logique déclarative via ui_hints.
+    // send_message → branche else de NotificationTemplateEditor → teams template.
+    expect(container.querySelector('[data-testid="notification-template-editor-teams"]')).toBeInTheDocument();
+    expect(screen.queryByTestId('input-mapping-editor')).not.toBeInTheDocument();
+  });
+
+  it('renders_key_value_editor_when_ui_hints_is_empty', () => {
+    const { container } = render(
+      <ServiceCallStepConfig
+        data={{ ...baseData, integration_type: 'notification', operation: 'notify_execution_event' }}
+        onUpdate={vi.fn()}
+        disabled={false}
+      />,
+    );
+
+    // KeyValueEditor rendu (ui_hints: {} → pas de renderer spécial)
+    expect(screen.getByTestId('input-mapping-editor')).toBeInTheDocument();
+    expect(container.querySelector('[data-testid="notification-template-editor-email"]')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-testid="notification-template-editor-teams"]')).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Story 82.9 — T8.2: non-régression nouveau plugin visible partout
 // ---------------------------------------------------------------------------
 
@@ -406,7 +476,7 @@ describe('ServiceCallStepConfig — T8.2: nouveau service dans capabilities → 
           display_name: 'My New Service',
           credential_mode: 'integration' as const,
           supports_health_check: false,
-          operations: [],
+          operations: [] as { code: string; label: string; input_schema: Record<string, unknown>; output_schema: Record<string, unknown>; ui_hints: Record<string, unknown> }[],
         },
       ],
       stepTypes: [],

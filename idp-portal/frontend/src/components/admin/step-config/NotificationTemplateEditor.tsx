@@ -25,7 +25,8 @@ export interface NotificationTemplateEditorProps {
   workflowId?: number;
   currentStepId: string;
   availableStepIds?: string[];
-  operation: 'send_email' | 'send_teams';
+  /** Story 83-10: widened to string for full declarative support via ui_hints.input_renderer */
+  operation: string;
 }
 
 // Templates prédéfinis par opération

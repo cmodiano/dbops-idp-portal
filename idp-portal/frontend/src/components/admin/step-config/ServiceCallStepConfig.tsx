@@ -3,8 +3,8 @@
  *
  * Affiche : sélection integration_type, sélection operation (statique), éditeurs input/output_mapping, condition.
  *
- * Story 82.7: Les opérations sont désormais fournies par l'API capabilities (GET /capabilities/integrations/)
- * Les opérations sont fournies par l'API capabilities (GET /capabilities/integrations/).
+ * Story 82.7: Les opérations sont désormais fournies par l'API capabilities (GET /capabilities/integrations/).
+ * Story 83-10: Rendu déclaratif via ui_hints.input_renderer — plus de branche hardcodée sur integration_type/operation.
  */
 
 import { useMemo } from 'react';
@@ -61,6 +61,14 @@ export const ServiceCallStepConfig: FC<ServiceCallStepConfigProps> = ({
     }
     return [];
   }, [data.integration_type, capabilities]);
+
+  // Story 83-10 : résolution déclarative du renderer via ui_hints
+  const currentOperation = useMemo(() => {
+    if (!data.operation) return null;
+    return availableOperations.find((op) => op.code === data.operation) ?? null;
+  }, [data.operation, availableOperations]);
+
+  const useNotificationRenderer = currentOperation?.ui_hints?.input_renderer === 'notification_template';
 
   // Filtrer le step courant de la liste des étapes disponibles (AC4: "étapes précédentes")
   const filteredStepOptions = useMemo(
@@ -122,8 +130,7 @@ export const ServiceCallStepConfig: FC<ServiceCallStepConfigProps> = ({
 
       {/* Input mapping */}
       <div style={{ marginBottom: 12 }}>
-        {data.integration_type === 'notification' &&
-        ['send_email', 'send_teams'].includes(data.operation ?? '') ? (
+        {useNotificationRenderer ? (
           <>
             <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
               Configuration de la notification
@@ -135,7 +142,7 @@ export const ServiceCallStepConfig: FC<ServiceCallStepConfigProps> = ({
               workflowId={workflowId}
               currentStepId={data.step_id ?? ''}
               availableStepIds={availableStepIds}
-              operation={data.operation as 'send_email' | 'send_teams'}
+              operation={data.operation ?? ''}
             />
           </>
         ) : (

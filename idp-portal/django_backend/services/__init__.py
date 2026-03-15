@@ -117,9 +117,17 @@ service_definition_registry.register(ServiceDefinition(
     display_name="Notification",
     requires_integration=False,
     operation_defs=(
-        ServiceOperationDefinition(code="send_email", label="Envoyer un email"),
-        ServiceOperationDefinition(code="send_teams", label="Envoyer un message Teams"),
-        ServiceOperationDefinition(code="notify_execution_event", label="Notifier un événement d'exécution"),
+        ServiceOperationDefinition(
+            code="send_email",
+            label="Envoyer un email",
+            ui_hints={"input_renderer": "notification_template"},
+        ),
+        ServiceOperationDefinition(
+            code="send_teams",
+            label="Envoyer un message Teams",
+            ui_hints={"input_renderer": "notification_template"},
+        ),
+        ServiceOperationDefinition(code="notify_execution_event", label="Notifier un événement d'exécution", ui_hints={}),
     ),
     supports_health_check=False,
 ))

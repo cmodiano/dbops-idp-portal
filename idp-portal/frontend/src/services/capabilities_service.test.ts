@@ -40,7 +40,7 @@ describe('getIntegrationsCapabilities', () => {
           code: 'servicenow',
           display_name: 'ServiceNow',
           credential_mode: 'integration',
-          operations: [{ code: 'create_change', label: 'Créer un changement' }, { code: 'update_change', label: 'Mettre à jour un changement' }],
+          operations: [{ code: 'create_change', label: 'Créer un changement', input_schema: {}, output_schema: {}, ui_hints: {} }, { code: 'update_change', label: 'Mettre à jour un changement', input_schema: {}, output_schema: {}, ui_hints: {} }],
           supports_health_check: false,
         },
       ],

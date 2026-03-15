@@ -21,10 +21,14 @@ export interface PlatformCapability {
   action_config_schema: Record<string, unknown>;
 }
 
-/** Story 82.7 — opération d'un service avec label FR. */
+/** Story 82.7 — opération d'un service avec label FR et schémas.
+ *  Story 83-10 — enrichi avec input_schema, output_schema, ui_hints pour rendu déclaratif. */
 export interface ServiceOperation {
   code: string;
   label: string;
+  input_schema: Record<string, unknown>;
+  output_schema: Record<string, unknown>;
+  ui_hints: Record<string, unknown>;
 }
 
 export interface ServiceCapability {

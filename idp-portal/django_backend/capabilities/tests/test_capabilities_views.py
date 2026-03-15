@@ -237,14 +237,15 @@ class TestOperationSchemas:
                 assert isinstance(op['ui_hints'], dict)
 
     def test_operation_schemas_are_empty_by_default(self, auth_client):
-        """AC1.2 — input_schema, output_schema, ui_hints valent {} pour toutes les opérations actuelles."""
+        """AC1.2 — input_schema et output_schema valent {} pour toutes les opérations actuelles.
+        Story 83-10 : ui_hints peut être non-vide (ex: notification send_email/send_teams).
+        """
         url = reverse('capabilities:capabilities-integrations')
         data = auth_client.get(url).data['data']
         for service in data['services']:
             for op in service['operations']:
                 assert op['input_schema'] == {}, f"input_schema non vide pour {service['code']}.{op['code']}"
                 assert op['output_schema'] == {}, f"output_schema non vide pour {service['code']}.{op['code']}"
-                assert op['ui_hints'] == {}, f"ui_hints non vide pour {service['code']}.{op['code']}"
 
     def test_splunk_has_no_operations(self, auth_client):
         """Edge case AC1 — splunk n'a pas d'operation_defs, doit retourner une liste vide."""
@@ -383,3 +384,40 @@ class TestGateVariantConfigSchema:
         gate = next(s for s in data['step_types'] if s['code'] == 'gate')
         maintenance = next(v for v in gate['variants'] if v['code'] == 'maintenance_window')
         assert maintenance['config_schema'] == {}
+
+
+class TestNotificationServiceUiHints:
+    """Story 83-10, AC1 — ui_hints exposé pour les opérations send_email et send_teams."""
+
+    def test_send_email_has_notification_template_renderer(self, auth_client):
+        """send_email doit déclarer ui_hints.input_renderer = 'notification_template'."""
+        url = reverse('capabilities:capabilities-integrations')
+        data = auth_client.get(url).data['data']
+        services = data['services']
+        notification_svc = next((s for s in services if s['code'] == 'notification'), None)
+        assert notification_svc is not None
+        send_email_op = next((op for op in notification_svc['operations'] if op['code'] == 'send_email'), None)
+        assert send_email_op is not None
+        assert send_email_op['ui_hints'] == {'input_renderer': 'notification_template'}
+
+    def test_send_teams_has_notification_template_renderer(self, auth_client):
+        """send_teams doit déclarer ui_hints.input_renderer = 'notification_template'."""
+        url = reverse('capabilities:capabilities-integrations')
+        data = auth_client.get(url).data['data']
+        services = data['services']
+        notification_svc = next((s for s in services if s['code'] == 'notification'), None)
+        assert notification_svc is not None
+        send_teams_op = next((op for op in notification_svc['operations'] if op['code'] == 'send_teams'), None)
+        assert send_teams_op is not None
+        assert send_teams_op['ui_hints'] == {'input_renderer': 'notification_template'}
+
+    def test_notify_execution_event_has_empty_ui_hints(self, auth_client):
+        """notify_execution_event doit avoir ui_hints vide (renderer générique)."""
+        url = reverse('capabilities:capabilities-integrations')
+        data = auth_client.get(url).data['data']
+        services = data['services']
+        notification_svc = next((s for s in services if s['code'] == 'notification'), None)
+        assert notification_svc is not None
+        nee_op = next((op for op in notification_svc['operations'] if op['code'] == 'notify_execution_event'), None)
+        assert nee_op is not None
+        assert nee_op['ui_hints'] == {}

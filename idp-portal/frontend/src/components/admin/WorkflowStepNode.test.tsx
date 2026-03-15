@@ -384,8 +384,8 @@ describe('WorkflowStepNode', () => {
           credential_mode: 'integration' as const,
           supports_health_check: false,
           operations: [
-            { code: 'create_change', label: 'Créer un change' },
-            { code: 'close_change', label: 'Fermer le change' },
+            { code: 'create_change', label: 'Créer un change', input_schema: {}, output_schema: {}, ui_hints: {} },
+            { code: 'close_change', label: 'Fermer le change', input_schema: {}, output_schema: {}, ui_hints: {} },
           ],
         },
         {
@@ -393,7 +393,7 @@ describe('WorkflowStepNode', () => {
           display_name: 'HashiCorp Vault',
           credential_mode: 'integration' as const,
           supports_health_check: false,
-          operations: [{ code: 'get_secret', label: 'Lire un secret' }],
+          operations: [{ code: 'get_secret', label: 'Lire un secret', input_schema: {}, output_schema: {}, ui_hints: {} }],
         },
       ],
       stepTypes: [],
