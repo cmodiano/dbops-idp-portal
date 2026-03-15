@@ -25,6 +25,10 @@ class PlatformDefinition:
             Une ValueError est levée si l'une d'elles est absente ou vide.
         runtime_kwargs_optional: Clés optionnelles avec leur valeur par défaut.
             Si la clé est absente de get_config(), la valeur par défaut est utilisée.
+        action_config_schema: Schéma JSON (jsonschema draft-07) décrivant la structure
+            attendue de action_config pour les actions de cette plateforme.
+            `{}` signifie aucune contrainte (comportement actuel pour toutes les plateformes).
+            Exposé via GET /api/v1/capabilities/integrations/ (Story 82.8, AC2).
     """
 
     code: str
@@ -36,3 +40,4 @@ class PlatformDefinition:
     supports_health_check: bool
     runtime_kwargs_required: tuple[str, ...] = field(default_factory=tuple)
     runtime_kwargs_optional: dict[str, object] = field(default_factory=dict)
+    action_config_schema: dict = field(default_factory=dict)

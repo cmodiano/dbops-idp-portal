@@ -18,6 +18,33 @@ from catalog.serializers.validators import (
 )
 from platforms.registry import platform_registry
 
+
+def _validate_action_config_schema(platform_code: str, action_config: dict | None) -> None:
+    """Valide action_config contre action_config_schema de la plateforme (AC3 Story 82.8).
+
+    Si le schéma est vide ({}) → no-op (aucune contrainte).
+    Si le schéma est non vide → validation jsonschema.
+    """
+    if not platform_code:
+        return
+    try:
+        defn = platform_registry.get(platform_code)
+    except Exception:
+        return  # Plateforme inconnue → laisse les autres validateurs gérer
+
+    schema = defn.action_config_schema
+    if not schema:
+        return  # Schéma vide → pas de validation
+
+    import jsonschema  # noqa: PLC0415
+    try:
+        jsonschema.validate(instance=action_config or {}, schema=schema)
+    except jsonschema.ValidationError as e:
+        raise serializers.ValidationError({'action_config': str(e.message)})
+    except jsonschema.SchemaError as e:
+        raise serializers.ValidationError({'action_config': f'Invalid platform schema: {e.message}'})
+
+
 # Step type → fields to copy from config (Audit #5 — 5c)
 # Story 63.12: platform steps support input_mapping/output_mapping
 _STEP_TYPE_FIELDS: dict[str, tuple[str, ...]] = {
@@ -285,6 +312,18 @@ class ActionSerializer(WorkflowEnrichmentMixin, ActionFieldValidationMixin, seri
         integration = getattr(self.instance, 'integration', None) if self.instance else None
         validate_platform_integration_consistency(platform, integration)
 
+        # Story 82.8, AC3: validate action_config against platform schema.
+        # NOTE: The Action model does not yet have an `action_config` field — this is
+        # placeholder infrastructure for when that field is added. Currently, all platform
+        # schemas are {} so _validate_action_config_schema is always a no-op.
+        # TODO: Once Action.action_config is added to the model and serializer fields,
+        # remove this comment and ensure `action_config` is declared in Meta.fields.
+        if platform:
+            action_config = data.get('action_config') or (
+                getattr(self.instance, 'action_config', None) if self.instance else None
+            )
+            _validate_action_config_schema(platform, action_config)
+
         has_policy_fk = data.get('business_rule_policy') is not None
         has_policy_inline = data.get('business_rule_policies') is not None
         if has_policy_fk and has_policy_inline:
@@ -481,6 +520,15 @@ class ActionCreateSerializer(ActionFieldValidationMixin, serializers.Serializer)
                     {'integration_id': 'Integration not found'}
                 )
             validate_platform_integration_consistency(platform, integration, integration_id)
+
+        # Story 82.8, AC3: validate action_config against platform schema.
+        # NOTE: action_config field does not yet exist on the Action model — no-op while all schemas are {}.
+        if platform:
+            action_config = data.get('action_config') or (
+                getattr(self.context.get('instance'), 'action_config', None)
+            )
+            _validate_action_config_schema(platform, action_config)
+
         return data
 
 

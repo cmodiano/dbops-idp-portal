@@ -18,7 +18,7 @@ from core.services import AuditService
 from utils.json_helpers import validate_json_schema
 
 try:
-    import jsonschema  # type: ignore
+    import jsonschema
     JSONSCHEMA_AVAILABLE = True
 except ImportError:  # pragma: no cover
     JSONSCHEMA_AVAILABLE = False

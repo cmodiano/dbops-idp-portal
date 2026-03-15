@@ -32,6 +32,7 @@ describe('getIntegrationsCapabilities', () => {
           connector_type: 'aap',
           action_platform_code: 'AAP',
           supports_health_check: true,
+          action_config_schema: {},
         },
       ],
       services: [
@@ -81,13 +82,14 @@ describe('getWorkflowStepsCapabilities', () => {
   it('retourne step_types avec variants gate depuis la réponse API', async () => {
     const mockData: CapabilitiesWorkflowStepsData = {
       step_types: [
-        { code: 'platform', label: 'Exécuter', category: 'execution', config_schema: {} },
-        { code: 'service_call', label: 'Service', category: 'integration', config_schema: {} },
+        { code: 'platform', label: 'Exécuter', category: 'execution', config_schema: {}, constraints: {} },
+        { code: 'service_call', label: 'Service', category: 'integration', config_schema: {}, constraints: {} },
         {
           code: 'gate',
           label: 'Attendre',
           category: 'control',
           config_schema: {},
+          constraints: {},
           variants: [
             { code: 'maintenance_window', label: 'Fenêtre de maintenance', config_schema: {} },
             { code: 'approval', label: 'Approbation manuelle', config_schema: {} },

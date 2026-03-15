@@ -169,3 +169,53 @@ class TestWorkflowStepsCapabilities:
         for step in data['step_types']:
             if step['code'] != 'gate':
                 assert 'variants' not in step
+
+    # Story 82.8 — constraints
+    def test_platform_step_has_requires_integration_constraint(self, auth_client):
+        """Story 82.8, AC4: platform step_type a constraints requires_integration=True."""
+        url = reverse('capabilities:capabilities-workflow-steps')
+        data = auth_client.get(url).data['data']
+        platform = next(s for s in data['step_types'] if s['code'] == 'platform')
+        assert 'constraints' in platform
+        assert platform['constraints']['requires_integration'] is True
+
+    def test_service_call_step_has_requires_service_integration_constraint(self, auth_client):
+        """Story 82.8, AC4: service_call step_type a constraints requires_service_integration=True."""
+        url = reverse('capabilities:capabilities-workflow-steps')
+        data = auth_client.get(url).data['data']
+        service_call = next(s for s in data['step_types'] if s['code'] == 'service_call')
+        assert 'constraints' in service_call
+        assert service_call['constraints']['requires_service_integration'] is True
+
+    def test_gate_step_has_empty_constraints(self, auth_client):
+        """Story 82.8, AC4: gate step_type a constraints vide {}."""
+        url = reverse('capabilities:capabilities-workflow-steps')
+        data = auth_client.get(url).data['data']
+        gate = next(s for s in data['step_types'] if s['code'] == 'gate')
+        assert 'constraints' in gate
+        assert gate['constraints'] == {}
+
+    def test_all_step_types_have_constraints_field(self, auth_client):
+        """Story 82.8, AC4: tous les step_types retournent constraints."""
+        url = reverse('capabilities:capabilities-workflow-steps')
+        data = auth_client.get(url).data['data']
+        for step in data['step_types']:
+            assert 'constraints' in step
+
+
+class TestIntegrationsCapabilitiesActionConfigSchema:
+    """Story 82.8, AC2: action_config_schema dans chaque platform."""
+
+    def test_platform_has_action_config_schema_field(self, auth_client):
+        """Story 82.8, AC2: chaque platform expose action_config_schema."""
+        url = reverse('capabilities:capabilities-integrations')
+        data = auth_client.get(url).data['data']
+        for platform in data['platforms']:
+            assert 'action_config_schema' in platform
+
+    def test_action_config_schema_is_empty_dict_by_default(self, auth_client):
+        """Story 82.8, AC2: action_config_schema est {} par défaut (aucune contrainte)."""
+        url = reverse('capabilities:capabilities-integrations')
+        data = auth_client.get(url).data['data']
+        for platform in data['platforms']:
+            assert isinstance(platform['action_config_schema'], dict)

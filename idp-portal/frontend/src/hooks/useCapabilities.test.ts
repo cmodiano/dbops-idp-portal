@@ -21,6 +21,7 @@ const mockIntegrationsData = {
       connector_type: 'aap',
       action_platform_code: 'AAP',
       supports_health_check: true,
+      action_config_schema: {},
     },
   ],
   services: [
@@ -41,6 +42,7 @@ const mockWorkflowStepsData = {
       label: 'Attendre',
       category: 'control',
       config_schema: {},
+      constraints: {},
       variants: [
         { code: 'maintenance_window', label: 'Fenêtre de maintenance', config_schema: {} },
         { code: 'approval', label: 'Approbation manuelle', config_schema: {} },

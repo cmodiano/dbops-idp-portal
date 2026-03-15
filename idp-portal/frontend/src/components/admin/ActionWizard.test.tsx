@@ -119,6 +119,7 @@ const mockCapabilities = {
       connector_type: 'aap',
       action_platform_code: 'AAP',
       supports_health_check: true,
+      action_config_schema: {},
     },
     {
       code: 'terraform_cloud',
@@ -128,6 +129,7 @@ const mockCapabilities = {
       connector_type: 'terraform',
       action_platform_code: 'Terraform',
       supports_health_check: false,
+      action_config_schema: {},
     },
     {
       code: 'github_actions',
@@ -137,6 +139,7 @@ const mockCapabilities = {
       connector_type: 'github_actions',
       action_platform_code: 'GitHub Actions',
       supports_health_check: false,
+      action_config_schema: {},
     },
   ],
   services: [],
@@ -1577,6 +1580,7 @@ describe('ActionWizard — capabilities-driven connectorType (Story 82.7)', () =
             connector_type: 'aap', // Override: capabilities retourne 'aap' pour github_actions
             action_platform_code: 'GitHub Actions',
             supports_health_check: false,
+            action_config_schema: {},
           },
         ],
       },

@@ -21,9 +21,9 @@ logger = structlog.get_logger(__name__)
 
 # Labels et catégories des step_types statiques
 _STEP_TYPES_STATIC = [
-    {'code': 'platform',     'label': 'Exécuter', 'category': 'execution'},
-    {'code': 'service_call', 'label': 'Service',  'category': 'integration'},
-    {'code': 'gate',         'label': 'Attendre', 'category': 'control'},
+    {'code': 'platform',     'label': 'Exécuter', 'category': 'execution',   'constraints': {'requires_integration': True}},
+    {'code': 'service_call', 'label': 'Service',  'category': 'integration', 'constraints': {'requires_service_integration': True}},
+    {'code': 'gate',         'label': 'Attendre', 'category': 'control',     'constraints': {}},
 ]
 
 
@@ -50,6 +50,7 @@ def get_integrations_capabilities(request: Request) -> Response:
             'connector_type': defn.connector_type,
             'action_platform_code': defn.action_platform_code,
             'supports_health_check': defn.supports_health_check,
+            'action_config_schema': defn.action_config_schema,
         })
 
     services = []
@@ -88,6 +89,7 @@ def get_workflow_steps_capabilities(request: Request) -> Response:
             'label': step_meta['label'],
             'category': step_meta['category'],
             'config_schema': {},
+            'constraints': step_meta.get('constraints', {}),
         }
         if step_meta['code'] == 'gate':
             # Variants dérivés de gate_registry (Story 82.5)

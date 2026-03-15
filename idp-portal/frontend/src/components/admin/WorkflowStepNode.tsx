@@ -16,6 +16,7 @@ import { Badge, Divider, Tag, Tooltip, theme } from 'antd';
 import { CheckCircleOutlined, CloseCircleOutlined, HourglassOutlined, LoadingOutlined, MinusCircleOutlined } from '@ant-design/icons';
 import type { WorkflowStepType, ScheduleStepConfig } from '../../types/api';
 import { INTEGRATION_LABELS } from './step-config/serviceCallConstants';
+import { useCapabilities } from '../../hooks/useCapabilities';
 
 // Story 57.13: Color codes and labels per step type
 const STEP_TYPE_COLORS: Record<WorkflowStepType, string> = {
@@ -107,6 +108,7 @@ export interface WorkflowStepNodeData {
 const WorkflowStepNode: FC<NodeProps> = ({ data, selected }) => {
   const { token } = theme.useToken();
   const nodeData = data as unknown as WorkflowStepNodeData;
+  const { capabilities } = useCapabilities();
 
   const stepType: WorkflowStepType = nodeData.step_type ?? 'platform';
 
@@ -116,12 +118,15 @@ const WorkflowStepNode: FC<NodeProps> = ({ data, selected }) => {
       return nodeData.name ?? nodeData.action_name ?? '';
     }
     if (stepType === 'service_call') {
+      // Story 82.8: labels depuis capabilities, fallback INTEGRATION_LABELS
+      const serviceCap = capabilities?.services?.find((s) => s.code === nodeData.integration_type);
       const integration = nodeData.integration_type
-        ? (INTEGRATION_LABELS[nodeData.integration_type] ?? nodeData.integration_type)
+        ? (serviceCap?.display_name ?? INTEGRATION_LABELS[nodeData.integration_type] ?? nodeData.integration_type)
         : '?';
-      // Story 82.7: OPERATION_LABELS supprimé — affichage du code brut ; migration via capabilities en 82.8
-      const op = nodeData.operation ?? '?';
-      return nodeData.name ?? `${integration} — ${op}`;
+      const opLabel = nodeData.operation
+        ? (serviceCap?.operations.find((o) => o.code === nodeData.operation)?.label ?? nodeData.operation)
+        : '?';
+      return nodeData.name ?? `${integration} — ${opLabel}`;
     }
     if (stepType === 'evaluation') {
       return nodeData.name ?? (nodeData.policy_name ? nodeData.policy_name : `Politique #${nodeData.policy_id ?? '?'}`);
@@ -139,7 +144,7 @@ const WorkflowStepNode: FC<NodeProps> = ({ data, selected }) => {
       return nodeData.name ?? nodeData.action_name ?? 'Planifier une exécution';
     }
     return nodeData.name ?? '';
-  }, [stepType, nodeData]);
+  }, [stepType, nodeData, capabilities]);
 
   // Execution status colors — subtle, professional palette
   const executionBorderColors: Record<string, string> = {

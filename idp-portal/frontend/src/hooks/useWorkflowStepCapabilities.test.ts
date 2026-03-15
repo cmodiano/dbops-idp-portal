@@ -14,12 +14,13 @@ const mockCapabilities = {
   platforms: [],
   services: [],
   stepTypes: [
-    { code: 'platform', label: 'Exécuter', category: 'execution', config_schema: {} },
+    { code: 'platform', label: 'Exécuter', category: 'execution', config_schema: {}, constraints: {} },
     {
       code: 'gate',
       label: 'Attendre',
       category: 'control',
       config_schema: {},
+      constraints: {},
       variants: [
         { code: 'maintenance_window', label: 'Fenêtre de maintenance', config_schema: {} },
         { code: 'approval', label: 'Approbation manuelle', config_schema: {} },
@@ -102,7 +103,7 @@ describe('useWorkflowStepCapabilities', () => {
         platforms: [],
         services: [],
         stepTypes: [
-          { code: 'gate', label: 'Attendre', category: 'control', config_schema: {} },
+          { code: 'gate', label: 'Attendre', category: 'control', config_schema: {}, constraints: {} },
           // pas de variants
         ],
       },

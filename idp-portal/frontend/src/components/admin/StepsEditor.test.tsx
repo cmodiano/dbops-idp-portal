@@ -9,6 +9,7 @@ import userEvent from '@testing-library/user-event';
 import { StepsEditor } from './StepsEditor';
 import type { ExecutionStep } from '../../types/api';
 import { useEnvironments } from '../../hooks/useEnvironments';
+import * as useCapabilitiesModule from '../../hooks/useCapabilities';
 
 vi.mock('../../hooks/useEnvironments', () => ({
   useEnvironments: vi.fn(),
@@ -18,10 +19,13 @@ vi.mock('../../hooks/useAAPTemplates', () => ({
   useAAPTemplates: vi.fn(),
 }));
 
+vi.mock('../../hooks/useCapabilities');
+
 import { useAAPTemplates } from '../../hooks/useAAPTemplates';
 const mockUseAAPTemplates = useAAPTemplates as ReturnType<typeof vi.fn>;
 
 const mockUseEnvironments = useEnvironments as ReturnType<typeof vi.fn>;
+const mockUseCapabilities = vi.mocked(useCapabilitiesModule.useCapabilities);
 
 const defaultEnvMock = {
   environments: ['dev', 'staging', 'prod'],
@@ -46,6 +50,7 @@ describe('StepsEditor', () => {
     vi.clearAllMocks();
     mockUseEnvironments.mockReturnValue(defaultEnvMock);
     mockUseAAPTemplates.mockReturnValue(defaultAAPMock);
+    mockUseCapabilities.mockReturnValue({ capabilities: null, loading: false, error: null });
   });
 
   it('renders connector dropdown (Story 2.7)', async () => {
@@ -406,6 +411,7 @@ describe('StepsEditor - Additional coverage 55.7', () => {
     vi.clearAllMocks();
     mockUseEnvironments.mockReturnValue(defaultEnvMock);
     mockUseAAPTemplates.mockReturnValue(defaultAAPMock);
+    mockUseCapabilities.mockReturnValue({ capabilities: null, loading: false, error: null });
   });
 
   it('servicenow avec conditional_environments non vide — pas de message validation', () => {
@@ -609,6 +615,7 @@ describe('StepsEditor - Extended coverage 55.6', () => {
     vi.clearAllMocks();
     mockUseEnvironments.mockReturnValue(defaultEnvMock);
     mockUseAAPTemplates.mockReturnValue(defaultAAPMock);
+    mockUseCapabilities.mockReturnValue({ capabilities: null, loading: false, error: null });
   });
 
   it('handleRemoveStep — supprime la première étape parmi plusieurs, réordonne correctement', async () => {
@@ -724,5 +731,122 @@ describe('StepsEditor - Extended coverage 55.6', () => {
     // canRemove = false → button disabled
     const deleteBtn = screen.getByLabelText(/Au moins une etape requise/i);
     expect(deleteBtn).toBeDisabled();
+  });
+});
+
+// === Story 82.8: StepsEditor — CONNECTOR_OPTIONS depuis capabilities ===
+describe('StepsEditor - Story 82.8: connectorOptions depuis capabilities', () => {
+  const mockCapabilitiesWithPlatforms = {
+    platforms: [
+      {
+        code: 'aap',
+        display_name: 'Ansible Automation Platform',
+        aliases: ['tower'],
+        icon: 'aap',
+        connector_type: 'aap',
+        action_platform_code: 'AAP',
+        supports_health_check: true,
+        action_config_schema: {},
+      },
+      {
+        code: 'azure_devops',
+        display_name: 'Azure DevOps',
+        aliases: ['azuredevops'],
+        icon: 'azuredevops',
+        connector_type: 'azuredevops',
+        action_platform_code: 'Azure DevOps',
+        supports_health_check: false,
+        action_config_schema: {},
+      },
+    ],
+    services: [],
+    stepTypes: [],
+  };
+
+  const steps: ExecutionStep[] = [
+    {
+      order: 1,
+      name: 'Step 1',
+      type: 'execution',
+      connector_type: 'none',
+      conditional_environments: null,
+    },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseEnvironments.mockReturnValue(defaultEnvMock);
+    mockUseAAPTemplates.mockReturnValue(defaultAAPMock);
+    useCapabilitiesModule._resetCapabilitiesCache();
+  });
+
+  it('T6.1 — connecteurs chargés depuis capabilities mock → liste reflète platforms (display_name)', async () => {
+    const user = userEvent.setup();
+    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithPlatforms, loading: false, error: null });
+
+    render(<StepsEditor value={steps} onChange={vi.fn()} />);
+    const connectorSelect = screen.getByLabelText(/Connecteur etape 1/i);
+    await user.click(connectorSelect);
+
+    // display_name from capabilities
+    expect(await screen.findByText('Ansible Automation Platform')).toBeInTheDocument();
+    expect(await screen.findByText('Azure DevOps')).toBeInTheDocument();
+    // 'Aucun' toujours en tête (peut apparaître plusieurs fois : valeur sélectionnée + option)
+    expect(screen.getAllByText('Aucun').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('T6.2 — capabilities null → fallback CONNECTOR_OPTIONS (liste locale)', async () => {
+    const user = userEvent.setup();
+    mockUseCapabilities.mockReturnValue({ capabilities: null, loading: false, error: null });
+
+    render(<StepsEditor value={steps} onChange={vi.fn()} />);
+    const connectorSelect = screen.getByLabelText(/Connecteur etape 1/i);
+    await user.click(connectorSelect);
+
+    // CONNECTOR_OPTIONS locaux
+    expect(await screen.findByText('ServiceNow')).toBeInTheDocument();
+    expect(screen.getByText('AAP')).toBeInTheDocument();
+    // 'Aucun' peut apparaître plusieurs fois (valeur sélectionnée + option)
+    expect(screen.getAllByText('Aucun').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('T6.3 — dédupliquation connector_type — 2 plateformes avec même connector_type → une seule option', async () => {
+    const user = userEvent.setup();
+    const capabilitiesWithDuplicate = {
+      ...mockCapabilitiesWithPlatforms,
+      platforms: [
+        {
+          code: 'aap',
+          display_name: 'Ansible Automation Platform',
+          aliases: [],
+          icon: 'aap',
+          connector_type: 'aap',
+          action_platform_code: 'AAP',
+          supports_health_check: true,
+          action_config_schema: {},
+        },
+        {
+          code: 'tower',
+          display_name: 'Ansible Tower',
+          aliases: [],
+          icon: 'aap',
+          connector_type: 'aap', // même connector_type → dédupliqué
+          action_platform_code: 'AAP',
+          supports_health_check: false,
+          action_config_schema: {},
+        },
+      ],
+    };
+    mockUseCapabilities.mockReturnValue({ capabilities: capabilitiesWithDuplicate, loading: false, error: null });
+
+    render(<StepsEditor value={steps} onChange={vi.fn()} />);
+    const connectorSelect = screen.getByLabelText(/Connecteur etape 1/i);
+    await user.click(connectorSelect);
+
+    // Une seule option AAP (premier rencontré)
+    const aapOptions = await screen.findAllByText('Ansible Automation Platform');
+    expect(aapOptions).toHaveLength(1);
+    // 'Ansible Tower' ne doit pas apparaître (dédupliqué)
+    expect(screen.queryByText('Ansible Tower')).not.toBeInTheDocument();
   });
 });

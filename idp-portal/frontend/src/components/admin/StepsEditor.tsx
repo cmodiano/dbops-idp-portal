@@ -8,7 +8,7 @@
  * - Accessibility support
  */
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import type { FC, CSSProperties } from 'react';
 import {
   Alert,
@@ -43,6 +43,7 @@ import type { ExecutionStep, ExecutionStepType, ConnectorType } from '../../type
 import { useEnvironments } from '../../hooks/useEnvironments';
 import { useAAPTemplates } from '../../hooks/useAAPTemplates';
 import { useDebounce } from '../../hooks/useDebounce';
+import { useCapabilities } from '../../hooks/useCapabilities';
 
 const { Text } = Typography;
 
@@ -78,6 +79,7 @@ interface SortableStepCardProps {
   index: number;
   environmentOptions: { value: string; label: string }[];
   environmentsLoading: boolean;
+  connectorOptions: { value: ConnectorType; label: string }[];
   onStepChange: (index: number, field: keyof ExecutionStep, fieldValue: unknown) => void;
   onRemoveStep: (index: number) => void;
   /** When false, remove button is disabled (at least one step required). */
@@ -211,6 +213,7 @@ const SortableStepCard: FC<SortableStepCardProps> = ({
   index,
   environmentOptions,
   environmentsLoading,
+  connectorOptions,
   onStepChange,
   onRemoveStep,
   canRemove,
@@ -293,7 +296,7 @@ const SortableStepCard: FC<SortableStepCardProps> = ({
             <Select
               value={step.connector_type ?? 'none'}
               onChange={(val) => onStepChange(index, 'connector_type', val)}
-              options={CONNECTOR_OPTIONS}
+              options={connectorOptions}
               style={{ width: 160 }}
               aria-label={`Connecteur etape ${step.order}`}
             />
@@ -347,6 +350,22 @@ const SortableStepCard: FC<SortableStepCardProps> = ({
 
 export const StepsEditor: FC<StepsEditorProps> = ({ value = EMPTY_STEPS, onChange, integrationId }) => {
   const { environmentOptions, loading: environmentsLoading } = useEnvironments();
+  const { capabilities } = useCapabilities();
+
+  // Story 82.8: connecteurs depuis capabilities.platforms (dédupliqués par connector_type)
+  const connectorOptions = useMemo<{ value: ConnectorType; label: string }[]>(() => {
+    const noneOption = { value: 'none' as ConnectorType, label: 'Aucun' };
+    if (!capabilities?.platforms?.length) return CONNECTOR_OPTIONS;
+    const seen = new Set<string>();
+    const platformOpts = capabilities.platforms
+      .filter((p) => {
+        if (seen.has(p.connector_type)) return false;
+        seen.add(p.connector_type);
+        return true;
+      })
+      .map((p) => ({ value: p.connector_type as ConnectorType, label: p.display_name }));
+    return [noneOption, ...platformOpts];
+  }, [capabilities]);
 
   // Configure dnd-kit sensors for pointer and keyboard interaction
   const sensors = useSensors(
@@ -423,6 +442,7 @@ export const StepsEditor: FC<StepsEditorProps> = ({ value = EMPTY_STEPS, onChang
                 index={index}
                 environmentOptions={environmentOptions}
                 environmentsLoading={environmentsLoading}
+                connectorOptions={connectorOptions}
                 onStepChange={handleStepChange}
                 onRemoveStep={handleRemoveStep}
                 canRemove={value.length > 1}

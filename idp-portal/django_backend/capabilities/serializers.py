@@ -12,6 +12,7 @@ class PlatformCapabilitySerializer(serializers.Serializer):
     connector_type = serializers.CharField()
     action_platform_code = serializers.CharField()
     supports_health_check = serializers.BooleanField()
+    action_config_schema = serializers.DictField(default=dict)
 
 
 class ServiceOperationSerializer(serializers.Serializer):
@@ -38,6 +39,7 @@ class StepTypeSerializer(serializers.Serializer):
     label = serializers.CharField()  # type: ignore[assignment]
     category = serializers.CharField()
     config_schema = serializers.DictField(default=dict)
+    constraints = serializers.DictField(default=dict)
     variants = GateVariantSerializer(many=True, required=False)
 
 

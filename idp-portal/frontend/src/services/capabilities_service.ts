@@ -18,6 +18,7 @@ export interface PlatformCapability {
   connector_type: string;
   action_platform_code: string;
   supports_health_check: boolean;
+  action_config_schema: Record<string, unknown>;
 }
 
 /** Story 82.7 — opération d'un service avec label FR. */
@@ -45,6 +46,7 @@ export interface WorkflowStepCapability {
   label: string;
   category: string;
   config_schema: Record<string, unknown>;
+  constraints: Record<string, unknown>;
   variants?: GateVariant[];
 }
 

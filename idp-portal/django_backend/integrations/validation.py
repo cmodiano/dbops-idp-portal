@@ -7,7 +7,7 @@ import threading
 from pathlib import Path
 
 try:
-    import jsonschema  # type: ignore[import-untyped]
+    import jsonschema
     JSONSCHEMA_AVAILABLE = True
 except ImportError:
     JSONSCHEMA_AVAILABLE = False
