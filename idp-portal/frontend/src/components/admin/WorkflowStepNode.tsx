@@ -75,7 +75,7 @@ export interface WorkflowStepNodeData {
   operation?: string | null;
   policy_id?: number | null;
   policy_name?: string | null;
-  gate_type?: 'maintenance_window' | 'approval' | null;
+  gate_type?: string | null; // Story 83-9, AC4: extensible — plus d'union littérale figée
   on_timeout?: 'FAIL' | 'SKIP' | null;
   context_from?: string[] | null;
   approver_profile_ids?: number[] | null;

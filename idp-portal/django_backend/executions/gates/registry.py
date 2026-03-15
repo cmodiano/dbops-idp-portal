@@ -34,7 +34,23 @@ gate_registry.register(GateDefinition(
     condition_type='approval_granted',     # Différent du gate_type — mapping clé
     display_name='Approbation manuelle',
     category='approval',
-    config_schema={},
+    config_schema={
+        "type": "object",
+        "properties": {
+            "context_from": {
+                "type": "array",
+                "items": {"type": "string"},
+                "title": "Contexte pour l'approbateur",
+                "description": "Step IDs dont le résultat sera visible par l'approbateur"
+            },
+            "approver_profile_ids": {
+                "type": "array",
+                "items": {"type": "integer"},
+                "title": "Profils approbateurs autorisés",
+                "description": "Laisser vide pour autoriser tous les profils avec is_approver=true"
+            }
+        }
+    },
     supports_timeout=True,
     requires_manual_resolution=True,       # Satisfait uniquement via POST /approve/
     # evaluation_strategy=None (défaut) — résolution manuelle, pas d'auto-évaluation

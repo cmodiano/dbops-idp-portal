@@ -2,8 +2,8 @@
  * GateStepConfig — Configuration pour les steps de type gate (Story 57.13, AC5).
  *
  * Affiche : sélection gate_type, input timeout, sélection on_timeout (FAIL/SKIP),
- * multi-select context_from (step_ids du workflow courant, si gate_type=approval),
- * multi-select approver_profile_ids (profils approbateurs, si gate_type=approval — Story 58.4 AC2).
+ * multi-select context_from et approver_profile_ids déclenchés par config_schema du variant
+ * sélectionné (Story 83-9 — logique déclarative, suppression des branches hardcodées gate_type=approval).
  */
 
 import type { FC } from 'react';
@@ -38,10 +38,19 @@ export const GateStepConfig: FC<GateStepConfigProps> = ({
 }) => {
   // Story 57.19: Use pre-computed options with labels if available, fallback to raw IDs
   const stepOptions = availableStepOptions ?? availableStepIds.map((id) => ({ value: id, label: id }));
-  const { approverProfileOptions, loading: approverProfilesLoading } = useApproverProfiles(data.gate_type === 'approval');
   // Story 82.6: gate variants depuis le backend (fallback local si API indisponible)
   const { gateVariants, loading: gateLoading } = useWorkflowStepCapabilities();
   const gateOptions = gateVariants.map((v) => ({ value: v.code, label: v.label }));
+
+  // Story 83-9: Résoudre le config_schema du gate variant sélectionné (déclaratif)
+  const selectedVariant = gateVariants.find((v) => v.code === data.gate_type);
+  const configSchema = (selectedVariant?.config_schema ?? {}) as {
+    properties?: Record<string, unknown>;
+  };
+  const hasContextFrom = !!configSchema.properties?.context_from;
+  const hasApproverProfiles = !!configSchema.properties?.approver_profile_ids;
+
+  const { approverProfileOptions, loading: approverProfilesLoading } = useApproverProfiles(hasApproverProfiles);
 
   return (
     <div data-testid="gate-step-config">
@@ -54,7 +63,16 @@ export const GateStepConfig: FC<GateStepConfigProps> = ({
           style={{ width: '100%' }}
           size="small"
           value={data.gate_type ?? undefined}
-          onChange={(value) => onUpdate({ gate_type: value, context_from: value !== 'approval' ? null : data.context_from })}
+          onChange={(value) => {
+            // Story 83-9, AC5 : réinitialiser les champs non déclarés par le nouveau gate variant
+            const newVariant = gateVariants.find((v) => v.code === value);
+            const newSchema = (newVariant?.config_schema ?? {}) as { properties?: Record<string, unknown> };
+            onUpdate({
+              gate_type: value,
+              context_from: newSchema.properties?.context_from ? data.context_from : null,
+              approver_profile_ids: newSchema.properties?.approver_profile_ids ? data.approver_profile_ids : null,
+            });
+          }}
           placeholder="Sélectionner un type"
           disabled={disabled}
           aria-label="Type de gate"
@@ -97,8 +115,8 @@ export const GateStepConfig: FC<GateStepConfigProps> = ({
         />
       </div>
 
-      {/* context_from — only for approval gates */}
-      {data.gate_type === 'approval' && (
+      {/* context_from — déclaratif : rendu si config_schema le déclare (Story 83-9, AC3) */}
+      {hasContextFrom && (
         <div style={{ marginBottom: 12 }}>
           <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
             Contexte à afficher à l'approbateur (context_from)
@@ -120,8 +138,8 @@ export const GateStepConfig: FC<GateStepConfigProps> = ({
         </div>
       )}
 
-      {/* approver_profile_ids — only for approval gates — Story 58.4 AC2 */}
-      {data.gate_type === 'approval' && (
+      {/* approver_profile_ids — déclaratif : rendu si config_schema le déclare (Story 83-9, AC3) */}
+      {hasApproverProfiles && (
         <div style={{ marginBottom: 12 }}>
           <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
             Profils approbateurs autorisés

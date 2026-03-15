@@ -1,11 +1,12 @@
 /**
- * Tests for GateStepConfig — Story 58.4, AC2; Story 57.19, AC1/AC2.
+ * Tests for GateStepConfig — Story 58.4, AC2; Story 57.19, AC1/AC2; Story 83-9, AC2–AC6.
  * Tests: approver_profile_ids multi-select for approval gates.
  * Story 57.19: context_from Select uses readable step labels instead of UUIDs.
+ * Story 83-9: rendu déclaratif depuis config_schema du variant sélectionné.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { GateStepConfig } from './GateStepConfig';
 import * as useApproverProfilesModule from '../../../hooks/useApproverProfiles';
 import * as useWorkflowStepCapabilitiesModule from '../../../hooks/useWorkflowStepCapabilities';
@@ -30,17 +31,33 @@ const baseData = {
   on_error_step_name: null,
   isStartNode: false,
   isEndNode: false,
-  gate_type: 'approval' as const,
+  gate_type: 'approval', // Story 83-9, AC4: plus de 'as const' (gate_type est string | null)
   on_timeout: 'FAIL' as const,
   context_from: null,
   approver_profile_ids: null,
   timeout: null,
 };
 
-const defaultGateVariants = [
-  { code: 'maintenance_window', label: 'Fenêtre de maintenance', config_schema: {} },
-  { code: 'approval', label: 'Approbation manuelle', config_schema: {} },
-];
+// Story 83-9, AC6: mocks avec config_schema correct
+const approvalVariant = {
+  code: 'approval',
+  label: 'Approbation manuelle',
+  config_schema: {
+    type: 'object',
+    properties: {
+      context_from: { type: 'array', items: { type: 'string' }, title: "Contexte pour l'approbateur" },
+      approver_profile_ids: { type: 'array', items: { type: 'integer' }, title: 'Profils approbateurs autorisés' },
+    },
+  },
+};
+
+const maintenanceVariant = {
+  code: 'maintenance_window',
+  label: 'Fenêtre de maintenance',
+  config_schema: {},
+};
+
+const defaultGateVariants = [maintenanceVariant, approvalVariant];
 
 describe('GateStepConfig — approver_profile_ids', () => {
   beforeEach(() => {
@@ -77,7 +94,7 @@ describe('GateStepConfig — approver_profile_ids', () => {
   });
 
   it('hides approver_profile_ids select for maintenance_window gate_type', () => {
-    const maintenanceData = { ...baseData, gate_type: 'maintenance_window' as const };
+    const maintenanceData = { ...baseData, gate_type: 'maintenance_window' };
     render(
       <GateStepConfig
         data={maintenanceData}
@@ -153,10 +170,7 @@ describe('GateStepConfig — gate options from useWorkflowStepCapabilities (Stor
 
   it('utilise les options backend pour le select gate_type', () => {
     mockUseWorkflowStepCapabilities.mockReturnValue({
-      gateVariants: [
-        { code: 'maintenance_window', label: 'Fenêtre de maintenance', config_schema: {} },
-        { code: 'approval', label: 'Approbation manuelle', config_schema: {} },
-      ],
+      gateVariants: defaultGateVariants,
       loading: false,
       error: null,
     });
@@ -196,10 +210,7 @@ describe('GateStepConfig — gate options from useWorkflowStepCapabilities (Stor
   it('utilise le fallback local si erreur API (variants non vides)', () => {
     // Quand erreur, useWorkflowStepCapabilities retourne les variants fallback
     mockUseWorkflowStepCapabilities.mockReturnValue({
-      gateVariants: [
-        { code: 'maintenance_window', label: 'Fenêtre de maintenance', config_schema: {} },
-        { code: 'approval', label: 'Approbation manuelle', config_schema: {} },
-      ],
+      gateVariants: defaultGateVariants,
       loading: false,
       error: 'API down',
     });
@@ -270,7 +281,7 @@ describe('GateStepConfig — context_from with labels (Story 57.19)', () => {
   it('does not render context_from for maintenance_window gate type', () => {
     render(
       <GateStepConfig
-        data={{ ...baseData, gate_type: 'maintenance_window' as const }}
+        data={{ ...baseData, gate_type: 'maintenance_window' }}
         onUpdate={vi.fn()}
         disabled={false}
         availableStepOptions={[{ value: 'uuid-1', label: 'Étape 1 — Deploy' }]}
@@ -278,5 +289,187 @@ describe('GateStepConfig — context_from with labels (Story 57.19)', () => {
     );
 
     expect(screen.queryByLabelText("Contexte pour l'approbateur")).not.toBeInTheDocument();
+  });
+});
+
+// ─── Story 83-9: Rendu déclaratif depuis config_schema ────────────────────────
+describe('GateStepConfig — rendu déclaratif depuis config_schema (Story 83-9)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseApproverProfiles.mockReturnValue({
+      profiles: [],
+      loading: false,
+      approverProfileOptions: [],
+    });
+  });
+
+  // AC2.3 : gate_type null → config_schema effectif = {} → aucun champ extra
+  it('renders_no_extra_fields_when_gate_type_is_null', () => {
+    mockUseWorkflowStepCapabilities.mockReturnValue({
+      gateVariants: defaultGateVariants,
+      loading: false,
+      error: null,
+    });
+
+    render(
+      <GateStepConfig
+        data={{ ...baseData, gate_type: null }}
+        onUpdate={vi.fn()}
+        disabled={false}
+        availableStepIds={[]}
+      />
+    );
+
+    expect(screen.queryByLabelText("Contexte pour l'approbateur")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Profils approbateurs')).not.toBeInTheDocument();
+  });
+
+  // AC2.3 : gate_type absent de gateVariants → config_schema effectif = {} → aucun champ extra
+  it('renders_no_extra_fields_when_gate_type_unknown', () => {
+    mockUseWorkflowStepCapabilities.mockReturnValue({
+      gateVariants: defaultGateVariants,
+      loading: false,
+      error: null,
+    });
+
+    render(
+      <GateStepConfig
+        data={{ ...baseData, gate_type: 'unknown_gate_type' }}
+        onUpdate={vi.fn()}
+        disabled={false}
+        availableStepIds={[]}
+      />
+    );
+
+    expect(screen.queryByLabelText("Contexte pour l'approbateur")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Profils approbateurs')).not.toBeInTheDocument();
+  });
+
+  it('renders_context_from_when_schema_declares_it', () => {
+    // Gate hypothétique avec context_from mais pas d'approver_profile_ids
+    const customGateWithContextFrom = {
+      code: 'peer_review',
+      label: 'Revue par les pairs',
+      config_schema: {
+        type: 'object',
+        properties: {
+          context_from: { type: 'array', items: { type: 'string' }, title: "Contexte pour l'approbateur" },
+          // pas d'approver_profile_ids
+        },
+      },
+    };
+    mockUseWorkflowStepCapabilities.mockReturnValue({
+      gateVariants: [maintenanceVariant, approvalVariant, customGateWithContextFrom],
+      loading: false,
+      error: null,
+    });
+
+    render(
+      <GateStepConfig
+        data={{ ...baseData, gate_type: 'peer_review' }}
+        onUpdate={vi.fn()}
+        disabled={false}
+        availableStepOptions={[{ value: 'uuid-aaa', label: 'Étape 1' }]}
+      />
+    );
+
+    expect(screen.getByLabelText("Contexte pour l'approbateur")).toBeInTheDocument();
+    expect(screen.queryByLabelText('Profils approbateurs')).not.toBeInTheDocument();
+  });
+
+  it('renders_no_extra_fields_for_gate_with_empty_schema', () => {
+    mockUseWorkflowStepCapabilities.mockReturnValue({
+      gateVariants: defaultGateVariants,
+      loading: false,
+      error: null,
+    });
+
+    render(
+      <GateStepConfig
+        data={{ ...baseData, gate_type: 'maintenance_window' }}
+        onUpdate={vi.fn()}
+        disabled={false}
+        availableStepIds={[]}
+      />
+    );
+
+    expect(screen.queryByLabelText("Contexte pour l'approbateur")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Profils approbateurs')).not.toBeInTheDocument();
+  });
+});
+
+// ─── Story 83-9: AC5 — onChange gate_type réinitialise les champs selon config_schema ──
+describe('GateStepConfig — AC5 onChange gate_type reset (Story 83-9)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseApproverProfiles.mockReturnValue({
+      profiles: [],
+      loading: false,
+      approverProfileOptions: [],
+    });
+  });
+
+  it('resets context_from and approver_profile_ids when switching to gate with empty schema', () => {
+    mockUseWorkflowStepCapabilities.mockReturnValue({
+      gateVariants: defaultGateVariants,
+      loading: false,
+      error: null,
+    });
+
+    const onUpdate = vi.fn();
+    render(
+      <GateStepConfig
+        data={{ ...baseData, gate_type: 'approval', context_from: ['step1'], approver_profile_ids: [1] }}
+        onUpdate={onUpdate}
+        disabled={false}
+        availableStepIds={[]}
+      />
+    );
+
+    // Ouvre le dropdown via l'input interne du Select (aria-label sur l'input Ant Design)
+    const gateTypeInput = screen.getByLabelText('Type de gate');
+    fireEvent.mouseDown(gateTypeInput);
+
+    // Clique sur l'option maintenance_window dans le dropdown
+    const option = screen.getByTitle('Fenêtre de maintenance');
+    fireEvent.click(option);
+
+    expect(onUpdate).toHaveBeenCalledWith({
+      gate_type: 'maintenance_window',
+      context_from: null,
+      approver_profile_ids: null,
+    });
+  });
+
+  it('preserves context_from and approver_profile_ids when switching to gate that declares them', () => {
+    mockUseWorkflowStepCapabilities.mockReturnValue({
+      gateVariants: defaultGateVariants,
+      loading: false,
+      error: null,
+    });
+
+    const onUpdate = vi.fn();
+    render(
+      <GateStepConfig
+        data={{ ...baseData, gate_type: 'maintenance_window', context_from: null, approver_profile_ids: null }}
+        onUpdate={onUpdate}
+        disabled={false}
+        availableStepIds={[]}
+      />
+    );
+
+    // Ouvre le dropdown via l'input interne du Select
+    const gateTypeInput = screen.getByLabelText('Type de gate');
+    fireEvent.mouseDown(gateTypeInput);
+
+    // Clique sur l'option approval dans le dropdown
+    const option = screen.getByTitle('Approbation manuelle');
+    fireEvent.click(option);
+
+    expect(onUpdate).toHaveBeenCalledWith({
+      gate_type: 'approval',
+      context_from: null,         // données existantes préservées (null → null)
+      approver_profile_ids: null, // données existantes préservées (null → null)
+    });
   });
 });

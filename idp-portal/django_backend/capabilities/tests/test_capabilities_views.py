@@ -320,7 +320,7 @@ class TestWorkflowStepsVariantsDerived:
             gate = next(s for s in data['step_types'] if s['code'] == 'gate')
             variant_codes = {v['code'] for v in gate['variants']}
             assert 'fake_gate' in variant_codes
-            assert len(variant_codes) == 3  # AC6.2 : 3 variants (maintenance_window, approval, fake_gate)
+            assert len(variant_codes) == 3  # 2 gates réels (maintenance_window, approval) + 1 fake enregistré dans ce test
         finally:
             gate_registry._by_gate_type.pop('fake_gate', None)
             gate_registry._by_condition_type.pop('fake_condition', None)
@@ -342,3 +342,44 @@ class TestIntegrationsCapabilitiesActionConfigSchema:
         data = auth_client.get(url).data['data']
         for platform in data['platforms']:
             assert isinstance(platform['action_config_schema'], dict)
+
+
+class TestGateVariantConfigSchema:
+    """Story 83-9, AC1 — config_schema enrichi pour le gate approval."""
+
+    def test_approval_variant_has_non_empty_config_schema(self, auth_client):
+        """AC1.3 : GET /api/v1/capabilities/workflow-steps/ expose config_schema non vide pour approval."""
+        url = reverse('capabilities:capabilities-workflow-steps')
+        data = auth_client.get(url).data['data']
+        gate = next(s for s in data['step_types'] if s['code'] == 'gate')
+        approval = next(v for v in gate['variants'] if v['code'] == 'approval')
+        assert approval['config_schema'] != {}
+        assert 'properties' in approval['config_schema']
+
+    def test_approval_config_schema_has_context_from_property(self, auth_client):
+        """AC1.1 : config_schema approval déclare context_from."""
+        url = reverse('capabilities:capabilities-workflow-steps')
+        data = auth_client.get(url).data['data']
+        gate = next(s for s in data['step_types'] if s['code'] == 'gate')
+        approval = next(v for v in gate['variants'] if v['code'] == 'approval')
+        props = approval['config_schema']['properties']
+        assert 'context_from' in props
+        assert props['context_from']['type'] == 'array'
+
+    def test_approval_config_schema_has_approver_profile_ids_property(self, auth_client):
+        """AC1.1 : config_schema approval déclare approver_profile_ids."""
+        url = reverse('capabilities:capabilities-workflow-steps')
+        data = auth_client.get(url).data['data']
+        gate = next(s for s in data['step_types'] if s['code'] == 'gate')
+        approval = next(v for v in gate['variants'] if v['code'] == 'approval')
+        props = approval['config_schema']['properties']
+        assert 'approver_profile_ids' in props
+        assert props['approver_profile_ids']['type'] == 'array'
+
+    def test_maintenance_window_variant_has_empty_config_schema(self, auth_client):
+        """AC1.2 : maintenance_window conserve config_schema={}."""
+        url = reverse('capabilities:capabilities-workflow-steps')
+        data = auth_client.get(url).data['data']
+        gate = next(s for s in data['step_types'] if s['code'] == 'gate')
+        maintenance = next(v for v in gate['variants'] if v['code'] == 'maintenance_window')
+        assert maintenance['config_schema'] == {}

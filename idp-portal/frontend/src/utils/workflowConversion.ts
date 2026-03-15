@@ -293,7 +293,7 @@ export function reactFlowToWorkflowSteps(
     if (stepType === 'gate') {
       return {
         ...baseStep,
-        gate_type: data.gate_type ?? null,
+        gate_type: (data.gate_type ?? null) as 'maintenance_window' | 'approval' | null,
         on_timeout: data.on_timeout ?? null,
         context_from: data.context_from ?? null,
         approver_profile_ids: data.approver_profile_ids ?? null,
