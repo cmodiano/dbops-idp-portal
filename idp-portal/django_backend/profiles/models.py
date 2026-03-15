@@ -183,7 +183,7 @@ class ProfileTargetPermission(models.Model):
     Profile target permission model mapping to Oracle PROFILE_TARGET_PERMISSIONS table (V012).
     One row per profile: type (LIST/PATTERN/ALL).
     Data stored in normalized tables: PROFILE_TARGET_ALLOWLIST, PROFILE_TARGET_PATTERNS,
-    PROFILE_TARGET_ATTRIBUTE_FILTERS, PROFILE_TARGET_EXCLUSIONS (Story 78.12).
+    PROFILE_TARGET_ATTR_FILTERS, PROFILE_TARGET_EXCLUSIONS (Story 78.12).
     Legacy CLOB columns dropped in V136 (Story 78.15).
     """
     profile = models.OneToOneField(

@@ -180,13 +180,14 @@ class WorkflowCommandService:
         step.approval_comment = payload.get("comment", "")
 
         # Update gate_status in output
+        # Story 84.2: Marquer TOUTES les conditions à résolution manuelle (sans break).
+        from executions.gates.registry import gate_registry  # noqa: PLC0415
         output = step.get_output() or {}
         gate_status = output.get("gate_status", [])
         for gs in gate_status:
-            if isinstance(gs, dict) and gs.get("type") == "approval_granted":
+            if isinstance(gs, dict) and gate_registry.is_manual_condition_type(gs.get("type", "")):
                 gs["satisfied"] = True
                 gs["reason"] = f"Approuvé par utilisateur {user_id}"
-                break
         output["gate_status"] = gate_status
         step.set_output(output)
         step.save()

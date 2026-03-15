@@ -328,10 +328,11 @@ def _update_waiting_context(step: ExecutionStep, gate_status: dict, correlation_
     output = step.get_output() or {}
     gate_conditions = output.get('gate_conditions', [])
 
-    # Skip emit for approval_granted gates: status never changes until user approves.
-    # Avoids ~1 STEP_OUTPUT_UPDATED per minute while waiting (noisy, wasteful).
-    is_approval_gate = any(
-        isinstance(c, dict) and c.get('type') == 'approval_granted'
+    # Story 84.2: Filtre générique via registre — skip emit pour tout gate à résolution manuelle.
+    # Évite ~1 STEP_OUTPUT_UPDATED par minute pendant l'attente (noisy, wasteful).
+    from executions.gates.registry import gate_registry  # noqa: PLC0415
+    is_manual_gate = any(
+        isinstance(c, dict) and gate_registry.is_manual_condition_type(c.get('type', ''))
         for c in gate_conditions
     )
 
@@ -378,8 +379,8 @@ def _update_waiting_context(step: ExecutionStep, gate_status: dict, correlation_
         step.output = json.dumps(output)
 
     # V113: Durable event so UI can refresh gate status on reconnect.
-    # Skip for approval gates — no meaningful change until approval.
-    if output_changed and updated == 1 and not is_approval_gate:
+    # Skip for manual gates — no meaningful change until user resolves.
+    if output_changed and updated == 1 and not is_manual_gate:
         try:
             from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
             WorkflowEventService.emit_step_output_updated(step.execution_id, step)

@@ -2,7 +2,7 @@
 Story 78.12: Normalized profile target permission models.
 
 Maps the Flyway-managed tables PROFILE_TARGET_ALLOWLIST, PROFILE_TARGET_PATTERNS,
-PROFILE_TARGET_ATTRIBUTE_FILTERS, PROFILE_TARGET_EXCLUSIONS to Django ORM models (managed = False).
+PROFILE_TARGET_ATTR_FILTERS, PROFILE_TARGET_EXCLUSIONS to Django ORM models (managed = False).
 """
 from __future__ import annotations
 
@@ -60,7 +60,7 @@ class ProfileTargetAttributeFilter(models.Model):
 
     class Meta:
         managed = False
-        db_table = 'PROFILE_TARGET_ATTRIBUTE_FILTERS'
+        db_table = 'PROFILE_TARGET_ATTR_FILTERS'
         unique_together = [['profile', 'attribute_key', 'attribute_value']]
 
     def __str__(self) -> str:

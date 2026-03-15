@@ -178,7 +178,7 @@ class ProfileTargetPermissionFactory(DjangoModelFactory):
     """Factory for profiles.ProfileTargetPermission model.
 
     Story 78.15: Legacy CLOB fields removed. Data is in normalized tables
-    (PROFILE_TARGET_ALLOWLIST, PROFILE_TARGET_PATTERNS, PROFILE_TARGET_ATTRIBUTE_FILTERS,
+    (PROFILE_TARGET_ALLOWLIST, PROFILE_TARGET_PATTERNS, PROFILE_TARGET_ATTR_FILTERS,
     PROFILE_TARGET_EXCLUSIONS).
     Use ProfileService.set_target_permissions() or the normalized model factories
     directly to populate target permission data in tests.

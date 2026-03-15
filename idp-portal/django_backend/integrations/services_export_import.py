@@ -75,7 +75,11 @@ def export_integration_yaml(name: str) -> bytes:
         spec["secret_service_ref"] = obj.secret_service.name
     if obj.config:
         try:
-            spec["config"] = json.loads(obj.config)
+            config_val: Any = obj.config
+            if isinstance(config_val, dict):
+                spec["config"] = config_val
+            else:
+                spec["config"] = json.loads(config_val)
         except (json.JSONDecodeError, ValueError) as e:
             logger.warning(
                 "integration_export_malformed_config",

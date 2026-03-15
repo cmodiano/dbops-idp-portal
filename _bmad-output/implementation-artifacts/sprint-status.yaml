@@ -1022,7 +1022,7 @@ development_status:
     # Travail restant post-Epic 83 : runtime handler registry, gate resolution générique, workflow UI backend-driven, services schema-driven, plateformes/gates/legacy
     epic-84: in-progress
     84-1-registre-handlers-runtime-step-types: done # R1,R2,W5 — Remplacer match step_type par registre handlers. Aligner definitions et execution.
-    84-2-resolution-manuelle-generique-gates: backlog # G1,G3,G4,R3 — Découpler approval_granted, resolution_strategy déclaratif, réduire legacy
+    84-2-resolution-manuelle-generique-gates: review # G1,G3,G4,R3 — Découpler approval_granted, resolution_strategy déclaratif, réduire legacy
     84-3-workflow-ui-backend-driven: backlog # W1-W4 — Palette, titres, validation, typing depuis capabilities
     84-4-formulaires-service-schema-driven-complets: backlog # S1-S4 — input_schema, validation F/B, ui_hints, services non opérationnels
     84-5-gate-step-config-renderer-generique: backlog # G2 — GateStepConfig branché sur SchemaFormRenderer

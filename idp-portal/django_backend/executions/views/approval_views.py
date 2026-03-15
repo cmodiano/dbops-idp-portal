@@ -39,7 +39,19 @@ from idp_auth.models import User
 from rest_framework import serializers
 from drf_spectacular.utils import extend_schema, OpenApiParameter, inline_serializer
 
+from executions.gates.registry import gate_registry
+
 logger = structlog.get_logger(__name__)
+
+
+def _is_manual_resolution_condition(condition_type: str) -> bool:
+    """True si condition_type correspond à un gate nécessitant résolution humaine.
+
+    Story 84.2: Délègue à gate_registry.is_manual_condition_type() — évite le couplage
+    dur à 'approval_granted' dans les views/services.
+    Retourne False pour les types inconnus (pas d'exception).
+    """
+    return gate_registry.is_manual_condition_type(condition_type)
 
 
 def _enqueue_resume_with_retries(execution_id: int, step_ids: list[str], max_retries: int = 3) -> None:
@@ -132,11 +144,11 @@ def _get_step_or_404(execution_id: int, step_id: int) -> ExecutionStep:
 
 
 def _validate_approval_gate_step(step: ExecutionStep) -> None:
-    """Valide que le step est bien un gate approval WAITING.
+    """Valide que le step est bien un gate à résolution manuelle en état WAITING.
 
     Lève BadRequestError si :
     - step.status != WAITING
-    - gate_conditions ne contient pas de condition {type: approval_granted}
+    - gate_conditions ne contient aucune condition avec requires_manual_resolution=True
     """
     if step.status != ExecutionStepStatus.WAITING:
         raise BadRequestError(
@@ -147,14 +159,14 @@ def _validate_approval_gate_step(step: ExecutionStep) -> None:
 
     output = step.get_output() or {}
     gate_conditions = output.get("gate_conditions", [])
-    has_approval = any(
-        isinstance(c, dict) and c.get("type") == "approval_granted"
+    has_manual_gate = any(
+        isinstance(c, dict) and _is_manual_resolution_condition(c.get("type", ""))
         for c in gate_conditions
     )
-    if not has_approval:
+    if not has_manual_gate:
         raise BadRequestError(
             code="STEP_NOT_APPROVAL_GATE",
-            message=f"Le step '{step.step_name}' n'est pas un gate d'approbation",
+            message=f"Le step '{step.step_name}' n'est pas un gate à résolution manuelle",
             details={"step_id": step.id, "gate_conditions": gate_conditions},
         )
 
@@ -198,7 +210,7 @@ def _get_on_success_step_ids(step_config: dict, execution_steps: list) -> list[s
 
 
 def _find_first_waiting_approval_step(execution_id: int) -> ExecutionStep | None:
-    """Trouve le premier step WAITING avec gate_conditions approval_granted.
+    """Trouve le premier step WAITING avec au moins une gate_condition à résolution manuelle.
 
     select_for_update() verrouille les rows pour éviter la double-approbation
     dans le chemin backward compat.
@@ -214,7 +226,7 @@ def _find_first_waiting_approval_step(execution_id: int) -> ExecutionStep | None
         output = step.get_output() or {}
         conditions = output.get("gate_conditions", [])
         if any(
-            isinstance(c, dict) and c.get("type") == "approval_granted"
+            isinstance(c, dict) and _is_manual_resolution_condition(c.get("type", ""))
             for c in conditions
         ):
             return step
@@ -272,6 +284,9 @@ class PendingApprovalsView(APIView):
                 ExecutionStep.objects.filter(status=ExecutionStepStatus.WAITING)
                 .extra(
                     where=[
+                        # Intentionnellement spécifique à 'approval_granted' : seul gate manuel
+                        # stocké en DB actuellement. Ne pas généraliser sans migration
+                        # (filtre texte brut Oracle DBMS_LOB.INSTR — AC7 Story 84.2).
                         "OUTPUT IS NOT NULL AND DBMS_LOB.INSTR(OUTPUT, 'approval_granted') > 0"
                     ]
                 )
@@ -282,6 +297,9 @@ class PendingApprovalsView(APIView):
             )
         else:
             # Subquery to avoid duplicate Execution rows when multiple WAITING approval steps exist
+            # Intentionnellement spécifique à 'approval_granted' : seul gate manuel
+            # stocké en DB actuellement. Ne pas généraliser sans migration
+            # (filtre texte brut Postgres — AC7 Story 84.2).
             approval_exec_ids_subquery = ExecutionStep.objects.filter(
                 status=ExecutionStepStatus.WAITING,
                 output__contains="approval_granted",
@@ -413,10 +431,11 @@ class ApproveExecutionView(APIView):
                 output = step.get_output() or {}
                 gate_status = output.get("gate_status", [])
                 for gs in gate_status:
-                    if isinstance(gs, dict) and gs.get("type") == "approval_granted":
+                    # Story 84.2: Marquer TOUTES les conditions à résolution manuelle
+                    # (sans break) pour cohérence avec les gates futurs.
+                    if isinstance(gs, dict) and _is_manual_resolution_condition(gs.get("type", "")):
                         gs["satisfied"] = True
                         gs["reason"] = f"Approuvé par utilisateur {user_id}"
-                        break
                 output["gate_status"] = gate_status
                 step.set_output(output)
                 step.save()

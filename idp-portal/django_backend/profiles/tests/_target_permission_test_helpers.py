@@ -27,7 +27,7 @@ def create_unmanaged_tables():
             )
         """)
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS "PROFILE_TARGET_ATTRIBUTE_FILTERS" (
+            CREATE TABLE IF NOT EXISTS "PROFILE_TARGET_ATTR_FILTERS" (
                 "ID" INTEGER PRIMARY KEY AUTOINCREMENT,
                 "PROFILE_ID" INTEGER NOT NULL,
                 "ATTRIBUTE_KEY" VARCHAR(255) NOT NULL,
@@ -50,5 +50,5 @@ def drop_unmanaged_tables():
     with connection.cursor() as cursor:
         cursor.execute('DROP TABLE IF EXISTS "PROFILE_TARGET_ALLOWLIST"')
         cursor.execute('DROP TABLE IF EXISTS "PROFILE_TARGET_PATTERNS"')
-        cursor.execute('DROP TABLE IF EXISTS "PROFILE_TARGET_ATTRIBUTE_FILTERS"')
+        cursor.execute('DROP TABLE IF EXISTS "PROFILE_TARGET_ATTR_FILTERS"')
         cursor.execute('DROP TABLE IF EXISTS "PROFILE_TARGET_EXCLUSIONS"')

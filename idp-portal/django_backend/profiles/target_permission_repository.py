@@ -3,7 +3,7 @@ ProfileTargetPermissionRepository — normalized read API for profile target per
 
 Story 78.15: Contract phase — legacy CLOB columns dropped (V136). All reads come
 exclusively from normalized tables PROFILE_TARGET_ALLOWLIST, PROFILE_TARGET_PATTERNS,
-PROFILE_TARGET_ATTRIBUTE_FILTERS, PROFILE_TARGET_EXCLUSIONS (created in Story 78.12,
+PROFILE_TARGET_ATTR_FILTERS, PROFILE_TARGET_EXCLUSIONS (created in Story 78.12,
 V132/V133).
 
 The feature flag PROFILE_TARGET_PERMISSIONS_NORMALIZED_ENABLED and dual-write
@@ -31,7 +31,7 @@ def get_target_patterns(perm: ProfileTargetPermission) -> list[str]:
 
 
 def get_filter_by_attribute(perm: ProfileTargetPermission) -> dict[str, list[str]] | None:
-    """Return filter_by_attribute from the normalized PROFILE_TARGET_ATTRIBUTE_FILTERS table."""
+    """Return filter_by_attribute from the normalized PROFILE_TARGET_ATTR_FILTERS table."""
     return get_filter_by_attribute_from_normalized(perm.profile_id)
 
 

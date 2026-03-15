@@ -146,3 +146,17 @@ class GateDefinitionRegistry:
         Remplace VALID_GATE_CONDITION_TYPES dans catalog/validators.py.
         """
         return frozenset(self._by_condition_type)
+
+    def is_manual_condition_type(self, condition_type: str) -> bool:
+        """True si condition_type requiert une résolution manuelle (ex: approval_granted).
+
+        Story 84.2: Centralise la logique de détection des gates manuels dans le registre,
+        réutilisable depuis approval_views.py, workflow_commands.py et tasks/gates.py
+        sans couplage dur à 'approval_granted'.
+
+        Returns False (pas d'exception) pour les condition_types inconnus.
+        """
+        try:
+            return self._by_condition_type[condition_type].requires_manual_resolution
+        except KeyError:
+            return False

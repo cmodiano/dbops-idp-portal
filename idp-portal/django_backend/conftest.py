@@ -74,7 +74,7 @@ def _ensure_unmanaged_tables_for_sqlite(django_db_setup, django_db_blocker):
                 )
             """)
             cursor.execute("""
-                CREATE TABLE IF NOT EXISTS "PROFILE_TARGET_ATTRIBUTE_FILTERS" (
+                CREATE TABLE IF NOT EXISTS "PROFILE_TARGET_ATTR_FILTERS" (
                     "ID" INTEGER PRIMARY KEY AUTOINCREMENT,
                     "PROFILE_ID" INTEGER NOT NULL,
                     "ATTRIBUTE_KEY" VARCHAR(255) NOT NULL,
@@ -140,7 +140,7 @@ def _ensure_unmanaged_tables_for_sqlite(django_db_setup, django_db_blocker):
             cursor.execute('DROP TABLE IF EXISTS "WORKFLOW_STEPS"')
             cursor.execute('DROP TABLE IF EXISTS "WORKFLOW_DEFINITIONS"')
             cursor.execute('DROP TABLE IF EXISTS "PROFILE_TARGET_EXCLUSIONS"')
-            cursor.execute('DROP TABLE IF EXISTS "PROFILE_TARGET_ATTRIBUTE_FILTERS"')
+            cursor.execute('DROP TABLE IF EXISTS "PROFILE_TARGET_ATTR_FILTERS"')
             cursor.execute('DROP TABLE IF EXISTS "PROFILE_TARGET_PATTERNS"')
             cursor.execute('DROP TABLE IF EXISTS "PROFILE_TARGET_ALLOWLIST"')
             cursor.execute('DROP TABLE IF EXISTS "PROFILE_ACTION_ENVS"')

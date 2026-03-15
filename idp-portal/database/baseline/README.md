@@ -23,7 +23,7 @@ Ce dossier contient le script de **baseline** du schéma Oracle de l'IDP Portal.
 sqlplus idp_user/password@NEW_ENV:1521/XEPDB1 @database/baseline/baseline_flyway.sql
 ```
 
-> Le script crée les 47 tables (dont EXECUTIONS, EXECUTION_STEPS, AUDIT_LOG partitionnées, WORKFLOW_DEFINITIONS, WORKFLOW_STEPS, WORKFLOW_STEP_EDGES, PROFILE_ACTION_ALLOWLIST, PROFILE_ACTION_TAG_PATTERNS, PROFILE_ACTION_ENVS, PROFILE_TARGET_ALLOWLIST, PROFILE_TARGET_PATTERNS, PROFILE_TARGET_ATTRIBUTE_FILTERS, PROFILE_TARGET_EXCLUSIONS, et les tables Django auth/session/API), indexes, contraintes, le trigger d'immutabilité, le package PKG_IDP_MAINTENANCE et insère les données de référence (REF_ENGINES, REF_CATEGORIES).
+> Le script crée les 47 tables (dont EXECUTIONS, EXECUTION_STEPS, AUDIT_LOG partitionnées, WORKFLOW_DEFINITIONS, WORKFLOW_STEPS, WORKFLOW_STEP_EDGES, PROFILE_ACTION_ALLOWLIST, PROFILE_ACTION_TAG_PATTERNS, PROFILE_ACTION_ENVS, PROFILE_TARGET_ALLOWLIST, PROFILE_TARGET_PATTERNS, PROFILE_TARGET_ATTR_FILTERS, PROFILE_TARGET_EXCLUSIONS, et les tables Django auth/session/API), indexes, contraintes, le trigger d'immutabilité, le package PKG_IDP_MAINTENANCE et insère les données de référence (REF_ENGINES, REF_CATEGORIES).
 
 ### Étape 2 : Déclarer la base au niveau V136 (commande Flyway `baseline`)
 
@@ -93,7 +93,7 @@ Cela garantit un stockage en UTC quel que soit le timezone de la base ou de la s
 | Phase 4b — Maintenance | IDP_MAINTENANCE_LOG, PKG_IDP_MAINTENANCE |
 | Phase 4c — V113–V129 | WORKFLOW_EVENTS, WORKFLOW_EVENT_COUNTER, RUNNABLE_STEPS (V123 leases), WORKFLOW_COMMANDS, EXECUTION_OUTBOX, WORKFLOW_DEFINITIONS, WORKFLOW_STEPS, WORKFLOW_STEP_EDGES |
 | Phase 4d — V130–V131 | PROFILE_ACTION_ALLOWLIST, PROFILE_ACTION_TAG_PATTERNS, PROFILE_ACTION_ENVS (normalisation permissions action) |
-| Phase 4e — V132–V136 | PROFILE_TARGET_ALLOWLIST, PROFILE_TARGET_PATTERNS, PROFILE_TARGET_ATTRIBUTE_FILTERS, PROFILE_TARGET_EXCLUSIONS ; CHECK (IS JSON) Tier 2 ; suppression colonnes CLOB/approval legacy |
+| Phase 4e — V132–V136 | PROFILE_TARGET_ALLOWLIST, PROFILE_TARGET_PATTERNS, PROFILE_TARGET_ATTR_FILTERS, PROFILE_TARGET_EXCLUSIONS ; CHECK (IS JSON) Tier 2 ; suppression colonnes CLOB/approval legacy |
 
 ### Données de référence insérées
 

@@ -71,6 +71,55 @@ class TestGateDefinitionRegistry:
         assert registry.get('g').display_name == 'V2'
 
 
+class TestIsManualConditionType:
+    """Tests unitaires de GateDefinitionRegistry.is_manual_condition_type() — Story 84.2 AC9."""
+
+    def test_known_manual_type_returns_true(self):
+        """approval_granted est enregistré avec requires_manual_resolution=True."""
+        assert gate_registry.is_manual_condition_type('approval_granted') is True
+
+    def test_known_auto_type_returns_false(self):
+        """maintenance_window est enregistré avec requires_manual_resolution=False."""
+        assert gate_registry.is_manual_condition_type('maintenance_window') is False
+
+    def test_unknown_type_returns_false_no_exception(self):
+        """Type inconnu → False, pas de KeyError."""
+        assert gate_registry.is_manual_condition_type('unknown_type') is False
+
+    def test_empty_string_returns_false(self):
+        """Chaîne vide → False, pas d'exception."""
+        assert gate_registry.is_manual_condition_type('') is False
+
+    def test_isolated_registry_manual_type(self):
+        """Instance fraîche : type manual enregistré → True."""
+        registry = GateDefinitionRegistry()
+        registry.register(GateDefinition(
+            gate_type='review',
+            condition_type='review_required',
+            display_name='Revue',
+            category='review',
+            requires_manual_resolution=True,
+        ))
+        assert registry.is_manual_condition_type('review_required') is True
+
+    def test_isolated_registry_auto_type(self):
+        """Instance fraîche : type auto enregistré → False."""
+        registry = GateDefinitionRegistry()
+        registry.register(GateDefinition(
+            gate_type='check',
+            condition_type='check_passed',
+            display_name='Check',
+            category='check',
+            requires_manual_resolution=False,
+        ))
+        assert registry.is_manual_condition_type('check_passed') is False
+
+    def test_isolated_registry_unknown_returns_false(self):
+        """Instance fraîche vide : type inconnu → False."""
+        registry = GateDefinitionRegistry()
+        assert registry.is_manual_condition_type('anything') is False
+
+
 class TestGateRegistrySingleton:
     """Tests sur le singleton gate_registry (état réel)."""
 
