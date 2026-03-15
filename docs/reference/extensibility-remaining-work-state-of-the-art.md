@@ -711,3 +711,9 @@ Si cette chaine est simple a suivre, le systeme sera :
 - lisible
 - stable
 - beaucoup moins fragile qu'aujourd'hui
+
+---
+
+## Epic de mise en œuvre
+
+Epic 83 : [Extensibilite state-of-the-art — achevement architecture data-driven](../backend/epic-83-extensibilite-state-of-the-art.md)
