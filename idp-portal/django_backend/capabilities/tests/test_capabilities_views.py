@@ -138,11 +138,12 @@ class TestWorkflowStepsCapabilities:
         response = client.get(url)
         assert response.status_code == 401
 
-    def test_contains_three_step_types(self, auth_client):
+    def test_contains_five_step_types(self, auth_client):
+        """Story 84.1 (AC4) : http_request et evaluation désormais déclarés dans le registre."""
         url = reverse('capabilities:capabilities-workflow-steps')
         data = auth_client.get(url).data['data']
         codes = {s['code'] for s in data['step_types']}
-        assert codes == {'platform', 'service_call', 'gate'}
+        assert codes == {'platform', 'service_call', 'gate', 'http_request', 'evaluation'}
 
     def test_gate_has_two_variants(self, auth_client):
         url = reverse('capabilities:capabilities-workflow-steps')

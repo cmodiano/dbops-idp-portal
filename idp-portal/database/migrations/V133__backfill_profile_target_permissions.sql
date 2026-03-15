@@ -4,50 +4,56 @@
 -- Lit chaque PROFILE_TARGET_PERMISSIONS, parse les JSON arrays/dict via JSON_TABLE,
 -- et insère dans les 4 tables normalisées.
 -- Idempotent : DELETE + INSERT par PROFILE_ID (ré-exécution sans doublon).
+--
+-- Si les colonnes CLOB n'existent pas (baseline ou post-V136), le backfill est ignoré (no-op).
+-- Utilise EXECUTE IMMEDIATE pour éviter ORA-00904 à la compilation du curseur.
 
 DECLARE
-    v_batch_count   NUMBER := 0;
+    v_has_clob_cols NUMBER := 0;
+    v_sql           CLOB;
+BEGIN
+    -- Skip if CLOB columns were dropped (baseline or post-V136) — no data to migrate
+    SELECT COUNT(*) INTO v_has_clob_cols
+    FROM USER_TAB_COLUMNS
+    WHERE TABLE_NAME = 'PROFILE_TARGET_PERMISSIONS'
+      AND COLUMN_NAME = 'EXCLUSION_PATTERNS_JSON';
 
+    IF v_has_clob_cols = 0 THEN
+        NULL;  /* no-op */
+    ELSE
+        v_sql := '
+DECLARE
+    v_batch_count   NUMBER := 0;
     CURSOR c_perms IS
         SELECT PROFILE_ID, TARGET_NAMES_JSON, TARGET_PATTERNS_JSON,
                FILTER_BY_ATTRIBUTE_JSON, EXCLUSION_PATTERNS_JSON
         FROM PROFILE_TARGET_PERMISSIONS;
-
 BEGIN
     FOR p IN c_perms LOOP
-        -- Idempotent: remove existing normalized data for this profile
         DELETE FROM PROFILE_TARGET_ALLOWLIST WHERE PROFILE_ID = p.PROFILE_ID;
         DELETE FROM PROFILE_TARGET_PATTERNS WHERE PROFILE_ID = p.PROFILE_ID;
         DELETE FROM PROFILE_TARGET_ATTRIBUTE_FILTERS WHERE PROFILE_ID = p.PROFILE_ID;
         DELETE FROM PROFILE_TARGET_EXCLUSIONS WHERE PROFILE_ID = p.PROFILE_ID;
 
-        -- Backfill TARGET_NAMES_JSON → PROFILE_TARGET_ALLOWLIST
-        IF p.TARGET_NAMES_JSON IS NOT NULL
-           AND DBMS_LOB.GETLENGTH(p.TARGET_NAMES_JSON) > 2 THEN
+        IF p.TARGET_NAMES_JSON IS NOT NULL AND DBMS_LOB.GETLENGTH(p.TARGET_NAMES_JSON) > 2 THEN
             INSERT INTO PROFILE_TARGET_ALLOWLIST (PROFILE_ID, TARGET_NAME)
             SELECT DISTINCT p.PROFILE_ID, jt.target_name
-            FROM JSON_TABLE(p.TARGET_NAMES_JSON, '$[*]'
-                COLUMNS (target_name VARCHAR2(255) PATH '$')
+            FROM JSON_TABLE(p.TARGET_NAMES_JSON, ''$[*]''
+                COLUMNS (target_name VARCHAR2(255) PATH ''$'')
             ) jt
             WHERE jt.target_name IS NOT NULL;
         END IF;
 
-        -- Backfill TARGET_PATTERNS_JSON → PROFILE_TARGET_PATTERNS
-        IF p.TARGET_PATTERNS_JSON IS NOT NULL
-           AND DBMS_LOB.GETLENGTH(p.TARGET_PATTERNS_JSON) > 2 THEN
+        IF p.TARGET_PATTERNS_JSON IS NOT NULL AND DBMS_LOB.GETLENGTH(p.TARGET_PATTERNS_JSON) > 2 THEN
             INSERT INTO PROFILE_TARGET_PATTERNS (PROFILE_ID, PATTERN)
             SELECT DISTINCT p.PROFILE_ID, jt.pattern
-            FROM JSON_TABLE(p.TARGET_PATTERNS_JSON, '$[*]'
-                COLUMNS (pattern VARCHAR2(255) PATH '$')
+            FROM JSON_TABLE(p.TARGET_PATTERNS_JSON, ''$[*]''
+                COLUMNS (pattern VARCHAR2(255) PATH ''$'')
             ) jt
             WHERE jt.pattern IS NOT NULL;
         END IF;
 
-        -- Backfill FILTER_BY_ATTRIBUTE_JSON → PROFILE_TARGET_ATTRIBUTE_FILTERS
-        -- Structure: {"key1": ["val1", "val2"], "key2": ["val3"]}
-        -- Use JSON_OBJECT_T PL/SQL API to iterate dict keys and array values.
-        IF p.FILTER_BY_ATTRIBUTE_JSON IS NOT NULL
-           AND DBMS_LOB.GETLENGTH(p.FILTER_BY_ATTRIBUTE_JSON) > 2 THEN
+        IF p.FILTER_BY_ATTRIBUTE_JSON IS NOT NULL AND DBMS_LOB.GETLENGTH(p.FILTER_BY_ATTRIBUTE_JSON) > 2 THEN
             DECLARE
                 v_obj   JSON_OBJECT_T;
                 v_keys  JSON_KEY_LIST;
@@ -69,8 +75,7 @@ BEGIN
                                         (PROFILE_ID, ATTRIBUTE_KEY, ATTRIBUTE_VALUE)
                                     VALUES (p.PROFILE_ID, v_key, v_val);
                                 EXCEPTION
-                                    WHEN DUP_VAL_ON_INDEX THEN
-                                        NULL; -- Deduplicate: skip duplicate (key, value) pairs
+                                    WHEN DUP_VAL_ON_INDEX THEN NULL;
                                 END;
                             END IF;
                         END LOOP;
@@ -79,25 +84,24 @@ BEGIN
             END;
         END IF;
 
-        -- Backfill EXCLUSION_PATTERNS_JSON → PROFILE_TARGET_EXCLUSIONS
-        IF p.EXCLUSION_PATTERNS_JSON IS NOT NULL
-           AND DBMS_LOB.GETLENGTH(p.EXCLUSION_PATTERNS_JSON) > 2 THEN
+        IF p.EXCLUSION_PATTERNS_JSON IS NOT NULL AND DBMS_LOB.GETLENGTH(p.EXCLUSION_PATTERNS_JSON) > 2 THEN
             INSERT INTO PROFILE_TARGET_EXCLUSIONS (PROFILE_ID, EXCLUSION_PATTERN)
             SELECT DISTINCT p.PROFILE_ID, jt.exclusion_pattern
-            FROM JSON_TABLE(p.EXCLUSION_PATTERNS_JSON, '$[*]'
-                COLUMNS (exclusion_pattern VARCHAR2(255) PATH '$')
+            FROM JSON_TABLE(p.EXCLUSION_PATTERNS_JSON, ''$[*]''
+                COLUMNS (exclusion_pattern VARCHAR2(255) PATH ''$'')
             ) jt
             WHERE jt.exclusion_pattern IS NOT NULL;
         END IF;
 
-        -- Batch commit every 100 profiles
         v_batch_count := v_batch_count + 1;
         IF MOD(v_batch_count, 100) = 0 THEN
             COMMIT;
         END IF;
     END LOOP;
-
-    -- Final commit for remaining rows
     COMMIT;
+END;
+';
+        EXECUTE IMMEDIATE v_sql;
+    END IF;
 END;
 /

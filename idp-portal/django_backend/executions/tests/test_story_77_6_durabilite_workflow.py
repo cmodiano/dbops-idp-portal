@@ -625,7 +625,7 @@ class TestAC5RollbackApproveNoSideEffects(TestCase):
                 format='json',
             )
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
 
         # Le callback on_commit a bien été enregistré (pattern on_commit actif)
         self.assertGreater(

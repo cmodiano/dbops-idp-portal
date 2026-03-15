@@ -64,3 +64,13 @@ repos:
         language: system
         files: ^idp-portal/django_backend/.*\.py$
         pass_filenames: false
+
+  # Pytest (Django backend): run backend tests before commit
+  - repo: local
+    hooks:
+      - id: pytest-django-backend
+        name: pytest (django_backend)
+        entry: "bash -c 'cd idp-portal/django_backend && .venv/bin/python -m pytest -q --tb=short -x 2>&1 | tail -50'"
+        language: system
+        files: ^idp-portal/django_backend/
+        pass_filenames: false

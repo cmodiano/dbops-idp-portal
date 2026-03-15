@@ -15,8 +15,11 @@ from capabilities.step_definitions import (
 
 class TestWorkflowStepDefinitionRegistry:
 
-    def test_list_types_returns_three_step_types(self):
-        assert workflow_step_registry.list_types() == ['platform', 'service_call', 'gate']
+    def test_list_types_returns_five_step_types(self):
+        """Story 84.1 (AC4) : http_request et evaluation ajoutés au registre."""
+        assert workflow_step_registry.list_types() == [
+            'platform', 'service_call', 'gate', 'http_request', 'evaluation'
+        ]
 
     def test_get_platform_has_label(self):
         assert workflow_step_registry.get('platform').label == 'Exécuter'

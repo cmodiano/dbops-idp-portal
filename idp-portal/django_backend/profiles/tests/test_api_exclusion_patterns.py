@@ -199,19 +199,22 @@ class TestProfileTargetPermissionsAPIWithExclusion(TestCase):
         self.assertIn('exclusion_patterns', errors)
     
     def test_put_without_exclusion_patterns_field(self):
-        """Test PUT without exclusion_patterns field preserves existing value."""
+        """Test PUT without exclusion_patterns field.
+
+        Story 78.12: When payload omits exclusion_patterns, normalized replace
+        uses default []; exclusion_patterns is not merged from existing.
+        """
         # Create permission with exclusion
         ProfileService().set_target_permissions(
             self.profile.id,
             {'targets_type': 'pattern', 'target_patterns': ['PROD-*'], 'exclusion_patterns': ['PROD-CRITICAL-*']},
         )
 
-        # Update other fields without touching exclusion_patterns
+        # Update other fields without exclusion_patterns in payload
         payload = {
             'targets_type': 'pattern',
             'target_names': [],
-            'target_patterns': ["STAGING-*"]  # Changed
-            # exclusion_patterns not included
+            'target_patterns': ["STAGING-*"],
         }
 
         response = self.client.put(
@@ -221,7 +224,5 @@ class TestProfileTargetPermissionsAPIWithExclusion(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-
-        # Verify exclusion_patterns preserved
-        perm = ProfileTargetPermission.objects.get(profile=self.profile)
-        self.assertEqual(get_exclusion_patterns(perm), ["PROD-CRITICAL-*"])
+        # Omitted field → default [] in response (Story 78.12 replace semantics)
+        self.assertEqual(response.json()['data']['exclusion_patterns'], [])

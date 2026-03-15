@@ -70,14 +70,18 @@ class TestDashboardStatsApprobationsStructure:
     def test_non_null_fields_have_float_types(self):
         """Avec des données, approval_rate et avg_approval_delay_s sont des floats."""
         action = ActionFactory.create()
+        # created_at must be before approved_at for delay calculation (delta >= 0)
+        created = timezone.now() - timedelta(hours=2)
         execution = ExecutionFactory.create(
             action=action, user=self.user, status='COMPLETED',
         )
+        execution.created_at = created
+        execution.save()
         ExecutionStepFactory.create(
             execution=execution,
             step_type='gate',
             status='COMPLETED',
-            approved_at=timezone.now() - timedelta(hours=1),
+            approved_at=timezone.now() - timedelta(hours=1),  # 1h after created
         )
         response = self.client.get(URL)
         data = response.data['data']

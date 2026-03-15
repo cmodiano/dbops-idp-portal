@@ -70,7 +70,7 @@ class TestApproveStepView(TestCase):
                 {"comment": "LGTM"},
                 format='json',
             )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
 
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, ExecutionStepStatus.COMPLETED)
@@ -110,7 +110,7 @@ class TestApproveStepView(TestCase):
             {"comment": "OK"},
             format='json',
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
 
         self.execution.refresh_from_db()
         self.assertEqual(self.execution.status, ExecutionStatus.COMPLETED)
@@ -204,7 +204,7 @@ class TestRejectStepView(TestCase):
                 {"comment": "Rejected"},
                 format='json',
             )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
 
         self.step.refresh_from_db()
         self.assertEqual(self.step.status, ExecutionStepStatus.FAILED)
@@ -238,7 +238,7 @@ class TestRejectStepView(TestCase):
             f"/api/v1/executions/{self.execution.id}/steps/{self.step.id}/reject/",
             format='json',
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
 
         self.execution.refresh_from_db()
         self.assertEqual(self.execution.status, ExecutionStatus.FAILED)
@@ -306,7 +306,7 @@ class TestApproveExecutionBackwardCompat(TestCase):
             f"/api/v1/executions/{execution.id}/approve/",
             format='json',
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
 
         step.refresh_from_db()
         self.assertEqual(step.status, ExecutionStepStatus.COMPLETED)
@@ -414,7 +414,7 @@ class TestRejectExecutionBackwardCompat(TestCase):
                 {"rejection_reason": "Non conforme"},
                 format='json',
             )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
 
         step.refresh_from_db()
         self.assertEqual(step.status, ExecutionStepStatus.FAILED)
@@ -456,7 +456,7 @@ class TestRejectExecutionBackwardCompat(TestCase):
             f"/api/v1/executions/{execution.id}/reject/",
             format='json',
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
 
         step.refresh_from_db()
         self.assertEqual(step.status, ExecutionStepStatus.FAILED)
@@ -499,7 +499,7 @@ class TestRejectExecutionBackwardCompat(TestCase):
                 {"rejection_reason": "Audit requis"},
                 format='json',
             )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
 
         step.refresh_from_db()
         self.assertEqual(step.approval_comment, "Audit requis")

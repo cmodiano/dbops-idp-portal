@@ -337,11 +337,13 @@ class TestCeleryTaskRoutesConsistency:
             )
 
     def test_celery_task_routes_beat_tasks_on_default(self) -> None:
-        """Les tasks Beat (retry, gates, scheduled) restent sur la queue 'default'."""
+        """Les tasks Beat (gates, scheduled) restent sur la queue 'default'.
+
+        Story 81: retry_workflow_step removed — legacy workflow decommissioned.
+        """
         from django.conf import settings
 
         beat_tasks = [
-            "executions.tasks.retry_workflow_step",
             "executions.tasks.evaluate_waiting_gates",
             "executions.tasks.process_pending_scheduled_executions",
         ]

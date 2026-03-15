@@ -964,4 +964,5 @@ Si cette chaine est simple a suivre, le systeme sera :
 
 ## Epic de mise en œuvre
 
-Epic 83 : [Extensibilite state-of-the-art — achevement architecture data-driven](../backend/epic-83-extensibilite-state-of-the-art.md)
+- Epic 83 : [Extensibilite state-of-the-art — achevement architecture data-driven](../backend/epic-83-extensibilite-state-of-the-art.md) (Phases 1–4, done)
+- Epic 84 : [Extensibilite phase 5 — atteindre 9/10 par composant](../backend/epic-84-extensibilite-phase5-9-sur-10.md) (travail restant pour 9/10)

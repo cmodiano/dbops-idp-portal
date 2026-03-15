@@ -104,7 +104,7 @@ class TestIntegrationApproverProfileIds(TestCase):
             f"/api/v1/executions/{execution.id}/steps/{step.id}/approve/",
             format='json',
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
         step.refresh_from_db()
         self.assertEqual(step.status, ExecutionStepStatus.COMPLETED)
 
@@ -140,7 +140,7 @@ class TestIntegrationApproverProfileIds(TestCase):
             {"comment": "Refusé"},
             format='json',
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
         step.refresh_from_db()
         self.assertEqual(step.status, ExecutionStepStatus.FAILED)
 

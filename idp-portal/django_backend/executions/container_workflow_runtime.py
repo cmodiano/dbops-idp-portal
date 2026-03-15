@@ -23,7 +23,7 @@ import time
 import threading
 import structlog
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Dict, Any, List, NamedTuple, Union, cast
+from typing import Dict, Any, List, NamedTuple, cast
 
 from django.db import close_old_connections, transaction
 from django.utils import timezone
@@ -46,10 +46,7 @@ from executions.template_resolver import StepTemplateResolver
 from catalog.workflow_definition_repository import get_steps as get_workflow_steps
 from executions.utils.workflow_parsing import get_workflow_entry_step_ids
 from executions.step_handlers.condition_evaluator import StepConditionEvaluator
-from executions.step_handlers.service_call_handler import ServiceCallHandler
-from executions.step_handlers.http_request_handler import HttpRequestHandler
-from executions.step_handlers.evaluation_handler import EvaluationHandler
-from executions.step_handlers.gate_handler import GateHandler
+from executions.step_handlers.registry import step_handler_registry
 from executions.tasks.trigger import trigger_platform_job
 from executions.tasks.polling import get_platform_queue
 from executions.container_routing import (
@@ -425,31 +422,24 @@ class ContainerWorkflowRuntime:
             return self._create_skipped_step(step_name, step_id, step_type, parallel_context)
 
         # Dispatcher selon step_type (ADR-007 §3d)
-        handler: Union[
-            ServiceCallHandler, HttpRequestHandler, EvaluationHandler, GateHandler
-        ]
-        match step_type:
-            case 'platform':
-                return self._execute_platform_step(step, resolved_params, step_name, step_id, parallel_context)
-            case 'service_call':
-                handler = ServiceCallHandler()
-            case 'http_request':
-                handler = HttpRequestHandler()
-            case 'evaluation':
-                handler = EvaluationHandler()
-            case 'gate':
-                handler = GateHandler()
-            case _:
-                if parallel_context is not None:
-                    logger.error(
-                        "container_workflow_parallel_unknown_step_type",
-                        step_type=step_type,
-                        execution_id=self.execution.id,
-                        correlation_id=self.correlation_id,
-                    )
-                    return ExecutionStatus.FAILED
-                raise ValueError(f"Unknown step_type: {step_type!r}")
+        # 'platform' : routing interne — crée des child executions via _execute_platform_step()
+        if step_type == 'platform':
+            return self._execute_platform_step(step, resolved_params, step_name, step_id, parallel_context)
 
+        # Lookup via registre (Story 84.1 — R1 extensibilité)
+        handler_class = step_handler_registry.get(step_type)
+        if handler_class is None:
+            if parallel_context is not None:
+                logger.error(
+                    "container_workflow_parallel_unknown_step_type",
+                    step_type=step_type,
+                    execution_id=self.execution.id,
+                    correlation_id=self.correlation_id,
+                )
+                return ExecutionStatus.FAILED
+            raise ValueError(f"Unknown step_type: {step_type!r}")
+
+        handler = handler_class()
         return self._execute_handler_step(step, resolved_params, step_name, step_id, step_type, handler, parallel_context)
 
     def _get_next_step_ids(self, step: dict, outcome: ExecutionStatus) -> list[str]:
@@ -1185,9 +1175,7 @@ class ContainerWorkflowRuntime:
         step_name: str,
         step_id: str | None,
         step_type: str,
-        handler: Union[
-            ServiceCallHandler, HttpRequestHandler, EvaluationHandler, GateHandler
-        ],
+        handler: Any,  # Instance d'un handler enregistré dans step_handler_registry (Story 84.1)
         parallel_context: ParallelContext | None = None,
     ) -> ExecutionStatus:
         """
@@ -1512,10 +1500,10 @@ class ContainerWorkflowRuntime:
             next_ids = self._get_next_step_ids(step_config, ExecutionStatus.COMPLETED)
             return ExecutionStatus.COMPLETED, next_ids
 
-        # Dispatch by step_type
+        # Dispatch by step_type (Story 84.1 — R1 extensibilité, cohérence avec _execute_step)
         if step_type == 'platform':
             status = self._worker_execute_platform(exec_step, step_config, resolved_params)
-        elif step_type in ('service_call', 'http_request', 'evaluation', 'gate'):
+        elif step_handler_registry.is_registered(step_type):
             status = self._worker_execute_handler(exec_step, step_config, step_type, resolved_params)
         else:
             assert_step_transition(exec_step.status, ExecutionStepStatus.FAILED)
@@ -1635,24 +1623,17 @@ class ContainerWorkflowRuntime:
         step_id = step_config.get('step_id')
         step_name = step_config.get('name') or f"Étape {step_config.get('order', 0)}"
 
-        handler: Union[ServiceCallHandler, HttpRequestHandler, EvaluationHandler, GateHandler]
-        match step_type:
-            case 'service_call':
-                handler = ServiceCallHandler()
-            case 'http_request':
-                handler = HttpRequestHandler()
-            case 'evaluation':
-                handler = EvaluationHandler()
-            case 'gate':
-                handler = GateHandler()
-            case _:
-                assert_step_transition(exec_step.status, ExecutionStepStatus.FAILED)
-                exec_step.status = ExecutionStepStatus.FAILED
-                exec_step.completed_at = timezone.now()
-                exec_step.error_message = f"Unknown handler step_type: {step_type!r}"
-                exec_step.save(update_fields=['status', 'completed_at', 'error_message'])
-                _broadcast_step(self.execution.id, exec_step)
-                return ExecutionStatus.FAILED
+        # Lookup via registre (Story 84.1 — cohérence avec _execute_step, R1 extensibilité)
+        handler_class = step_handler_registry.get(step_type)
+        if handler_class is None:
+            assert_step_transition(exec_step.status, ExecutionStepStatus.FAILED)
+            exec_step.status = ExecutionStepStatus.FAILED
+            exec_step.completed_at = timezone.now()
+            exec_step.error_message = f"Unknown handler step_type: {step_type!r}"
+            exec_step.save(update_fields=['status', 'completed_at', 'error_message'])
+            _broadcast_step(self.execution.id, exec_step)
+            return ExecutionStatus.FAILED
+        handler: Any = handler_class()
 
         try:
             result = handler.execute(

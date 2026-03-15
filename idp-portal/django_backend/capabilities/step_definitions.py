@@ -110,3 +110,22 @@ workflow_step_registry.register(WorkflowStepDefinition(
     constraints={},
     variants_builder=_build_gate_variants,
 ))
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Types ajoutés par Story 84.1 — alignement capabilities ↔ runtime (AC4, R2)
+# Ces types étaient exécutables mais non déclarés → absents de l'API capabilities
+# ─────────────────────────────────────────────────────────────────────────────
+
+workflow_step_registry.register(WorkflowStepDefinition(
+    code='http_request',
+    label='Requête HTTP',
+    category='integration',
+    constraints={'requires_allowed_host': True},
+))
+
+workflow_step_registry.register(WorkflowStepDefinition(
+    code='evaluation',
+    label='Évaluation',
+    category='control',
+    constraints={},
+))

@@ -357,15 +357,17 @@ class TestProfileActionPermissionsValidate(TestCase):
 class TestProfileActionPermissionsToRepresentation(TestCase):
     """Cover to_representation (lines 185-198)."""
 
-    def test_to_representation_with_profile_action_permission_instance(self):
+    @patch("profiles.action_permission_repository.get_action_ids", return_value=[1, 2, 3])
+    @patch("profiles.action_permission_repository.get_tag_patterns", return_value=[])
+    @patch("profiles.action_permission_repository.get_environments", return_value=["prod"])
+    def test_to_representation_with_profile_action_permission_instance(
+        self, mock_envs, mock_patterns, mock_ids
+    ):
         """Lines 187-197: ProfileActionPermission instance → dict."""
         from profiles.models import ProfileActionPermission
 
         instance = MagicMock(spec=ProfileActionPermission)
         instance.permission_type = "LIST"
-        instance.get_action_ids.return_value = [1, 2, 3]
-        instance.get_tag_patterns.return_value = []
-        instance.get_environments.return_value = ["prod"]
 
         s = ProfileActionPermissionsSerializer()
         result = s.to_representation(instance)
@@ -375,15 +377,15 @@ class TestProfileActionPermissionsToRepresentation(TestCase):
         self.assertEqual(result["tag_patterns"], [])
         self.assertEqual(result["environments"], ["prod"])
 
-    def test_to_representation_pattern_type(self):
+    @patch("profiles.action_permission_repository.get_action_ids", return_value=[])
+    @patch("profiles.action_permission_repository.get_tag_patterns", return_value=["oracle:*", "pg:*"])
+    @patch("profiles.action_permission_repository.get_environments", return_value=[])
+    def test_to_representation_pattern_type(self, mock_envs, mock_patterns, mock_ids):
         """PATTERN permission_type → 'pattern'."""
         from profiles.models import ProfileActionPermission
 
         instance = MagicMock(spec=ProfileActionPermission)
         instance.permission_type = "PATTERN"
-        instance.get_action_ids.return_value = []
-        instance.get_tag_patterns.return_value = ["oracle:*", "pg:*"]
-        instance.get_environments.return_value = []
 
         s = ProfileActionPermissionsSerializer()
         result = s.to_representation(instance)
@@ -391,30 +393,32 @@ class TestProfileActionPermissionsToRepresentation(TestCase):
         self.assertEqual(result["actions_type"], "pattern")
         self.assertEqual(result["tag_patterns"], ["oracle:*", "pg:*"])
 
-    def test_to_representation_all_type(self):
+    @patch("profiles.action_permission_repository.get_action_ids", return_value=[])
+    @patch("profiles.action_permission_repository.get_tag_patterns", return_value=[])
+    @patch("profiles.action_permission_repository.get_environments", return_value=[])
+    def test_to_representation_all_type(self, mock_envs, mock_patterns, mock_ids):
         """ALL permission_type → 'all'."""
         from profiles.models import ProfileActionPermission
 
         instance = MagicMock(spec=ProfileActionPermission)
         instance.permission_type = "ALL"
-        instance.get_action_ids.return_value = []
-        instance.get_tag_patterns.return_value = []
-        instance.get_environments.return_value = []
 
         s = ProfileActionPermissionsSerializer()
         result = s.to_representation(instance)
 
         self.assertEqual(result["actions_type"], "all")
 
-    def test_to_representation_unknown_type_defaults_to_all(self):
+    @patch("profiles.action_permission_repository.get_action_ids", return_value=[])
+    @patch("profiles.action_permission_repository.get_tag_patterns", return_value=[])
+    @patch("profiles.action_permission_repository.get_environments", return_value=[])
+    def test_to_representation_unknown_type_defaults_to_all(
+        self, mock_envs, mock_patterns, mock_ids
+    ):
         """Unknown permission_type defaults to 'all'."""
         from profiles.models import ProfileActionPermission
 
         instance = MagicMock(spec=ProfileActionPermission)
         instance.permission_type = "UNKNOWN"
-        instance.get_action_ids.return_value = []
-        instance.get_tag_patterns.return_value = []
-        instance.get_environments.return_value = []
 
         s = ProfileActionPermissionsSerializer()
         result = s.to_representation(instance)
@@ -654,16 +658,18 @@ class TestProfileTargetPermissionsValidate(TestCase):
 class TestProfileTargetPermissionsToRepresentation(TestCase):
     """Cover to_representation (lines 372-386)."""
 
-    def test_to_representation_with_profile_target_permission_instance(self):
+    @patch("profiles.target_permission_repository.get_target_names", return_value=["host1", "host2"])
+    @patch("profiles.target_permission_repository.get_target_patterns", return_value=[])
+    @patch("profiles.target_permission_repository.get_filter_by_attribute", return_value={"environment": ["prod"]})
+    @patch("profiles.target_permission_repository.get_exclusion_patterns", return_value=["PROD-CRITICAL-*"])
+    def test_to_representation_with_profile_target_permission_instance(
+        self, mock_excl, mock_filter, mock_patterns, mock_names
+    ):
         """Lines 374-385: ProfileTargetPermission instance → dict."""
         from profiles.models import ProfileTargetPermission
 
         instance = MagicMock(spec=ProfileTargetPermission)
         instance.permission_type = "LIST"
-        instance.get_target_names.return_value = ["host1", "host2"]
-        instance.get_target_patterns.return_value = []
-        instance.get_filter_by_attribute.return_value = {"environment": ["prod"]}
-        instance.get_exclusion_patterns.return_value = ["PROD-CRITICAL-*"]
 
         s = ProfileTargetPermissionsSerializer()
         result = s.to_representation(instance)
@@ -674,16 +680,18 @@ class TestProfileTargetPermissionsToRepresentation(TestCase):
         self.assertEqual(result["filter_by_attribute"], {"environment": ["prod"]})
         self.assertEqual(result["exclusion_patterns"], ["PROD-CRITICAL-*"])
 
-    def test_to_representation_pattern_type(self):
+    @patch("profiles.target_permission_repository.get_target_names", return_value=[])
+    @patch("profiles.target_permission_repository.get_target_patterns", return_value=["PROD-*", "UAT-*"])
+    @patch("profiles.target_permission_repository.get_filter_by_attribute", return_value=None)
+    @patch("profiles.target_permission_repository.get_exclusion_patterns", return_value=[])
+    def test_to_representation_pattern_type(
+        self, mock_excl, mock_filter, mock_patterns, mock_names
+    ):
         """PATTERN permission_type → 'pattern'."""
         from profiles.models import ProfileTargetPermission
 
         instance = MagicMock(spec=ProfileTargetPermission)
         instance.permission_type = "PATTERN"
-        instance.get_target_names.return_value = []
-        instance.get_target_patterns.return_value = ["PROD-*", "UAT-*"]
-        instance.get_filter_by_attribute.return_value = None
-        instance.get_exclusion_patterns.return_value = []
 
         s = ProfileTargetPermissionsSerializer()
         result = s.to_representation(instance)
@@ -691,32 +699,36 @@ class TestProfileTargetPermissionsToRepresentation(TestCase):
         self.assertEqual(result["targets_type"], "pattern")
         self.assertEqual(result["target_patterns"], ["PROD-*", "UAT-*"])
 
-    def test_to_representation_all_type(self):
+    @patch("profiles.target_permission_repository.get_target_names", return_value=[])
+    @patch("profiles.target_permission_repository.get_target_patterns", return_value=[])
+    @patch("profiles.target_permission_repository.get_filter_by_attribute", return_value=None)
+    @patch("profiles.target_permission_repository.get_exclusion_patterns", return_value=[])
+    def test_to_representation_all_type(
+        self, mock_excl, mock_filter, mock_patterns, mock_names
+    ):
         """ALL permission_type → 'all'."""
         from profiles.models import ProfileTargetPermission
 
         instance = MagicMock(spec=ProfileTargetPermission)
         instance.permission_type = "ALL"
-        instance.get_target_names.return_value = []
-        instance.get_target_patterns.return_value = []
-        instance.get_filter_by_attribute.return_value = None
-        instance.get_exclusion_patterns.return_value = []
 
         s = ProfileTargetPermissionsSerializer()
         result = s.to_representation(instance)
 
         self.assertEqual(result["targets_type"], "all")
 
-    def test_to_representation_unknown_type_defaults_to_all(self):
+    @patch("profiles.target_permission_repository.get_target_names", return_value=[])
+    @patch("profiles.target_permission_repository.get_target_patterns", return_value=[])
+    @patch("profiles.target_permission_repository.get_filter_by_attribute", return_value=None)
+    @patch("profiles.target_permission_repository.get_exclusion_patterns", return_value=[])
+    def test_to_representation_unknown_type_defaults_to_all(
+        self, mock_excl, mock_filter, mock_patterns, mock_names
+    ):
         """Unknown permission_type defaults to 'all'."""
         from profiles.models import ProfileTargetPermission
 
         instance = MagicMock(spec=ProfileTargetPermission)
         instance.permission_type = "UNKNOWN_TYPE"
-        instance.get_target_names.return_value = []
-        instance.get_target_patterns.return_value = []
-        instance.get_filter_by_attribute.return_value = None
-        instance.get_exclusion_patterns.return_value = []
 
         s = ProfileTargetPermissionsSerializer()
         result = s.to_representation(instance)

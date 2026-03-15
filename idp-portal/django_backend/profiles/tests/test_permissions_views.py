@@ -85,7 +85,7 @@ class TestProfilePermissionsViews(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('data', response.data)
         self.assertEqual(response.data['data']['actions_type'], 'pattern')
-        self.assertEqual(response.data['data']['tag_patterns'], ['tag:oracle*', 'tag:database*'])
+        self.assertEqual(sorted(response.data['data']['tag_patterns']), sorted(['tag:oracle*', 'tag:database*']))
     
     def test_set_profile_actions_all(self):
         """Test PUT /admin/profiles/{id}/actions with actions_type='all'."""

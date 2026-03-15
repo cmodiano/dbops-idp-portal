@@ -106,33 +106,34 @@ class TestTasksExceptionHandling:
     """Story 22.11: Tests for tasks.py exception handling."""
 
     def test_celery_task_logs_with_correlation_id_and_error_type(self, mocker):
-        """Exception in retry_workflow_step logs with correlation_id and error_type."""
-        mock_logger = mocker.patch('executions.tasks.logger')
+        """Exception in resume_container_workflow_from_gate logs with correlation_id and error.
+
+        Story 81: retry_workflow_step removed — test now targets resume_container_workflow_from_gate.
+        """
+        mock_logger = mocker.patch('executions.tasks.gates.logger')
         mocker.patch('executions.tasks.get_correlation_id', return_value='test-corr-id-123')
-        # is_cancelled is imported inside the function, patch at source
         mocker.patch(
             'executions.cancellation_cache.is_cancelled',
             side_effect=RuntimeError("Redis down"),
         )
 
-        from executions.tasks import retry_workflow_step
+        from executions.tasks.gates import resume_container_workflow_from_gate
 
-        step = {'step_id': 'step-1'}
-        # Call the underlying function directly (Celery bind=True, self is first positional arg)
-        result = retry_workflow_step.run(execution_id=99999, step=step, attempt=1)
+        result = resume_container_workflow_from_gate.run(
+            execution_id=99999, on_success_step_ids=['step-1']
+        )
 
         assert result['outcome'] == 'error'
 
-        exception_calls = [
-            c for c in mock_logger.exception.call_args_list
-            if c[0][0] == "celery_retry_workflow_step_error"
+        error_calls = [
+            c for c in mock_logger.error.call_args_list
+            if c[0][0] == "resume_container_workflow_gate_error"
         ]
-        assert len(exception_calls) == 1
-        call_kwargs = exception_calls[0][1]
-        assert call_kwargs['error_type'] == 'RuntimeError'
+        assert len(error_calls) == 1
+        call_kwargs = error_calls[0][1]
+        assert 'Redis down' in call_kwargs['error']
         assert call_kwargs['correlation_id'] == 'test-corr-id-123'
         assert call_kwargs['execution_id'] == 99999
-        assert call_kwargs['step_id'] == 'step-1'
 
 
 class TestFeatureFlagsExceptionHandling:

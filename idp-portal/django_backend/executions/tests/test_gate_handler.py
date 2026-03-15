@@ -609,15 +609,16 @@ class TestTransitionStepToRunningADR007:
                     _transition_step_to_running(mock_step, gate_status, 'corr-approval')
 
         # Vérifie que resume_container_workflow_from_gate a été dispatchée (workflow reprend)
-        mock_apply.assert_called_once_with(
+        mock_apply.assert_called_once()
+        mock_apply.assert_called_with(
             args=[mock_step.execution_id, ['next-step']],
             queue='default',
         )
         # Vérifie que la transition de statut a été persistée (WAITING → RUNNING)
         mock_filter.assert_called()
         mock_filter.return_value.update.assert_called()
-        # Vérifie l'observabilité : AuditService tracé la transition d'approbation
-        mock_audit.assert_called()
+        # Vérifie l'observabilité : AuditService.create_entry tracé la transition d'approbation
+        mock_audit.create_entry.assert_called()
 
     @pytest.mark.django_db
     def test_step_def_not_found_logs_error(self):

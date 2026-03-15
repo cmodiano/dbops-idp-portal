@@ -53,25 +53,19 @@ class ExecutionModelTest(TestCase):
         self.assertEqual(execution.get_parameters(), params)
 
     def test_execution_approval_fields(self):
-        """Test approval workflow fields.
-        DEPRECATED (78.14, ADR-007): approved_by/approval_comment on Execution are deprecated.
-        Source of truth is ExecutionStep. Fields kept for backward-compat reads only.
-        PENDING_APPROVAL removed from DB CHECK (V135) — use SUBMITTED instead.
+        """Story 78.15: approved_by/approval_comment removed from Execution model.
+
+        Source of truth is ExecutionStep.approved_by/approval_comment (ADR-007).
+        Execution no longer accepts these kwargs — verify basic create still works.
         """
-        approver = User.objects.create(
-            username='approver',
-            profile='DBA'
-        )
         execution = Execution.objects.create(
             action=self.action,
             user=self.user,
             environment='production',
             status='SUBMITTED',
-            approved_by=approver,
-            approval_comment='Approved for production'
         )
-        self.assertEqual(execution.approved_by, approver)
-        self.assertEqual(execution.approval_comment, 'Approved for production')
+        self.assertEqual(execution.status, 'SUBMITTED')
+        self.assertEqual(execution.environment, 'production')
 
 
 @pytest.mark.django_db

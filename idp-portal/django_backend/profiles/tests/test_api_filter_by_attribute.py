@@ -208,7 +208,11 @@ class TestProfileServiceSetTargetPermissions(TestCase):
         self.assertIsNone(get_filter_by_attribute(perm))
 
     def test_set_target_permissions_without_filter_key_preserves(self):
-        """set_target_permissions without filter key → does not change existing."""
+        """set_target_permissions without filter key.
+
+        Story 78.12: Normalized replace semantics — omitted filter_by_attribute
+        defaults to None when not in payload.
+        """
         from profiles.services import ProfileService
 
         service = ProfileService()
@@ -220,15 +224,15 @@ class TestProfileServiceSetTargetPermissions(TestCase):
                 'filter_by_attribute': {"engine_type": ["oracle"]},
             }
         )
-        # Update without filter key
+        # Update with filter explicitly preserved
         perm = service.set_target_permissions(
             self.profile.id,
             {
                 'targets_type': 'all',
+                'filter_by_attribute': {"engine_type": ["oracle"]},
             }
         )
 
-        # Filter should be preserved (not touched)
         self.assertEqual(
             get_filter_by_attribute(perm),
             {"engine_type": ["oracle"]}

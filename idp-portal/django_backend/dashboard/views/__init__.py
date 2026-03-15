@@ -2,6 +2,7 @@
 
 Refactored from monolithic views.py into thematic modules.
 """
+from core.utils import ensure_utc_isoformat  # noqa: F401 — used by submodules for datetime serialization
 from dashboard.views.stats import (
     DashboardStatsView,
     DashboardStatsByTechnologyView,

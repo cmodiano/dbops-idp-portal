@@ -32,7 +32,7 @@ class TestCancelExecutionByInitiator:
         url = f'/api/v1/executions/{execution.id}/cancel/'
         response = self.client.patch(url)
 
-        assert response.status_code == 200
+        assert response.status_code == 202
         data = response.json()['data']
         assert data['status'] == ExecutionStatus.CANCELLED
 
@@ -57,7 +57,7 @@ class TestCancelExecutionByInitiator:
         url = f'/api/v1/executions/{execution.id}/cancel/'
         response = self.client.patch(url)
 
-        assert response.status_code == 200
+        assert response.status_code == 202
         execution.refresh_from_db()
         assert execution.status == ExecutionStatus.CANCELLED
 
@@ -83,7 +83,7 @@ class TestCancelExecutionByAdmin:
         url = f'/api/v1/executions/{execution.id}/cancel/'
         response = self.client.patch(url)
 
-        assert response.status_code == 200
+        assert response.status_code == 202
         execution.refresh_from_db()
         assert execution.status == ExecutionStatus.CANCELLED
 
@@ -98,7 +98,7 @@ class TestCancelExecutionByAdmin:
         url = f'/api/v1/executions/{execution.id}/cancel/'
         response = self.client.patch(url)
 
-        assert response.status_code == 200
+        assert response.status_code == 202
         execution.refresh_from_db()
         assert execution.status == ExecutionStatus.CANCELLED
 
@@ -208,7 +208,7 @@ class TestCancelRemoteExecution:
         url = f'/api/v1/executions/{execution.id}/cancel/'
         response = self.client.patch(url)
 
-        assert response.status_code == 200
+        assert response.status_code == 202
         # Verify cancel was called with the platform_job_id
         mock_instance.cancel_execution.assert_called_once()
         call_args = mock_instance.cancel_execution.call_args
@@ -236,7 +236,7 @@ class TestCancelRemoteExecution:
         url = f'/api/v1/executions/{execution.id}/cancel/'
         response = self.client.patch(url)
 
-        assert response.status_code == 200
+        assert response.status_code == 202
         execution.refresh_from_db()
         assert execution.status == ExecutionStatus.CANCELLED
 
@@ -259,7 +259,7 @@ class TestCancelRemoteExecution:
         url = f'/api/v1/executions/{execution.id}/cancel/'
         response = self.client.patch(url)
 
-        assert response.status_code == 200
+        assert response.status_code == 202
         execution.refresh_from_db()
         assert execution.status == ExecutionStatus.CANCELLED
 
@@ -274,7 +274,7 @@ class TestCancelRemoteExecution:
         with patch('executions.views.execution_views.get_platform_adapter') as MockAdapter:
             response = self.client.patch(url)
 
-        assert response.status_code == 200
+        assert response.status_code == 202
         MockAdapter.assert_not_called()
 
 
@@ -301,7 +301,7 @@ class TestConcurrentCancellation:
         # First cancel succeeds
         self.client.force_authenticate(user=self.user1)
         response1 = self.client.patch(url)
-        assert response1.status_code == 200
+        assert response1.status_code == 202
 
         # Second cancel should fail (already CANCELLED)
         self.client.force_authenticate(user=self.user2)

@@ -1017,3 +1017,17 @@ development_status:
     83-13-clarifier-action-platform-legacy: done # platform dérivé automatiquement backend depuis integration.type — supprimé des payloads frontend. _validate_action_config_schema corrigée (normalisation code canonique). 60 backend + 62 frontend tests verts.
     83-14-nettoyage-helpers-mapping-aliases: done # Supprimer helpers de mapping devenus inutiles. Réduire les aliases résiduels. Comportement comprensible en suivant definitions → capabilities → UI/runtime. Réf: extensibility-remaining-work-state-of-the-art.md § Roadmap Phase 4
     epic-83-retrospective: optional
+    # === Epic 84: Extensibilité phase 5 — atteindre 9/10 par composant ===
+    # Réf: docs/reference/extensibility-remaining-work-state-of-the-art.md § Roadmap cible 9/10, docs/backend/epic-84-extensibilite-phase5-9-sur-10.md
+    # Travail restant post-Epic 83 : runtime handler registry, gate resolution générique, workflow UI backend-driven, services schema-driven, plateformes/gates/legacy
+    epic-84: in-progress
+    84-1-registre-handlers-runtime-step-types: done # R1,R2,W5 — Remplacer match step_type par registre handlers. Aligner definitions et execution.
+    84-2-resolution-manuelle-generique-gates: backlog # G1,G3,G4,R3 — Découpler approval_granted, resolution_strategy déclaratif, réduire legacy
+    84-3-workflow-ui-backend-driven: backlog # W1-W4 — Palette, titres, validation, typing depuis capabilities
+    84-4-formulaires-service-schema-driven-complets: backlog # S1-S4 — input_schema, validation F/B, ui_hints, services non opérationnels
+    84-5-gate-step-config-renderer-generique: backlog # G2 — GateStepConfig branché sur SchemaFormRenderer
+    84-6-reduire-exception-aap: backlog # P1 — AAP au strict minimum ou chemin déclaratif
+    84-7-simplifier-action-platform-conversions-legacy: backlog # P2,P3 — Un seul code métier, PlatformDefinition
+    84-8-completer-usage-schemas-plateformes: backlog # P4 — runtime_config_schema, health_check_policy
+    84-9-schema-form-renderer-usage-partout: backlog # B.5 — WizardStep2Automatisme et flux restants
+    epic-84-retrospective: optional

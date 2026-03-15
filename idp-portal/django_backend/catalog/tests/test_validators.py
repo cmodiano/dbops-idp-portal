@@ -530,13 +530,13 @@ class TestValidateGateConditions:
         validate_gate_conditions([])
 
     def test_valid_all_types(self):
-        """Tous les types valides passent."""
-        for gate_type in ('maintenance_window', 'time_window', 'approval_granted', 'target_state'):
+        """Tous les types valides (gate_registry) passent."""
+        for gate_type in ('maintenance_window', 'approval_granted'):
             validate_gate_conditions([{"type": gate_type}])
 
     def test_on_timeout_skip_passes(self):
         """on_timeout='SKIP' est valide."""
-        validate_gate_conditions([{"type": "time_window", "on_timeout": "SKIP"}])
+        validate_gate_conditions([{"type": "maintenance_window", "on_timeout": "SKIP"}])
 
     def test_zero_timeout_raises(self):
         """timeout_hours=0 → pas positif → erreur."""

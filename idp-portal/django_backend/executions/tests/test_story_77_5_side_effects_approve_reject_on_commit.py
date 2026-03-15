@@ -80,7 +80,7 @@ class TestStory775SideEffectsOnCommit(TestCase):
                 {"comment": "LGTM"},
                 format='json',
             )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
         # Avant commit : aucun side effect ne doit avoir été appelé
         mock_emit.assert_not_called()
         mock_delete.assert_not_called()
@@ -96,7 +96,7 @@ class TestStory775SideEffectsOnCommit(TestCase):
                 {"comment": "LGTM"},
                 format='json',
             )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
         mock_emit.assert_called_once()
         mock_delete.assert_called_once_with(self.step.id)
 
@@ -115,7 +115,7 @@ class TestStory775SideEffectsOnCommit(TestCase):
                 {"comment": "Non approuvé"},
                 format='json',
             )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
         mock_emit.assert_not_called()
         mock_delete.assert_not_called()
 
@@ -130,7 +130,7 @@ class TestStory775SideEffectsOnCommit(TestCase):
                 {"comment": "Non approuvé"},
                 format='json',
             )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
         mock_emit.assert_called_once()
         mock_delete.assert_called_once_with(self.step.id)
 
@@ -154,7 +154,7 @@ class TestStory775SideEffectsOnCommit(TestCase):
                 {"comment": "LGTM"},
                 format='json',
             )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
         # Le callback on_commit a bien été enregistré (pattern en place)
         self.assertGreater(len(callbacks), 0, "Expected at least one on_commit callback to be registered")
         # Mais non exécuté (simulate rollback : side effects durables non émis)
@@ -179,7 +179,7 @@ class TestStory775SideEffectsOnCommit(TestCase):
                 {"comment": "Non approuvé"},
                 format='json',
             )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
         # Le callback on_commit a bien été enregistré (pattern en place)
         self.assertGreater(len(callbacks), 0, "Expected at least one on_commit callback to be registered")
         # Mais non exécuté (simulate rollback : side effects durables non émis)

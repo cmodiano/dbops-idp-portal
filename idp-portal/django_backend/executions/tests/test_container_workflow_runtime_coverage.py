@@ -753,7 +753,11 @@ class TestExecuteHandlerStepCoverage(TestCase):
 
 @pytest.mark.django_db
 class TestExecuteStepUnknownStepType(TestCase):
-    """_execute_step — step_type inconnu → ValueError."""
+    """_execute_step — step_type inconnu → ValueError (séquentiel) ou FAILED (parallèle).
+
+    Story 84.1 (T5.2) : vérifie que le comportement du registre est identique
+    à l'ancien match step_type pour les cas non enregistrés (AC5).
+    """
 
     def setUp(self):
         self.user = UserFactory(username='unknown_step_user', profile='DBA')
@@ -768,7 +772,7 @@ class TestExecuteStepUnknownStepType(TestCase):
 
     @patch('executions.container_workflow_runtime.AuditService')
     def test_unknown_step_type_raises_value_error(self, mock_audit):
-        """step_type inconnu → ValueError."""
+        """step_type inconnu en contexte séquentiel → ValueError (AC5)."""
         execution = Execution.objects.create(
             action=self.wf, user=self.user, environment=TEST_ENV, status=ExecutionStatus.RUNNING,
         )
@@ -778,6 +782,21 @@ class TestExecuteStepUnknownStepType(TestCase):
         with self.assertRaises(ValueError) as cm:
             runtime._execute_step(step)
         self.assertIn('unknown_type_xyz', str(cm.exception))
+
+    @patch('executions.container_workflow_runtime.AuditService')
+    def test_unknown_step_type_in_parallel_context_returns_failed(self, mock_audit):
+        """step_type inconnu en contexte parallèle → ExecutionStatus.FAILED (AC5, Story 84.1)."""
+        from executions.container_workflow_runtime import ParallelContext
+        execution = Execution.objects.create(
+            action=self.wf, user=self.user, environment=TEST_ENV, status=ExecutionStatus.RUNNING,
+        )
+        runtime = ContainerWorkflowRuntime(execution)
+        step = self.wf.execution_steps[0]
+        parallel_ctx = ParallelContext(step_order=1)
+
+        result = runtime._execute_step(step, parallel_context=parallel_ctx)
+
+        self.assertEqual(result, ExecutionStatus.FAILED)
 
 
 # ─── Tests _execute_platform_step — output_mapping not dict ────────────────────

@@ -101,7 +101,7 @@ class TestApproveAuditContext(TestCase):
         )
 
         response = self._approve(execution.id)
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 200)  # Auto-approval-gate: synchronous 200
 
         audit = self._get_audit(execution.id)
         self.assertIsNotNone(audit)
@@ -125,7 +125,7 @@ class TestApproveAuditContext(TestCase):
         _make_auto_approval_gate(execution)
 
         response = self._approve(execution.id)
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 200)  # Auto-approval-gate: synchronous 200
 
         audit = self._get_audit(execution.id)
         details = json.loads(audit.details)
@@ -144,7 +144,7 @@ class TestApproveAuditContext(TestCase):
         _make_auto_approval_gate(execution)
 
         response = self._approve(execution.id)
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 200)  # Auto-approval-gate: synchronous 200
 
         audit = self._get_audit(execution.id)
         details = json.loads(audit.details)
@@ -193,7 +193,7 @@ class TestRejectAuditContext(TestCase):
         )
 
         response = self._reject(execution.id, reason="Fenetre de maintenance depassee")
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 200)  # Auto-approval-gate: synchronous 200
 
         audit = self._get_audit(execution.id)
         self.assertIsNotNone(audit)
@@ -217,7 +217,7 @@ class TestRejectAuditContext(TestCase):
         _make_auto_approval_gate(execution)
 
         response = self._reject(execution.id)
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 200)  # Auto-approval-gate: synchronous 200
 
         audit = self._get_audit(execution.id)
         details = json.loads(audit.details)
@@ -236,7 +236,7 @@ class TestRejectAuditContext(TestCase):
         _make_auto_approval_gate(execution)
 
         response = self._reject(execution.id)
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 200)  # Auto-approval-gate: synchronous 200
 
         audit = self._get_audit(execution.id)
         details = json.loads(audit.details)
@@ -294,7 +294,7 @@ class TestStepApproveAuditContext(TestCase):
             {"comment": "LGTM"},
             format="json",
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
 
         audit = AuditLog.objects.filter(
             action_type="EXECUTION_APPROVED",
@@ -319,7 +319,7 @@ class TestStepApproveAuditContext(TestCase):
             {"comment": "Non conforme"},
             format="json",
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
 
         audit = AuditLog.objects.filter(
             action_type="EXECUTION_REJECTED",
@@ -343,7 +343,7 @@ class TestStepApproveAuditContext(TestCase):
             f"/api/v1/executions/{execution.id}/steps/{step.id}/approve/",
             format="json",
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
 
         audit = AuditLog.objects.filter(
             action_type="EXECUTION_APPROVED",
@@ -361,7 +361,7 @@ class TestStepApproveAuditContext(TestCase):
             f"/api/v1/executions/{execution.id}/steps/{step.id}/approve/",
             format="json",
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
 
         audit = AuditLog.objects.filter(
             action_type="EXECUTION_APPROVED",
@@ -401,7 +401,7 @@ class TestLegacyBackwardCompatAuditContext(TestCase):
         _make_approval_step(execution)
 
         response = self.client.post(f"/api/v1/executions/{execution.id}/approve/")
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
 
         audit = AuditLog.objects.filter(
             action_type="EXECUTION_APPROVED",
@@ -439,7 +439,7 @@ class TestLegacyBackwardCompatAuditContext(TestCase):
             data={"rejection_reason": "Fenetre de maintenance fermee"},
             format="json",
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
 
         audit = AuditLog.objects.filter(
             action_type="EXECUTION_REJECTED",
