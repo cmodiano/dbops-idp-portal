@@ -17,9 +17,63 @@ Le but n'est pas seulement de simplifier le CRUD des integrations, mais de rendr
 
 ---
 
+## Mise a jour - etat reel sur `develop`
+
+Depuis la redaction initiale de ce document, une partie du refactoring a ete implemente sur `develop`.
+
+### Deja en place sur `develop`
+
+- **PlatformRegistry** et **PlatformDefinition**
+  - `idp-portal/django_backend/platforms/registry.py`
+  - `idp-portal/django_backend/platforms/definitions.py`
+- **ServiceDefinitionRegistry**
+  - `idp-portal/django_backend/services/definitions.py`
+- **GateRegistry** et **GateDefinition**
+  - `idp-portal/django_backend/executions/gates/registry.py`
+  - `idp-portal/django_backend/executions/gates/definitions.py`
+- **API de capacites**
+  - `idp-portal/django_backend/capabilities/views.py`
+  - `idp-portal/django_backend/capabilities/serializers.py`
+- **Frontend consommant une partie des capacites backend**
+  - `idp-portal/frontend/src/services/capabilities_service.ts`
+  - `idp-portal/frontend/src/hooks/useCapabilities.ts`
+  - `idp-portal/frontend/src/hooks/useWorkflowStepCapabilities.ts`
+  - `idp-portal/frontend/src/components/admin/step-config/ServiceCallStepConfig.tsx`
+  - `idp-portal/frontend/src/components/admin/step-config/GateStepConfig.tsx`
+
+### Ce que cela a reellement ameliore
+
+- les **operations de services** ne sont plus dupliquees dans une constante frontend et une allowlist backend separee
+- les **gates** ont maintenant une source de verite backend unique pour :
+  - les types exposes
+  - le mapping `gate_type -> condition_type`
+  - la validation
+- les **capacites backend** sont exposees au frontend pour les services, gates et une partie des plateformes
+- la **normalisation des aliases plateforme** est mieux centralisee
+- les **kwargs runtime plateforme** sont mieux centralises via :
+  - `idp-portal/django_backend/adapters/runtime_config.py`
+
+### Ce qui reste incomplet
+
+- la creation/mise a jour des integrations utilise encore `IntegrationType.choices`
+  - `idp-portal/django_backend/integrations/serializers.py`
+- l'UI plateforme dans les **actions** n'est pas encore vraiment schema-driven
+- les **gates** exposent des variants mais pas encore une vraie logique de formulaire derivee de `config_schema`
+- `WorkflowStepNode.tsx` garde encore une partie du rendu des gates en dur
+- les capacites de services exposent surtout les **labels d'operations**, pas encore les schemas complets d'entree/sortie
+- ajouter une **nouvelle integration executable** demande encore du code backend pour l'adapter ou le client de service
+
+En consequence, ce document doit maintenant etre lu comme :
+
+- **un plan directeur toujours valable**
+- **avec une partie deja implementee sur develop**
+- **et une partie encore a finir pour atteindre une extensibilite de bout en bout**
+
+---
+
 ## Resume executif
 
-L'etat actuel est **partiellement extensible** :
+L'etat actuel est **mieux extensible qu'avant, mais encore partiellement extensible** :
 
 - les **services** et **plateformes** disposent deja d'un noyau correct via des registres backend
 - le **frontend** est deja pilote par un catalogue pour la creation d'integrations
@@ -30,13 +84,90 @@ L'etat actuel est **partiellement extensible** :
   - des formulaires specifiques non derives d'un schema
   - une logique de gate sans vrai pattern registre/strategie
 
-La cible recommandee est :
+La cible recommandee reste :
 
 1. **une source de verite unique** pour les capacites d'integration et de workflow
 2. **des registres backend** pour les plateformes, services et gates
 3. **une API de capacites** consommee par le frontend
 4. **des formulaires et validateurs drives par schema**
 5. **des labels, aliases, icones et operations centralises**
+
+---
+
+## Clarification importante - ce que fait un registre, et ce qu'il ne fait pas
+
+La question legitime est : **"si je dois encore modifier du code pour ajouter une plateforme ou un service, a quoi sert le registre ?"**
+
+La reponse courte est :
+
+- un **registre** ne supprime pas le besoin de coder un nouveau comportement runtime
+- il **supprime la dispersion** de la connaissance de ce comportement dans 5 a 10 fichiers differents
+
+### Sans registre
+
+Ajouter une nouvelle plateforme/service demande souvent :
+
+- un adapter ou client
+- un mapping alias
+- une allowlist runtime
+- un mapping UI
+- un mapping health check
+- un mapping action/workflow
+- des labels
+
+Le risque principal est la derive :
+
+- visible dans l'UI mais pas executable
+- executable mais pas validable
+- valide mais pas health-checkable
+- supporte dans un endroit et oublie ailleurs
+
+### Avec registre + definition
+
+Ajouter une nouvelle plateforme/service executable demande encore :
+
+1. **du code runtime**
+   - un adapter de plateforme
+   - ou un client de service
+2. **une definition centralisee**
+   - code canonique
+   - labels
+   - aliases
+   - operations
+   - capabilities
+   - schemas
+3. **un enregistrement unique dans le registre**
+
+Ensuite, les autres couches peuvent **deriver automatiquement** :
+
+- health check
+- validation
+- exposition des capacites frontend
+- labels et listes
+- options de configuration
+
+### Ce que le registre apporte concretement
+
+Le gain n'est donc pas **"zero code pour toute nouvelle plateforme"**.
+
+Le gain est plutot :
+
+- **code obligatoire uniquement la ou il y a un vrai comportement**
+- **metadata et wiring centralises**
+- **moins de fichiers a modifier**
+- **moins de risques d'incoherence**
+
+### Regle pratique
+
+- **Nouveau type purement declaratif** : peut devenir proche du zero-code
+  - exemple : nouveau label, alias, operation declarative deja supportee par un moteur generique
+- **Nouvelle plateforme executable** : demandera toujours un adapter ou une logique runtime
+- **Nouveau service avec comportement reel** : demandera toujours un client ou une logique runtime
+
+Autrement dit :
+
+- le **registre** rend l'ajout **simple, coherent et localise**
+- il ne rend pas magiquement **sans code** une integration qui a un comportement runtime nouveau
 
 ---
 
