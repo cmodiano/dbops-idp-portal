@@ -6,6 +6,9 @@
  * 2. Special steps (service_call, evaluation, gate, http_request — click to add)
  *
  * Actions are loaded via useEligibleActions hook (DIP pattern, Story 48.8, AC1).
+ *
+ * Story 84.3 (AC3/W1): Les special steps dérivent de useCapabilities() plutôt que d'une constante locale.
+ * STEP_TYPE_UI_META fournit couleur et icône (concerns UI, non dérivables du backend).
  */
 
 import { useMemo, useState } from 'react';
@@ -22,22 +25,20 @@ import {
 import type { ActionListItem } from '../../types/api';
 import type { WorkflowStepType } from '../../types/api';
 import { useEligibleActions } from '../../hooks/useEligibleActions';
+import { useCapabilities } from '../../hooks/useCapabilities';
 
 const { Text } = Typography;
 
-// Story 57.13: Special step types colors and labels
-const SPECIAL_STEP_TYPES: {
-  type: WorkflowStepType;
-  label: string;
-  color: string;
-  icon: ReactNode;
-}[] = [
-  { type: 'service_call', label: 'Appel service', color: '#fa8c16', icon: <ApiOutlined /> },
-  { type: 'evaluation', label: 'Évaluer', color: '#722ed1', icon: <SafetyCertificateOutlined /> },
-  { type: 'gate', label: 'Attendre', color: '#faad14', icon: <ClockCircleOutlined /> },
-  { type: 'http_request', label: 'Requête HTTP', color: '#13c2c2', icon: <GlobalOutlined /> },
-  { type: 'schedule_execution', label: 'Planifier une exécution', color: '#4f46e5', icon: <ScheduleOutlined /> },
-];
+// Story 84.3 (AC3): UI-only metadata — couleur et icône par code de step type.
+// Non dérivable du backend (décisions UX). Fallback _default pour types inconnus.
+const STEP_TYPE_UI_META: Record<string, { color: string; icon: ReactNode }> = {
+  service_call:       { color: '#fa8c16', icon: <ApiOutlined /> },
+  evaluation:         { color: '#722ed1', icon: <SafetyCertificateOutlined /> },
+  gate:               { color: '#faad14', icon: <ClockCircleOutlined /> },
+  http_request:       { color: '#13c2c2', icon: <GlobalOutlined /> },
+  schedule_execution: { color: '#4f46e5', icon: <ScheduleOutlined /> },
+  _default:           { color: '#8c8c8c', icon: <ApiOutlined /> },
+};
 
 export interface ActionPaletteProps {
   disabled?: boolean;
@@ -51,6 +52,7 @@ export const ActionPalette: FC<ActionPaletteProps> = ({
 }) => {
   const { token } = theme.useToken();
   const { eligibleActions, loadingActions, loadError } = useEligibleActions();
+  const { capabilities, loading: loadingCapabilities, error: capabilitiesError } = useCapabilities();
   const [search, setSearch] = useState('');
 
   // Story 57.13: Group platform actions by category
@@ -69,6 +71,13 @@ export const ActionPalette: FC<ActionPaletteProps> = ({
       return acc;
     }, {});
   }, [eligibleActions, search]);
+
+  // Story 84.3 (AC3): special steps dérivés des capabilities backend, platform et parallel_group exclus
+  const specialSteps = useMemo(() => {
+    return (capabilities?.stepTypes ?? []).filter(
+      (s) => s.code !== 'platform' && s.code !== 'parallel_group'
+    );
+  }, [capabilities]);
 
   const categoryKeys = Object.keys(groupedActions).sort();
 
@@ -186,7 +195,7 @@ export const ActionPalette: FC<ActionPaletteProps> = ({
           />
         )}
 
-        {/* Story 57.13: Special steps section */}
+        {/* Story 84.3 (AC3/W1): Special steps section — dérivée des capabilities backend */}
         <Text
           strong
           style={{
@@ -201,26 +210,34 @@ export const ActionPalette: FC<ActionPaletteProps> = ({
           Steps spéciaux
         </Text>
         <div>
-          {SPECIAL_STEP_TYPES.map(({ type, label, color, icon }) => (
-            <Button
-              key={type}
-              size="small"
-              disabled={disabled || !onAddSpecialStep}
-              onClick={() => onAddSpecialStep?.(type)}
-              style={{
-                width: '100%',
-                marginBottom: 6,
-                textAlign: 'left',
-                borderColor: color,
-                color: color,
-              }}
-              icon={icon}
-              aria-label={`Ajouter un step ${label}`}
-              data-testid={`add-special-step-${type}`}
-            >
-              {label}
-            </Button>
-          ))}
+          {loadingCapabilities && (
+            <div style={{ textAlign: 'center', padding: 8 }}>
+              <Spin size="small" />
+            </div>
+          )}
+          {!loadingCapabilities && !capabilitiesError && specialSteps.map((s) => {
+            const uiMeta = STEP_TYPE_UI_META[s.code] ?? STEP_TYPE_UI_META._default;
+            return (
+              <Button
+                key={s.code}
+                size="small"
+                disabled={disabled || !onAddSpecialStep}
+                onClick={() => onAddSpecialStep?.(s.code as WorkflowStepType)}
+                style={{
+                  width: '100%',
+                  marginBottom: 6,
+                  textAlign: 'left',
+                  borderColor: uiMeta.color,
+                  color: uiMeta.color,
+                }}
+                icon={uiMeta.icon}
+                aria-label={`Ajouter un step ${s.label}`}
+                data-testid={`add-special-step-${s.code}`}
+              >
+                {s.label}
+              </Button>
+            );
+          })}
         </div>
       </div>
     </div>

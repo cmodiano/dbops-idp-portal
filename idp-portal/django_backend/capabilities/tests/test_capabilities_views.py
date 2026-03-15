@@ -138,12 +138,12 @@ class TestWorkflowStepsCapabilities:
         response = client.get(url)
         assert response.status_code == 401
 
-    def test_contains_five_step_types(self, auth_client):
-        """Story 84.1 (AC4) : http_request et evaluation désormais déclarés dans le registre."""
+    def test_contains_six_step_types(self, auth_client):
+        """Story 84.1 (AC4) + Story 84.3 (AC1) : schedule_execution ajouté → 6 types au total."""
         url = reverse('capabilities:capabilities-workflow-steps')
         data = auth_client.get(url).data['data']
         codes = {s['code'] for s in data['step_types']}
-        assert codes == {'platform', 'service_call', 'gate', 'http_request', 'evaluation'}
+        assert codes == {'platform', 'service_call', 'gate', 'http_request', 'evaluation', 'schedule_execution'}
 
     def test_gate_has_two_variants(self, auth_client):
         url = reverse('capabilities:capabilities-workflow-steps')
@@ -188,13 +188,16 @@ class TestWorkflowStepsCapabilities:
         assert 'constraints' in service_call
         assert service_call['constraints']['requires_service_integration'] is True
 
-    def test_gate_step_has_empty_constraints(self, auth_client):
-        """Story 82.8, AC4: gate step_type a constraints vide {}."""
+    def test_gate_step_has_required_fields_constraint(self, auth_client):
+        """Story 84.3 (AC2) : gate step_type a required_fields dans ses constraints."""
         url = reverse('capabilities:capabilities-workflow-steps')
         data = auth_client.get(url).data['data']
         gate = next(s for s in data['step_types'] if s['code'] == 'gate')
         assert 'constraints' in gate
-        assert gate['constraints'] == {}
+        assert 'required_fields' in gate['constraints']
+        rf = gate['constraints']['required_fields']
+        assert isinstance(rf, list)
+        assert any(item['field'] == 'gate_type' for item in rf)
 
     def test_all_step_types_have_constraints_field(self, auth_client):
         """Story 82.8, AC4: tous les step_types retournent constraints."""
@@ -202,6 +205,53 @@ class TestWorkflowStepsCapabilities:
         data = auth_client.get(url).data['data']
         for step in data['step_types']:
             assert 'constraints' in step
+
+    # Story 84.3 (AC1, AC2, AC9) — schedule_execution et required_fields dans l'endpoint
+    def test_schedule_execution_present_in_endpoint(self, auth_client):
+        """Story 84.3 (AC1) : GET /capabilities/workflow-steps/ contient schedule_execution."""
+        url = reverse('capabilities:capabilities-workflow-steps')
+        data = auth_client.get(url).data['data']
+        codes = [s['code'] for s in data['step_types']]
+        assert 'schedule_execution' in codes
+
+    def test_schedule_execution_label_and_category(self, auth_client):
+        """Story 84.3 (AC1) : schedule_execution a label='Planifier' et category='scheduling'."""
+        url = reverse('capabilities:capabilities-workflow-steps')
+        data = auth_client.get(url).data['data']
+        sched = next(s for s in data['step_types'] if s['code'] == 'schedule_execution')
+        assert sched['label'] == 'Planifier'
+        assert sched['category'] == 'scheduling'
+
+    def test_platform_constraints_has_required_fields(self, auth_client):
+        """Story 84.3 (AC2, AC9) : platform.constraints expose required_fields via l'endpoint."""
+        url = reverse('capabilities:capabilities-workflow-steps')
+        data = auth_client.get(url).data['data']
+        platform = next(s for s in data['step_types'] if s['code'] == 'platform')
+        assert 'required_fields' in platform['constraints']
+        rf = platform['constraints']['required_fields']
+        assert isinstance(rf, list)
+        assert any(item['field'] == 'action_id' for item in rf)
+
+    def test_service_call_constraints_has_required_fields(self, auth_client):
+        """Story 84.3 (AC2, AC9) : service_call.constraints expose required_fields via l'endpoint."""
+        url = reverse('capabilities:capabilities-workflow-steps')
+        data = auth_client.get(url).data['data']
+        service_call = next(s for s in data['step_types'] if s['code'] == 'service_call')
+        assert 'required_fields' in service_call['constraints']
+        rf = service_call['constraints']['required_fields']
+        fields = [item['field'] for item in rf]
+        assert 'integration_type' in fields
+        assert 'operation' in fields
+
+    def test_all_step_types_have_required_fields_in_constraints(self, auth_client):
+        """Story 84.3 (AC2) : tous les types exposent required_fields non vide via l'endpoint."""
+        url = reverse('capabilities:capabilities-workflow-steps')
+        data = auth_client.get(url).data['data']
+        for step in data['step_types']:
+            rf = step['constraints'].get('required_fields')
+            assert rf is not None, f"{step['code']}: required_fields absent de l'endpoint"
+            assert isinstance(rf, list), f"{step['code']}: required_fields doit être une liste"
+            assert len(rf) >= 1, f"{step['code']}: required_fields ne doit pas être vide"
 
 
 class TestOperationSchemas:

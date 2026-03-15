@@ -244,7 +244,7 @@ export function ActionWizard({
     }
     // Story 16.7, AC8: Graph validation — block save on critical errors
     const { nodes, edges } = workflowStepsToReactFlow(workflowSteps);
-    const graphValidation = validateWorkflowGraph(nodes, edges);
+    const graphValidation = validateWorkflowGraph(nodes, edges, capabilities?.stepTypes);
     if (!graphValidation.valid) {
       const errors = graphValidation.errors.filter((e) => e.type === 'error');
       modal.error({

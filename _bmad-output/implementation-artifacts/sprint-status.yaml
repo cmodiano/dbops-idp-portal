@@ -1023,7 +1023,7 @@ development_status:
     epic-84: in-progress
     84-1-registre-handlers-runtime-step-types: done # R1,R2,W5 — Remplacer match step_type par registre handlers. Aligner definitions et execution.
     84-2-resolution-manuelle-generique-gates: done # G1,G3,G4,R3 — Découpler approval_granted, resolution_strategy déclaratif, réduire legacy
-    84-3-workflow-ui-backend-driven: backlog # W1-W4 — Palette, titres, validation, typing depuis capabilities
+    84-3-workflow-ui-backend-driven: done # W1-W4 — Palette, titres, validation, typing depuis capabilities
     84-4-formulaires-service-schema-driven-complets: backlog # S1-S4 — input_schema, validation F/B, ui_hints, services non opérationnels
     84-5-gate-step-config-renderer-generique: backlog # G2 — GateStepConfig branché sur SchemaFormRenderer
     84-6-reduire-exception-aap: backlog # P1 — AAP au strict minimum ou chemin déclaratif
@@ -1031,3 +1031,31 @@ development_status:
     84-8-completer-usage-schemas-plateformes: backlog # P4 — runtime_config_schema, health_check_policy
     84-9-schema-form-renderer-usage-partout: backlog # B.5 — WizardStep2Automatisme et flux restants
     epic-84-retrospective: optional
+    # === Epic 85: Réorganisation structure packages orchestration (post Temporal-plan) ===
+    # Réf: docs/architecture/temporal-plan-evaluation-2026-03-15.md § Remaining Gaps
+    # Plan fonctionnel 85–90% livré. Reste: aligner layout domain/infra/app du temporal-advantages-without-temporal-implementation-plan.md
+    epic-85: backlog
+    85-1-domain-workflow-graph-commands: backlog # Créer domain/workflow_graph.py, domain/commands.py — extraire logique existante si pertinent
+    85-2-infra-repositories-outbox: backlog # Créer infra/repositories.py ; relocaliser services/outbox.py → infra/outbox.py
+    85-3-app-orchestrator-command-processor: backlog # Relocaliser tasks/orchestration_worker.py → app/orchestrator.py ; services/workflow_commands.py → app/command_processor.py
+    85-4-app-handlers: backlog # Relocaliser step_handlers/ → app/handlers/
+    epic-85-retrospective: optional
+    # === Epic 86: Robustesse — correction des gaps identifiés ===
+    # Réf: docs/robustness-issues.md
+    # Timeouts adapters, ServiceNow, backoff gates, validation gate_type, cache annulation Redis, retries services, health check, Splunk, transitions, jitter
+    epic-86: backlog
+    # --- Critical (HIGH) ---
+    86-1-timeout-adapter-calls: backlog # adapters/base_adapter.py — timeout_seconds sur trigger/get_status, AdapterTimeoutError, env vars par adapter (AAP_SOCKET_TIMEOUT, etc.), catch dans container_workflow_runtime
+    86-2-servicenow-update-change-get-status: backlog # services/servicenow_service.py — implémenter update_change() et get_change_status() (Table API PATCH/GET), mapping états, tests unitaires + @integration
+    # --- Medium ---
+    86-3-gate-polling-backoff: backlog # gate_evaluator.py — backoff exponentiel par gate (BASE/MAX_POLL_INTERVAL, POLL_BACKOFF_FACTOR), persister poll_attempt dans step.output ou cache
+    86-4-retry-inventory-service-maintenance-window: backlog # gates/strategies.py — tenacity retry sur get_next_maintenance_window (3 tentatives, backoff 2s/4s/8s), log WARNING par retry
+    86-5-gate-type-validation-definition-time: backlog # catalog/validation.py — valider gate_type via gate_registry à la sauvegarde workflow, ValidationError avec types valides
+    86-6-cancellation-cache-redis: backlog # cancellation_cache.py — remplacer dict in-memory par Redis (Django cache), clé cancellation:{execution_id}, TTL 24h, test multi-worker
+    86-7-service-call-retry-transient: backlog # step_handlers/service_call_handler.py — tenacity retry sur Vault/ServiceNow (transient only: VaultUnavailableError, 429/503), VAULT_MAX_RETRIES, SERVICENOW_MAX_RETRIES
+    # --- Low ---
+    86-8-health-check-endpoint-timeout: backlog # integrations/health_check.py — ThreadPoolExecutor concurrent, deadline 10s, marquer timeout si dépassé
+    86-9-splunk-batch-durability: backlog # services/splunk_service.py — SPLUNK_OUTBOX ou réutiliser outbox pattern ; Celery beat flush ; ou documenter limitation + métrique dropped batches
+    86-10-warning-max-step-transitions: backlog # container_workflow_runtime.py — WARNING à 80% limite, ERROR au plafond, settings.MAX_STEP_TRANSITIONS configurable
+    86-11-retry-backoff-jitter: backlog # services.py + api_client.ts — full jitter sur backoff (random.uniform / Math.random) pour éviter thundering herd
+    epic-86-retrospective: optional

@@ -27,6 +27,7 @@ import { MappingHelpPopover } from './step-config/MappingHelpPopover';
 import { useInputMappingWarnings } from '../../hooks/useInputMappingWarnings';
 import type { WorkflowStepType } from '../../types/api';
 import { getStepLabel } from '../../utils/workflowStepLabels';
+import { useCapabilities } from '../../hooks/useCapabilities';
 
 const { Text, Title } = Typography;
 
@@ -87,6 +88,10 @@ export const StepConfigPanel: FC<StepConfigPanelProps> = ({
     filteredStepOptionsForPlatform,
   );
 
+  // Story 84.3 (AC5/T7): STEP_TYPE_TITLES supprimé — titre dérivé des capabilities backend
+  const { capabilities } = useCapabilities();
+  const stepTypeTitle = capabilities?.stepTypes?.find((s) => s.code === stepType)?.label ?? stepType;
+
   if (!node || !data) return null;
 
   // Validation helpers (platform only)
@@ -114,20 +119,9 @@ export const StepConfigPanel: FC<StepConfigPanelProps> = ({
     onNodeUpdate(node.id, updates);
   };
 
-  // Step type titles
-  const STEP_TYPE_TITLES: Record<WorkflowStepType, string> = {
-    platform: 'Action (Exécuter)',
-    service_call: 'Appel de service',
-    evaluation: 'Évaluation (Politique)',
-    gate: 'Attente / Gate',
-    http_request: 'Requête HTTP',
-    schedule_execution: 'Planifier une exécution', // Story 57.16
-    parallel_group: 'Groupe parallèle (déprécié)', // rétro-compat
-  };
-
   return (
     <Drawer
-      title={`Configuration — ${STEP_TYPE_TITLES[stepType]}`}
+      title={`Configuration — ${stepTypeTitle}`}
       open={open}
       onClose={onClose}
       size="default"

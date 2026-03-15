@@ -1,5 +1,5 @@
 /**
- * Tests for workflowValidation utilities — Story 26.5 AC8; Story 57.13 AC8
+ * Tests for workflowValidation utilities — Story 26.5 AC8; Story 57.13 AC8; Story 84.3 AC6/AC9
  */
 import { describe, it, expect } from 'vitest';
 import type { Node, Edge } from '@xyflow/react';
@@ -7,6 +7,7 @@ import { validateWorkflowGraph } from '../workflowValidation';
 import { START_NODE_ID, END_NODE_ID, workflowStepsToReactFlow } from '../workflowConversion';
 import type { WorkflowStep } from '../../types/api';
 import type { WorkflowStepNodeData } from '../../components/admin/WorkflowStepNode';
+import type { WorkflowStepCapability } from '../../services/capabilities_service';
 
 const makeNodeWithData = (id: string, data: Partial<WorkflowStepNodeData> = {}): Node => ({
   id,
@@ -31,6 +32,70 @@ const makeEdge = (source: string, target: string, sourceHandle: string = 'succes
 
 const startNode: Node = { id: START_NODE_ID, type: 'start', position: { x: 0, y: 0 }, data: {} };
 const endNode: Node = { id: END_NODE_ID, type: 'end', position: { x: 0, y: 300 }, data: {} };
+
+// Story 84.3 (AC9): capabilities mockées pour les tests de validation per-type
+const mockStepTypeCapabilities: WorkflowStepCapability[] = [
+  {
+    code: 'platform',
+    label: 'Exécuter',
+    category: 'execution',
+    config_schema: {},
+    constraints: {
+      required_fields: [{ field: 'action_id', message: 'Action requise pour un step de type Exécuter' }],
+    },
+  },
+  {
+    code: 'service_call',
+    label: 'Service',
+    category: 'integration',
+    config_schema: {},
+    constraints: {
+      required_fields: [
+        { field: 'integration_type', message: "Type d'intégration requis" },
+        { field: 'operation', message: 'Opération requise' },
+      ],
+    },
+  },
+  {
+    code: 'gate',
+    label: 'Attendre',
+    category: 'control',
+    config_schema: {},
+    constraints: {
+      required_fields: [{ field: 'gate_type', message: 'Type de gate requis' }],
+    },
+  },
+  {
+    code: 'http_request',
+    label: 'Requête HTTP',
+    category: 'integration',
+    config_schema: {},
+    constraints: {
+      required_fields: [
+        { field: 'url', message: 'URL requise' },
+        { field: 'method', message: 'Méthode HTTP requise' },
+      ],
+    },
+  },
+  {
+    code: 'evaluation',
+    label: 'Évaluation',
+    category: 'control',
+    config_schema: {},
+    constraints: {
+      required_fields: [{ field: 'policy_id', message: 'Politique de règles métier requise' }],
+    },
+  },
+  {
+    code: 'schedule_execution',
+    label: 'Planifier',
+    category: 'scheduling',
+    config_schema: {},
+    constraints: {
+      required_fields: [{ field: 'action_id', message: 'Action cible requise pour le step de planification' }],
+    },
+  },
+];
 
 describe('validateWorkflowGraph', () => {
   it('returns error for empty graph (no workflow nodes)', () => {
@@ -150,9 +215,31 @@ describe('validateWorkflowGraph', () => {
     const unreachable = result.errors.filter((e) => e.message.includes('Non atteignable'));
     expect(unreachable).toHaveLength(0);
   });
+
+  // Story 84.3 (AC6, T10.3): appel sans 3ème argument ne crash pas
+  it('ne crash pas quand appelé sans stepTypeCapabilities (paramètre optionnel)', () => {
+    const node = makeNodeWithData('p-1', { step_type: 'platform' });
+    expect(() => validateWorkflowGraph([startNode, node, endNode], [
+      makeEdge(START_NODE_ID, 'p-1', 'output'),
+      makeEdge('p-1', END_NODE_ID, 'success'),
+      makeEdge('p-1', END_NODE_ID, 'error'),
+    ])).not.toThrow();
+  });
+
+  it('sans stepTypeCapabilities, aucune erreur de champ requis générée (résilient)', () => {
+    // Action_id manquant mais pas de capabilities → pas d'erreur de champ
+    const node = makeNodeWithData('p-1', { step_type: 'platform' });
+    const result = validateWorkflowGraph([startNode, node, endNode], [
+      makeEdge(START_NODE_ID, 'p-1', 'output'),
+      makeEdge('p-1', END_NODE_ID, 'success'),
+      makeEdge('p-1', END_NODE_ID, 'error'),
+    ]);
+    const fieldErrors = result.errors.filter((e) => e.nodeId === 'p-1' && e.type === 'error');
+    expect(fieldErrors).toHaveLength(0);
+  });
 });
 
-describe('validateWorkflowGraph — Story 57.13 AC8 — validation per step_type', () => {
+describe('validateWorkflowGraph — Story 57.13 AC8 / Story 84.3 AC6 — validation per step_type avec capabilities', () => {
   const startNode: Node = { id: START_NODE_ID, type: 'start', position: { x: 0, y: 0 }, data: {} };
   const endNode: Node = { id: END_NODE_ID, type: 'end', position: { x: 0, y: 300 }, data: {} };
   const edgesForNode = (id: string): Edge[] => [
@@ -161,30 +248,31 @@ describe('validateWorkflowGraph — Story 57.13 AC8 — validation per step_type
     makeEdge(id, END_NODE_ID, 'error'),
   ];
 
-  it('platform sans action_id → erreur', () => {
+  // Story 84.3 (T10.2): champs requis via capabilities
+  it('platform sans action_id → erreur (via required_fields)', () => {
     const node = makeNodeWithData('p-1', { step_type: 'platform' });
-    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('p-1'));
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('p-1'), mockStepTypeCapabilities);
     const errors = result.errors.filter((e) => e.nodeId === 'p-1' && e.type === 'error');
     expect(errors.some((e) => e.message.includes('Action requise'))).toBe(true);
   });
 
   it('platform avec action_id → pas d\'erreur de type', () => {
     const node = makeNodeWithData('p-1', { step_type: 'platform', action_id: 10 });
-    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('p-1'));
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('p-1'), mockStepTypeCapabilities);
     const typeErrors = result.errors.filter((e) => e.nodeId === 'p-1' && e.type === 'error');
     expect(typeErrors).toHaveLength(0);
   });
 
   it('service_call sans integration_type → erreur', () => {
     const node = makeNodeWithData('sc-1', { step_type: 'service_call', operation: 'create_change' });
-    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('sc-1'));
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('sc-1'), mockStepTypeCapabilities);
     const errors = result.errors.filter((e) => e.nodeId === 'sc-1' && e.type === 'error');
     expect(errors.some((e) => e.message.includes("intégration"))).toBe(true);
   });
 
   it('service_call sans operation → erreur', () => {
     const node = makeNodeWithData('sc-1', { step_type: 'service_call', integration_type: 'servicenow' });
-    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('sc-1'));
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('sc-1'), mockStepTypeCapabilities);
     const errors = result.errors.filter((e) => e.nodeId === 'sc-1' && e.type === 'error');
     expect(errors.some((e) => e.message.includes('Opération'))).toBe(true);
   });
@@ -195,49 +283,49 @@ describe('validateWorkflowGraph — Story 57.13 AC8 — validation per step_type
       integration_type: 'servicenow',
       operation: 'create_change',
     });
-    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('sc-1'));
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('sc-1'), mockStepTypeCapabilities);
     const typeErrors = result.errors.filter((e) => e.nodeId === 'sc-1' && e.type === 'error');
     expect(typeErrors).toHaveLength(0);
   });
 
   it('evaluation sans policy_id → erreur', () => {
     const node = makeNodeWithData('ev-1', { step_type: 'evaluation' });
-    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('ev-1'));
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('ev-1'), mockStepTypeCapabilities);
     const errors = result.errors.filter((e) => e.nodeId === 'ev-1' && e.type === 'error');
     expect(errors.some((e) => e.message.includes('Politique'))).toBe(true);
   });
 
   it('evaluation avec policy_id → pas d\'erreur de type', () => {
     const node = makeNodeWithData('ev-1', { step_type: 'evaluation', policy_id: 5 });
-    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('ev-1'));
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('ev-1'), mockStepTypeCapabilities);
     const typeErrors = result.errors.filter((e) => e.nodeId === 'ev-1' && e.type === 'error');
     expect(typeErrors).toHaveLength(0);
   });
 
   it('gate sans gate_type → erreur', () => {
     const node = makeNodeWithData('g-1', { step_type: 'gate' });
-    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('g-1'));
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('g-1'), mockStepTypeCapabilities);
     const errors = result.errors.filter((e) => e.nodeId === 'g-1' && e.type === 'error');
     expect(errors.some((e) => e.message.includes('gate'))).toBe(true);
   });
 
   it('gate avec gate_type → pas d\'erreur de type', () => {
     const node = makeNodeWithData('g-1', { step_type: 'gate', gate_type: 'approval' });
-    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('g-1'));
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('g-1'), mockStepTypeCapabilities);
     const typeErrors = result.errors.filter((e) => e.nodeId === 'g-1' && e.type === 'error');
     expect(typeErrors).toHaveLength(0);
   });
 
   it('http_request sans url → erreur', () => {
     const node = makeNodeWithData('h-1', { step_type: 'http_request', method: 'GET' });
-    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('h-1'));
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('h-1'), mockStepTypeCapabilities);
     const errors = result.errors.filter((e) => e.nodeId === 'h-1' && e.type === 'error');
     expect(errors.some((e) => e.message.includes('URL'))).toBe(true);
   });
 
   it('http_request sans method → erreur', () => {
     const node = makeNodeWithData('h-1', { step_type: 'http_request', url: 'https://api.test.com' });
-    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('h-1'));
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('h-1'), mockStepTypeCapabilities);
     const errors = result.errors.filter((e) => e.nodeId === 'h-1' && e.type === 'error');
     expect(errors.some((e) => e.message.includes('Méthode'))).toBe(true);
   });
@@ -248,28 +336,29 @@ describe('validateWorkflowGraph — Story 57.13 AC8 — validation per step_type
       url: 'https://api.test.com',
       method: 'POST',
     });
-    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('h-1'));
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('h-1'), mockStepTypeCapabilities);
     const typeErrors = result.errors.filter((e) => e.nodeId === 'h-1' && e.type === 'error');
     expect(typeErrors).toHaveLength(0);
   });
 
-  // Story 57.16: schedule_execution validation
-  it('schedule_execution sans action_id → erreur', () => {
+  // Story 57.16 + Story 84.3 (T10.4): schedule_execution — validation complexe conservée
+  it('schedule_execution sans action_id → erreur (via required_fields)', () => {
     const node = makeNodeWithData('s-1', {
       step_type: 'schedule_execution',
       schedule_config: { schedule_source: 'parameter', schedule_parameter_name: 'date' },
     });
-    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('s-1'));
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('s-1'), mockStepTypeCapabilities);
     const errors = result.errors.filter((e) => e.nodeId === 's-1' && e.type === 'error');
     expect(errors.some((e) => e.message.includes('Action cible'))).toBe(true);
   });
 
-  it('schedule_execution sans schedule_config → erreur', () => {
+  it('schedule_execution sans schedule_config → erreur (validation complexe UI)', () => {
+    // Story 84.3 (T10.4): la validation complexe schedule_config reste en frontend
     const node = makeNodeWithData('s-1', {
       step_type: 'schedule_execution',
       action_id: 56,
     });
-    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('s-1'));
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('s-1'), mockStepTypeCapabilities);
     const errors = result.errors.filter((e) => e.nodeId === 's-1' && e.type === 'error');
     expect(errors.some((e) => e.message.includes('Configuration de planification'))).toBe(true);
   });
@@ -280,7 +369,7 @@ describe('validateWorkflowGraph — Story 57.13 AC8 — validation per step_type
       action_id: 56,
       schedule_config: { schedule_source: 'parameter' },
     });
-    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('s-1'));
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('s-1'), mockStepTypeCapabilities);
     const errors = result.errors.filter((e) => e.nodeId === 's-1' && e.type === 'error');
     expect(errors.some((e) => e.message.includes('schedule_parameter_name'))).toBe(true);
   });
@@ -291,7 +380,7 @@ describe('validateWorkflowGraph — Story 57.13 AC8 — validation per step_type
       action_id: 56,
       schedule_config: { schedule_source: 'fixed_offset' },
     });
-    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('s-1'));
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('s-1'), mockStepTypeCapabilities);
     const errors = result.errors.filter((e) => e.nodeId === 's-1' && e.type === 'error');
     expect(errors.some((e) => e.message.includes('Offset fixe'))).toBe(true);
   });
@@ -302,7 +391,7 @@ describe('validateWorkflowGraph — Story 57.13 AC8 — validation per step_type
       action_id: 56,
       schedule_config: { schedule_source: 'recurring' },
     });
-    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('s-1'));
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('s-1'), mockStepTypeCapabilities);
     const errors = result.errors.filter((e) => e.nodeId === 's-1' && e.type === 'error');
     expect(errors.some((e) => e.message.includes('pattern récurrent'))).toBe(true);
   });
@@ -316,7 +405,7 @@ describe('validateWorkflowGraph — Story 57.13 AC8 — validation per step_type
         schedule_parameter_name: 'maintenance_at',
       },
     });
-    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('s-1'));
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('s-1'), mockStepTypeCapabilities);
     const typeErrors = result.errors.filter((e) => e.nodeId === 's-1' && e.type === 'error');
     expect(typeErrors).toHaveLength(0);
   });
@@ -330,9 +419,41 @@ describe('validateWorkflowGraph — Story 57.13 AC8 — validation per step_type
         fixed_offset: '+3d',
       },
     });
-    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('s-1'));
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('s-1'), mockStepTypeCapabilities);
     const typeErrors = result.errors.filter((e) => e.nodeId === 's-1' && e.type === 'error');
     expect(typeErrors).toHaveLength(0);
   });
 
+  it('schedule_execution complet avec recurring source → pas d\'erreur de type', () => {
+    const node = makeNodeWithData('s-1', {
+      step_type: 'schedule_execution',
+      action_id: 56,
+      schedule_config: {
+        schedule_source: 'recurring',
+        recurring_pattern: { pattern_type: 'daily', pattern_config: {} },
+      },
+    });
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('s-1'), mockStepTypeCapabilities);
+    const typeErrors = result.errors.filter((e) => e.nodeId === 's-1' && e.type === 'error');
+    expect(typeErrors).toHaveLength(0);
+  });
+
+  // Story 84.3 (T10.1): type dynamique non connu → required_fields lu depuis capabilities mockées
+  it('un type dynamique non connu avec capabilities mockées → erreur si champ requis manquant', () => {
+    const dynamicCaps: WorkflowStepCapability[] = [
+      {
+        code: 'notification',
+        label: 'Notifier',
+        category: 'control',
+        config_schema: {},
+        constraints: {
+          required_fields: [{ field: 'url', message: 'Destinataire requis' }],
+        },
+      },
+    ];
+    const node = makeNodeWithData('n-1', { step_type: 'notification' });
+    const result = validateWorkflowGraph([startNode, node, endNode], edgesForNode('n-1'), dynamicCaps);
+    const errors = result.errors.filter((e) => e.nodeId === 'n-1' && e.type === 'error');
+    expect(errors.some((e) => e.message.includes('Destinataire'))).toBe(true);
+  });
 });

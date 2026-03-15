@@ -75,14 +75,23 @@ workflow_step_registry.register(WorkflowStepDefinition(
     code='platform',
     label='Exécuter',
     category='execution',
-    constraints={'requires_integration': True},
+    constraints={
+        'requires_integration': True,
+        'required_fields': [{'field': 'action_id', 'message': 'Action requise pour un step de type Exécuter'}],
+    },
 ))
 
 workflow_step_registry.register(WorkflowStepDefinition(
     code='service_call',
     label='Service',
     category='integration',
-    constraints={'requires_service_integration': True},
+    constraints={
+        'requires_service_integration': True,
+        'required_fields': [
+            {'field': 'integration_type', 'message': "Type d'intégration requis"},
+            {'field': 'operation', 'message': 'Opération requise'},
+        ],
+    },
 ))
 
 def _build_gate_variants() -> list[dict]:
@@ -107,7 +116,9 @@ workflow_step_registry.register(WorkflowStepDefinition(
     code='gate',
     label='Attendre',
     category='control',
-    constraints={},
+    constraints={
+        'required_fields': [{'field': 'gate_type', 'message': 'Type de gate requis'}],
+    },
     variants_builder=_build_gate_variants,
 ))
 
@@ -120,12 +131,33 @@ workflow_step_registry.register(WorkflowStepDefinition(
     code='http_request',
     label='Requête HTTP',
     category='integration',
-    constraints={'requires_allowed_host': True},
+    constraints={
+        'requires_allowed_host': True,
+        'required_fields': [
+            {'field': 'url', 'message': 'URL requise'},
+            {'field': 'method', 'message': 'Méthode HTTP requise'},
+        ],
+    },
 ))
 
 workflow_step_registry.register(WorkflowStepDefinition(
     code='evaluation',
     label='Évaluation',
     category='control',
-    constraints={},
+    constraints={
+        'required_fields': [{'field': 'policy_id', 'message': 'Politique de règles métier requise'}],
+    },
+))
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Story 84.3 — schedule_execution : step de planification d'exécution différée
+# ─────────────────────────────────────────────────────────────────────────────
+
+workflow_step_registry.register(WorkflowStepDefinition(
+    code='schedule_execution',
+    label='Planifier',
+    category='scheduling',
+    constraints={
+        'required_fields': [{'field': 'action_id', 'message': 'Action cible requise pour le step de planification'}],
+    },
 ))

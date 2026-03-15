@@ -17,8 +17,9 @@ import { CheckCircleOutlined, CloseCircleOutlined, HourglassOutlined, LoadingOut
 import type { WorkflowStepType, ScheduleStepConfig } from '../../types/api';
 import { useCapabilities } from '../../hooks/useCapabilities';
 
-// Story 57.13: Color codes and labels per step type
-const STEP_TYPE_COLORS: Record<WorkflowStepType, string> = {
+// Story 57.13: Color codes per step type (UI concern, non dérivable du backend)
+// Story 84.3 (AC4/T6.4): type adapté en Partial<Record<string, string>> pour AC7
+const STEP_TYPE_COLORS: Partial<Record<string, string>> = {
   platform:           '#1677ff',  // bleu Ant Design Primary
   service_call:       '#fa8c16',  // orange
   evaluation:         '#722ed1',  // violet
@@ -28,15 +29,8 @@ const STEP_TYPE_COLORS: Record<WorkflowStepType, string> = {
   parallel_group:     '#52c41a',  // vert (deprecated, rétro-compat)
 };
 
-const STEP_TYPE_LABELS: Record<WorkflowStepType, string> = {
-  platform:           'Exécuter',
-  service_call:       'Service',
-  evaluation:         'Évaluer',
-  gate:               'Attendre',
-  http_request:       'HTTP',
-  schedule_execution: 'Planifier', // Story 57.16
-  parallel_group:     'Parallèle', // deprecated, rétro-compat
-};
+// Story 84.3 (AC4/W2): STEP_TYPE_LABELS supprimé — labels dérivés de capabilities.stepTypes via useCapabilities()
+// Le badge label est calculé dans stepTypeBadgeLabel (useMemo) ci-dessous.
 
 
 export interface WorkflowStepNodeData {
@@ -144,12 +138,16 @@ const WorkflowStepNode: FC<NodeProps> = ({ data, selected }) => {
     return nodeData.name ?? '';
   }, [stepType, nodeData, capabilities]);
 
-  // Story 83-11: Badge label dérivé du variant de gate (déclaratif)
+  // Story 84.3 (AC4/W2) + Story 83-11: Badge label dérivé des capabilities backend.
+  // Pour gate : variant label > step label > fallback code brut.
+  // Pour les autres types : capabilities.stepTypes label ou fallback code brut.
   const stepTypeBadgeLabel = useMemo(() => {
-    if (stepType !== 'gate') return STEP_TYPE_LABELS[stepType];
-    const gateStepCap = capabilities?.stepTypes?.find((s) => s.code === 'gate');
-    const gateVariant = gateStepCap?.variants?.find((v) => v.code === nodeData.gate_type);
-    return gateVariant?.label ?? STEP_TYPE_LABELS['gate'];
+    if (stepType === 'gate') {
+      const gateStepCap = capabilities?.stepTypes?.find((s) => s.code === 'gate');
+      const gateVariant = gateStepCap?.variants?.find((v) => v.code === nodeData.gate_type);
+      return gateVariant?.label ?? (capabilities?.stepTypes?.find((s) => s.code === stepType)?.label ?? stepType);
+    }
+    return capabilities?.stepTypes?.find((s) => s.code === stepType)?.label ?? stepType;
   }, [stepType, capabilities, nodeData.gate_type]);
 
   // Execution status colors — subtle, professional palette
@@ -266,7 +264,7 @@ const WorkflowStepNode: FC<NodeProps> = ({ data, selected }) => {
 
         {/* Story 57.13: Step type badge — Story 83-11: badge label dérivé du variant de gate */}
         <Tag
-          color={STEP_TYPE_COLORS[stepType]}
+          color={STEP_TYPE_COLORS[stepType] ?? '#8c8c8c'}
           style={{ fontSize: 10, padding: '0 4px', marginBottom: 4, display: 'inline-block', lineHeight: '16px' }}
         >
           {stepTypeBadgeLabel}

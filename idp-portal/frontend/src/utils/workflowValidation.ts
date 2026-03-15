@@ -3,10 +3,15 @@
  *
  * Extracted from WorkflowBuilderCanvas.tsx to separate concerns.
  * Validates workflow graph structure: nodes, edges, reachability, loops.
+ *
+ * Story 84.3 (AC6): getStepTypeErrors lit les required_fields depuis les capabilities backend.
+ * Le switch métier sur les champs requis simples est supprimé — seule la validation complexe
+ * de schedule_execution (schedule_config, schedule_source…) reste en frontend.
  */
 import type { Node, Edge } from '@xyflow/react';
 import { START_NODE_ID, END_NODE_ID } from './workflowConversion';
 import type { WorkflowStepNodeData } from '../components/admin/WorkflowStepNode';
+import type { WorkflowStepCapability } from '../services/capabilities_service';
 
 /** Validation error or warning for a specific node. */
 export interface ValidationError {
@@ -22,73 +27,58 @@ export interface ValidationResult {
 }
 
 /**
- * Validate step configuration per type (Story 57.13, AC8).
- * Checks required fields per step_type.
+ * Validate step configuration per type (Story 57.13, AC8 ; Story 84.3, AC6).
+ *
+ * Les champs requis simples sont dérivés de `stepTypeCapabilities` (backend-driven).
+ * La validation complexe de schedule_execution reste en frontend.
+ *
+ * Si `stepTypeCapabilities` est absent, aucune erreur de champ n'est générée (résilient).
  */
-function getStepTypeErrors(nodeId: string, data: WorkflowStepNodeData): ValidationError[] {
+function getStepTypeErrors(
+  nodeId: string,
+  data: WorkflowStepNodeData,
+  stepTypeCapabilities?: WorkflowStepCapability[],
+): ValidationError[] {
   // Backward compat: if step_type is not explicitly set, skip per-type validation
   if (!data.step_type) return [];
   const stepType = data.step_type;
   const errors: ValidationError[] = [];
 
-  switch (stepType) {
-    case 'platform':
-      if (!data.action_id) {
-        errors.push({ nodeId, type: 'error', message: 'Action requise pour un step de type Exécuter' });
-      }
-      break;
-    case 'service_call':
-      if (!data.integration_type) {
-        errors.push({ nodeId, type: 'error', message: "Type d'intégration requis" });
-      }
-      if (!data.operation) {
-        errors.push({ nodeId, type: 'error', message: 'Opération requise' });
-      }
-      break;
-    case 'evaluation':
-      if (!data.policy_id) {
-        errors.push({ nodeId, type: 'error', message: 'Politique de règles métier requise' });
-      }
-      break;
-    case 'gate':
-      if (!data.gate_type) {
-        errors.push({ nodeId, type: 'error', message: 'Type de gate requis (maintenance_window ou approval)' });
-      }
-      break;
-    case 'http_request':
-      if (!data.url) {
-        errors.push({ nodeId, type: 'error', message: 'URL requise' });
-      }
-      if (!data.method) {
-        errors.push({ nodeId, type: 'error', message: 'Méthode HTTP requise' });
-      }
-      break;
-    case 'schedule_execution': {
-      // referenced_action_id requis
-      if (!data.action_id) {
-        errors.push({ nodeId, type: 'error', message: 'Action cible requise pour le step de planification' });
-      }
-      const config = data.schedule_config;
-      if (!config) {
-        errors.push({ nodeId, type: 'error', message: 'Configuration de planification requise' });
-        break;
-      }
-      if (!config.schedule_source) {
-        errors.push({ nodeId, type: 'error', message: 'Source de date requise (schedule_source)' });
-        break;
-      }
-      if (config.schedule_source === 'parameter' && !config.schedule_parameter_name) {
-        errors.push({ nodeId, type: 'error', message: "Nom du paramètre de date requis (schedule_parameter_name)" });
-      }
-      if (config.schedule_source === 'fixed_offset' && !config.fixed_offset) {
-        errors.push({ nodeId, type: 'error', message: "Offset fixe requis (ex: +3d, +6h)" });
-      }
-      if (config.schedule_source === 'recurring' && !config.recurring_pattern?.pattern_type) {
-        errors.push({ nodeId, type: 'error', message: "Type de pattern récurrent requis" });
-      }
-      break;
+  // Story 84.3 (AC6): champs requis dérivés du backend via required_fields
+  const stepDef = stepTypeCapabilities?.find((s) => s.code === stepType);
+  const requiredFields = (stepDef?.constraints?.required_fields ?? []) as Array<{
+    field: string;
+    message: string;
+  }>;
+  for (const { field, message } of requiredFields) {
+    const value = data[field as keyof WorkflowStepNodeData];
+    if (value === null || value === undefined || value === '') {
+      errors.push({ nodeId, type: 'error', message });
     }
   }
+
+  // Story 84.3 (AC6): validation UI complexe — schedule_execution uniquement (non dérivable par required_fields)
+  if (stepType === 'schedule_execution') {
+    const config = data.schedule_config;
+    if (!config) {
+      errors.push({ nodeId, type: 'error', message: 'Configuration de planification requise' });
+      return errors;
+    }
+    if (!config.schedule_source) {
+      errors.push({ nodeId, type: 'error', message: 'Source de date requise (schedule_source)' });
+      return errors;
+    }
+    if (config.schedule_source === 'parameter' && !config.schedule_parameter_name) {
+      errors.push({ nodeId, type: 'error', message: "Nom du paramètre de date requis (schedule_parameter_name)" });
+    }
+    if (config.schedule_source === 'fixed_offset' && !config.fixed_offset) {
+      errors.push({ nodeId, type: 'error', message: "Offset fixe requis (ex: +3d, +6h)" });
+    }
+    if (config.schedule_source === 'recurring' && !config.recurring_pattern?.pattern_type) {
+      errors.push({ nodeId, type: 'error', message: "Type de pattern récurrent requis" });
+    }
+  }
+
   return errors;
 }
 
@@ -100,9 +90,16 @@ function getStepTypeErrors(nodeId: string, data: WorkflowStepNodeData): Validati
  * 2. Every node has at least one output connection
  * 3. All nodes are reachable from start (no orphans)
  * 4. No infinite loops (cycle detection DFS)
- * 5. Step configuration per type (Story 57.13, AC8)
+ * 5. Step configuration per type (Story 57.13, AC8 ; Story 84.3, AC6)
+ *
+ * Story 84.3 (AC6): `stepTypeCapabilities` est optionnel.
+ * Si absent, la validation de champs requis est silencieuse (résiliente).
  */
-export function validateWorkflowGraph(nodes: Node[], edges: Edge[]): ValidationResult {
+export function validateWorkflowGraph(
+  nodes: Node[],
+  edges: Edge[],
+  stepTypeCapabilities?: WorkflowStepCapability[],
+): ValidationResult {
   // Filter out start/end visual nodes for validation
   const workflowNodes = nodes.filter(
     (n) => n.id !== START_NODE_ID && n.id !== END_NODE_ID
@@ -215,10 +212,10 @@ export function validateWorkflowGraph(nodes: Node[], edges: Edge[]): ValidationR
     });
   });
 
-  // 4. Validate step configuration per type (Story 57.13, AC8)
+  // 4. Validate step configuration per type (Story 57.13, AC8 ; Story 84.3, AC6)
   workflowNodes.forEach((node) => {
     const data = node.data as unknown as WorkflowStepNodeData;
-    const stepErrors = getStepTypeErrors(node.id, data);
+    const stepErrors = getStepTypeErrors(node.id, data, stepTypeCapabilities);
     errors.push(...stepErrors);
   });
 
