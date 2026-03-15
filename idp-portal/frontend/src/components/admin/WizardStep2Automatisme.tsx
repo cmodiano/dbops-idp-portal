@@ -2,6 +2,11 @@
  * WizardStep2Automatisme — Étape 2 du wizard (Automatisme & Paramètres) extraite de ActionWizard (Story 33.5, Task 5).
  * Contient : WorkflowStepsEditor ou (WizardAAPTemplateSection + ParametersEditor) selon le type.
  * Note : WizardAAPTemplateSection est co-localisé ici car utilisé exclusivement dans cette étape.
+ *
+ * Story 83-8: Rendu déclaratif via action_config_schema.
+ *   - Schéma vide → rien rendu pour la config plateforme.
+ *   - connector_type === 'aap' + schéma non vide → WizardAAPTemplateSection (renderer UX exceptionnel).
+ *   - Autre connector + schéma non vide → SchemaFormRenderer générique.
  */
 import { useState } from 'react';
 import { Form, Input, Select, Alert, Space, Radio } from 'antd';
@@ -9,9 +14,11 @@ import type {
   ParameterDefinition,
   WorkflowStep,
 } from '../../types/api';
+import type { PlatformCapability } from '../../services/capabilities_service';
 import { ParametersEditor } from './ParametersEditor';
 import { WorkflowStepsEditor } from './WorkflowStepsEditor';
 import { WorkflowBuilderCanvas } from './WorkflowBuilderCanvas';
+import { SchemaFormRenderer } from '../shared';
 import { useAAPTemplates } from '../../hooks/useAAPTemplates';
 import { useDebounce } from '../../hooks/useDebounce';
 
@@ -19,23 +26,30 @@ import { useDebounce } from '../../hooks/useDebounce';
 
 interface WizardAAPTemplateSectionProps {
   integrationId: number | undefined;
-  aapResourceType: 'job_template' | 'workflow_job';
-  aapTemplateId: number | undefined;
-  onResourceTypeChange: (v: 'job_template' | 'workflow_job') => void;
-  onTemplateIdChange: (v: number | undefined) => void;
+  actionConfig: Record<string, unknown>;
+  onActionConfigChange: (v: Record<string, unknown>) => void;
   isReadOnly: boolean;
 }
 
 function WizardAAPTemplateSection({
   integrationId,
-  aapResourceType,
-  aapTemplateId,
-  onResourceTypeChange,
-  onTemplateIdChange,
+  actionConfig,
+  onActionConfigChange,
   isReadOnly,
 }: WizardAAPTemplateSectionProps) {
   const [searchInput, setSearchInput] = useState('');
   const debouncedSearch = useDebounce(searchInput, 300);
+
+  const aapResourceType = (actionConfig.resource_type as 'job_template' | 'workflow_job') ?? 'job_template';
+  const aapTemplateId = actionConfig.template_id as number | undefined;
+
+  const handleResourceTypeChange = (v: 'job_template' | 'workflow_job') => {
+    onActionConfigChange({ ...actionConfig, resource_type: v });
+  };
+
+  const handleTemplateIdChange = (v: number | undefined) => {
+    onActionConfigChange({ ...actionConfig, template_id: v });
+  };
 
   const { templates, loading, fallback, error } = useAAPTemplates(integrationId, aapResourceType, debouncedSearch || undefined);
 
@@ -50,7 +64,7 @@ function WizardAAPTemplateSection({
         <Form.Item label="Type de ressource" style={{ marginBottom: 0 }}>
           <Select
             value={aapResourceType}
-            onChange={onResourceTypeChange}
+            onChange={handleResourceTypeChange}
             options={[
               { value: 'job_template', label: 'Job template' },
               { value: 'workflow_job', label: 'Workflow job' },
@@ -81,7 +95,7 @@ function WizardAAPTemplateSection({
                 type="number"
                 min={1}
                 value={aapTemplateId ?? ''}
-                onChange={(e) => onTemplateIdChange(e.target.value ? Number(e.target.value) : undefined)}
+                onChange={(e) => handleTemplateIdChange(e.target.value ? Number(e.target.value) : undefined)}
                 placeholder="ID template AAP"
                 style={{ width: 120 }}
                 aria-label="ID template AAP"
@@ -102,7 +116,7 @@ function WizardAAPTemplateSection({
               loading={loading}
               style={{ minWidth: 240 }}
               value={aapTemplateId ?? undefined}
-              onChange={(val) => onTemplateIdChange(val)}
+              onChange={(val) => handleTemplateIdChange(val)}
               onSearch={setSearchInput}
               placeholder="Selectionnez un template"
               filterOption={(input, opt) =>
@@ -125,13 +139,13 @@ function WizardAAPTemplateSection({
 export interface WizardStep2AutomatismeProps {
   isWorkflow: boolean;
   isReadOnly: boolean;
-  /** Story 82.7: remplace isPlatformAAP: boolean — générique, dérivé depuis capabilities. */
-  connectorType: string;
-  integrationId: number | undefined;
-  aapResourceType: 'job_template' | 'workflow_job';
-  setAapResourceType: (v: 'job_template' | 'workflow_job') => void;
-  aapTemplateId: number | undefined;
-  setAapTemplateId: (v: number | undefined) => void;
+  /** Story 83-8: remplace connectorType + aapResourceType/aapTemplateId — capabilities complètes. */
+  platformCap: PlatformCapability | null;
+  /** ID de l'intégration sélectionnée — nécessaire pour WizardAAPTemplateSection (recherche templates). */
+  integrationId?: number;
+  /** Story 83-8: état unifié de configuration de plateforme (remplace aapResourceType+aapTemplateId). */
+  actionConfig: Record<string, unknown>;
+  setActionConfig: (v: Record<string, unknown>) => void;
   parameterList: ParameterDefinition[];
   setParameterList: (list: ParameterDefinition[]) => void;
   workflowSteps: WorkflowStep[];
@@ -142,15 +156,22 @@ export interface WizardStep2AutomatismeProps {
   workflowId?: number;
 }
 
+function hasPlatformConfigSchema(platformCap: PlatformCapability | null): boolean {
+  if (!platformCap?.action_config_schema) return false;
+  const schema = platformCap.action_config_schema as Record<string, unknown>;
+  if (Object.keys(schema).length === 0) return false;
+  // Exige au moins une propriété déclarée pour que SchemaFormRenderer ait quelque chose à rendre.
+  const properties = (schema.properties as object) ?? {};
+  return Object.keys(properties).length > 0;
+}
+
 export function WizardStep2Automatisme({
   isWorkflow,
   isReadOnly,
-  connectorType,
+  platformCap,
   integrationId,
-  aapResourceType,
-  setAapResourceType,
-  aapTemplateId,
-  setAapTemplateId,
+  actionConfig,
+  setActionConfig,
   parameterList,
   setParameterList,
   workflowSteps,
@@ -159,6 +180,10 @@ export function WizardStep2Automatisme({
   setWorkflowViewMode,
   workflowId,
 }: WizardStep2AutomatismeProps) {
+
+  const hasSchema = hasPlatformConfigSchema(platformCap);
+  const isAAP = platformCap?.connector_type === 'aap';
+
   return (
     <Space orientation="vertical" style={{ width: '100%' }} size="middle">
       {isWorkflow ? (
@@ -202,14 +227,22 @@ export function WizardStep2Automatisme({
         </Form.Item>
       ) : (
         <>
-          {connectorType === 'aap' && (
+          {/* Story 83-8: Rendu déclaratif — règle de choix du renderer */}
+          {hasSchema && isAAP && (
             <WizardAAPTemplateSection
               integrationId={integrationId}
-              aapResourceType={aapResourceType}
-              aapTemplateId={aapTemplateId}
-              onResourceTypeChange={setAapResourceType}
-              onTemplateIdChange={setAapTemplateId}
+              actionConfig={actionConfig}
+              onActionConfigChange={setActionConfig}
               isReadOnly={isReadOnly}
+            />
+          )}
+
+          {hasSchema && !isAAP && (
+            <SchemaFormRenderer
+              schema={platformCap!.action_config_schema as Record<string, unknown>}
+              value={actionConfig}
+              onChange={setActionConfig}
+              disabled={isReadOnly}
             />
           )}
           <Form.Item

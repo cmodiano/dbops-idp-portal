@@ -2,11 +2,14 @@
  * useActionWizardValidation — Logique de validation extraite de ActionWizard::handleSave (Story 33.5, Task 6).
  * Factorisation avec useActionFormValidation via les helpers partagés validateParameterList,
  * validateImpactRulesList.
+ *
+ * Story 83-8: Validation AAP refactorisée via platformCap + actionConfig.
  */
 import type {
   ImpactRuleDefinition,
   ParameterDefinition,
 } from '../types/api';
+import type { PlatformCapability } from '../services/capabilities_service';
 import {
   validateParameterList,
   validateImpactRulesList,
@@ -18,7 +21,9 @@ export interface ActionWizardValidationParams {
   isWorkflowSave: boolean;
   parameterList: ParameterDefinition[];
   impactRulesList: ImpactRuleDefinition[];
-  aapTemplateId: number | undefined;
+  /** Story 83-8: remplace aapTemplateId — platformCap + actionConfig. */
+  platformCap: PlatformCapability | null;
+  actionConfig: Record<string, unknown>;
   integrationId: number | undefined;
   getIntegrationById: (id: number) => IntegrationLike | undefined;
 }
@@ -37,7 +42,8 @@ export function useActionWizardValidation({ validateWorkflowSteps }: UseActionWi
       isWorkflowSave,
       parameterList,
       impactRulesList,
-      aapTemplateId,
+      platformCap,
+      actionConfig,
       integrationId,
       getIntegrationById,
     } = params;
@@ -58,12 +64,21 @@ export function useActionWizardValidation({ validateWorkflowSteps }: UseActionWi
     const impactError = validateImpactRulesList(impactRulesList);
     if (impactError) return impactError;
 
-    // Validation template AAP
-    if (integrationId) {
+    // Story 83-8: Validation template AAP via platformCap + actionConfig
+    if (integrationId && platformCap?.connector_type === 'aap') {
+      const template_id = actionConfig?.template_id as number | undefined;
+      if (!template_id || template_id < 1) {
+        return "Pour une intégration AAP/Tower, l'ID du template (job ou workflow) est requis.";
+      }
+    } else if (integrationId && !platformCap) {
+      // Fallback: vérification par integration type si platformCap pas encore chargé
       const integration = getIntegrationById(integrationId);
       const isSaveAAP = integration?.type === 'aap' || integration?.type === 'tower';
-      if (isSaveAAP && (aapTemplateId == null || aapTemplateId < 1)) {
-        return "Pour une intégration AAP/Tower, l'ID du template (job ou workflow) est requis.";
+      if (isSaveAAP) {
+        const template_id = actionConfig?.template_id as number | undefined;
+        if (!template_id || template_id < 1) {
+          return "Pour une intégration AAP/Tower, l'ID du template (job ou workflow) est requis.";
+        }
       }
     }
 

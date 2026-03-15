@@ -109,6 +109,24 @@ platform_registry.register(PlatformDefinition(
     supports_health_check=True,
     runtime_kwargs_required=(),
     runtime_kwargs_optional={"ca_bundle_path": None},
+    action_config_schema={
+        "type": "object",
+        "properties": {
+            "resource_type": {
+                "type": "string",
+                "enum": ["job_template", "workflow_job"],
+                "title": "Type de ressource",
+                "description": "Type de template AAP à appeler",
+            },
+            "template_id": {
+                "type": "integer",
+                "title": "ID du template",
+                "description": "Identifiant du job template ou workflow job template dans AAP",
+                "minimum": 1,
+            },
+        },
+        "required": ["template_id"],
+    },
 ))
 
 platform_registry.register(PlatformDefinition(
@@ -121,6 +139,24 @@ platform_registry.register(PlatformDefinition(
     supports_health_check=True,
     runtime_kwargs_required=(),
     runtime_kwargs_optional={"ssl_verify": False, "ca_bundle_path": None},
+    action_config_schema={
+        "type": "object",
+        "properties": {
+            "resource_type": {
+                "type": "string",
+                "enum": ["job_template", "workflow_job"],
+                "title": "Type de ressource",
+                "description": "Type de template Tower à appeler",
+            },
+            "template_id": {
+                "type": "integer",
+                "title": "ID du template",
+                "description": "Identifiant du job template ou workflow job template dans Tower",
+                "minimum": 1,
+            },
+        },
+        "required": ["template_id"],
+    },
 ))
 
 platform_registry.register(PlatformDefinition(

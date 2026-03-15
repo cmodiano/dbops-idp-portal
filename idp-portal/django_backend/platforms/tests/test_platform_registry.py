@@ -136,6 +136,41 @@ def test_aap_metadata():
     assert defn.runtime_kwargs_required == ()
 
 
+def test_aap_action_config_schema():
+    """Story 83-8: AAP expose un action_config_schema non vide avec resource_type et template_id."""
+    defn = platform_registry.get("aap")
+    schema = defn.action_config_schema
+    assert schema, "action_config_schema doit être non vide pour AAP"
+    props = schema.get("properties", {})
+    assert "resource_type" in props
+    assert "template_id" in props
+    assert props["resource_type"]["enum"] == ["job_template", "workflow_job"]
+    assert props["template_id"]["type"] == "integer"
+    assert props["template_id"]["minimum"] == 1
+
+
+def test_other_platforms_action_config_schema_empty():
+    """Story 83-8: Les plateformes sans connecteur de config conservent action_config_schema={}."""
+    for code in ("azure_devops", "github_actions", "terraform_cloud"):
+        defn = platform_registry.get(code)
+        assert defn.action_config_schema == {}, f"{code} devrait avoir action_config_schema={{}}"
+
+
+def test_tower_action_config_schema():
+    """Story 83-8 fix: Tower (connector_type=aap) doit avoir un action_config_schema non vide.
+    Sinon la validation exige template_id mais le champ n'est jamais rendu (régression critique).
+    """
+    defn = platform_registry.get("tower")
+    schema = defn.action_config_schema
+    assert schema, "action_config_schema doit être non vide pour Tower"
+    props = schema.get("properties", {})
+    assert "resource_type" in props
+    assert "template_id" in props
+    assert props["template_id"]["type"] == "integer"
+    assert "required" in schema
+    assert "template_id" in schema["required"]
+
+
 def test_tower_metadata():
     defn = platform_registry.get("tower")
     assert defn.display_name == "Ansible Tower"

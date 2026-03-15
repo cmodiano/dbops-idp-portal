@@ -74,16 +74,19 @@ vi.mock('../../hooks/usePlatformIntegrations', () => ({
     integrations: [
       { id: 1, type: 'aap', name: 'AAP-PROD', status: 'valid', base_url: 'https://aap.local', credential_ref: null, icon: null, auth_flow: null, created_at: '', updated_at: '' },
       { id: 2, type: 'github_actions', name: 'GitHub CI', status: 'valid', base_url: 'https://github.com', credential_ref: null, icon: null, auth_flow: null, created_at: '', updated_at: '' },
+      { id: 3, type: 'tower', name: 'Tower-PROD', status: 'valid', base_url: 'https://tower.local', credential_ref: null, icon: null, auth_flow: null, created_at: '', updated_at: '' },
     ],
     integrationOptions: [
       { value: 1, label: 'AAP-PROD — aap' },
       { value: 2, label: 'GitHub CI — github_actions' },
+      { value: 3, label: 'Tower-PROD — tower' },
     ],
     loading: false,
     error: null,
     getIntegrationById: (id: number) => {
       if (id === 1) return { id: 1, type: 'aap', name: 'AAP-PROD', status: 'valid', base_url: 'https://aap.local', credential_ref: null, icon: null, auth_flow: null, created_at: '', updated_at: '' };
       if (id === 2) return { id: 2, type: 'github_actions', name: 'GitHub CI', status: 'valid', base_url: 'https://github.com', credential_ref: null, icon: null, auth_flow: null, created_at: '', updated_at: '' };
+      if (id === 3) return { id: 3, type: 'tower', name: 'Tower-PROD', status: 'valid', base_url: 'https://tower.local', credential_ref: null, icon: null, auth_flow: null, created_at: '', updated_at: '' };
       return undefined;
     },
   }),
@@ -108,18 +111,43 @@ import * as useCapabilitiesModule from '../../hooks/useCapabilities';
 const mockUseAAPTemplates = useAAPTemplates as ReturnType<typeof vi.fn>;
 const mockUseCapabilities = vi.mocked(useCapabilitiesModule.useCapabilities);
 
-// Mock capabilities avec plateformes AAP et terraform
+// Story 83-8: Mock capabilities avec schéma AAP non vide
 const mockCapabilities = {
   platforms: [
     {
       code: 'aap',
       display_name: 'Ansible Automation Platform',
-      aliases: ['tower'],
+      aliases: [],
       icon: 'aap',
       connector_type: 'aap',
       action_platform_code: 'AAP',
       supports_health_check: true,
-      action_config_schema: {},
+      action_config_schema: {
+        type: 'object',
+        properties: {
+          resource_type: { type: 'string', enum: ['job_template', 'workflow_job'], title: 'Type de ressource' },
+          template_id: { type: 'integer', title: 'ID du template', minimum: 1 },
+        },
+        required: ['template_id'],
+      },
+    },
+    {
+      // Story 83-8 fix: Tower a le même schema qu'AAP (connector_type=aap)
+      code: 'tower',
+      display_name: 'Ansible Tower',
+      aliases: [],
+      icon: 'aap',
+      connector_type: 'aap',
+      action_platform_code: 'Tower',
+      supports_health_check: true,
+      action_config_schema: {
+        type: 'object',
+        properties: {
+          resource_type: { type: 'string', enum: ['job_template', 'workflow_job'], title: 'Type de ressource' },
+          template_id: { type: 'integer', title: 'ID du template', minimum: 1 },
+        },
+        required: ['template_id'],
+      },
     },
     {
       code: 'terraform_cloud',
@@ -1579,7 +1607,14 @@ describe('ActionWizard — capabilities-driven connectorType (Story 82.7)', () =
             connector_type: 'aap', // Override: capabilities retourne 'aap' pour github_actions
             action_platform_code: 'GitHub Actions',
             supports_health_check: false,
-            action_config_schema: {},
+            // Story 83-8: schéma non vide requis pour que WizardAAPTemplateSection s'affiche
+            action_config_schema: {
+              type: 'object',
+              properties: {
+                resource_type: { type: 'string', enum: ['job_template', 'workflow_job'] },
+                template_id: { type: 'integer', minimum: 1 },
+              },
+            },
           },
         ],
       },
@@ -1616,6 +1651,42 @@ describe('ActionWizard — capabilities-driven connectorType (Story 82.7)', () =
     // Si capabilities prime (connector_type='aap'), la section AAP doit être visible
     await waitFor(() => {
       expect(screen.getByText(/Quel automatisme appeler/i)).toBeInTheDocument();
+    }, { timeout: 8000 });
+  });
+
+  it('T8.5 — Tower (connector_type=aap, schéma non vide) → WizardAAPTemplateSection visible (régression fix 83-8)', async () => {
+    // Régression : Tower avait action_config_schema={} ce qui bloquait les utilisateurs Tower
+    // (validation exigeait template_id mais le champ n'était jamais rendu).
+    // Fix : Tower a maintenant le même schema qu'AAP.
+    const towerEditAction: ActionDetail = {
+      id: 3,
+      name: 'Action Tower',
+      description: 'Test Tower regression',
+      item_type: 'action',
+      engine: 'Oracle',
+      platform: 'Tower',
+      integration_id: 3,
+      parameters_schema: null,
+      impact_rules: null,
+      default_impact_level: null,
+      status: 'draft',
+      created_by: null,
+      created_at: '',
+      updated_at: null,
+      execution_steps: null,
+      workflow_steps: null,
+      tags: [],
+    };
+    await act(async () => {
+      render(<ActionWizard {...defaultProps} editAction={towerEditAction} />);
+    });
+    await waitFor(() => expect(screen.getByLabelText("Nom de l'action")).toHaveValue('Action Tower'));
+    const nextBtn = await screen.findByRole('button', { name: /Suivant/i });
+    await userEvent.setup().click(nextBtn);
+    // Tower (connector_type=aap + schéma non vide) → WizardAAPTemplateSection doit être rendu
+    await waitFor(() => {
+      expect(screen.getByText(/Quel automatisme appeler/i)).toBeInTheDocument();
+      expect(screen.getByText(/Type de ressource/i)).toBeInTheDocument();
     }, { timeout: 8000 });
   });
 });
