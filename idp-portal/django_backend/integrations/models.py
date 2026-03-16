@@ -189,9 +189,12 @@ class Integration(models.Model):
     # JSON field helper for config
     def get_config(self):
         """Deserialize JSON from CLOB."""
-        raw: object = self.config  # Oracle CLOB may arrive as a LOB object at runtime
+        raw: object = self.config  # Oracle CLOB may arrive as a LOB object or auto-parsed dict
         if raw is None:
             return None
+        # oracledb may return NCLOB columns containing valid JSON as a dict directly
+        if isinstance(raw, dict):
+            return raw
         # Coerce LOB / non-str to str
         if not isinstance(raw, str):
             raw = raw.read() if hasattr(raw, 'read') else str(raw)
@@ -200,7 +203,7 @@ class Integration(models.Model):
         try:
             return json.loads(raw)
         except (json.JSONDecodeError, TypeError) as e:
-            logger.warning("Failed to deserialize config for Integration %s (type=%s): %s", self.id, type(self.config).__name__, e)
+            logger.warning("get_config_deserialize_failed", integration_id=self.id, config_type=type(self.config).__name__, error=str(e))
             return None
     
     def set_config(self, value):
