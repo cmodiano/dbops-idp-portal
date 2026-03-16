@@ -146,6 +146,22 @@ platform_registry.register(PlatformDefinition(
         },
         "required": ["template_id"],
     },
+    runtime_config_schema={
+        "type": "object",
+        "properties": {
+            "ca_bundle_path": {
+                "type": "string",
+                "title": "Chemin CA bundle",
+                "description": "Chemin local vers le bundle CA pour la validation SSL. Optionnel — si absent, la vérification SSL système est utilisée.",
+            },
+        },
+        "additionalProperties": True,
+    },
+    health_check_policy={
+        "timeout_seconds": 30,
+        "health_check_endpoint": "/api/v2/ping/",
+        "description": "GET /api/v2/ping/ — valide la connectivité et les credentials AAP.",
+    },
 ))
 
 platform_registry.register(PlatformDefinition(
@@ -176,6 +192,28 @@ platform_registry.register(PlatformDefinition(
         },
         "required": ["template_id"],
     },
+    runtime_config_schema={
+        "type": "object",
+        "properties": {
+            "ssl_verify": {
+                "type": "boolean",
+                "title": "Vérification SSL",
+                "description": "Activer la vérification SSL. Défaut : False (Tower on-premises sans certificat CA public).",
+                "default": False,
+            },
+            "ca_bundle_path": {
+                "type": "string",
+                "title": "Chemin CA bundle",
+                "description": "Chemin local vers le bundle CA. Optionnel — utilisé uniquement si ssl_verify=True.",
+            },
+        },
+        "additionalProperties": True,
+    },
+    health_check_policy={
+        "timeout_seconds": 30,
+        "health_check_endpoint": "/api/v2/ping/",
+        "description": "GET /api/v2/ping/ — valide la connectivité et les credentials Tower (AWX compatible).",
+    },
 ))
 
 platform_registry.register(PlatformDefinition(
@@ -192,6 +230,17 @@ platform_registry.register(PlatformDefinition(
     supports_health_check=True,
     runtime_kwargs_required=(),
     runtime_kwargs_optional={},
+    runtime_config_schema={
+        "type": "object",
+        "properties": {},
+        "description": "Azure DevOps ne requiert aucun paramètre de config supplémentaire au-delà de base_url et du token d'authentification.",
+        "additionalProperties": True,
+    },
+    health_check_policy={
+        "timeout_seconds": 30,
+        "health_check_endpoint": "/_apis/?api-version=7.1",
+        "description": "GET /_apis/ — valide le PAT et l'accès à l'organisation/projet Azure DevOps.",
+    },
 ))
 
 platform_registry.register(PlatformDefinition(
@@ -204,6 +253,30 @@ platform_registry.register(PlatformDefinition(
     supports_health_check=True,
     runtime_kwargs_required=("owner", "repo"),
     runtime_kwargs_optional={},
+    runtime_config_schema={
+        "type": "object",
+        "required": ["owner", "repo"],
+        "properties": {
+            "owner": {
+                "type": "string",
+                "title": "Propriétaire du dépôt",
+                "description": "Nom de l'organisation ou de l'utilisateur GitHub (ex: 'my-org').",
+                "minLength": 1,
+            },
+            "repo": {
+                "type": "string",
+                "title": "Nom du dépôt",
+                "description": "Nom du dépôt GitHub (ex: 'my-repo').",
+                "minLength": 1,
+            },
+        },
+        "additionalProperties": True,
+    },
+    health_check_policy={
+        "timeout_seconds": 30,
+        "health_check_endpoint": "/",
+        "description": "GET {base_url}/ — valide le PAT GitHub via l'endpoint racine de l'API.",
+    },
 ))
 
 platform_registry.register(PlatformDefinition(
@@ -219,4 +292,24 @@ platform_registry.register(PlatformDefinition(
     supports_health_check=True,
     runtime_kwargs_required=("organization",),
     runtime_kwargs_optional={},
+    runtime_config_schema={
+        "type": "object",
+        "required": ["organization"],
+        "properties": {
+            "organization": {
+                "type": "string",
+                "title": "Organisation Terraform Cloud",
+                "description": "Nom de l'organisation dans Terraform Cloud ou TFE (ex: 'my-org').",
+                "minLength": 1,
+            },
+        },
+        "additionalProperties": True,
+    },
+    health_check_policy={
+        "timeout_seconds": 30,
+        # Chemin absolu depuis la racine du serveur (base_url inclut déjà /api/v2,
+        # l'adapter appelle base_url + "/account/details")
+        "health_check_endpoint": "/api/v2/account/details",
+        "description": "GET /api/v2/account/details — valide le token Terraform Cloud via les détails du compte.",
+    },
 ))

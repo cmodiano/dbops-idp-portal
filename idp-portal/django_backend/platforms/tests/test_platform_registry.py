@@ -316,3 +316,52 @@ def test_register_indexes_action_platform_code():
     retrieved = registry.get_by_action_platform_code("TestPlatform")
     assert retrieved.code == "testplatform"
     assert retrieved is defn
+
+
+# ─────────────────────────────────────────────
+# Tests Story 84-8 — runtime_config_schema et health_check_policy peuplés
+# ─────────────────────────────────────────────
+
+def test_aap_runtime_config_schema_structure():
+    """T5.2 — AAP : runtime_config_schema contient ca_bundle_path en properties."""
+    defn = platform_registry.get("aap")
+    schema = defn.runtime_config_schema
+    assert schema != {}
+    assert "properties" in schema
+    assert "ca_bundle_path" in schema["properties"]
+
+
+def test_tower_runtime_config_schema_structure():
+    """T5.2b — Tower : runtime_config_schema contient ssl_verify et ca_bundle_path (Story 84-8)."""
+    defn = platform_registry.get("tower")
+    schema = defn.runtime_config_schema
+    assert schema != {}
+    assert "properties" in schema
+    assert "ssl_verify" in schema["properties"]
+    assert schema["properties"]["ssl_verify"]["type"] == "boolean"
+    assert "ca_bundle_path" in schema["properties"]
+
+
+def test_github_actions_runtime_config_schema_required_fields():
+    """T5.3 — GitHub Actions : runtime_config_schema.required contient owner et repo."""
+    defn = platform_registry.get("github_actions")
+    schema = defn.runtime_config_schema
+    assert "required" in schema
+    assert "owner" in schema["required"]
+    assert "repo" in schema["required"]
+
+
+def test_terraform_cloud_runtime_config_schema_required_fields():
+    """T5.4 — Terraform Cloud : runtime_config_schema.required contient organization."""
+    defn = platform_registry.get("terraform_cloud")
+    schema = defn.runtime_config_schema
+    assert "required" in schema
+    assert "organization" in schema["required"]
+
+
+def test_all_platforms_health_check_policy_has_timeout():
+    """T5.5 — Les 5 plateformes ont timeout_seconds dans health_check_policy."""
+    for code in ["aap", "tower", "azure_devops", "github_actions", "terraform_cloud"]:
+        defn = platform_registry.get(code)
+        assert "timeout_seconds" in defn.health_check_policy, f"timeout_seconds absent pour {code}"
+        assert isinstance(defn.health_check_policy["timeout_seconds"], int), f"timeout_seconds non-int pour {code}"

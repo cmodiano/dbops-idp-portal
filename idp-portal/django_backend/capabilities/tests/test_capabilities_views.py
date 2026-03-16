@@ -406,13 +406,51 @@ class TestPlatformNewSchemaFields:
             assert isinstance(platform['runtime_config_schema'], dict)
             assert isinstance(platform['health_check_policy'], dict)
 
-    def test_platform_new_schema_fields_are_empty_by_default(self, auth_client):
-        """AC2.2 — runtime_config_schema et health_check_policy valent {} pour toutes les plateformes actuelles."""
+    def test_platform_runtime_config_schema_non_empty(self, auth_client):
+        """AC1 — runtime_config_schema est non vide pour toutes les plateformes enregistrées."""
         url = reverse('capabilities:capabilities-integrations')
         data = auth_client.get(url).data['data']
         for platform in data['platforms']:
-            assert platform['runtime_config_schema'] == {}, f"runtime_config_schema non vide pour {platform['code']}"
-            assert platform['health_check_policy'] == {}, f"health_check_policy non vide pour {platform['code']}"
+            assert platform['runtime_config_schema'] != {}, f"runtime_config_schema vide pour {platform['code']}"
+
+    def test_platform_health_check_policy_non_empty(self, auth_client):
+        """AC2 — health_check_policy est non vide pour toutes les plateformes enregistrées."""
+        url = reverse('capabilities:capabilities-integrations')
+        data = auth_client.get(url).data['data']
+        for platform in data['platforms']:
+            assert platform['health_check_policy'] != {}, f"health_check_policy vide pour {platform['code']}"
+
+    def test_platform_health_check_policy_has_required_keys(self, auth_client):
+        """AC2 — health_check_policy contient timeout_seconds (int), health_check_endpoint (str), description (str)."""
+        url = reverse('capabilities:capabilities-integrations')
+        data = auth_client.get(url).data['data']
+        for platform in data['platforms']:
+            policy = platform['health_check_policy']
+            assert 'timeout_seconds' in policy, f"timeout_seconds absent pour {platform['code']}"
+            assert 'health_check_endpoint' in policy, f"health_check_endpoint absent pour {platform['code']}"
+            assert 'description' in policy, f"description absent pour {platform['code']}"
+            assert isinstance(policy['timeout_seconds'], int), f"timeout_seconds doit être int pour {platform['code']}"
+            assert isinstance(policy['health_check_endpoint'], str), f"health_check_endpoint doit être str pour {platform['code']}"
+            assert isinstance(policy['description'], str), f"description doit être str pour {platform['code']}"
+
+    def test_github_actions_runtime_config_schema_required(self, auth_client):
+        """AC1 — GitHub Actions : runtime_config_schema.required contient owner et repo."""
+        url = reverse('capabilities:capabilities-integrations')
+        data = auth_client.get(url).data['data']
+        github = next(p for p in data['platforms'] if p['code'] == 'github_actions')
+        schema = github['runtime_config_schema']
+        assert 'required' in schema
+        assert 'owner' in schema['required']
+        assert 'repo' in schema['required']
+
+    def test_terraform_cloud_runtime_config_schema_required(self, auth_client):
+        """AC1 — Terraform Cloud : runtime_config_schema.required contient organization."""
+        url = reverse('capabilities:capabilities-integrations')
+        data = auth_client.get(url).data['data']
+        terraform = next(p for p in data['platforms'] if p['code'] == 'terraform_cloud')
+        schema = terraform['runtime_config_schema']
+        assert 'required' in schema
+        assert 'organization' in schema['required']
 
 
 class TestWorkflowStepsVariantsDerived:

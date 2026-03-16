@@ -30,12 +30,14 @@ class PlatformDefinition:
             attendue de action_config pour les actions de cette plateforme.
             `{}` signifie aucune contrainte (comportement actuel pour toutes les plateformes).
             Exposé via GET /api/v1/capabilities/integrations/ (Story 82.8, AC2).
-        runtime_config_schema: Schéma JSON (jsonschema draft-07) décrivant la structure
-            des paramètres de configuration runtime attendus. `{}` signifie aucune
-            contrainte. Destiné à l'exposition via capabilities (Story 83-5).
-        health_check_policy: Politique de health check de la plateforme
-            (ex: timeout_seconds, retry_count, endpoint_pattern). `{}` signifie
-            comportement par défaut. Destiné à l'exposition via capabilities (Story 83-5).
+        runtime_config_schema: Schéma JSON (jsonschema draft-07) décrivant les clés attendues
+            dans integration.get_config(). Purement DESCRIPTIF — pas de validation automatique.
+            Validation effective : runtime_kwargs_required / runtime_kwargs_optional.
+            Exposé via GET /api/v1/capabilities/integrations/ (Story 83-5, 84-8).
+        health_check_policy: Politique descriptive du health check (clés : timeout_seconds,
+            health_check_endpoint, description). Purement DESCRIPTIF — documente le comportement
+            de IHealthCheckable.health_check(). Comportement effectif : constantes *_DEFAULT_TIMEOUT
+            et endpoint appelé par health_check(). Exposé via capabilities (Story 83-5, 84-8).
     """
 
     code: str
@@ -55,4 +57,28 @@ class PlatformDefinition:
     runtime_kwargs_optional: dict[str, object] = field(default_factory=dict)
     action_config_schema: dict = field(default_factory=dict)
     runtime_config_schema: dict = field(default_factory=dict)
+    """Schéma JSON draft-07 décrivant les clés attendues dans integration.get_config()
+    pour cette plateforme.
+
+    Rôle : purement DESCRIPTIF. Expose la structure de config requise aux consommateurs
+    (frontend, admin, documentation). N'est PAS validé automatiquement à l'exécution.
+
+    Validation effective : assurée par runtime_kwargs_required / runtime_kwargs_optional
+    dans build_platform_runtime_config() (adapters/runtime_config.py).
+
+    Exposition : GET /api/v1/capabilities/integrations/ → platforms[*].runtime_config_schema
+    """
     health_check_policy: dict = field(default_factory=dict)
+    """Politique descriptive du health check pour cette plateforme.
+
+    Rôle : purement DESCRIPTIF. Documente comment le health check est implémenté dans
+    IHealthCheckable.health_check() de l'adapter correspondant. N'est PAS appliqué
+    automatiquement à l'exécution.
+
+    Comportement effectif : défini par les constantes *_DEFAULT_TIMEOUT dans l'adapter
+    et l'endpoint appelé par health_check().
+
+    Clés attendues : timeout_seconds (int), health_check_endpoint (str), description (str).
+
+    Exposition : GET /api/v1/capabilities/integrations/ → platforms[*].health_check_policy
+    """
