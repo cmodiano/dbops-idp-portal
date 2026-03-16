@@ -104,9 +104,10 @@ describe('WizardStep2Automatisme', () => {
     expect(screen.getByText('Paramètres')).toBeInTheDocument();
   });
 
+  // T5.1: "Quel automatisme appeler" supprimé — vérification "Type de ressource" via SchemaFormRenderer
   it('affiche le sélecteur de type AAP quand platformCap.connector_type=aap avec schéma non vide', () => {
     renderWithForm({ ...defaultProps, platformCap: aapPlatformCap, integrationId: 1 });
-    expect(screen.getByText(/Quel automatisme appeler/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Quel automatisme appeler/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Type de ressource/i)).toBeInTheDocument();
   });
 
@@ -136,6 +137,7 @@ describe('WizardStep2Automatisme — coverage extension', () => {
     expect(screen.queryByRole('button', { name: /Ajouter une étape/i })).not.toBeInTheDocument();
   });
 
+  // T5.3: fallback mode — aria-label "ID template AAP" conservé dans AAPTemplateIdRenderer
   it('affiche la section AAP en mode fallback quand integrationId est undefined et platformCap=aap', () => {
     vi.mocked(useAAPTemplatesModule.useAAPTemplates).mockReturnValue({
       templates: [],
@@ -158,6 +160,7 @@ describe('WizardStep2Automatisme — coverage extension', () => {
     expect(screen.getByText(/Saisie manuelle/i)).toBeInTheDocument();
   });
 
+  // T5.2: aria-label "Template AAP" conservé dans AAPTemplateIdRenderer (mode normal)
   it('affiche Template AAP Select (non-fallback) quand templates disponibles', () => {
     vi.mocked(useAAPTemplatesModule.useAAPTemplates).mockReturnValue({
       templates: [{ id: 10, name: 'My Template' }],
@@ -200,7 +203,8 @@ describe('WizardStep2Automatisme — coverage extension', () => {
     expect(setActionConfig).toHaveBeenCalledWith(expect.objectContaining({ template_id: undefined }));
   });
 
-  it('affiche validate error quand template_id est null', () => {
+  // T5.4: validation text adapté — l'Input fallback est présent (validation display supprimée avec WizardAAPTemplateSection)
+  it('affiche input fallback quand template_id est null (pas de validation text)', () => {
     vi.mocked(useAAPTemplatesModule.useAAPTemplates).mockReturnValue({
       templates: [],
       loading: false,
@@ -208,7 +212,7 @@ describe('WizardStep2Automatisme — coverage extension', () => {
       error: null,
     });
     renderWithForm({ ...defaultProps, platformCap: aapPlatformCap, integrationId: 1, actionConfig: {} });
-    expect(screen.getByText(/ID du job template/i)).toBeInTheDocument();
+    expect(screen.getByLabelText('ID template AAP')).toBeInTheDocument();
   });
 
   it('appelle setActionConfig via Select onChange (non-fallback)', async () => {
@@ -262,9 +266,10 @@ describe('WizardStep2Automatisme — rendu déclaratif action_config_schema (Sto
     });
   });
 
-  it('renders_aap_section_for_aap_platform_with_schema : platformCap.connector_type=aap + schéma non vide → WizardAAPTemplateSection présent', () => {
+  // T5.1: Adapté — suppression vérification "Quel automatisme appeler", conservation "Type de ressource" via SchemaFormRenderer
+  it('renders_aap_section_for_aap_platform_with_schema : platformCap.connector_type=aap + schéma non vide → SchemaFormRenderer présent (sans label WizardAAPTemplateSection)', () => {
     renderWithForm({ ...defaultProps, platformCap: aapPlatformCap, integrationId: 1 });
-    expect(screen.getByText(/Quel automatisme appeler/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Quel automatisme appeler/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Type de ressource/i)).toBeInTheDocument();
   });
 
@@ -311,19 +316,20 @@ describe('WizardStep2Automatisme — platformCap (Story 82.7 → 83-8)', () => {
     });
   });
 
-  it("platformCap.connector_type='aap' + schéma → section WizardAAPTemplateSection visible", () => {
+  // T5.1: Adapté — "Quel automatisme appeler" supprimé, "Type de ressource" via SchemaFormRenderer
+  it("platformCap.connector_type='aap' + schéma → SchemaFormRenderer visible avec Type de ressource", () => {
     renderWithForm({ ...defaultProps, platformCap: aapPlatformCap, integrationId: 1 });
-    expect(screen.getByText(/Quel automatisme appeler/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Quel automatisme appeler/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Type de ressource/i)).toBeInTheDocument();
   });
 
-  it("platformCap.connector_type='terraform' (schéma vide) → section WizardAAPTemplateSection cachée", () => {
+  it("platformCap.connector_type='terraform' (schéma vide) → section config cachée", () => {
     renderWithForm({ ...defaultProps, platformCap: terraformCap, integrationId: 2 });
     expect(screen.queryByText(/Quel automatisme appeler/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Type de ressource/i)).not.toBeInTheDocument();
   });
 
-  it("platformCap=null → section WizardAAPTemplateSection cachée", () => {
+  it("platformCap=null → section config cachée", () => {
     renderWithForm({ ...defaultProps, platformCap: null, integrationId: 2 });
     expect(screen.queryByText(/Quel automatisme appeler/i)).not.toBeInTheDocument();
   });
@@ -332,5 +338,98 @@ describe('WizardStep2Automatisme — platformCap (Story 82.7 → 83-8)', () => {
     renderWithForm({ ...defaultProps, platformCap: genericPlatformWithSchema, integrationId: 3 });
     expect(screen.queryByText(/Quel automatisme appeler/i)).not.toBeInTheDocument();
     expect(screen.getByText('Paramètres')).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Story 84-6 — Nouveaux tests : SchemaFormRenderer unifié pour AAP (AC1, AC6)
+// ---------------------------------------------------------------------------
+
+describe('WizardStep2Automatisme — Story 84-6 : SchemaFormRenderer unifié AAP', () => {
+  beforeEach(() => {
+    vi.mocked(useAAPTemplatesModule.useAAPTemplates).mockReturnValue({
+      templates: [],
+      loading: false,
+      fallback: false,
+      error: null,
+    });
+  });
+
+  // T6.1 — AAP + schema non vide → SchemaFormRenderer rendu, pas de label "Quel automatisme appeler"
+  it('aap_uses_schema_form_renderer_not_aap_section : AAP + schema → SchemaFormRenderer (sans "Quel automatisme appeler")', () => {
+    renderWithForm({ ...defaultProps, platformCap: aapPlatformCap, integrationId: 1 });
+    expect(screen.queryByText(/Quel automatisme appeler/i)).not.toBeInTheDocument();
+    // SchemaFormRenderer est actif : les champs du schema sont rendus
+    expect(screen.getByText(/Type de ressource/i)).toBeInTheDocument();
+  });
+
+  // T6.2 — resource_type rendu automatiquement par SchemaFormRenderer (enum → Select standard, pas de custom renderer)
+  // resource_type n'a PAS d'aria-label propre → seul template_id a "Template AAP"
+  // Les deux champs génèrent chacun un combobox : resource_type (schema-driven) + template_id (custom renderer)
+  it('aap_resource_type_rendered_by_schema_form_renderer : deux combobox présents — resource_type (schema) + template_id (custom renderer)', () => {
+    vi.mocked(useAAPTemplatesModule.useAAPTemplates).mockReturnValue({
+      templates: [{ id: 1, name: 'Deploy' }],
+      loading: false,
+      fallback: false,
+      error: null,
+    });
+    renderWithForm({ ...defaultProps, platformCap: aapPlatformCap, integrationId: 1 });
+    expect(screen.getByText(/Type de ressource/i)).toBeInTheDocument();
+    // resource_type (enum, schema-driven) + template_id (custom renderer) → 2 combobox au minimum
+    const combos = screen.queryAllByRole('combobox');
+    expect(combos.length).toBeGreaterThanOrEqual(2);
+    // template_id a un aria-label dédié ; resource_type n'en a pas (rendu standard SchemaFormRenderer)
+    expect(screen.getByLabelText('Template AAP')).toBeInTheDocument();
+  });
+
+  // T6.3 — custom renderer template_id en mode normal : Select avec aria-label "Template AAP"
+  it('aap_template_id_custom_renderer_normal_mode : Select aria-label "Template AAP" visible', () => {
+    vi.mocked(useAAPTemplatesModule.useAAPTemplates).mockReturnValue({
+      templates: [{ id: 1, name: 'Deploy Prod' }],
+      loading: false,
+      fallback: false,
+      error: null,
+    });
+    renderWithForm({ ...defaultProps, platformCap: aapPlatformCap, integrationId: 1 });
+    expect(screen.getByLabelText('Template AAP')).toBeInTheDocument();
+    expect(screen.queryByLabelText('ID template AAP')).not.toBeInTheDocument();
+  });
+
+  // T6.4 — custom renderer template_id en mode fallback : Input avec aria-label "ID template AAP"
+  it('aap_template_id_custom_renderer_fallback_mode : Input aria-label "ID template AAP" visible', () => {
+    vi.mocked(useAAPTemplatesModule.useAAPTemplates).mockReturnValue({
+      templates: [],
+      loading: false,
+      fallback: true,
+      error: null,
+    });
+    renderWithForm({ ...defaultProps, platformCap: aapPlatformCap, integrationId: 1 });
+    expect(screen.getByLabelText('ID template AAP')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Template AAP')).not.toBeInTheDocument();
+  });
+
+  // M1 — AC7 : isReadOnly=true → contrôle AAPTemplateIdRenderer désactivé (Input fallback)
+  it('aap_template_id_disabled_when_isReadOnly : Input fallback disabled quand isReadOnly=true', () => {
+    vi.mocked(useAAPTemplatesModule.useAAPTemplates).mockReturnValue({
+      templates: [],
+      loading: false,
+      fallback: true,
+      error: null,
+    });
+    renderWithForm({ ...defaultProps, platformCap: aapPlatformCap, integrationId: 1, isReadOnly: true });
+    const input = screen.getByLabelText('ID template AAP');
+    expect(input).toBeDisabled();
+  });
+
+  // M2 — Alerte saisie manuelle visible quand fallback=true + error présent même si integrationId est défini
+  it('aap_fallback_alert_shown_when_error_and_integrationId_defined : Alert visible si error truthy même avec integrationId', () => {
+    vi.mocked(useAAPTemplatesModule.useAAPTemplates).mockReturnValue({
+      templates: [],
+      loading: false,
+      fallback: true,
+      error: 'Connection refused',
+    });
+    renderWithForm({ ...defaultProps, platformCap: aapPlatformCap, integrationId: 1 });
+    expect(screen.getByText(/Saisie manuelle/i)).toBeInTheDocument();
   });
 });

@@ -1,14 +1,16 @@
 /**
  * WizardStep2Automatisme — Étape 2 du wizard (Automatisme & Paramètres) extraite de ActionWizard (Story 33.5, Task 5).
- * Contient : WorkflowStepsEditor ou (WizardAAPTemplateSection + ParametersEditor) selon le type.
- * Note : WizardAAPTemplateSection est co-localisé ici car utilisé exclusivement dans cette étape.
+ * Contient : WorkflowStepsEditor ou (SchemaFormRenderer + ParametersEditor) selon le type.
  *
- * Story 83-8: Rendu déclaratif via action_config_schema.
- *   - Schéma vide → rien rendu pour la config plateforme.
- *   - connector_type === 'aap' + schéma non vide → WizardAAPTemplateSection (renderer UX exceptionnel).
- *   - Autre connector + schéma non vide → SchemaFormRenderer générique.
+ * Story 84-6: Exception AAP réduite au strict minimum.
+ *   - Couche rendu : un seul bloc SchemaFormRenderer pour tous les connecteurs y compris AAP.
+ *   - resource_type (enum) → rendu standard automatique par SchemaFormRenderer.
+ *   - template_id (source externe API AAP) → AAPTemplateIdRenderer via customRenderers.
+ *   - isAAP utilisé uniquement pour définir aapCustomRenderers — plus de branchement JSX.
+ *   - Couche payload : buildConnectorConfig() dans ActionWizard conservé sans modification
+ *     (frontière incompressible frontend/backend — cf. commentaire Story 83-14).
  */
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Form, Input, Select, Alert, Space, Radio } from 'antd';
 import type {
   ParameterDefinition,
@@ -22,115 +24,82 @@ import { SchemaFormRenderer } from '../shared';
 import { useAAPTemplates } from '../../hooks/useAAPTemplates';
 import { useDebounce } from '../../hooks/useDebounce';
 
-// ─── WizardAAPTemplateSection (composant local, non exporté) ─────────────────
+// ─── AAPTemplateIdRenderer (renderer local, non exporté) ──────────────────────
+// Encapsule la logique de sélection du template AAP (source externe : API AAP via useAAPTemplates).
+// Le label et la description sont gérés par SchemaFormRenderer (wrapper Form.Item) — ce composant
+// ne fournit que le widget input (même principe que Story 84-5 pour gateCustomRenderers).
 
-interface WizardAAPTemplateSectionProps {
+interface AAPTemplateIdRendererProps {
   integrationId: number | undefined;
-  actionConfig: Record<string, unknown>;
-  onActionConfigChange: (v: Record<string, unknown>) => void;
-  isReadOnly: boolean;
+  resourceType: 'job_template' | 'workflow_job';
+  value: number | undefined;
+  onChange: (v: unknown) => void;
+  disabled: boolean;
 }
 
-function WizardAAPTemplateSection({
+function AAPTemplateIdRenderer({
   integrationId,
-  actionConfig,
-  onActionConfigChange,
-  isReadOnly,
-}: WizardAAPTemplateSectionProps) {
+  resourceType,
+  value,
+  onChange,
+  disabled,
+}: AAPTemplateIdRendererProps) {
   const [searchInput, setSearchInput] = useState('');
   const debouncedSearch = useDebounce(searchInput, 300);
 
-  const aapResourceType = (actionConfig.resource_type as 'job_template' | 'workflow_job') ?? 'job_template';
-  const aapTemplateId = actionConfig.template_id as number | undefined;
-
-  const handleResourceTypeChange = (v: 'job_template' | 'workflow_job') => {
-    onActionConfigChange({ ...actionConfig, resource_type: v });
-  };
-
-  const handleTemplateIdChange = (v: number | undefined) => {
-    onActionConfigChange({ ...actionConfig, template_id: v });
-  };
-
-  const { templates, loading, fallback, error } = useAAPTemplates(integrationId, aapResourceType, debouncedSearch || undefined);
+  const { templates, loading, fallback, error } = useAAPTemplates(
+    integrationId,
+    resourceType,
+    debouncedSearch || undefined,
+  );
 
   const options = templates.map((t) => ({ value: t.id, label: t.name }));
-  if (aapTemplateId && !templates.find((t) => t.id === aapTemplateId) && templates.length > 0) {
-    options.unshift({ value: aapTemplateId, label: `Template #${aapTemplateId} (introuvable)` });
+  if (value && !templates.find((t) => t.id === value) && templates.length > 0) {
+    options.unshift({ value, label: `Template #${value} (introuvable)` });
+  }
+
+  if (fallback) {
+    return (
+      <>
+        {(error || !integrationId) && (
+          <Alert
+            type="warning"
+            showIcon
+            title="Saisie manuelle — liste non disponible"
+            style={{ marginBottom: 8 }}
+          />
+        )}
+        <Input
+          type="number"
+          min={1}
+          value={value ?? ''}
+          onChange={(e) => onChange(e.target.value ? Number(e.target.value) : undefined)}
+          placeholder="ID template AAP"
+          style={{ width: 120 }}
+          aria-label="ID template AAP"
+          disabled={disabled}
+        />
+      </>
+    );
   }
 
   return (
-    <Form.Item label="Quel automatisme appeler ?" style={{ marginBottom: 0 }}>
-      <Space wrap>
-        <Form.Item label="Type de ressource" style={{ marginBottom: 0 }}>
-          <Select
-            value={aapResourceType}
-            onChange={handleResourceTypeChange}
-            options={[
-              { value: 'job_template', label: 'Job template' },
-              { value: 'workflow_job', label: 'Workflow job' },
-            ]}
-            style={{ width: 160 }}
-            aria-label="Type ressource AAP"
-            disabled={isReadOnly}
-          />
-        </Form.Item>
-        {fallback ? (
-          <>
-            {(error || !integrationId) && (
-              <Alert
-                type="warning"
-                showIcon
-                title="Saisie manuelle — liste non disponible"
-                style={{ marginBottom: 8 }}
-              />
-            )}
-            <Form.Item
-              label="ID template (manuel)"
-              required
-              validateStatus={aapTemplateId == null || aapTemplateId < 1 ? 'error' : ''}
-              help={aapTemplateId == null || aapTemplateId < 1 ? 'ID du job template ou workflow job template AAP' : ''}
-              style={{ marginBottom: 0 }}
-            >
-              <Input
-                type="number"
-                min={1}
-                value={aapTemplateId ?? ''}
-                onChange={(e) => handleTemplateIdChange(e.target.value ? Number(e.target.value) : undefined)}
-                placeholder="ID template AAP"
-                style={{ width: 120 }}
-                aria-label="ID template AAP"
-                disabled={isReadOnly}
-              />
-            </Form.Item>
-          </>
-        ) : (
-          <Form.Item
-            label="Template AAP"
-            required
-            validateStatus={aapTemplateId == null || aapTemplateId < 1 ? 'error' : ''}
-            help={aapTemplateId == null || aapTemplateId < 1 ? 'Selectionnez un template AAP' : ''}
-            style={{ marginBottom: 0 }}
-          >
-            <Select
-              showSearch
-              loading={loading}
-              style={{ minWidth: 240 }}
-              value={aapTemplateId ?? undefined}
-              onChange={(val) => handleTemplateIdChange(val)}
-              onSearch={setSearchInput}
-              placeholder="Selectionnez un template"
-              filterOption={(input, opt) =>
-                ((opt?.label as string) ?? '').toLowerCase().includes(input.toLowerCase())
-              }
-              options={options}
-              aria-label="Template AAP"
-              notFoundContent={loading ? 'Chargement...' : 'Aucun template'}
-              disabled={isReadOnly}
-            />
-          </Form.Item>
-        )}
-      </Space>
-    </Form.Item>
+    <Select
+      showSearch
+      loading={loading}
+      style={{ minWidth: 240 }}
+      value={value ?? undefined}
+      onChange={(val) => onChange(val)}
+      onSearch={setSearchInput}
+      placeholder="Sélectionnez un template"
+      filterOption={(input, opt) =>
+        ((opt?.label as string) ?? '').toLowerCase().includes(input.toLowerCase())
+      }
+      options={options}
+      aria-label="Template AAP"
+      notFoundContent={loading ? 'Chargement...' : 'Aucun template'}
+      disabled={disabled}
+    />
   );
 }
 
@@ -141,7 +110,7 @@ export interface WizardStep2AutomatismeProps {
   isReadOnly: boolean;
   /** Story 83-8: remplace connectorType + aapResourceType/aapTemplateId — capabilities complètes. */
   platformCap: PlatformCapability | null;
-  /** ID de l'intégration sélectionnée — nécessaire pour WizardAAPTemplateSection (recherche templates). */
+  /** ID de l'intégration sélectionnée — nécessaire pour AAPTemplateIdRenderer (recherche templates). */
   integrationId?: number;
   /** Story 83-8: état unifié de configuration de plateforme (remplace aapResourceType+aapTemplateId). */
   actionConfig: Record<string, unknown>;
@@ -182,9 +151,27 @@ export function WizardStep2Automatisme({
 }: WizardStep2AutomatismeProps) {
 
   const hasSchema = hasPlatformConfigSchema(platformCap);
-  // Cas exceptionnel connecteur aap : WizardAAPTemplateSection nécessite un composant UI
-  // dédié pour lister et sélectionner les templates depuis l'API AAP — non déclaratisable (Story 83-14)
+  // isAAP utilisé uniquement pour définir aapCustomRenderers — pas de branchement JSX (Story 84-6)
   const isAAP = platformCap?.connector_type === 'aap';
+
+  // Story 84-6: custom renderer pour template_id uniquement (source externe : API AAP).
+  // resource_type est un enum → rendu standard Select par SchemaFormRenderer (aucun custom renderer).
+  // Pattern identique à gateCustomRenderers de Story 84-5 (closure pour accéder à resource_type).
+  const aapCustomRenderers = useMemo(() => {
+    if (!isAAP) return undefined;
+    const resourceType = (actionConfig.resource_type as 'job_template' | 'workflow_job') ?? 'job_template';
+    return {
+      template_id: (value: unknown, onChange: (v: unknown) => void, disabled: boolean) => (
+        <AAPTemplateIdRenderer
+          integrationId={integrationId}
+          resourceType={resourceType}
+          value={value as number | undefined}
+          onChange={onChange}
+          disabled={disabled}
+        />
+      ),
+    };
+  }, [isAAP, integrationId, actionConfig.resource_type]);
 
   return (
     <Space orientation="vertical" style={{ width: '100%' }} size="middle">
@@ -229,22 +216,15 @@ export function WizardStep2Automatisme({
         </Form.Item>
       ) : (
         <>
-          {/* Story 83-8: Rendu déclaratif — règle de choix du renderer */}
-          {hasSchema && isAAP && (
-            <WizardAAPTemplateSection
-              integrationId={integrationId}
-              actionConfig={actionConfig}
-              onActionConfigChange={setActionConfig}
-              isReadOnly={isReadOnly}
-            />
-          )}
-
-          {hasSchema && !isAAP && (
+          {/* Story 84-6: Un seul bloc SchemaFormRenderer gère tous les connecteurs y compris AAP.
+              aapCustomRenderers est undefined pour les connecteurs non-AAP → comportement identique. */}
+          {hasSchema && (
             <SchemaFormRenderer
               schema={platformCap!.action_config_schema as Record<string, unknown>}
               value={actionConfig}
               onChange={setActionConfig}
               disabled={isReadOnly}
+              customRenderers={aapCustomRenderers}
             />
           )}
           <Form.Item
