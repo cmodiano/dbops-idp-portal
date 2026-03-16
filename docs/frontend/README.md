@@ -6,7 +6,6 @@ Documentation technique du frontend React de l'IDP Portal (DBOps).
 
 | Document | Description |
 |----------|-------------|
-| [folder-structure.md](./folder-structure.md) | Structure des dossiers et organisation du code |
 | [components.md](./components.md) | Composants principaux par feature |
 | [state-management.md](./state-management.md) | Contexts, hooks et gestion d'état |
 | [routing.md](./routing.md) | Routes, guards et navigation |

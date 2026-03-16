@@ -1,41 +1,30 @@
 # Documentation IDP Portal
 
-**Date :** 2026-03-07
+Portail développeur interne pour l'orchestration d'opérations de bases de données.
+
+- **Stack** : React 19 + TypeScript (frontend), Django 5.2 + DRF (backend), Oracle 19c+, Redis, Celery
+- **Architecture** : SPA React + API REST Django (`/api/v1`) + WebSocket temps réel
 
 ---
 
-## Vue d'ensemble du projet
+## Navigation
 
-- **Type :** multi-part (2 parties : Frontend + Django Backend)
-- **Langage principal :** TypeScript (frontend), Python 3.12 (backend)
-- **Architecture :** SPA React + API REST Django ; intégration via HTTP JSON (`/api/v1`)
-
----
-
-## Navigation rapide
-
-### Par thème
-
-| Section | Description |
-|--------|-------------|
-| [Vue d'ensemble](overview/project-overview.md) | Résumé, classification, stack technique |
-| [Architecture](architecture/frontend.md) | Frontend, Backend, intégration, patterns |
-| [API](api/documentation.md) | Contrats, référence, self-service |
-| [Backend](backend/README.md) | Django, ADR, runbooks, standards |
-| [Frontend](frontend/README.md) | React, composants, design system |
-| [Opérations](operations/deployment.md) | Déploiement, exploitation |
-| [Sécurité](security/architecture-global.md) | Architecture, audit, compliance |
-| [Intégrations](integrations/index.md) | AAP, ServiceNow, Terraform, etc. |
-| [Référence](reference/development-guide.md) | Guides, conventions, contribution |
+| Section | Point d'entrée | Description |
+|---------|---------------|-------------|
+| Architecture | [workflow-architecture.md](architecture/workflow-architecture.md) | Vue d'ensemble complète du système |
+| Guide développeur | [developer-guide.md](architecture/developer-guide.md) | Référence technique pour les développeurs |
+| API | [documentation.md](api/documentation.md) | Swagger UI, contrats, self-service |
+| Backend | [README.md](backend/README.md) | Modules Django, services, tests |
+| Frontend | [README.md](frontend/README.md) | Composants React, routing, state |
+| Intégrations | [index.md](integrations/index.md) | AAP, ServiceNow, Terraform, GitHub, Azure |
+| Opérations | [deployment.md](operations/deployment.md) | Déploiement, exploitation production |
+| Sécurité | [architecture-global.md](security/architecture-global.md) | Architecture sécurité, compliance |
+| Référence | [glossary.md](reference/glossary.md) | Glossaire, conventions, feature flags |
 
 ---
 
 ## Démarrer
 
-1. **Lire** [Vue d'ensemble du projet](overview/project-overview.md) et [Architecture d'intégration](architecture/integration.md).
-2. **Développement :** [Guide de développement](reference/development-guide.md) (frontend : `npm run dev` ; backend : venv + `python manage.py runserver`).
-3. **Contribution :** [Guide de contribution](reference/contribution-guide.md).
-
----
-
-*Documentation consolidée – MkDocs Material. Point d'entrée pour le développement assisté par IA.*
+1. Lire [Architecture des workflows](architecture/workflow-architecture.md) pour comprendre le système
+2. Consulter le [Guide développeur](architecture/developer-guide.md) pour la référence technique
+3. Suivre le [Guide de développement](reference/development-guide.md) pour le setup local

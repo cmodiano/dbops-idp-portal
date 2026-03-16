@@ -2,23 +2,12 @@
 
 Documentation d'architecture du projet IDP Portal.
 
-## Documents principaux
+## Documents
 
-- [Architecture Frontend](frontend.md)
-- [Architecture Backend](backend.md)
-- [Architecture d'intégration](integration.md)
-- [Patterns d'architecture](patterns.md)
-
-## Compléments
-
-- [Stratégie de cache](caching-strategy.md)
-- [Architecture des conteneurs](container-architecture.md)
-- [Configuration as Code – Stratégie](configuration-as-code-strategy.md) ✅ Document référence (Story 64-17)
-- [Configuration as Code – Implémentation](configuration-as-code-implementation-guide.md) ✅ Document référence (Story 64-17)
-- [Plan complet: Temporal-like orchestration sans Temporal](temporal-advantages-without-temporal-implementation-plan.md)
-- [Reset dev workflows/actions via seed](dev-reset-workflows-actions-via-seed.md)
-- [Decommission ancien code path workflow (dev-only)](dev-decommission-legacy-workflow-code-path.md)
-- [Infrastructure as Code – Stratégie](infrastructure-as-code-strategy.md) ⚠️ OBSOLÈTE — remplacé par configuration-as-code-strategy.md
-- [Infrastructure as Code – Implémentation](infrastructure-as-code-implementation-guide.md) ⚠️ OBSOLÈTE — remplacé par configuration-as-code-implementation-guide.md
-- [Analyse : Actions parallèles dans les workflows](parallel-workflow-actions-analysis.md)
-- [Investigation : Reprise d'approbation](approval-resume-investigation.md)
+| Document | Description |
+|----------|-------------|
+| [Architecture des workflows](workflow-architecture.md) | Vue d'ensemble complète : composants, schéma BD, cycle de vie, machine à états, gates, retry, auth, observabilité |
+| [Guide développeur](developer-guide.md) | Référence technique : stack, structure projet, modules Django, runtime, step handlers, Celery, React, debugging |
+| [Stratégie de cache](caching-strategy.md) | Cache in-memory TTLCache, invalidation, patterns |
+| [Configuration as Code](configuration-as-code-strategy.md) | Paradigme Git-as-source-of-truth, import/export YAML |
+| [Architecture conteneurs](container-architecture.md) | Docker, orchestration locale |

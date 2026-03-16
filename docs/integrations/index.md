@@ -1,7 +1,14 @@
 # Intégrations
 
-Analyses et guides d'intégration avec des plateformes externes.
+Documentation des plateformes externes intégrées au portail IDP.
 
-## Documents
+## Plateformes
 
-Voir les fichiers dans ce répertoire pour les analyses d'intégration (AAP, Ansible Tower, Azure DevOps, GitHub Actions, ServiceNow, Terraform Cloud, etc.).
+| Plateforme | Document |
+|------------|----------|
+| AAP (Ansible Automation Platform) | [aap-integration-analysis.md](aap-integration-analysis.md) |
+| Ansible Tower / AWX | [ansible-tower-integration-analysis.md](ansible-tower-integration-analysis.md) |
+| Azure DevOps Pipelines | [azure-devops-integration-analysis.md](azure-devops-integration-analysis.md) |
+| GitHub Actions | [github-actions-integration-analysis.md](github-actions-integration-analysis.md) |
+| ServiceNow | [servicenow-integration-analysis.md](servicenow-integration-analysis.md) |
+| Terraform Cloud | [terraform-cloud-integration-analysis.md](terraform-cloud-integration-analysis.md) |

@@ -2,36 +2,27 @@
 
 Bienvenue dans le projet IDP Portal ! Ce guide couvre tout ce qu'un nouveau développeur doit savoir pour être productif rapidement.
 
-## Documents d'onboarding
+## Par où commencer
 
-| Document | Description |
-|----------|-------------|
-| [Guide de migration FastAPI → Django](./django-migration-guide.md) | Différences clés, patterns équivalents, structure projet, conventions tests |
+1. Lire l'[Architecture des workflows](../../architecture/workflow-architecture.md) pour comprendre le système
+2. Consulter le [Guide développeur](../../architecture/developer-guide.md) pour la référence technique complète
+3. Lire le [Guide de développement](../../reference/development-guide.md) pour le setup local
 
-## Documentation complémentaire
+## Documentation clé
 
-### Architecture et décisions
+### Architecture
 
-- [ADRs (Architecture Decision Records)](../decisions/README.md) — Décisions architecturales documentées
-- [Notes migration DRF](../drf-api-migration-notes.md) — Notes détaillées de la migration API
-- [Architecture SSO](../sso-architecture.md) — Authentification SAML 2.0 + JWT
+- [Architecture SSO](../sso.md) — Authentification SAML 2.0 + JWT
+- [RBAC](../rbac.md) — Permissions et contrôle d'accès
+- [Observabilité](../observability.md) — Logging structuré, corrélation
 
 ### Standards de développement
 
-- [Checklist nouveaux endpoints](../standards/endpoint-checklist.md) — Checklist PR pour tout nouvel endpoint DRF
-- [Pièges sécurité courants](../security-django/common-pitfalls.md) — Erreurs fréquentes et solutions
-- [Checklist sécurité pré-PR](../security-django/pre-pr-checklist.md) — Auto-review sécurité avant PR
-
-### Tests
-
-- README Tests — `idp-portal/django_backend/tests/README.md` (dépôt)
-- Issues connues — `idp-portal/django_backend/tests/KNOWN_ISSUES.md` (dépôt)
-
-### Observabilité
-
-- [Architecture observabilité](../observability-architecture.md) — Logging structuré, corrélation
-- [Runbook observabilité](../observability-runbook.md) — Guide opérationnel
-- [Conventions de logging](../logging-conventions.md) — Structlog et format des logs
+- [Checklist nouveaux endpoints](../endpoint-checklist.md) — Checklist PR pour tout nouvel endpoint DRF
+- [Pièges sécurité courants](../security-common-pitfalls.md) — Erreurs fréquentes et solutions
+- [Checklist sécurité pré-PR](../security-pre-pr-checklist.md) — Auto-review sécurité avant PR
+- [Conventions de logging](../logging-conventions.md) — structlog et format des logs
+- [Guide mypy](../mypy-developer-guide.md) — Typage strict
 
 ## Démarrage rapide
 
@@ -53,8 +44,3 @@ pip install -r requirements-dev.txt
 # 5. Lancer le serveur de développement
 .venv/bin/python manage.py runserver
 ```
-
-## Contacts
-
-- **Epic 12** : Documentation technique complète (en cours)
-- **Epic M** : Migration FastAPI → Django (terminée)
