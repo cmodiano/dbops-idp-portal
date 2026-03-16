@@ -124,7 +124,7 @@ class AdapterTimeoutError(ServiceUnavailableError):
         details: dict | None = None,
     ) -> None:
         extra: dict = {"adapter_type": adapter_type}
-        if platform_job_id:
+        if platform_job_id is not None:
             extra["platform_job_id"] = platform_job_id
         if details:
             extra.update(details)
