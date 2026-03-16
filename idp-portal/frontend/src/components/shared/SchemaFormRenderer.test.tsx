@@ -389,6 +389,104 @@ describe('SchemaFormRenderer — label fallback', () => {
 });
 
 // ---------------------------------------------------------------------------
+// AC1 — customRenderers prop
+// ---------------------------------------------------------------------------
+describe('SchemaFormRenderer — customRenderers', () => {
+  it('custom renderer fourni pour field_a est appelé et son output est dans le DOM', () => {
+    const schema = {
+      properties: {
+        field_a: { type: 'string', title: 'Champ A' },
+      },
+    };
+    render(
+      <SchemaFormRenderer
+        schema={schema}
+        value={{ field_a: 'hello' }}
+        onChange={vi.fn()}
+        customRenderers={{
+          field_a: () => <button>custom-widget-a</button>,
+        }}
+      />
+    );
+    expect(screen.getByRole('button', { name: /custom-widget-a/i })).toBeInTheDocument();
+    // Le rendu standard (textbox) ne doit pas être présent
+    expect(screen.queryByRole('textbox', { name: /champ a/i })).not.toBeInTheDocument();
+  });
+
+  it('schema à 2 props avec custom renderer sur 1 seule — les deux sont rendus correctement', () => {
+    const schema = {
+      properties: {
+        field_a: { type: 'string', title: 'Champ A' },
+        field_b: { type: 'string', title: 'Champ B' },
+      },
+    };
+    render(
+      <SchemaFormRenderer
+        schema={schema}
+        value={{ field_a: 'a', field_b: 'b' }}
+        onChange={vi.fn()}
+        customRenderers={{
+          field_a: () => <button>custom-widget-a</button>,
+        }}
+      />
+    );
+    // field_a : custom renderer
+    expect(screen.getByRole('button', { name: /custom-widget-a/i })).toBeInTheDocument();
+    // field_b : rendu standard (textbox)
+    expect(screen.getByRole('textbox', { name: /champ b/i })).toBeInTheDocument();
+  });
+
+  it('label du schema est affiché autour du custom renderer', () => {
+    const schema = {
+      properties: {
+        field_a: { type: 'string', title: 'Mon Label', description: 'Ma description' },
+      },
+    };
+    render(
+      <SchemaFormRenderer
+        schema={schema}
+        value={{ field_a: '' }}
+        onChange={vi.fn()}
+        customRenderers={{
+          field_a: () => <span data-testid="custom-input">widget</span>,
+        }}
+      />
+    );
+    // Le label du schema doit être visible
+    expect(screen.getByText('Mon Label')).toBeInTheDocument();
+    // La description aussi
+    expect(screen.getByText('Ma description')).toBeInTheDocument();
+    // Le custom input est là
+    expect(screen.getByTestId('custom-input')).toBeInTheDocument();
+  });
+
+  it('disabled=true est transmis au custom renderer via le 3e argument', () => {
+    const receivedArgs: boolean[] = [];
+    const schema = {
+      properties: {
+        field_a: { type: 'string', title: 'Champ A' },
+      },
+    };
+    render(
+      <SchemaFormRenderer
+        schema={schema}
+        value={{ field_a: 'test' }}
+        onChange={vi.fn()}
+        disabled={true}
+        customRenderers={{
+          field_a: (_value, _onChange, isDisabled) => {
+            receivedArgs.push(isDisabled);
+            return <span data-testid="custom-disabled">widget</span>;
+          },
+        }}
+      />
+    );
+    expect(screen.getByTestId('custom-disabled')).toBeInTheDocument();
+    expect(receivedArgs).toContain(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // AC1.4 — schéma vide
 // ---------------------------------------------------------------------------
 describe('SchemaFormRenderer — empty schema', () => {

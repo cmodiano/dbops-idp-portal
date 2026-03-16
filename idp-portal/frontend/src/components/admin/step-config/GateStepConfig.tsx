@@ -6,11 +6,12 @@
  * sélectionné (Story 83-9 — logique déclarative, suppression des branches hardcodées gate_type=approval).
  */
 
-import type { FC } from 'react';
+import { type FC, useMemo } from 'react';
 import { Input, Select, Typography } from 'antd';
 import type { WorkflowStepNodeData } from '../WorkflowStepNode';
 import { useApproverProfiles } from '../../../hooks/useApproverProfiles';
 import { useWorkflowStepCapabilities } from '../../../hooks/useWorkflowStepCapabilities';
+import { SchemaFormRenderer } from '../../shared/SchemaFormRenderer';
 
 const { Text } = Typography;
 
@@ -47,10 +48,53 @@ export const GateStepConfig: FC<GateStepConfigProps> = ({
   const configSchema = (selectedVariant?.config_schema ?? {}) as {
     properties?: Record<string, unknown>;
   };
-  const hasContextFrom = !!configSchema.properties?.context_from;
   const hasApproverProfiles = !!configSchema.properties?.approver_profile_ids;
 
   const { approverProfileOptions, loading: approverProfilesLoading } = useApproverProfiles(hasApproverProfiles);
+
+  // T4 — Bridge gateConfigValue / handleGateConfigChange (Story 84-5, AC2)
+  const gateConfigValue: Record<string, unknown> = {
+    context_from: data.context_from,
+    approver_profile_ids: data.approver_profile_ids,
+  };
+
+  const handleGateConfigChange = (newValues: Record<string, unknown>) => {
+    onUpdate({
+      context_from: (newValues.context_from as string[] | null) ?? null,
+      approver_profile_ids: (newValues.approver_profile_ids as number[] | null) ?? null,
+    });
+  };
+
+  // T5 — Custom renderers pour les champs à source de données externe (Story 84-5, AC3)
+  const gateCustomRenderers = useMemo(() => ({
+    context_from: (value: unknown, onChange: (v: unknown) => void, isDisabled: boolean) => (
+      <Select
+        mode="multiple"
+        style={{ width: '100%' }}
+        size="small"
+        value={(value as string[] | null) ?? []}
+        onChange={(vals: string[]) => onChange(vals.length > 0 ? vals : null)}
+        placeholder="Sélectionner des étapes"
+        disabled={isDisabled}
+        aria-label="Contexte pour l'approbateur"
+        options={stepOptions}
+      />
+    ),
+    approver_profile_ids: (value: unknown, onChange: (v: unknown) => void, isDisabled: boolean) => (
+      <Select
+        mode="multiple"
+        style={{ width: '100%' }}
+        size="small"
+        loading={approverProfilesLoading}
+        value={(value as number[] | null) ?? []}
+        onChange={(vals: number[]) => onChange(vals.length > 0 ? vals : null)}
+        placeholder="Tous les profils approbateurs éligibles (si vide)"
+        disabled={isDisabled}
+        aria-label="Profils approbateurs"
+        options={approverProfileOptions}
+      />
+    ),
+  }), [stepOptions, approverProfileOptions, approverProfilesLoading, disabled]);
 
   return (
     <div data-testid="gate-step-config">
@@ -64,13 +108,22 @@ export const GateStepConfig: FC<GateStepConfigProps> = ({
           size="small"
           value={data.gate_type ?? undefined}
           onChange={(value) => {
-            // Story 83-9, AC5 : réinitialiser les champs non déclarés par le nouveau gate variant
+            // Story 84-5, AC4 : reset générique — itère les clés du schema
             const newVariant = gateVariants.find((v) => v.code === value);
             const newSchema = (newVariant?.config_schema ?? {}) as { properties?: Record<string, unknown> };
+            const newProperties = newSchema.properties ?? {};
+
+            const resetUpdates: Partial<Record<string, null>> = {};
+            for (const key of Object.keys(configSchema.properties ?? {})) {
+              if (!newProperties[key]) {
+                resetUpdates[key] = null;
+              }
+            }
+
             onUpdate({
               gate_type: value,
-              context_from: newSchema.properties?.context_from ? data.context_from : null,
-              approver_profile_ids: newSchema.properties?.approver_profile_ids ? data.approver_profile_ids : null,
+              context_from: resetUpdates.context_from !== undefined ? null : data.context_from,
+              approver_profile_ids: resetUpdates.approver_profile_ids !== undefined ? null : data.approver_profile_ids,
             });
           }}
           placeholder="Sélectionner un type"
@@ -115,54 +168,14 @@ export const GateStepConfig: FC<GateStepConfigProps> = ({
         />
       </div>
 
-      {/* context_from — déclaratif : rendu si config_schema le déclare (Story 83-9, AC3) */}
-      {hasContextFrom && (
-        <div style={{ marginBottom: 12 }}>
-          <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
-            Contexte à afficher à l'approbateur (context_from)
-          </Text>
-          <Select
-            mode="multiple"
-            style={{ width: '100%' }}
-            size="small"
-            value={data.context_from ?? []}
-            onChange={(value) => onUpdate({ context_from: value.length > 0 ? value : null })}
-            placeholder="Sélectionner des étapes"
-            disabled={disabled}
-            aria-label="Contexte pour l'approbateur"
-            options={stepOptions}
-          />
-          <Text type="secondary" style={{ fontSize: 11, marginTop: 4, display: 'block' }}>
-            Step IDs dont le résultat sera visible par l'approbateur
-          </Text>
-        </div>
-      )}
-
-      {/* approver_profile_ids — déclaratif : rendu si config_schema le déclare (Story 83-9, AC3) */}
-      {hasApproverProfiles && (
-        <div style={{ marginBottom: 12 }}>
-          <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
-            Profils approbateurs autorisés
-          </Text>
-          <Select
-            mode="multiple"
-            style={{ width: '100%' }}
-            size="small"
-            loading={approverProfilesLoading}
-            value={data.approver_profile_ids ?? []}
-            onChange={(value: number[]) =>
-              onUpdate({ approver_profile_ids: value.length > 0 ? value : null })
-            }
-            placeholder="Tous les profils approbateurs éligibles (si vide)"
-            disabled={disabled}
-            aria-label="Profils approbateurs"
-            options={approverProfileOptions}
-          />
-          <Text type="secondary" style={{ fontSize: 11, marginTop: 4, display: 'block' }}>
-            Laisser vide pour autoriser tous les profils avec is_approver=true
-          </Text>
-        </div>
-      )}
+      {/* Champs config_schema — Story 84-5, AC2/AC3 : route via SchemaFormRenderer avec custom renderers */}
+      <SchemaFormRenderer
+        schema={configSchema as Record<string, unknown>}
+        value={gateConfigValue}
+        onChange={handleGateConfigChange}
+        disabled={disabled}
+        customRenderers={gateCustomRenderers}
+      />
     </div>
   );
 };

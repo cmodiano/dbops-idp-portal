@@ -1,4 +1,4 @@
-import type { FC, ReactNode } from 'react';
+import { type FC, type ReactNode } from 'react';
 import { useRef, useState } from 'react';
 import { Input, InputNumber, Select, Switch, Button } from 'antd';
 import { Typography } from 'antd';
@@ -15,6 +15,12 @@ export interface SchemaFormRendererProps {
   onChange?: (values: Record<string, unknown>) => void;
   /** Désactive tous les inputs (défaut : false). */
   disabled?: boolean;
+  /**
+   * Renderers personnalisés pour des propriétés spécifiques du schema.
+   * La fonction reçoit (value, onChange, disabled) et retourne l'input widget uniquement.
+   * Le wrapper label + description est conservé par SchemaFormRenderer.
+   */
+  customRenderers?: Record<string, (value: unknown, onChange: (v: unknown) => void, disabled: boolean) => ReactNode>;
 }
 
 /**
@@ -32,6 +38,7 @@ export const SchemaFormRenderer: FC<SchemaFormRendererProps> = ({
   value = {},
   onChange,
   disabled = false,
+  customRenderers,
 }) => {
   const properties = schema.properties as Record<string, Record<string, unknown>> | undefined;
 
@@ -40,7 +47,7 @@ export const SchemaFormRenderer: FC<SchemaFormRendererProps> = ({
   return (
     <div>
       {Object.entries(properties).map(([key, propSchema]) =>
-        renderProperty(key, propSchema, value, onChange, disabled)
+        renderProperty(key, propSchema, value, onChange, disabled, customRenderers)
       )}
     </div>
   );
@@ -56,6 +63,7 @@ function renderProperty(
   parentValue: Record<string, unknown>,
   onChange?: (v: Record<string, unknown>) => void,
   disabled = false,
+  customRenderers?: Record<string, (value: unknown, onChange: (v: unknown) => void, disabled: boolean) => ReactNode>,
 ): ReactNode {
   const label = (propSchema.title as string) ?? key;
   const description = propSchema.description as string | undefined;
@@ -65,6 +73,24 @@ function renderProperty(
   const handleChange = (newFieldVal: unknown) => {
     onChange?.({ ...parentValue, [key]: newFieldVal });
   };
+
+  // Custom renderer prend priorité sur le rendu standard (input seulement)
+  if (customRenderers?.[key]) {
+    const customInput = customRenderers[key](parentValue[key], handleChange, disabled);
+    return (
+      <div key={key} style={{ marginBottom: 12 }}>
+        <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
+          {label}
+        </Text>
+        {customInput}
+        {description && (
+          <Text type="secondary" style={{ fontSize: 11, marginTop: 4, display: 'block' }}>
+            {description}
+          </Text>
+        )}
+      </div>
+    );
+  }
 
   let input: React.ReactNode;
 
@@ -141,6 +167,7 @@ function renderProperty(
               subValue,
               (newSub) => handleChange(newSub),
               disabled,
+              customRenderers,
             )
           )}
         </div>
