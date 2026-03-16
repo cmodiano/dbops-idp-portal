@@ -24,17 +24,21 @@ def _validate_action_config_schema(platform_code: str, action_config: dict | Non
     Si le schéma est vide ({}) → no-op (aucune contrainte).
     Si le schéma est non vide → validation jsonschema.
 
-    AC5 Story 83-13: normalise le code avant lookup (platform_code peut être 'AAP', 'Azure DevOps', etc.)
-    Note Story 83-14: le flux 'Terraform' → lower+replace → 'terraform' → resolve_alias → 'terraform_cloud'
-    dépend activement de l'alias 'terraform' défini dans platforms/registry.py.
+    Story 84-7: utilise get_by_action_platform_code() pour une conversion BD → domaine explicite et centralisée.
+    Lookup direct (case-sensitive) sur la valeur stockée en BD (ex: 'AAP', 'Azure DevOps', 'Terraform').
+
+    Args:
+        platform_code: Valeur stockée dans Action.platform (code BD, ex: 'AAP', 'Azure DevOps').
+        action_config: Dictionnaire de configuration action à valider, ou None (traité comme {}).
+
+    Raises:
+        serializers.ValidationError: Si action_config ne respecte pas le schéma de la plateforme.
     """
     if not platform_code:
         return
     try:
-        normalized = platform_code.lower().replace(' ', '_')
-        resolved = platform_registry.resolve_alias(normalized)
-        defn = platform_registry.get(resolved)
-    except Exception:
+        defn = platform_registry.get_by_action_platform_code(platform_code)
+    except KeyError:
         return  # Plateforme inconnue → laisse les autres validateurs gérer
 
     schema = defn.action_config_schema
@@ -520,8 +524,8 @@ class ActionCreateSerializer(ActionFieldValidationMixin, serializers.Serializer)
                 raise serializers.ValidationError("platform is required for action type")
 
         # Story 82.8, AC3: validate action_config against platform schema.
-        # Story 83-13 AC5: platform_code est maintenant le code canonique (ex: 'AAP') — la normalisation
-        # dans _validate_action_config_schema sert de garde-fou défensif.
+        # Story 83-13 AC5: platform_code est le code BD (ex: 'AAP') dérivé depuis integration.
+        # Story 84-7: _validate_action_config_schema utilise get_by_action_platform_code() — lookup direct, pas de normalisation.
         # NOTE: action_config field does not yet exist on the Action model — ne valider que si
         # action_config est explicitement fourni dans le payload (pas de validation implicite sur None).
         platform = data.get('platform')

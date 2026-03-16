@@ -26,6 +26,7 @@ class PlatformRegistry:
     def __init__(self) -> None:
         self._registry: dict[str, PlatformDefinition] = {}  # code → definition
         self._aliases: dict[str, str] = {}  # alias → canonical code
+        self._action_platform_codes: dict[str, PlatformDefinition] = {}  # action_platform_code → definition
 
     def register(self, definition: PlatformDefinition) -> None:
         """Enregistre une PlatformDefinition.
@@ -39,6 +40,8 @@ class PlatformRegistry:
         self._registry[definition.code] = definition
         for alias in definition.aliases:
             self._aliases[alias] = definition.code
+        # Index reverse action_platform_code → definition (Story 84-7)
+        self._action_platform_codes[definition.action_platform_code] = definition
 
     def get(self, code: str) -> PlatformDefinition:
         """Retourne la PlatformDefinition pour un code canonique.
@@ -82,6 +85,22 @@ class PlatformRegistry:
             Code canonique si alias connu, sinon 'code' inchangé.
         """
         return self._aliases.get(code, code)
+
+    def get_by_action_platform_code(self, code: str) -> PlatformDefinition:
+        """Retourne la PlatformDefinition pour un code ActionPlatform (valeur BD).
+
+        Permet la conversion reverse : 'AAP' → PlatformDefinition(code='aap', ...)
+
+        Args:
+            code: Valeur telle que stockée dans Action.platform (ex: 'AAP', 'Azure DevOps')
+
+        Returns:
+            PlatformDefinition correspondante.
+
+        Raises:
+            KeyError: Si le code n'est pas reconnu.
+        """
+        return self._action_platform_codes[code]
 
     def list_types(self) -> list[str]:
         """Retourne la liste des codes canoniques enregistrés.
@@ -190,9 +209,9 @@ platform_registry.register(PlatformDefinition(
 platform_registry.register(PlatformDefinition(
     code="terraform_cloud",
     display_name="Terraform Cloud",
-    # Alias 'terraform' activement consommé par _validate_action_config_schema (action.py) :
-    # action_platform_code='Terraform' → normalisé 'terraform' → résolu 'terraform_cloud'.
-    # Également consommé par trigger.py / integrations/tasks.py pour des données BD historiques.
+    # Alias 'terraform' consommé par trigger.py / integrations/tasks.py pour des données BD historiques.
+    # Note: _validate_action_config_schema utilise désormais get_by_action_platform_code('Terraform')
+    # directement (Story 84-7) — cet alias n'est plus utilisé dans ce flux.
     aliases=frozenset({"terraform"}),
     icon="terraform",
     connector_type="terraform",

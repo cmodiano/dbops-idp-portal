@@ -273,3 +273,46 @@ def test_registry_register_and_get():
     retrieved = registry.get("myplatform")
     assert retrieved.runtime_kwargs_required == ("token",)
     assert retrieved.runtime_kwargs_optional == {"timeout": 30}
+
+
+# ─────────────────────────────────────────────
+# Tests Story 84-7 — get_by_action_platform_code
+# ─────────────────────────────────────────────
+
+def test_get_by_action_platform_code_all_platforms():
+    """T5.1 — Les 5 codes BD retournent la bonne PlatformDefinition."""
+    assert platform_registry.get_by_action_platform_code("AAP").code == "aap"
+    assert platform_registry.get_by_action_platform_code("Tower").code == "tower"
+    assert platform_registry.get_by_action_platform_code("GitHub Actions").code == "github_actions"
+    assert platform_registry.get_by_action_platform_code("Azure DevOps").code == "azure_devops"
+    assert platform_registry.get_by_action_platform_code("Terraform").code == "terraform_cloud"
+
+
+def test_get_by_action_platform_code_unknown_raises_keyerror():
+    """T5.2 — Code inconnu lève KeyError."""
+    with pytest.raises(KeyError):
+        platform_registry.get_by_action_platform_code("UnknownPlatform")
+
+
+def test_get_by_action_platform_code_case_sensitive():
+    """T5.3 — Lookup case-sensitive : 'aap' (lowercase) → KeyError (valeur BD exacte requise)."""
+    with pytest.raises(KeyError):
+        platform_registry.get_by_action_platform_code("aap")
+
+
+def test_register_indexes_action_platform_code():
+    """T5.4 — register() construit bien l'index action_platform_code → definition."""
+    registry = PlatformRegistry()
+    defn = PlatformDefinition(
+        code="testplatform",
+        display_name="Test Platform",
+        aliases=frozenset(),
+        icon="test",
+        connector_type="test",
+        action_platform_code="TestPlatform",
+        supports_health_check=False,
+    )
+    registry.register(defn)
+    retrieved = registry.get_by_action_platform_code("TestPlatform")
+    assert retrieved.code == "testplatform"
+    assert retrieved is defn

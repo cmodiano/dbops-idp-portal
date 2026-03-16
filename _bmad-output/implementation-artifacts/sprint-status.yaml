@@ -1027,7 +1027,7 @@ development_status:
     84-4-formulaires-service-schema-driven-complets: done # S1-S4 — input_schema, validation F/B, ui_hints, services non opérationnels
     84-5-gate-step-config-renderer-generique: done # G2 — GateStepConfig branché sur SchemaFormRenderer
     84-6-reduire-exception-aap: done # P1 — AAP au strict minimum ou chemin déclaratif
-    84-7-simplifier-action-platform-conversions-legacy: backlog # P2,P3 — Un seul code métier, PlatformDefinition
+    84-7-simplifier-action-platform-conversions-legacy: done # P2,P3 — Un seul code métier, PlatformDefinition
     84-8-completer-usage-schemas-plateformes: backlog # P4 — runtime_config_schema, health_check_policy
     84-9-schema-form-renderer-usage-partout: backlog # B.5 — WizardStep2Automatisme et flux restants
     epic-84-retrospective: optional

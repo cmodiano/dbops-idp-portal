@@ -301,3 +301,90 @@ class TestActionPlatformIntegrationE2E(TestCase):
             'integration_id': self.integration_servicenow.id,
         }, format='json')
         self.assertEqual(response.status_code, http_status.HTTP_400_BAD_REQUEST)
+
+
+@pytest.mark.django_db
+class TestValidateActionConfigUsesRegistryMethod(TestCase):
+    """Story 84-7 (T6.1) — _validate_action_config_schema() fonctionne via get_by_action_platform_code()."""
+
+    def setUp(self):
+        self.user = UserFactory(username='testuser', profile='DBA')
+        RefEngine.objects.create(code='Oracle', label='Oracle', display_order=1, is_active=1)
+
+        for code, name in [
+            ('aap', 'AAP'),
+            ('tower', 'Ansible Tower'),
+            ('github_actions', 'GitHub Actions'),
+            ('azure_devops', 'Azure DevOps'),
+            ('terraform_cloud', 'Terraform Cloud'),
+        ]:
+            IntegrationTypeCatalogueFactory(code=code, name=name, integration_role=IntegrationRole.PLATFORM)
+
+        self.integrations = {
+            'AAP': IntegrationFactory(type='aap', name='Test AAP'),
+            'Tower': IntegrationFactory(type='tower', name='Test Tower'),
+            'GitHub Actions': IntegrationFactory(type='github_actions', name='Test GitHub'),
+            'Azure DevOps': IntegrationFactory(type='azure_devops', name='Test Azure'),
+            'Terraform': IntegrationFactory(type='terraform_cloud', name='Test Terraform'),
+        }
+
+    def test_validate_action_config_uses_registry_method(self):
+        """T6.1 — La validation schéma fonctionne pour tous les 5 codes BD via get_by_action_platform_code().
+
+        AAP et Tower ont un action_config_schema non vide (template_id requis) — on passe un config valide.
+        Les autres ont un schéma vide → pas de validation.
+        """
+        valid_aap_config = {'resource_type': 'job_template', 'template_id': 42}
+
+        # AAP — schéma non vide, config valide → is_valid()
+        serializer = ActionCreateSerializer(data={
+            'name': 'AAP Action',
+            'item_type': 'action',
+            'engine': 'Oracle',
+            'integration_id': self.integrations['AAP'].id,
+            'action_config': valid_aap_config,
+        })
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(serializer.validated_data['platform'], 'AAP')
+
+        # Tower — même schéma que AAP, config valide → is_valid()
+        serializer = ActionCreateSerializer(data={
+            'name': 'Tower Action',
+            'item_type': 'action',
+            'engine': 'Oracle',
+            'integration_id': self.integrations['Tower'].id,
+            'action_config': valid_aap_config,
+        })
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(serializer.validated_data['platform'], 'Tower')
+
+        # GitHub Actions — schéma vide → is_valid() sans action_config
+        serializer = ActionCreateSerializer(data={
+            'name': 'GitHub Action',
+            'item_type': 'action',
+            'engine': 'Oracle',
+            'integration_id': self.integrations['GitHub Actions'].id,
+        })
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(serializer.validated_data['platform'], 'GitHub Actions')
+
+        # Azure DevOps — schéma vide → is_valid() sans action_config
+        serializer = ActionCreateSerializer(data={
+            'name': 'Azure Action',
+            'item_type': 'action',
+            'engine': 'Oracle',
+            'integration_id': self.integrations['Azure DevOps'].id,
+        })
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(serializer.validated_data['platform'], 'Azure DevOps')
+
+        # Terraform — schéma vide → is_valid() sans action_config
+        serializer = ActionCreateSerializer(data={
+            'name': 'Terraform Action',
+            'item_type': 'action',
+            'engine': 'Oracle',
+            'integration_id': self.integrations['Terraform'].id,
+        })
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(serializer.validated_data['platform'], 'Terraform')
+

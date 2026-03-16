@@ -44,6 +44,12 @@ class PlatformDefinition:
     icon: str
     connector_type: str
     action_platform_code: str
+    """Valeur stockée dans la colonne Action.platform (contrainte CHECK Oracle).
+
+    Représentation lisible BD héritée (ex: 'AAP', 'Azure DevOps') ≠ code canonique (ex: 'aap', 'azure_devops').
+    Conversion inverse : platform_registry.get_by_action_platform_code(code).
+    Ne pas utiliser directement comme code métier — utiliser PlatformDefinition.code.
+    """
     supports_health_check: bool
     runtime_kwargs_required: tuple[str, ...] = field(default_factory=tuple)
     runtime_kwargs_optional: dict[str, object] = field(default_factory=dict)

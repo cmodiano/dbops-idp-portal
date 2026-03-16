@@ -23,26 +23,26 @@ class TestValidateActionConfigSchema:
     def test_unknown_platform_is_noop(self):
         """Plateforme inconnue dans le registry → pas de validation (silencieux)."""
         from platforms.registry import platform_registry
-        with patch.object(platform_registry, 'get', side_effect=KeyError('unknown')):
+        with patch.object(platform_registry, 'get_by_action_platform_code', side_effect=KeyError('unknown')):
             # Should not raise
-            _validate_action_config_schema('unknown_platform', {'some': 'config'})
+            _validate_action_config_schema('UnknownPlatform', {'some': 'config'})
 
     def test_empty_schema_is_noop(self):
         """Schéma vide {} → pas de validation (aucune contrainte)."""
         defn_mock = MagicMock()
         defn_mock.action_config_schema = {}
         from platforms.registry import platform_registry
-        with patch.object(platform_registry, 'get', return_value=defn_mock):
+        with patch.object(platform_registry, 'get_by_action_platform_code', return_value=defn_mock):
             # Should not raise even with invalid data
-            _validate_action_config_schema('aap', {'invalid': 'anything'})
+            _validate_action_config_schema('AAP', {'invalid': 'anything'})
 
     def test_none_schema_is_noop(self):
         """Schéma None → pas de validation."""
         defn_mock = MagicMock()
         defn_mock.action_config_schema = None
         from platforms.registry import platform_registry
-        with patch.object(platform_registry, 'get', return_value=defn_mock):
-            _validate_action_config_schema('aap', {'invalid': 'anything'})
+        with patch.object(platform_registry, 'get_by_action_platform_code', return_value=defn_mock):
+            _validate_action_config_schema('AAP', {'invalid': 'anything'})
 
     def test_nonempty_schema_valid_config_passes(self):
         """Schéma non vide + config valide → pas d'erreur."""
@@ -53,9 +53,9 @@ class TestValidateActionConfigSchema:
             'required': ['target_host'],
         }
         from platforms.registry import platform_registry
-        with patch.object(platform_registry, 'get', return_value=defn_mock):
+        with patch.object(platform_registry, 'get_by_action_platform_code', return_value=defn_mock):
             # Should not raise
-            _validate_action_config_schema('aap', {'target_host': 'server01'})
+            _validate_action_config_schema('AAP', {'target_host': 'server01'})
 
     def test_nonempty_schema_invalid_config_raises(self):
         """Schéma non vide + config invalide → ValidationError."""
@@ -66,9 +66,9 @@ class TestValidateActionConfigSchema:
             'required': ['target_host'],
         }
         from platforms.registry import platform_registry
-        with patch.object(platform_registry, 'get', return_value=defn_mock):
+        with patch.object(platform_registry, 'get_by_action_platform_code', return_value=defn_mock):
             with pytest.raises(drf_serializers.ValidationError) as exc_info:
-                _validate_action_config_schema('aap', {})  # manque target_host
+                _validate_action_config_schema('AAP', {})  # manque target_host
             assert 'action_config' in exc_info.value.detail
 
     def test_none_action_config_treated_as_empty_dict(self):
@@ -80,9 +80,9 @@ class TestValidateActionConfigSchema:
             'required': ['target_host'],
         }
         from platforms.registry import platform_registry
-        with patch.object(platform_registry, 'get', return_value=defn_mock):
+        with patch.object(platform_registry, 'get_by_action_platform_code', return_value=defn_mock):
             with pytest.raises(drf_serializers.ValidationError):
-                _validate_action_config_schema('aap', None)
+                _validate_action_config_schema('AAP', None)
 
     def test_schema_with_wrong_type_raises(self):
         """Schéma non vide + config avec mauvais type → ValidationError."""
@@ -93,9 +93,9 @@ class TestValidateActionConfigSchema:
             'required': ['timeout'],
         }
         from platforms.registry import platform_registry
-        with patch.object(platform_registry, 'get', return_value=defn_mock):
+        with patch.object(platform_registry, 'get_by_action_platform_code', return_value=defn_mock):
             with pytest.raises(drf_serializers.ValidationError) as exc_info:
-                _validate_action_config_schema('aap', {'timeout': 'not_an_int'})
+                _validate_action_config_schema('AAP', {'timeout': 'not_an_int'})
             assert 'action_config' in exc_info.value.detail
 
     def test_malformed_schema_raises_validation_error(self):
@@ -106,14 +106,19 @@ class TestValidateActionConfigSchema:
             'properties': {'x': {'type': 'invalid_type'}},  # type invalide → SchemaError
         }
         from platforms.registry import platform_registry
-        with patch.object(platform_registry, 'get', return_value=defn_mock):
+        with patch.object(platform_registry, 'get_by_action_platform_code', return_value=defn_mock):
             with pytest.raises(drf_serializers.ValidationError) as exc_info:
-                _validate_action_config_schema('aap', {'x': 'value'})
+                _validate_action_config_schema('AAP', {'x': 'value'})
             assert 'action_config' in exc_info.value.detail
 
 
 class TestValidateActionConfigSchemaNormalization:
-    """Story 83-13 AC5 : normalisation du platform_code avant lookup dans le registry."""
+    """Story 83-13 AC5 (legacy) / Story 84-7 : validation directe par get_by_action_platform_code().
+
+    Ces tests vérifient que _validate_action_config_schema() accepte les codes BD exacts
+    (ex: 'AAP', 'Tower', 'Azure DevOps') et les résout via get_by_action_platform_code()
+    sans normalisation implicite (lower/replace supprimé en Story 84-7).
+    """
 
     def test_uppercase_aap_normalized_and_validated_valid(self):
         """'AAP' normalisé → 'aap' → schema AAP validé avec config valide."""
