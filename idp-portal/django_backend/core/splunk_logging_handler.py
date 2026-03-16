@@ -13,6 +13,11 @@ Configuration (environment variables or Django settings):
 - SPLUNK_FLUSH_INTERVAL: Flush interval in seconds (default: 5)
 - SPLUNK_BATCH_SIZE: Max events before auto-flush (default: 100)
 - SPLUNK_MAX_BUFFER_SIZE: Max buffer size before dropping old events (default: 1000)
+
+Limitation de durabilité : Le buffer est en mémoire (queue.Queue). Les événements bufferisés
+sont perdus si le process redémarre avant le flush. Les événements droppés (buffer plein ou
+HEC indisponible) ne sont pas récupérables. Surveiller splunk_events_dropped dans Splunk
+pour détecter les pertes.
 """
 from __future__ import annotations
 
@@ -106,6 +111,7 @@ class SplunkLoggingHandler(logging.Handler):
         self._timer: threading.Timer | None = None
         self._lock = threading.Lock()
         self._closed = False
+        self._dropped_count: int = 0
 
         # Check if handler is enabled (has URL configured)
         self.enabled = bool(self.hec_url)
@@ -147,6 +153,8 @@ class SplunkLoggingHandler(logging.Handler):
             if self._buffer.full():
                 try:
                     self._buffer.get_nowait()
+                    self._dropped_count += 1
+                    logger.warning("splunk_buffer_full_event_dropped", dropped_total=self._dropped_count)
                 except queue.Empty:
                     pass
 
@@ -227,13 +235,18 @@ class SplunkLoggingHandler(logging.Handler):
                 loop.close()
 
         except Exception as exc:  # noqa: BLE001 — best-effort-non-critical: Splunk unavailable, log warning and drop events
-            # Splunk unavailable: log warning locally, drop events
-            # Use standard logging to avoid recursion
-            logging.getLogger(__name__).warning(
-                "splunk_hec_unavailable: %s — dropped %d events",
-                str(exc),
-                len(events),
+            self._dropped_count += len(events)
+            logger.warning(
+                "splunk_events_dropped",
+                dropped_count=len(events),
+                dropped_total=self._dropped_count,
+                error=str(exc),
             )
+
+    @property
+    def dropped_count(self) -> int:
+        """Total number of events dropped since handler creation."""
+        return self._dropped_count
 
     def close(self) -> None:
         """Close the handler: flush remaining events and stop timer."""
@@ -245,3 +258,24 @@ class SplunkLoggingHandler(logging.Handler):
         if self.enabled:
             self.flush()
         super().close()
+
+
+def get_splunk_handler_stats() -> dict:
+    """Return stats from the first active SplunkLoggingHandler found in logging hierarchy.
+
+    Returns:
+        Dict with keys: buffer_qsize (int), dropped_count (int), enabled (bool).
+        Returns zeros/False if no handler found.
+    """
+    handlers_to_check: list = list(logging.root.handlers)
+    for _, lg in logging.Logger.manager.loggerDict.items():
+        if isinstance(lg, logging.Logger):
+            handlers_to_check.extend(lg.handlers)
+    for h in handlers_to_check:
+        if isinstance(h, SplunkLoggingHandler) and h.enabled and not h._closed:
+            return {
+                "buffer_qsize": h._buffer.qsize(),
+                "dropped_count": h.dropped_count,
+                "enabled": True,
+            }
+    return {"buffer_qsize": 0, "dropped_count": 0, "enabled": False}

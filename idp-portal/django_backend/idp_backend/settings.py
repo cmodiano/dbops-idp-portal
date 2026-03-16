@@ -750,6 +750,7 @@ CELERY_TASK_TIME_LIMITS = {
     "health_check_all_integrations": {"soft": 300, "hard": 330},           # 5min — dispatch
     "warmup_vault_secrets_cache": {"soft": 120, "hard": 150},              # 2min — cache warmup
     "reconcile_stale_executions": {"soft": 120, "hard": 150},              # 2min — startup reconciliation
+    "flush_splunk_logging_handler": {"soft": 30, "hard": 60},              # 30s — in-process flush
 }
 
 # ============================================================================

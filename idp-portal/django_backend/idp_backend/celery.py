@@ -310,3 +310,21 @@ if _outbox_schedule > 0:
         'task': 'executions.tasks.process_outbox_entries',
         'schedule': _outbox_schedule,
     }
+
+# Story 86.9: Splunk batch durability — periodic safety flush for Celery workers
+# Default interval = 30s. Set CELERY_BEAT_SPLUNK_FLUSH_INTERVAL env var to override (seconds).
+try:
+    _splunk_flush_schedule = float(os.getenv('CELERY_BEAT_SPLUNK_FLUSH_INTERVAL', '30.0'))
+except ValueError as exc:
+    logger.warning(
+        "celery_beat_invalid_splunk_flush_interval: value=%r error=%s fallback=30.0",
+        os.getenv('CELERY_BEAT_SPLUNK_FLUSH_INTERVAL'),
+        exc,
+    )
+    _splunk_flush_schedule = 30.0
+
+if _splunk_flush_schedule > 0:
+    app.conf.beat_schedule['flush-splunk-logging-handler'] = {
+        'task': 'core.tasks.flush_splunk_logging_handler',
+        'schedule': _splunk_flush_schedule,
+    }
