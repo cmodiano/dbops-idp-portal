@@ -1064,7 +1064,7 @@ development_status:
     # Objectif: Revoir toute la documentation MkDocs en français — workflows détaillés, frontend, Docker, dev/extensibilité, schéma BD
     epic-87: in-progress
     87-1-documentation-architecture-workflows-detaillee: done # Flow complet workflows: queue jobs, trigger, poll, gates, opérations BD, patterns (Outbox, RUNNABLE_STEPS)
-    87-2-documentation-structure-frontend-consommation-backend: backlog # Structure frontend, api_client, services, JSON Schemas (parameters_schema, useDynamicForm)
+    87-2-documentation-structure-frontend-consommation-backend: ready-for-dev # Structure frontend, api_client, services, JSON Schemas (parameters_schema, useDynamicForm)
     87-3-documentation-architecture-conteneurs-docker: backlog # Rôle de chaque conteneur (redis, oracle, backend, celery-worker, celery-beat, frontend), flux réseau
     87-4-documentation-developpement-extensibilite: backlog # Registries (Adapter, Platform, Service, Gate, StepHandler), comment ajouter gates/adapters/services
     87-5-documentation-schema-base-donnees: backlog # Toutes les tables, colonnes, descriptions, diagramme ER à jour
