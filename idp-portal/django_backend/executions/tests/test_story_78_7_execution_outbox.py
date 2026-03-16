@@ -202,7 +202,7 @@ class TestAC2WriteEntry:
             created_by="test-user",
         )
 
-        with patch("executions.services.workflow_commands.find_step_config", return_value=None):
+        with patch("executions.app.command_processor.find_step_config", return_value=None):
             with transaction.atomic():
                 WorkflowCommandService._handle_approve(cmd)
 
@@ -236,7 +236,7 @@ class TestAC2WriteEntry:
             created_by="test-user",
         )
 
-        with patch("executions.services.workflow_commands.find_step_config", return_value=None):
+        with patch("executions.app.command_processor.find_step_config", return_value=None):
             with transaction.atomic():
                 WorkflowCommandService._handle_reject(cmd)
 

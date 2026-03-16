@@ -219,9 +219,9 @@ class TestProcessRunnableStepsMetrics:
         """Verify that process_runnable_steps calls logger.info with metric fields."""
         mock_depth = {"pending": 3, "running": 1, "expired_leases": 2}
 
-        with patch("executions.tasks.orchestration_worker.get_runnable_queue_depth", return_value=mock_depth) as mock_get_depth, \
-             patch("executions.tasks.orchestration_worker.WorkQueue.claim", return_value=[]), \
-             patch("executions.tasks.orchestration_worker.logger") as mock_logger:
+        with patch("executions.app.orchestrator.get_runnable_queue_depth", return_value=mock_depth) as mock_get_depth, \
+             patch("executions.app.orchestrator.WorkQueue.claim", return_value=[]), \
+             patch("executions.app.orchestrator.logger") as mock_logger:
 
             from executions.tasks.orchestration_worker import process_runnable_steps
             process_runnable_steps()
@@ -239,9 +239,9 @@ class TestProcessRunnableStepsMetrics:
         """Verify the task return dict includes runnable_queue_depth."""
         mock_depth = {"pending": 5, "running": 0, "expired_leases": 0}
 
-        with patch("executions.tasks.orchestration_worker.get_runnable_queue_depth", return_value=mock_depth), \
-             patch("executions.tasks.orchestration_worker.WorkQueue.claim", return_value=[]), \
-             patch("executions.tasks.orchestration_worker.logger"):
+        with patch("executions.app.orchestrator.get_runnable_queue_depth", return_value=mock_depth), \
+             patch("executions.app.orchestrator.WorkQueue.claim", return_value=[]), \
+             patch("executions.app.orchestrator.logger"):
 
             from executions.tasks.orchestration_worker import process_runnable_steps
             result = process_runnable_steps()
