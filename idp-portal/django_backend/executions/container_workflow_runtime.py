@@ -25,6 +25,7 @@ import structlog
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any, List, NamedTuple, cast
 
+from django.conf import settings
 from django.db import close_old_connections, transaction
 from django.utils import timezone
 
@@ -196,6 +197,8 @@ class ContainerWorkflowRuntime:
 
         # Transition counter for loop detection
         self._transition_count = 0
+        # Story 86.10: flag pour limiter le WARNING approche-limite à une seule émission par runtime
+        self._warning_emitted = False
 
         # Contexte partagé des outputs de steps (ADR-007 §3a)
         self._step_outputs: dict[str, dict] = {}
@@ -370,7 +373,19 @@ class ContainerWorkflowRuntime:
         if parallel_context is None:
             self._step_order_counter += 1
             self._transition_count += 1
-            if self._transition_count > MAX_STEP_TRANSITIONS:
+            max_transitions = getattr(settings, 'MAX_STEP_TRANSITIONS', MAX_STEP_TRANSITIONS)
+            warning_threshold = int(0.8 * max_transitions)
+            if not self._warning_emitted and self._transition_count >= warning_threshold:
+                logger.warning(
+                    "container_workflow_step_limit_approaching",
+                    execution_id=self.execution.id,
+                    transition_count=self._transition_count,
+                    max_transitions=max_transitions,
+                    warning_threshold=warning_threshold,
+                    correlation_id=self.correlation_id,
+                )
+                self._warning_emitted = True
+            if self._transition_count > max_transitions:
                 logger.error(
                     "container_workflow_loop_detected",
                     execution_id=self.execution.id,
@@ -468,8 +483,6 @@ class ContainerWorkflowRuntime:
 
         Story 67.2 — AC1, AC2, AC3, AC4.
         """
-        from django.conf import settings  # noqa: PLC0415
-
         sub_steps: list[dict] = []
         for sid in step_ids:
             sub_step = self._step_lookup_by_id.get(sid)
@@ -491,7 +504,23 @@ class ContainerWorkflowRuntime:
                 pre_allocated[sub_step['step_id']] = self._step_order_counter
             self._transition_count += len(sub_steps)
 
-        if self._transition_count > MAX_STEP_TRANSITIONS:
+        # Thread-safety note: _warning_emitted and _transition_count are checked outside the
+        # lock intentionally — _execute_fan_out is always called from the main BFS thread, never
+        # from worker threads (_execute_step with parallel_context skips this counter path).
+        # GIL atomicity on bool assignment is sufficient here.
+        max_transitions = getattr(settings, 'MAX_STEP_TRANSITIONS', MAX_STEP_TRANSITIONS)
+        warning_threshold = int(0.8 * max_transitions)
+        if not self._warning_emitted and self._transition_count >= warning_threshold:
+            logger.warning(
+                "container_workflow_step_limit_approaching",
+                execution_id=self.execution.id,
+                transition_count=self._transition_count,
+                max_transitions=max_transitions,
+                warning_threshold=warning_threshold,
+                correlation_id=self.correlation_id,
+            )
+            self._warning_emitted = True
+        if self._transition_count > max_transitions:
             logger.error(
                 "container_workflow_loop_detected_fan_out",
                 execution_id=self.execution.id,

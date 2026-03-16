@@ -1056,7 +1056,7 @@ development_status:
     # --- Low ---
     86-8-health-check-endpoint-timeout: done # code-review 2026-03-16: H1 fix shutdown(wait=False) après FuturesTimeoutError + H2 test both-timeout AC#7 + M3 fix FuturesTimeoutError import tests, 17/17 tests pass
     86-9-splunk-batch-durability: done # code-review 2026-03-16: M1 fix _dropped_count false positive (move inside try block) + M2 remove redundant logging re-import + M3 add _closed check in get_splunk_handler_stats() + M4 dedup handlers in tasks.py + L5 unused name var. 32/32 tests pass
-    86-10-warning-max-step-transitions: backlog # container_workflow_runtime.py — WARNING à 80% limite, ERROR au plafond, settings.MAX_STEP_TRANSITIONS configurable
+    86-10-warning-max-step-transitions: done # code-review 2026-03-16: H1 test fan-out WARNING path manquant (AC#3), M2 comment thread-safety hors lock fan-out, M3 assert settings vs constante. 36/36 tests pass
     86-11-retry-backoff-jitter: backlog # services.py + api_client.ts — full jitter sur backoff (random.uniform / Math.random) pour éviter thundering herd
     epic-86-retrospective: optional
     # === Epic 87: Documentation complète de la solution ===

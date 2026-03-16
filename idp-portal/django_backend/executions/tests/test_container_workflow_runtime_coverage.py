@@ -5,7 +5,7 @@ Couvre les branches non couvertes par les tests existants.
 import json
 import pytest
 from unittest.mock import patch
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from executions.container_workflow_runtime import ContainerWorkflowRuntime, MAX_STEP_TRANSITIONS
@@ -114,6 +114,98 @@ class TestExecuteStepLoopDetection(TestCase):
         step = {"order": 1, "name": "Step 1", "referenced_action_id": self.action_a.id, "step_id": "s1"}
         result = runtime._execute_step(step)
         self.assertEqual(result, ExecutionStatus.FAILED)
+
+    @patch('executions.container_workflow_runtime.logger')
+    @patch('executions.container_workflow_runtime.AuditService')
+    def test_step_limit_warning_at_80_percent(self, mock_audit, mock_logger):
+        """transition_count atteint 80% → WARNING loggé, exécution continue."""
+        execution = Execution.objects.create(
+            action=self.wf, user=self.user, environment=TEST_ENV, status=ExecutionStatus.RUNNING,
+        )
+        runtime = ContainerWorkflowRuntime(execution)
+        warning_threshold = int(0.8 * MAX_STEP_TRANSITIONS)
+        runtime._transition_count = warning_threshold - 1  # devient warning_threshold après +1
+
+        step = {"order": 1, "name": "Step 1", "referenced_action_id": self.action_a.id, "step_id": "s1"}
+        with patch.object(runtime, '_execute_platform_step', return_value=ExecutionStatus.COMPLETED):
+            result = runtime._execute_step(step)
+
+        warning_calls = [
+            c for c in mock_logger.warning.call_args_list
+            if c[0][0] == 'container_workflow_step_limit_approaching'
+        ]
+        self.assertEqual(len(warning_calls), 1)
+        call_kwargs = warning_calls[0][1]
+        self.assertEqual(call_kwargs['transition_count'], warning_threshold)
+        self.assertEqual(call_kwargs['max_transitions'], MAX_STEP_TRANSITIONS)
+        self.assertEqual(result, ExecutionStatus.COMPLETED)
+
+    @patch('executions.container_workflow_runtime.logger')
+    @patch('executions.container_workflow_runtime.AuditService')
+    def test_step_limit_warning_emitted_only_once(self, mock_audit, mock_logger):
+        """WARNING loggé une seule fois même si _execute_step appelé plusieurs fois au-dessus du seuil."""
+        execution = Execution.objects.create(
+            action=self.wf, user=self.user, environment=TEST_ENV, status=ExecutionStatus.RUNNING,
+        )
+        runtime = ContainerWorkflowRuntime(execution)
+        warning_threshold = int(0.8 * MAX_STEP_TRANSITIONS)
+        runtime._transition_count = warning_threshold - 1  # deviendra threshold au 1er appel
+
+        step = {"order": 1, "name": "Step 1", "referenced_action_id": self.action_a.id, "step_id": "s1"}
+        with patch.object(runtime, '_execute_platform_step', return_value=ExecutionStatus.COMPLETED):
+            runtime._execute_step(step)  # 1er appel : WARNING émis
+            runtime._execute_step(step)  # 2ème appel : pas de 2ème WARNING
+
+        warning_calls = [
+            c for c in mock_logger.warning.call_args_list
+            if c[0][0] == 'container_workflow_step_limit_approaching'
+        ]
+        self.assertEqual(len(warning_calls), 1)
+
+    @patch('executions.container_workflow_runtime.AuditService')
+    @override_settings(MAX_STEP_TRANSITIONS=50)
+    def test_max_step_transitions_configurable_via_settings(self, mock_audit):
+        """override_settings(MAX_STEP_TRANSITIONS=50) → limite effective = 50."""
+        from django.conf import settings as django_settings
+        execution = Execution.objects.create(
+            action=self.wf, user=self.user, environment=TEST_ENV, status=ExecutionStatus.RUNNING,
+        )
+        runtime = ContainerWorkflowRuntime(execution)
+        runtime._transition_count = 50  # devient 51 > 50 → FAILED
+
+        step = {"order": 1, "name": "Step 1", "referenced_action_id": self.action_a.id, "step_id": "s1"}
+        result = runtime._execute_step(step)
+        self.assertEqual(result, ExecutionStatus.FAILED)
+        # Vérifie que la limite lue est bien celle de settings (50), pas la constante module (100)
+        self.assertEqual(getattr(django_settings, 'MAX_STEP_TRANSITIONS', MAX_STEP_TRANSITIONS), 50)
+
+    @patch('executions.container_workflow_runtime.logger')
+    @patch('executions.container_workflow_runtime.AuditService')
+    def test_fan_out_step_limit_warning_at_80_percent(self, mock_audit, mock_logger):
+        """_execute_fan_out : transition_count atteint 80% → WARNING loggé (AC#3 — path fan-out)."""
+        execution = Execution.objects.create(
+            action=self.wf, user=self.user, environment=TEST_ENV, status=ExecutionStatus.RUNNING,
+        )
+        runtime = ContainerWorkflowRuntime(execution)
+        warning_threshold = int(0.8 * MAX_STEP_TRANSITIONS)
+        # Placer le compteur à (threshold - 1) ; le fan-out d'1 sub-step l'amène à warning_threshold
+        runtime._transition_count = warning_threshold - 1
+        step = {"order": 1, "name": "Step 1", "referenced_action_id": self.action_a.id, "step_id": "s1"}
+        runtime._step_lookup_by_id = {"s1": step}
+
+        with patch.object(runtime, '_execute_step', return_value=ExecutionStatus.COMPLETED), \
+             patch.object(runtime, '_apply_join_policy', return_value=[]):
+            status, _ = runtime._execute_fan_out(["s1"])
+
+        warning_calls = [
+            c for c in mock_logger.warning.call_args_list
+            if c[0][0] == 'container_workflow_step_limit_approaching'
+        ]
+        self.assertEqual(len(warning_calls), 1)
+        call_kwargs = warning_calls[0][1]
+        self.assertEqual(call_kwargs['transition_count'], warning_threshold)
+        self.assertEqual(call_kwargs['max_transitions'], MAX_STEP_TRANSITIONS)
+        self.assertEqual(status, ExecutionStatus.COMPLETED)
 
 
 # ─── Tests simulation error path ─────────────────────────────────────────────

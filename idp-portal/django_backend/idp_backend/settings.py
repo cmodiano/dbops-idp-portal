@@ -850,6 +850,11 @@ PARALLEL_GROUP_MAX_WORKERS = int(os.environ.get('PARALLEL_GROUP_MAX_WORKERS', '5
 # dans le thread principal — doit être inférieur au soft_time_limit Celery de la tâche (600s).
 PARALLEL_GROUP_STEP_TIMEOUT_S = int(os.environ.get('PARALLEL_GROUP_STEP_TIMEOUT_S', '300'))
 
+# Story 86.10: Limite de transitions de steps pour la détection de boucle infinie
+# Configurable via env var MAX_STEP_TRANSITIONS (défaut: 100).
+# WARNING loggé à 80% de cette limite dans ContainerWorkflowRuntime.
+MAX_STEP_TRANSITIONS = int(os.environ.get('MAX_STEP_TRANSITIONS', '100'))
+
 # Story 86.8: Global deadline for concurrent external health checks (seconds)
 HEALTH_CHECK_GLOBAL_TIMEOUT = int(os.getenv('HEALTH_CHECK_GLOBAL_TIMEOUT', '10'))
 
