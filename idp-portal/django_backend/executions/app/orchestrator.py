@@ -175,7 +175,7 @@ def _force_finalize_execution(
                 correlation_id=execution.correlation_id,
             )
         except Exception:
-            logger.debug("audit_trail_best_effort_failed", execution_id=execution.id, correlation_id=execution.correlation_id, exc_info=True)
+            logger.warning("audit_trail_best_effort_failed", execution_id=execution.id, correlation_id=execution.correlation_id, exc_info=True)
 
 
 def _finalize_execution_if_done(execution: Execution, outcome: ExecutionStatus) -> None:
@@ -270,7 +270,7 @@ def _finalize_execution_if_done(execution: Execution, outcome: ExecutionStatus) 
                 correlation_id=execution.correlation_id,
             )
         except Exception:
-            logger.debug("audit_trail_best_effort_failed", execution_id=execution.id, correlation_id=execution.correlation_id, exc_info=True)
+            logger.warning("audit_trail_best_effort_failed", execution_id=execution.id, correlation_id=execution.correlation_id, exc_info=True)
 
 
 @shared_task(

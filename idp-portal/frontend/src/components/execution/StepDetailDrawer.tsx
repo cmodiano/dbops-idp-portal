@@ -8,9 +8,10 @@
  * of the child action instead of raw JSON.
  */
 
-import { useMemo } from 'react';
-import { Drawer, Space, Typography, Badge, Alert, Card, Spin, List, theme } from 'antd';
+import { useMemo, useState } from 'react';
+import { Drawer, Space, Typography, Badge, Alert, Card, Spin, List, theme, Button, Input } from 'antd';
 import { CloseOutlined, CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined, ClockCircleOutlined, BranchesOutlined } from '@ant-design/icons';
+import { approveExecution, rejectExecution } from '../../services/execution_core';
 import { FormattedJson } from '../common/FormattedJson';
 import { StructuredErrorCard } from './StructuredErrorCard';
 import { ExecutionTimeline } from './ExecutionTimeline';
@@ -41,6 +42,8 @@ interface StepDetailDrawerProps {
   executionSteps: ExecutionStepResponse[];
   workflowSteps: WorkflowStep[];
   onClose: () => void;
+  /** Appelé après une action d'approbation/refus pour notifier le parent. */
+  onApprovalAction?: () => void;
 }
 
 /** Calculate human-readable duration between two timestamps or elapsed time. */
@@ -62,8 +65,13 @@ export function StepDetailDrawer({
   executionSteps,
   workflowSteps,
   onClose,
+  onApprovalAction,
 }: StepDetailDrawerProps) {
   const { token } = theme.useToken();
+  const [approveLoading, setApproveLoading] = useState(false);
+  const [rejectLoading, setRejectLoading] = useState(false);
+  const [comment, setComment] = useState('');
+  const [approvalError, setApprovalError] = useState<string | null>(null);
 
   // AC10: Find selected step from data already loaded (no fetch)
   const selectedStep = useMemo(() => {
@@ -115,7 +123,14 @@ export function StepDetailDrawer({
 
   const workflowStep = selectedStep?.workflowStep ?? null;
   const executionStep = selectedStep?.executionStep ?? null;
-  const stepTitle = workflowStep?.name || workflowStep?.action_name || (workflowStep ? `Étape ${workflowStep.order}` : '');
+
+  const isApprovalGate = workflowStep?.step_type === 'gate' && workflowStep.gate_type === 'approval';
+  const isWaitingApproval = isApprovalGate && executionStep?.status === 'WAITING';
+
+  const gateDisplayName = workflowStep?.step_type === 'gate'
+    ? (workflowStep.gate_type === 'approval' ? 'Approbation manuelle' : 'Fenêtre de maintenance')
+    : null;
+  const stepTitle = workflowStep?.name || gateDisplayName || workflowStep?.action_name || (workflowStep ? `Étape ${workflowStep.order}` : '');
 
   // Story 65.6: Detect parallel_group to show sub-steps panel
   const isParallelGroup = workflowStep?.step_type === 'parallel_group';
@@ -285,6 +300,72 @@ export function StepDetailDrawer({
               />
             )}
           </Card>
+        ) : isWaitingApproval ? (
+          <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+            <Alert
+              type="warning"
+              showIcon
+              title="Approbation requise"
+              description="Cette étape nécessite une approbation manuelle avant de continuer l'exécution du workflow."
+            />
+            {approvalError && (
+              <Alert type="error" showIcon description={approvalError} closable onClose={() => setApprovalError(null)} />
+            )}
+            <Card size="small" title={<span style={{ fontSize: 13 }}>Commentaire (optionnel)</span>}>
+              <Input.TextArea
+                rows={3}
+                placeholder="Ajouter un commentaire..."
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+              />
+            </Card>
+            <Space size={12}>
+              <Button
+                type="primary"
+                icon={<CheckCircleOutlined />}
+                loading={approveLoading}
+                disabled={rejectLoading}
+                onClick={async () => {
+                  setApproveLoading(true);
+                  setApprovalError(null);
+                  try {
+                    await approveExecution(executionId, comment || undefined);
+                    setComment('');
+                    onApprovalAction?.();
+                    onClose();
+                  } catch (err) {
+                    setApprovalError(err instanceof Error ? err.message : 'Erreur lors de l\'approbation');
+                  } finally {
+                    setApproveLoading(false);
+                  }
+                }}
+              >
+                Approuver
+              </Button>
+              <Button
+                danger
+                icon={<CloseCircleOutlined />}
+                loading={rejectLoading}
+                disabled={approveLoading}
+                onClick={async () => {
+                  setRejectLoading(true);
+                  setApprovalError(null);
+                  try {
+                    await rejectExecution(executionId, comment || undefined);
+                    setComment('');
+                    onApprovalAction?.();
+                    onClose();
+                  } catch (err) {
+                    setApprovalError(err instanceof Error ? err.message : 'Erreur lors du refus');
+                  } finally {
+                    setRejectLoading(false);
+                  }
+                }}
+              >
+                Refuser
+              </Button>
+            </Space>
+          </Space>
         ) : !executionStep ? (
           // AC10: Step not yet executed
           <Alert

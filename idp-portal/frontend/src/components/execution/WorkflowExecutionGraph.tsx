@@ -150,8 +150,9 @@ function WorkflowExecutionGraphInner({
   // Skip real-time for terminal executions (no need to poll/WS for completed/failed/cancelled)
   const isTerminal = execution ? (TERMINAL_STATUSES as readonly string[]).includes(execution.status) : false;
 
-  // Story 38.6: DIP — use hook instead of direct service import for terminal steps
-  const { steps: staticSteps, error: stepsError } = useExecutionSteps(executionId, isTerminal);
+  // Always fetch steps once on mount for initial display (terminal or not).
+  // Non-terminal executions need this to show steps created before WS connected (e.g. WAITING gate).
+  const { steps: staticSteps, error: stepsError } = useExecutionSteps(executionId, true);
 
   // Skip WebSocket entirely in simulation mode (no WS server in Docker/dev)
   const forcePolling = import.meta.env.VITE_SIMULATE_EXECUTION === 'true';
@@ -162,12 +163,14 @@ function WorkflowExecutionGraphInner({
     enabled: !isTerminal && (forcePolling || ws.error != null),
   });
 
-  // Merge steps: terminal → static fetch, polling → polling, WS → WS
-  const executionSteps: ExecutionStepResponse[] = isTerminal
+  // Merge steps: real-time takes precedence when available, static fetch is the initial fallback.
+  // This ensures WAITING gate steps (created before WS connected) are visible immediately.
+  const realtimeSteps: ExecutionStepResponse[] = isTerminal
     ? staticSteps
     : forcePolling
       ? polling.steps
       : (ws.error == null ? ws.steps : polling.steps);
+  const executionSteps: ExecutionStepResponse[] = realtimeSteps.length > 0 ? realtimeSteps : staticSteps;
   // Live execution from real-time only (NOT from prop — that would cause infinite loop)
   const liveExecutionFromRealtime = !isTerminal
     ? (forcePolling ? polling.execution : (ws.error == null ? ws.execution : polling.execution))
@@ -466,6 +469,7 @@ function WorkflowExecutionGraphInner({
         executionSteps={executionSteps}
         workflowSteps={workflowSteps}
         onClose={() => setSelectedStepId(null)}
+        onApprovalAction={() => setSelectedStepId(null)}
       />
 
       {/* AC3: Subtle pulse animation for active (RUNNING) step — defined in WorkflowExecutionGraph.css */}

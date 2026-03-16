@@ -146,8 +146,8 @@ class TestForceFinalizeBestEffortLogging:
             exc_info=True,
         )
 
-    def test_audit_failure_logged_as_debug(self):
-        """_force_finalize_execution logs audit errors at debug level."""
+    def test_audit_failure_logged_as_warning(self):
+        """_force_finalize_execution logs audit errors at warning level (compliance-critical)."""
         from executions.app.orchestrator import _force_finalize_execution
 
         execution = MagicMock()
@@ -164,9 +164,50 @@ class TestForceFinalizeBestEffortLogging:
              patch("core.services.AuditService.create_entry", side_effect=RuntimeError("db down")):
             _force_finalize_execution(execution, ExecutionStatus.FAILED)
 
-        mock_logger.debug.assert_any_call(
+        mock_logger.warning.assert_any_call(
             "audit_trail_best_effort_failed",
             execution_id=42,
             correlation_id="corr-456",
+            exc_info=True,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Story 88.3 — BUG-BE-03: _finalize_execution_if_done logs audit failures at warning
+# ---------------------------------------------------------------------------
+
+
+class TestFinalizeIfDoneAuditLogging:
+    """BUG-BE-03: _finalize_execution_if_done logs audit trail failures at warning level."""
+
+    def test_audit_failure_logged_as_warning_in_finalize_if_done(self):
+        """_finalize_execution_if_done logs audit errors at warning level (compliance-critical)."""
+        from executions.app.orchestrator import _finalize_execution_if_done
+
+        execution = MagicMock()
+        execution.id = 43
+        execution.status = ExecutionStatus.RUNNING
+        execution.correlation_id = "corr-789"
+
+        step_filter_mock = MagicMock()
+        step_filter_mock.exists.return_value = False
+
+        exec_filter_mock = MagicMock()
+        exec_exclude_mock = MagicMock()
+        exec_filter_mock.exclude.return_value = exec_exclude_mock
+        exec_exclude_mock.update.return_value = 1  # CAS matched
+
+        with patch("executions.app.orchestrator.ExecutionStep.objects.filter", return_value=step_filter_mock), \
+             patch("executions.app.orchestrator.Execution.objects.filter", return_value=exec_filter_mock), \
+             patch("executions.app.orchestrator.assert_execution_transition"), \
+             patch("executions.app.orchestrator.logger") as mock_logger, \
+             patch("executions.container_workflow_runtime._broadcast_terminal"), \
+             patch("core.services.AuditService.create_entry", side_effect=RuntimeError("db down")):
+            _finalize_execution_if_done(execution, ExecutionStatus.COMPLETED)
+
+        mock_logger.warning.assert_any_call(
+            "audit_trail_best_effort_failed",
+            execution_id=43,
+            correlation_id="corr-789",
             exc_info=True,
         )

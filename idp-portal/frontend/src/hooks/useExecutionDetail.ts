@@ -22,6 +22,7 @@ export interface UseExecutionDetailReturn {
   selectedExecution: ExecutionResponse | null;
   selectedSteps: ExecutionStepResponse[];
   selectedActionDetail: CatalogActionDetail | null;
+  actionDetailUnavailable: boolean;
   loading: boolean;
   error: string | null;
   openExecution: (record: ExecutionResponse) => Promise<void>;
@@ -39,6 +40,7 @@ export const useExecutionDetail = (): UseExecutionDetailReturn => {
   const [selectedActionDetail, setSelectedActionDetail] = useState<CatalogActionDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [actionDetailUnavailable, setActionDetailUnavailable] = useState(false);
 
   const loadExecutionDetail = useCallback(async (id: number) => {
     setDrawerOpen(true);
@@ -47,6 +49,7 @@ export const useExecutionDetail = (): UseExecutionDetailReturn => {
     setSelectedExecution(null);
     setSelectedSteps([]);
     setSelectedActionDetail(null);
+    setActionDetailUnavailable(false);
 
     try {
       const [execution, steps] = await Promise.all([
@@ -59,8 +62,9 @@ export const useExecutionDetail = (): UseExecutionDetailReturn => {
         try {
           const { data } = await fetchCatalogActionById(execution.action_id);
           setSelectedActionDetail(data);
-        } catch {
-          // Fallback: show timeline if action detail fails
+        } catch (err) {
+          void err; // action detail unavailable, falling back to timeline only
+          setActionDetailUnavailable(true);
         }
       }
     } catch (err) {
@@ -100,6 +104,7 @@ export const useExecutionDetail = (): UseExecutionDetailReturn => {
     selectedExecution,
     selectedSteps,
     selectedActionDetail,
+    actionDetailUnavailable,
     loading,
     error,
     openExecution,

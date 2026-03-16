@@ -1080,7 +1080,7 @@ development_status:
     epic-88: in-progress
     88-1-quick-fixes-backend-bugs-securite: done # BUG-BE-01, ERR-BE-01, CELERY-BE-01, SEC-BE-01, TEST-BE-01
     88-2-quick-fixes-frontend-bugs-erreurs: done # BUG-FE-01, ERR-FE-01
-    88-3-bugs-erreurs-restants: backlog # BUG-BE-02/03, BUG-FE-02/03, ERR-FE-02/03
+    88-3-bugs-erreurs-restants: done # BUG-BE-02/03, BUG-FE-02/03, ERR-FE-02/03 — code review 2026-03-16
     88-4-securite-restante-low: backlog # SEC-BE-02/03, SEC-FE-01
     88-5-refactoring-god-class-container-runtime: backlog # SMELL-BE-01
     88-6-refactoring-code-smells: backlog # SMELL-BE-02, SMELL-FE-01, SMELL-FE-02

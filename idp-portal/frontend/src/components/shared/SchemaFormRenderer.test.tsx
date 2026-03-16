@@ -629,3 +629,64 @@ describe('SchemaFormRenderer — disabled', () => {
     expect(screen.getByRole('switch', { name: /c/i })).toBeDisabled();
   });
 });
+
+// ---------------------------------------------------------------------------
+// BUG-FE-03 — MappingEditor resynchronizes rows when prop value changes externally
+// ---------------------------------------------------------------------------
+describe('SchemaFormRenderer — MappingEditor external value sync (BUG-FE-03)', () => {
+  const mappingSchema = {
+    properties: {
+      env: {
+        type: 'object',
+        additionalProperties: { type: 'string' },
+        title: 'Env',
+      },
+    },
+  };
+
+  it('mapping_rows_resync_when_parent_updates_value', async () => {
+    // Wrapper that allows controlling the value externally
+    function Wrapper() {
+      const [val, setVal] = useState<Record<string, Record<string, string>>>({ env: { key1: 'val1' } });
+      return (
+        <>
+          <button onClick={() => setVal({ env: { key2: 'val2' } })}>Update value</button>
+          <SchemaFormRenderer schema={mappingSchema} value={val} onChange={(v) => setVal(v as typeof val)} />
+        </>
+      );
+    }
+    render(<Wrapper />);
+
+    // Initially shows key1/val1
+    expect(screen.getAllByRole('textbox')[0]).toHaveValue('key1');
+    expect(screen.getAllByRole('textbox')[1]).toHaveValue('val1');
+
+    // Parent updates value externally
+    await userEvent.click(screen.getByRole('button', { name: /update value/i }));
+
+    // Rows should now show key2/val2
+    expect(screen.getAllByRole('textbox')[0]).toHaveValue('key2');
+    expect(screen.getAllByRole('textbox')[1]).toHaveValue('val2');
+  });
+
+  it('interactive_edit_does_not_cause_unwanted_resync', async () => {
+    const handleChange = vi.fn();
+    render(
+      <SchemaFormRenderer
+        schema={mappingSchema}
+        value={{ env: { key1: 'val1' } }}
+        onChange={handleChange}
+      />
+    );
+
+    // Interactive edit: change the key
+    const keyInput = screen.getAllByRole('textbox')[0];
+    await userEvent.clear(keyInput);
+    await userEvent.type(keyInput, 'edited');
+
+    // onChange was called (not a resync loop)
+    expect(handleChange).toHaveBeenCalled();
+    // The input still shows the edited value (not reset to original)
+    expect(keyInput).toHaveValue('edited');
+  });
+});
