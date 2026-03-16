@@ -1,168 +1,90 @@
-# Documentation Backend Django - IDP Portal
+# Backend Django - IDP Portal
 
-**Version:** Django 5.2 + Django REST Framework 3.16
-**Base de données:** Oracle (via python-oracledb mode Thin)
-**Dernière mise à jour:** 2026-02-05
+**Stack** : Django 5.2, Django REST Framework, Celery 5.6, Oracle 19c+, Redis
 
-## Vue d'ensemble
+## Index
 
-Le backend IDP Portal est construit avec Django et Django REST Framework (DRF). Il fournit une API REST pour la gestion du catalogue d'actions, des profils utilisateurs, des exécutions et de l'audit.
-
-## Index de la documentation
+### Architecture et modèles
 
 | Document | Description |
 |----------|-------------|
-| [apps-structure.md](./apps-structure.md) | Structure des apps Django et leurs responsabilités |
-| [models.md](./models.md) | Modèles Django, relations et managers |
-| [services.md](./services.md) | Couche services et logique métier |
-| [api-reference.md](./api-reference.md) | Endpoints API, serializers et pagination |
-| [rbac.md](./rbac.md) | Système RBAC et gestion des permissions |
-| [authentication.md](./authentication.md) | Authentification SAML et JWT |
-| [observability.md](./observability.md) | Middleware, logging et monitoring |
-| [testing.md](./testing.md) | Tests, fixtures et couverture |
-| [contributing.md](./contributing.md) | Guide de contribution |
-| [Workflow Output Schemas](../../idp-portal/django_backend/docs/workflow-output-schemas.md) | Schémas d'output pour les workflows (Epic 63) — dans `django_backend/docs/` |
-| [Parallel Group](../../idp-portal/django_backend/docs/parallel-group.md) | Implémentation Parallel Group (Epic 65) — dans `django_backend/docs/` |
+| [architecture.md](architecture.md) | Structure des packages d'intégration |
+| [database-schema.md](database-schema.md) | Schéma BD complet, 28 tables, relations ER |
+| [services.md](services.md) | Couche services et logique métier |
+| [api-reference.md](api-reference.md) | Endpoints API, serializers, pagination |
+| [oracle-json-fields.md](oracle-json-fields.md) | OracleJSONField pour colonnes JSON/CLOB |
+| [partitioning-retention.md](partitioning-retention.md) | Partitionnement Oracle et politique de rétention |
 
-## Architecture en couches
+### Authentification et RBAC
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         API Layer                                │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐              │
-│  │  ViewSets   │  │ Serializers │  │ Permissions │              │
-│  │   (DRF)     │  │   (DRF)     │  │   (RBAC)    │              │
-│  └─────────────┘  └─────────────┘  └─────────────┘              │
-├─────────────────────────────────────────────────────────────────┤
-│                       Service Layer                              │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐              │
-│  │ CatalogSvc  │  │ ProfileSvc  │  │  AuditSvc   │              │
-│  │             │  │             │  │             │              │
-│  └─────────────┘  └─────────────┘  └─────────────┘              │
-├─────────────────────────────────────────────────────────────────┤
-│                      Data Access Layer                           │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐              │
-│  │  Managers   │  │   Models    │  │ Migrations  │              │
-│  │ (QuerySets) │  │  (Django)   │  │  (Flyway)   │              │
-│  └─────────────┘  └─────────────┘  └─────────────┘              │
-├─────────────────────────────────────────────────────────────────┤
-│                        Oracle Database                           │
-│                  (Tables UPPER_SNAKE_CASE)                       │
-└─────────────────────────────────────────────────────────────────┘
-```
+| Document | Description |
+|----------|-------------|
+| [authentication.md](authentication.md) | SAML 2.0, JWT, API Keys |
+| [sso.md](sso.md) | Architecture SSO et runbook de dépannage |
+| [rbac.md](rbac.md) | Système RBAC et permissions |
+| [rbac-filter-by-attribute.md](rbac-filter-by-attribute.md) | Filtres RBAC par attribut d'inventaire |
+| [ldap-configuration.md](ldap-configuration.md) | LDAP pour comptes de service |
 
-## Apps Django
+### Workflows et exécutions
 
-| App | Responsabilité |
-|-----|----------------|
-| `catalog` | Gestion du catalogue d'actions (CRUD, tags, statuts) |
-| `profiles` | Gestion des profils utilisateurs et permissions RBAC |
-| `idp_auth` | Authentification SAML et gestion des sessions JWT |
-| `integrations` | Configuration des plateformes distantes (AAP, Terraform, etc.) |
-| `executions` | Gestion des exécutions d'actions et des steps |
-| `core` | Fonctionnalités transverses (audit, pagination, exceptions, middleware) |
+| Document | Description |
+|----------|-------------|
+| [condition-gates.md](condition-gates.md) | Préconditions et gates sur les étapes |
+| [workflow-retry-celery.md](workflow-retry-celery.md) | Retry avec Celery (backoff exponentiel) |
+| [workflow-schedule-step-implementation.md](workflow-schedule-step-implementation.md) | Steps de planification dans un workflow |
+| [simulation-mode.md](simulation-mode.md) | Mode simulation pour le développement |
+| [change-type-config.md](change-type-config.md) | Configuration change_type par environnement |
 
-## Démarrage rapide
+### Intégrations et plateformes
 
-### Prérequis
+| Document | Description |
+|----------|-------------|
+| [integration-type-catalogue.md](integration-type-catalogue.md) | Catalogue des types d'intégration |
+| [integration-status-validation.md](integration-status-validation.md) | Validation statut valid/invalid/deprecated |
+| [platform-integration-mapping.md](platform-integration-mapping.md) | Mapping REF_PLATFORMS ↔ IntegrationTypeCatalogue |
+| [vault-integration.md](vault-integration.md) | HashiCorp Vault : analyse et troubleshooting |
+| [vault-bootstrap-guide.md](vault-bootstrap-guide.md) | Bootstrap Vault (Secret 0) |
+| [splunk-integration.md](splunk-integration.md) | Splunk HEC : logs structurés et gestion d'indisponibilité |
+| [jira-integration.md](jira-integration.md) | JiraService |
 
-- Python 3.11+
-- Oracle Database (ou Docker avec Oracle XE)
-- Variables d'environnement configurées
+### Observabilité et logging
 
-### Installation
+| Document | Description |
+|----------|-------------|
+| [observability.md](observability.md) | Middleware, logging, monitoring |
+| [logging-conventions.md](logging-conventions.md) | Standards de logging structuré |
+| [audit-correlation-id-search.md](audit-correlation-id-search.md) | Recherche par correlation ID |
 
-```bash
-# Cloner et naviguer
-cd idp-portal/django_backend
+### Qualité et standards
 
-# Créer l'environnement virtuel
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# ou: venv\Scripts\activate  # Windows
+| Document | Description |
+|----------|-------------|
+| [testing.md](testing.md) | Tests, fixtures, couverture |
+| [contributing.md](contributing.md) | Guide de contribution backend |
+| [mypy-developer-guide.md](mypy-developer-guide.md) | Guide mypy strict |
+| [solid-guidelines.md](solid-guidelines.md) | Conformité SOLID |
+| [endpoint-checklist.md](endpoint-checklist.md) | Checklist nouvel endpoint DRF |
+| [backend-best-practices.md](backend-best-practices.md) | Bonnes pratiques Oracle/RBAC |
 
-# Installer les dépendances
-pip install uv
-uv pip install -r requirements-dev.lock
+### Sécurité
 
-# Configurer les variables d'environnement
-cp .env.template .env
-# Éditer .env avec vos valeurs
+| Document | Description |
+|----------|-------------|
+| [secrets-configuration.md](secrets-configuration.md) | Configuration sécurisée des secrets |
+| [security-common-pitfalls.md](security-common-pitfalls.md) | Patterns de sécurité critiques |
+| [security-pre-pr-checklist.md](security-pre-pr-checklist.md) | Self-checklist sécurité pré-PR |
 
-# Exécuter les tests
-pytest
+### Infrastructure
 
-# Lancer le serveur de développement
-python manage.py runserver
-```
+| Document | Description |
+|----------|-------------|
+| [db-resilience.md](db-resilience.md) | Résilience Data Guard failover/switchover |
+| [ci-cd-django-deployment.md](ci-cd-django-deployment.md) | CI/CD et déploiement Django |
+| [reference-data.md](reference-data.md) | Reproductibilité des données de référence |
 
-### Variables d'environnement requises
+### Aide contextuelle
 
-```bash
-# Base de données Oracle
-ORACLE_DSN=localhost:1521/FREEPDB1
-ORACLE_USER=idp_app
-ORACLE_PASSWORD=Oracle123!
-
-# Sécurité
-SECRET_KEY=your-secret-key
-JWT_SECRET_KEY=your-jwt-secret
-
-# CORS
-CORS_ORIGIN=http://localhost:5173
-
-# Environnement
-APP_ENV=development
-DEBUG=True
-```
-
-## Conventions
-
-### Format de réponse API
-
-Toutes les réponses sont wrappées:
-
-```json
-// Succès
-{"data": {...}}
-
-// Erreur
-{"error": {"code": "NOT_FOUND", "message": "Action non trouvée", "details": {}}}
-```
-
-### Codes HTTP
-
-| Code | Usage |
-|------|-------|
-| 200 | Succès (GET, PUT, PATCH) |
-| 201 | Créé (POST) |
-| 204 | Supprimé (DELETE) |
-| 400 | Erreur de validation ou état invalide |
-| 401 | Non authentifié |
-| 403 | Non autorisé (RBAC) |
-| 404 | Ressource non trouvée |
-| 500 | Erreur serveur |
-
-### Conventions de nommage
-
-- **Champs API:** snake_case (pas camelCase)
-- **Tables Oracle:** UPPER_SNAKE_CASE
-- **Classes Python:** PascalCase
-- **Fichiers Python:** snake_case
-
-## Stack technique
-
-| Technologie | Version | Usage |
-|-------------|---------|-------|
-| Django | 5.2.11 | Framework principal |
-| Django REST Framework | 3.15+ | API REST |
-| python-oracledb | 3.4.1 | Connexion Oracle (mode Thin) |
-| structlog | dernière | Logging JSON structuré |
-| pytest-django | dernière | Tests |
-| gunicorn | 23.0.0 | Serveur WSGI production |
-
-## Ressources additionnelles
-
-- [Django Documentation](https://docs.djangoproject.com/)
-- [DRF Documentation](https://www.django-rest-framework.org/)
-- [Logs dans Splunk](#) (interne)
+| Document | Description |
+|----------|-------------|
+| [help-contextual-design.md](help-contextual-design.md) | Design de l'aide contextuelle (tooltips/popovers) |
+| [help/](help/) | Contenus d'aide pour les formulaires d'action |
