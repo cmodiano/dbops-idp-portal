@@ -795,7 +795,7 @@ class TestServiceCallHandlerRetry:
             "service_call_retry",
             integration_type="servicenow",
             operation="create_change",
-            attempt=2,
+            attempt=1,
             error="Vault KO",
             correlation_id="corr-warn",
         )

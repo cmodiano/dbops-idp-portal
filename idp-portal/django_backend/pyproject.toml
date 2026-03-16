@@ -179,6 +179,11 @@ module = [
 ]
 ignore_missing_imports = true
 
+# tenacity — no type stubs; used by service_call_handler, gate strategies
+[[tool.mypy.overrides]]
+module = "tenacity"
+ignore_missing_imports = true
+
 # Story 78.10–78.15: Normalized models (managed=False) — django-stubs false positives
 # on ForeignKey _id accessors and .objects manager for unmanaged models
 [[tool.mypy.overrides]]

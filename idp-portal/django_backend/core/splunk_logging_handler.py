@@ -29,9 +29,10 @@ import queue
 import threading
 from typing import Any, cast
 
-import structlog
-
-logger = structlog.get_logger(__name__)
+# Use standard logging for internal handler messages to avoid recursion and deadlock.
+# Structlog routes through Python logging and can re-enter emit(); _send_to_splunk runs
+# under self._lock, so recursive emit() → flush() → lock would deadlock.
+_internal_logger = logging.getLogger(__name__)
 
 # Configuration defaults
 DEFAULT_FLUSH_INTERVAL = 5.0  # seconds
@@ -86,6 +87,8 @@ class SplunkLoggingHandler(logging.Handler):
         max_buffer_size: int = DEFAULT_MAX_BUFFER_SIZE,
     ) -> None:
         super().__init__()
+        # Skip our own internal logs to avoid recursion and deadlock (emit → flush → lock)
+        self.addFilter(lambda r: r.name != __name__)
 
         # Load from config if not provided directly
         if not hec_url:
@@ -116,7 +119,9 @@ class SplunkLoggingHandler(logging.Handler):
         # Check if handler is enabled (has URL configured)
         self.enabled = bool(self.hec_url)
         if not self.enabled:
-            logger.warning("splunk_hec_not_configured", message="SPLUNK_HEC_URL not set, SplunkLoggingHandler disabled")
+            _internal_logger.warning(
+                "splunk_hec_not_configured: SPLUNK_HEC_URL not set, SplunkLoggingHandler disabled"
+            )
             return
 
         # Start periodic flush timer
@@ -154,7 +159,10 @@ class SplunkLoggingHandler(logging.Handler):
                 try:
                     self._buffer.get_nowait()
                     self._dropped_count += 1
-                    logger.warning("splunk_buffer_full_event_dropped", dropped_total=self._dropped_count)
+                    _internal_logger.warning(
+                        "splunk_buffer_full_event_dropped dropped_total=%s",
+                        self._dropped_count,
+                    )
                 except queue.Empty:
                     pass
 
@@ -236,11 +244,11 @@ class SplunkLoggingHandler(logging.Handler):
 
         except Exception as exc:  # noqa: BLE001 — best-effort-non-critical: Splunk unavailable, log warning and drop events
             self._dropped_count += len(events)
-            logger.warning(
-                "splunk_events_dropped",
-                dropped_count=len(events),
-                dropped_total=self._dropped_count,
-                error=str(exc),
+            _internal_logger.warning(
+                "splunk_events_dropped dropped_count=%s dropped_total=%s error=%s",
+                len(events),
+                self._dropped_count,
+                str(exc),
             )
 
     @property

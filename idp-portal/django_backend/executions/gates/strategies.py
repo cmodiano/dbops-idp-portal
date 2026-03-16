@@ -37,7 +37,7 @@ class MaintenanceWindowEvaluationStrategy:
             logger.warning(
                 "inventory_retry_maintenance_window",
                 target_id=target_id,
-                attempt=retry_state.attempt_number + 1,
+                attempt=retry_state.attempt_number,
                 wait_seconds=getattr(retry_state.next_action, 'sleep', 0.0),
                 error=str(exc),
                 correlation_id=correlation_id,

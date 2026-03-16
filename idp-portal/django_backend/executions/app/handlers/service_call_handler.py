@@ -29,14 +29,20 @@ logger = structlog.get_logger(__name__)
 # Story 86.7: Retry settings for transient service call errors
 _VAULT_MAX_RETRIES = int(os.getenv("VAULT_MAX_RETRIES", "3"))
 _SERVICENOW_MAX_RETRIES = int(os.getenv("SERVICENOW_MAX_RETRIES", "3"))
-_TRANSIENT_SERVICENOW_STATUS_CODES = frozenset({"429", "503"})
+_TRANSIENT_SERVICENOW_STATUS_CODES = frozenset({429, 503})
 
 
 def _is_transient_servicenow_error(exc: BaseException) -> bool:
     """True pour ServiceUnavailableError avec status_code 429 ou 503 (hors VaultUnavailableError)."""
     if not isinstance(exc, ServiceUnavailableError) or isinstance(exc, VaultUnavailableError):
         return False
-    return exc.details.get("status_code") in _TRANSIENT_SERVICENOW_STATUS_CODES
+    sc = exc.details.get("status_code")
+    if sc is None:
+        return False
+    try:
+        return int(sc) in _TRANSIENT_SERVICENOW_STATUS_CODES
+    except (TypeError, ValueError):
+        return False
 
 
 # Opérations autorisées et détection credential-free dérivées de service_definition_registry.
@@ -68,7 +74,7 @@ class ServiceCallHandler:
                 "service_call_retry",
                 integration_type=integration_type,
                 operation=operation,
-                attempt=retry_state.attempt_number + 1,
+                attempt=retry_state.attempt_number,
                 error=str(exc),
                 correlation_id=correlation_id,
             )

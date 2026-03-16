@@ -166,7 +166,7 @@ class ServiceNowService(IHealthCheckable):
             raise ServiceUnavailableError(
                 code="SERVICENOW_HTTP_ERROR",
                 message=f"ServiceNow create_change erreur {exc.response.status_code}",
-                details={"base_url": self.base_url, "status_code": str(exc.response.status_code)},
+                details={"base_url": self.base_url, "status_code": exc.response.status_code},
             ) from exc
         except httpx.RequestError as exc:
             logger.error(
@@ -288,7 +288,7 @@ class ServiceNowService(IHealthCheckable):
             raise ServiceUnavailableError(
                 code="SERVICENOW_HTTP_ERROR",
                 message=f"ServiceNow get_change_status erreur {exc.response.status_code}",
-                details={"change_id": change_id, "base_url": self.base_url, "status_code": str(exc.response.status_code)},
+                details={"change_id": change_id, "base_url": self.base_url, "status_code": exc.response.status_code},
             ) from exc
         except httpx.RequestError as exc:
             logger.error(
@@ -319,7 +319,7 @@ class ServiceNowService(IHealthCheckable):
         url = f"{self.base_url}/api/now/table/change_request/{change_id}"
         verify_tls = self._get_verify_tls()
         correlation_id = get_correlation_id()
-        details = {"change_id": change_id, "base_url": self.base_url}
+        details: dict[str, str | int] = {"change_id": change_id, "base_url": self.base_url}
 
         try:
             with httpx.Client(headers=self.auth_headers, timeout=self.timeout, verify=verify_tls) as client:
@@ -377,7 +377,7 @@ class ServiceNowService(IHealthCheckable):
                 error=str(exc),
                 correlation_id=correlation_id,
             )
-            details["status_code"] = str(exc.response.status_code)
+            details["status_code"] = exc.response.status_code
             raise ServiceUnavailableError(
                 code="SERVICENOW_HTTP_ERROR",
                 message=f"ServiceNow {operation} erreur {exc.response.status_code}",

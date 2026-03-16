@@ -1,5 +1,7 @@
 # Architecture des Workflows - IDP Portal
 
+> **Documentation détaillée :** Pour le flow complet avec diagrammes de séquence, opérations BD étape par étape, et implémentation des patterns, voir [workflow-execution-flow.md](./workflow-execution-flow.md).
+
 ## Vue d'ensemble
 
 L'IDP Portal est un portail interne de développeur (Internal Developer Platform) conçu pour orchestrer des opérations de bases de données à travers un système de workflows. Il permet aux équipes de déclencher, planifier, approuver et surveiller des actions automatisées sur l'infrastructure de bases de données.
@@ -50,13 +52,14 @@ graph TB
         end
 
         subgraph Celery["Celery (Workers Async)"]
-            T1[trigger_action_execution]
-            T2["evaluate_waiting_gates\n(60s)"]
-            T3[poll_execution_status]
-            T4[reconcile_workflow]
-            T5[process_scheduled_executions]
-            T6[dispatch_outbox_events]
+            T1[trigger_platform_job]
+            T2["evaluate_waiting_gates\n(Beat 60s)"]
+            T3[poll_platform_job_status]
+            T4["reconcile_workflow\n(Beat ~10min + AppReady)"]
+            T5["process_pending_scheduled_executions\n(Beat 60s)"]
+            T6["process_outbox_entries\n(dispatch_outbox_events — Beat 60s)"]
             T7[health_check_integrations]
+            T8[resume_container_workflow_from_gate]
         end
 
         Channels[Django Channels\nWebSocket]
@@ -238,7 +241,11 @@ erDiagram
         number EXECUTION_ID FK
         varchar STEP_ID
         varchar STEP_TYPE
+        varchar STEP_NAME
+        varchar CONFIG_STEP_ID "UUID depuis action.execution_steps"
+        number STEP_ORDER
         varchar STATUS
+        varchar PLATFORM_JOB_ID "ID du job côté plateforme"
         timestamp STARTED_AT
         timestamp COMPLETED_AT
         json OUTPUT
@@ -250,28 +257,44 @@ erDiagram
         number ID PK
         number EXECUTION_ID FK
         varchar EVENT_TYPE
-        varchar STEP_ID
+        varchar ENTITY_TYPE "execution|step"
+        number ENTITY_ID
         json PAYLOAD
-        number SEQ_NO
+        number SEQUENCE_NUM "monotone par execution_id"
         timestamp CREATED_AT
+    }
+
+    WORKFLOW_EVENT_COUNTER {
+        number EXECUTION_ID PK
+        number LAST_SEQUENCE_NUM "SELECT FOR UPDATE pour atomicité"
     }
 
     RUNNABLE_STEPS {
         number ID PK
+        number EXECUTION_STEP_ID FK "UNIQUE"
         number EXECUTION_ID FK
-        varchar STEP_ID
-        timestamp CLAIMED_UNTIL
+        number PRIORITY
+        number STEP_ORDER
+        varchar STEP_TYPE
+        timestamp CLAIMED_AT
+        varchar CLAIMED_BY "worker hostname+pid"
+        timestamp CLAIMED_UNTIL "lease expiry = now + 300s"
         number ATTEMPT_NO
         number MAX_ATTEMPTS
-        timestamp CREATED_AT
+        timestamp ELIGIBLE_AT "not-before timestamp"
     }
 
     EXECUTION_OUTBOX {
         number ID PK
         number EXECUTION_ID FK
-        varchar EVENT_TYPE
+        varchar EVENT_TYPE "step_broadcast|execution_notification|approval_granted|..."
         json PAYLOAD
-        timestamp PROCESSED_AT
+        varchar STATUS "pending|dispatched|failed"
+        varchar IDEMPOTENCY_KEY UK "{exec_id}:{event_type}:{discriminator}"
+        number ATTEMPT_NO
+        number MAX_ATTEMPTS
+        text LAST_ERROR
+        timestamp DISPATCHED_AT
         timestamp CREATED_AT
     }
 
@@ -292,16 +315,21 @@ erDiagram
         number USER_ID FK
         json PARAMETERS
         timestamp SCHEDULED_AT
-        varchar STATUS
-        number RECURRING_PATTERN_ID FK
+        varchar STATUS "pending|executed|cancelled"
+        varchar CORRELATION_ID
+        number EXECUTION_ID "FK → EXECUTIONS (après exécution)"
+        number SOURCE_EXECUTION_ID "FK → EXECUTIONS (si créée via schedule_execution step)"
+        timestamp CREATED_AT
     }
 
     RECURRING_PATTERNS {
         number ID PK
-        varchar CRON_EXPRESSION
-        varchar TIMEZONE
-        timestamp NEXT_RUN_AT
-        timestamp END_DATE
+        number SCHEDULED_EXECUTION_ID FK "OneToOne → SCHEDULED_EXECUTIONS"
+        varchar PATTERN_TYPE "one_time|daily|weekly|cron"
+        clob PATTERN_CONFIG "JSON (cron expression, interval_seconds…)"
+        timestamp NEXT_EXECUTION_DATE
+        number IS_ACTIVE "0=suspendu, 1=actif"
+        timestamp CREATED_AT
     }
 
     CORE_FEATURE_FLAGS {
@@ -323,10 +351,12 @@ erDiagram
     ACTIONS_CATALOG ||--o{ EXECUTIONS : "exécutée via"
     EXECUTIONS ||--o{ EXECUTION_STEPS : "contient"
     EXECUTIONS ||--o{ WORKFLOW_EVENTS : "génère"
+    EXECUTIONS ||--|| WORKFLOW_EVENT_COUNTER : "compteur séquence"
     EXECUTIONS ||--o{ RUNNABLE_STEPS : "planifie"
+    EXECUTION_STEPS ||--o| RUNNABLE_STEPS : "step enqueued"
     EXECUTIONS ||--o{ EXECUTION_OUTBOX : "émet"
     EXECUTIONS ||--o| EXECUTIONS : "parent/enfant"
-    SCHEDULED_EXECUTIONS ||--o| RECURRING_PATTERNS : "récurrence"
+    RECURRING_PATTERNS ||--|| SCHEDULED_EXECUTIONS : "récurrence"
     ACTIONS_CATALOG ||--o{ SCHEDULED_EXECUTIONS : "planifiée pour"
 ```
 
@@ -520,28 +550,96 @@ flowchart TD
 
 ## Patterns d'architecture
 
-### Event Sourcing (Workflow Events)
-Chaque changement d'état d'un workflow est enregistré comme un événement immuable dans `WORKFLOW_EVENTS`. Cela permet la reconstruction de l'état et l'audit complet.
+> Pour le détail complet de chaque pattern (code, séquences, tables BD), voir [workflow-execution-flow.md](./workflow-execution-flow.md).
 
-### Transactional Outbox
-La table `EXECUTION_OUTBOX` garantit la cohérence entre les écritures en base et la publication d'événements. Le dispatcher Celery traite les événements en attente de façon asynchrone.
+### Pattern 1 — Event Sourcing (WORKFLOW_EVENTS)
 
-### Work Queue distribué
-La table `RUNNABLE_STEPS` sert de file d'attente distribuée avec un système de bail (lease). Un worker réclame une étape via `CLAIMED_UNTIL`, l'exécute, puis la libère. Si le bail expire (crash du worker), un autre worker peut reprendre l'étape.
+**Problème résolu :** Le WebSocket fire-and-forget — si l'UI se reconnecte, les événements intermédiaires sont perdus.
 
-### State Machine
-Les transitions d'état des exécutions et étapes sont validées par une machine à états stricte (`domain/state_machine.py`), empêchant les transitions invalides.
+**Implémentation** : `executions/services/workflow_events.py` — migrations V113 + V122
+
+Chaque changement d'état produit une ligne dans `WORKFLOW_EVENTS` (append-only) avec un numéro de séquence monotone alloué via `SELECT FOR UPDATE` sur `WORKFLOW_EVENT_COUNTER` :
+
+```python
+# Allocation atomique (V122 — évite les races sur steps parallèles)
+counter = WorkflowEventCounter.objects.select_for_update().get(execution_id=execution_id)
+new_seq = counter.last_sequence_num + 1
+WorkflowEvent.objects.create(execution_id=execution_id, sequence_num=new_seq, ...)
+```
+
+**Catch-up UI sur reconnexion :**
+```sql
+SELECT * FROM WORKFLOW_EVENTS
+WHERE execution_id = 42 AND sequence_num > {last_known_seq}
+ORDER BY sequence_num
+```
+
+**Criticité des événements :**
+- **Critiques** (exception propagée si échec) : `EXECUTION_STATUS_CHANGED`, `STEP_COMPLETED`, `APPROVAL_GRANTED`, etc.
+- **Best-effort** (erreur loguée, swallowed) : `STEP_OUTPUT_UPDATED`, `TARGET_ADDED`
+
+### Pattern 2 — Transactional Outbox (EXECUTION_OUTBOX)
+
+**Problème résolu :** Un crash entre l'écriture BD et l'envoi WebSocket laisserait l'UI désynchronisée.
+
+**Implémentation :** `executions/infra/outbox.py` — migration V135
+
+```python
+# OBLIGATOIRE : dans transaction.atomic()
+with transaction.atomic():
+    # 1. Mutation métier
+    step.status = 'COMPLETED'
+    step.save()
+    # 2. Side-effect dans la même transaction
+    OutboxService.write_entry(
+        execution_id=42,
+        event_type='step_broadcast',
+        payload={'step_id': 15, 'status': 'COMPLETED'},
+        idempotency_key='42:step_broadcast:step_15'  # évite les doublons
+    )
+# → COMMIT atomique : mutation + outbox entry ensemble
+```
 
 ```mermaid
 flowchart LR
     subgraph Transactional Outbox Pattern
-        App[Runtime] -->|1. Transaction atomique| DB[(Oracle)]
-        DB -->|2. Écrit dans EXECUTION_OUTBOX| Outbox[EXECUTION_OUTBOX]
-        Dispatcher["dispatch_outbox_events\n(Celery)"] -->|3. Lit événements non traités| Outbox
-        Dispatcher -->|4. Publie| Redis[(Redis / Consumers)]
-        Dispatcher -->|5. Marque PROCESSED| Outbox
+        App[Runtime] -->|1. transaction.atomic| DB[(Oracle)]
+        DB -->|2. INSERT EXECUTION_OUTBOX\nstatus=pending| Outbox[EXECUTION_OUTBOX]
+        Dispatcher["process_outbox_entries\n(Celery Beat 60s)"] -->|3. SELECT FOR UPDATE\nSKIP LOCKED| Outbox
+        Dispatcher -->|4. Dispatch side-effect\nWebSocket / Email| WS[WebSocket / Email]
+        Dispatcher -->|5. UPDATE status=dispatched| Outbox
     end
 ```
+
+**Garanties :**
+- Rollback transaction → outbox entry rollbackée → pas de side-effect orphelin
+- `idempotency_key` unique → pas de doublon sur retry
+- `attempt_no / max_attempts` → circuit breaker (3 tentatives par défaut)
+
+### Pattern 3 — Work Queue distribué (RUNNABLE_STEPS)
+
+**Problème résolu :** Un worker Celery peut crasher entre le claim et la completion d'une étape.
+
+**Implémentation :** `executions/services/runnable_steps.py` — migration V113
+
+```
+Cycle :
+  1. ENQUEUE : get_or_create() — idempotent
+  2. CLAIM   : SELECT FOR UPDATE SKIP LOCKED WHERE eligible_at <= now
+               → claimed_until = now + 300s (RUNNABLE_STEP_LEASE_SECONDS)
+               → attempt_no++
+  3. EXECUTE : Worker traite l'étape
+  4. RELEASE : DELETE (succès)
+  5. RECLAIM : Si lease expiré (crash) → autre worker reclaim automatiquement
+```
+
+**Garanties :**
+- `SKIP LOCKED` : workers concurrents ne se bloquent pas (Oracle 12c+)
+- `max_attempts` : circuit breaker contre boucles infinies
+- `eligible_at` : not-before semantics (délai d'exécution)
+
+### State Machine
+Les transitions d'état des exécutions et étapes sont validées par une machine à états stricte (`domain/state_machine.py`), empêchant les transitions invalides.
 
 ---
 

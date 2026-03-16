@@ -160,11 +160,11 @@ class TestErrorHandling:
             mock_adapter = MockAdapter.return_value
             mock_adapter.send_batch = mock_send_batch_error
 
-            with patch("core.splunk_logging_handler.logger") as mock_structlog:
+            with patch("core.splunk_logging_handler._internal_logger") as mock_logger:
                 handler._send_to_splunk(events)
-                mock_structlog.warning.assert_called_once()
-                call_kwargs = mock_structlog.warning.call_args
-                assert call_kwargs[0][0] == "splunk_events_dropped"
+                mock_logger.warning.assert_called_once()
+                call_args = mock_logger.warning.call_args
+                assert "splunk_events_dropped" in call_args[0][0]
 
 
 class TestEnrichment:

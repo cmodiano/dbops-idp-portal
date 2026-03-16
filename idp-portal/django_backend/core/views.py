@@ -31,7 +31,7 @@ HEALTH_CHECK_TIMEOUT = getattr(settings, 'HEALTH_CHECK_TIMEOUT', 5)
 HEALTH_CHECK_GLOBAL_TIMEOUT = getattr(settings, 'HEALTH_CHECK_GLOBAL_TIMEOUT', 10)
 
 
-def _check_vault() -> str:
+def _check_vault(correlation_id: str | None = None) -> str:
     """Check Vault reachability. Returns 'reachable' or 'unreachable'."""
     vault_addr = getattr(settings, 'VAULT_ADDR', None)
     try:
@@ -42,11 +42,19 @@ def _check_vault() -> str:
         if response.status_code == 200:
             return "reachable"
         raise ConnectionError(f"Vault returned {response.status_code}")
-    except Exception:  # noqa: BLE001 — graceful-degradation: health check reports degraded status on any Vault error
+    except Exception as exc:  # noqa: BLE001 — graceful-degradation: health check reports degraded status on any Vault error
+        logger.warning(
+            "health_check_failed",
+            service="vault",
+            error=str(exc),
+            error_type=type(exc).__name__,
+            correlation_id=correlation_id,
+            exc_info=True,
+        )
         return "unreachable"
 
 
-def _check_servicenow() -> str:
+def _check_servicenow(correlation_id: str | None = None) -> str:
     """Check ServiceNow reachability. Returns 'reachable' or 'unreachable'."""
     servicenow_url = getattr(settings, 'SERVICENOW_INSTANCE_URL', None)
     try:
@@ -59,7 +67,15 @@ def _check_servicenow() -> str:
             # 401 means ServiceNow is reachable but requires auth (expected)
             return "reachable"
         raise ConnectionError(f"ServiceNow returned {response.status_code}")
-    except Exception:  # noqa: BLE001 — graceful-degradation: health check reports degraded status on any ServiceNow error
+    except Exception as exc:  # noqa: BLE001 — graceful-degradation: health check reports degraded status on any ServiceNow error
+        logger.warning(
+            "health_check_failed",
+            service="servicenow",
+            error=str(exc),
+            error_type=type(exc).__name__,
+            correlation_id=correlation_id,
+            exc_info=True,
+        )
         return "unreachable"
 
 
@@ -136,13 +152,13 @@ def health_check(request: Any) -> Response:
     checks: dict[str, Callable[[], str]] = {}
 
     if vault_addr and vault_addr != 'http://localhost:8200':
-        checks["vault"] = _check_vault
+        checks["vault"] = lambda: _check_vault(correlation_id)
     else:
         # Vault not configured - mark as reachable to not fail health check
         health_data["vault"] = "reachable"
 
     if servicenow_url and 'instance.service-now.com' not in servicenow_url:
-        checks["servicenow"] = _check_servicenow
+        checks["servicenow"] = lambda: _check_servicenow(correlation_id)
     else:
         # ServiceNow not configured - mark as reachable to not fail health check
         health_data["servicenow"] = "reachable"

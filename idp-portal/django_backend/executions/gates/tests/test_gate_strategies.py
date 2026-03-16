@@ -363,6 +363,6 @@ class TestMaintenanceWindowRetry:
         call_args = mock_logger.warning.call_args
         assert call_args.args[0] == 'inventory_retry_maintenance_window'
         assert call_args.kwargs.get('target_id') == 'SRV1'
-        assert call_args.kwargs.get('attempt') == 2  # première retry = tentative n°2
+        assert call_args.kwargs.get('attempt') == 1  # attempt that just failed (observability convention)
         assert call_args.kwargs.get('error') == 'timeout'
         assert 'wait_seconds' in call_args.kwargs
