@@ -17,6 +17,7 @@ class HealthCheckStatus(StrEnum):
     OK = "ok"
     ERROR = "error"
     UNKNOWN = "unknown"
+    TIMEOUT = "timeout"  # Story 86.8: check n'a pas terminé dans le deadline global
 
 
 @dataclass

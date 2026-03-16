@@ -1054,7 +1054,7 @@ development_status:
     86-6-cancellation-cache-redis: done # code-review 2026-03-16: H1 ne cacher que True (pas False) pour éviter staleness 24h si mark_cancelled échoue + M2 test TTL is_cancelled cache-miss + M3 docstring test file + L4 test mark_cancelled Redis failure, 12/12 tests pass
     86-7-service-call-retry-transient: done # code-review 2026-03-16: M1 fix assertion test_retry_exhausted (max() des deux settings) + M2 test exhaustion ServiceNow 429 + M3 test logger.error après épuisement + L1 _retry_wait hygiene (noté), 27/27 tests pass
     # --- Low ---
-    86-8-health-check-endpoint-timeout: backlog # integrations/health_check.py — ThreadPoolExecutor concurrent, deadline 10s, marquer timeout si dépassé
+    86-8-health-check-endpoint-timeout: done # code-review 2026-03-16: H1 fix shutdown(wait=False) après FuturesTimeoutError + H2 test both-timeout AC#7 + M3 fix FuturesTimeoutError import tests, 17/17 tests pass
     86-9-splunk-batch-durability: backlog # services/splunk_service.py — SPLUNK_OUTBOX ou réutiliser outbox pattern ; Celery beat flush ; ou documenter limitation + métrique dropped batches
     86-10-warning-max-step-transitions: backlog # container_workflow_runtime.py — WARNING à 80% limite, ERROR au plafond, settings.MAX_STEP_TRANSITIONS configurable
     86-11-retry-backoff-jitter: backlog # services.py + api_client.ts — full jitter sur backoff (random.uniform / Math.random) pour éviter thundering herd

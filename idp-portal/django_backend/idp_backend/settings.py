@@ -849,6 +849,9 @@ PARALLEL_GROUP_MAX_WORKERS = int(os.environ.get('PARALLEL_GROUP_MAX_WORKERS', '5
 # dans le thread principal — doit être inférieur au soft_time_limit Celery de la tâche (600s).
 PARALLEL_GROUP_STEP_TIMEOUT_S = int(os.environ.get('PARALLEL_GROUP_STEP_TIMEOUT_S', '300'))
 
+# Story 86.8: Global deadline for concurrent external health checks (seconds)
+HEALTH_CHECK_GLOBAL_TIMEOUT = int(os.getenv('HEALTH_CHECK_GLOBAL_TIMEOUT', '10'))
+
 # Story 86.1 — Adapter socket timeouts (configurable per adapter via env vars)
 def _parse_adapter_timeout(name: str, default: str) -> float:
     raw = os.environ.get(name, default)

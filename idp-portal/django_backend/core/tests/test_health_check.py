@@ -3,6 +3,7 @@ Tests for health check endpoint.
 Story M.8 - Task 10: Tests for extended health check.
 """
 
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from unittest.mock import patch, MagicMock
 
 from django.test import TestCase, Client, override_settings
@@ -254,4 +255,113 @@ class TestHealthCheckEndpoint(TestCase):
         assert response.status_code == 503
         data = response.json()['data']
         assert data['servicenow'] == 'unreachable'
+        assert data['status'] == 'degraded'
+
+    # --- Story 86.8: Tests for concurrent execution with global deadline ---
+
+    @patch('core.views.as_completed', side_effect=FuturesTimeoutError())
+    @patch('core.views._check_vault', return_value='reachable')
+    @patch('core.views.connection')
+    @override_settings(VAULT_ADDR='http://vault.example.com:8200')
+    def test_health_check_vault_timeout(self, mock_connection, mock_check_vault, mock_as_completed):
+        """Story 86.8 AC#2,#3: Vault check timeout → vault: timeout, status: degraded, HTTP 503."""
+        mock_cursor = MagicMock()
+        mock_connection.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
+        mock_connection.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        mock_connection.is_usable.return_value = True
+
+        response = self.client.get(self.url)
+
+        assert response.status_code == 503
+        data = response.json()['data']
+        assert data['vault'] == 'timeout'
+        assert data['status'] == 'degraded'
+
+    @patch('core.views.as_completed', side_effect=FuturesTimeoutError())
+    @patch('core.views._check_servicenow', return_value='reachable')
+    @patch('core.views.connection')
+    @override_settings(SERVICENOW_INSTANCE_URL='https://servicenow.example.com')
+    def test_health_check_servicenow_timeout(self, mock_connection, mock_check_servicenow, mock_as_completed):
+        """Story 86.8 AC#2,#3: ServiceNow check timeout → servicenow: timeout, status: degraded, HTTP 503."""
+        mock_cursor = MagicMock()
+        mock_connection.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
+        mock_connection.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        mock_connection.is_usable.return_value = True
+
+        response = self.client.get(self.url)
+
+        assert response.status_code == 503
+        data = response.json()['data']
+        assert data['servicenow'] == 'timeout'
+        assert data['status'] == 'degraded'
+
+    @patch('core.views._check_servicenow', return_value='reachable')
+    @patch('core.views._check_vault', return_value='reachable')
+    @patch('core.views.connection')
+    @override_settings(
+        VAULT_ADDR='http://vault.example.com:8200',
+        SERVICENOW_INSTANCE_URL='https://servicenow.example.com',
+    )
+    def test_health_check_concurrent_both_reachable(self, mock_connection, mock_check_vault, mock_check_servicenow):
+        """Story 86.8 AC#1,#6: Concurrent checks — both reachable → status healthy, HTTP 200."""
+        mock_cursor = MagicMock()
+        mock_connection.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
+        mock_connection.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        mock_connection.is_usable.return_value = True
+
+        response = self.client.get(self.url)
+
+        assert response.status_code == 200
+        data = response.json()['data']
+        assert data['vault'] == 'reachable'
+        assert data['servicenow'] == 'reachable'
+        assert data['status'] == 'healthy'
+
+    @patch('core.views.as_completed', side_effect=FuturesTimeoutError())
+    @patch('core.views._check_servicenow', return_value='reachable')
+    @patch('core.views._check_vault', return_value='reachable')
+    @patch('core.views.connection')
+    @override_settings(
+        VAULT_ADDR='http://vault.example.com:8200',
+        SERVICENOW_INSTANCE_URL='https://servicenow.example.com',
+    )
+    def test_health_check_both_services_timeout(
+        self, mock_connection, mock_check_vault, mock_check_servicenow, mock_as_completed
+    ):
+        """Story 86.8 AC#7: Deadline total — both checks slow → vault: timeout, servicenow: timeout, status: degraded."""
+        mock_cursor = MagicMock()
+        mock_connection.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
+        mock_connection.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        mock_connection.is_usable.return_value = True
+
+        response = self.client.get(self.url)
+
+        assert response.status_code == 503
+        data = response.json()['data']
+        assert data['vault'] == 'timeout'
+        assert data['servicenow'] == 'timeout'
+        assert data['status'] == 'degraded'
+
+    @patch('core.views._check_servicenow', return_value='reachable')
+    @patch('core.views._check_vault', side_effect=Exception('Connection refused'))
+    @patch('core.views.connection')
+    @override_settings(
+        VAULT_ADDR='http://vault.example.com:8200',
+        SERVICENOW_INSTANCE_URL='https://servicenow.example.com',
+    )
+    def test_health_check_concurrent_vault_unreachable_servicenow_reachable(
+        self, mock_connection, mock_check_vault, mock_check_servicenow
+    ):
+        """Story 86.8 AC#1,#6: Vault raises exception → vault unreachable, servicenow reachable, status degraded."""
+        mock_cursor = MagicMock()
+        mock_connection.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
+        mock_connection.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        mock_connection.is_usable.return_value = True
+
+        response = self.client.get(self.url)
+
+        assert response.status_code == 503
+        data = response.json()['data']
+        assert data['vault'] == 'unreachable'
+        assert data['servicenow'] == 'reachable'
         assert data['status'] == 'degraded'
