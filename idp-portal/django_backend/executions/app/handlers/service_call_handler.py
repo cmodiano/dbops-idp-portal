@@ -10,11 +10,14 @@ Utiliser step_config pour toutes les opérations.
 """
 from __future__ import annotations
 
-from collections.abc import Mapping
+import os
+from collections.abc import Callable, Mapping
 
 import structlog
+from tenacity import Retrying, RetryCallState, retry_if_exception, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from adapters.utils import build_auth_headers
+from core.exceptions import ServiceUnavailableError, VaultUnavailableError
 from integrations.services import IntegrationService
 from services import get_service_client
 from services.definitions import service_definition_registry
@@ -22,6 +25,20 @@ from services.definitions import service_definition_registry
 from executions.models import Execution
 
 logger = structlog.get_logger(__name__)
+
+# Story 86.7: Retry settings for transient service call errors
+_VAULT_MAX_RETRIES = int(os.getenv("VAULT_MAX_RETRIES", "3"))
+_SERVICENOW_MAX_RETRIES = int(os.getenv("SERVICENOW_MAX_RETRIES", "3"))
+_TRANSIENT_SERVICENOW_STATUS_CODES = frozenset({"429", "503"})
+
+
+def _is_transient_servicenow_error(exc: BaseException) -> bool:
+    """True pour ServiceUnavailableError avec status_code 429 ou 503 (hors VaultUnavailableError)."""
+    if not isinstance(exc, ServiceUnavailableError) or isinstance(exc, VaultUnavailableError):
+        return False
+    return exc.details.get("status_code") in _TRANSIENT_SERVICENOW_STATUS_CODES
+
+
 # Opérations autorisées et détection credential-free dérivées de service_definition_registry.
 # Story 82.3: _ALLOWED_OPERATIONS et _CREDENTIAL_FREE_TYPES supprimés.
 # Source de vérité : services/definitions.py (service_definition_registry)
@@ -33,7 +50,29 @@ class ServiceCallHandler:
 
     Résout l'intégration, instancie le service via ServiceRegistry,
     et appelle l'opération demandée avec les paramètres résolus.
+
+    Attribut de classe _retry_wait : permet de surcharger le wait en tests via
+    patch.object(ServiceCallHandler, '_retry_wait', wait_none()).
     """
+
+    _retry_wait = wait_exponential(multiplier=1, min=1, max=10)
+
+    @staticmethod
+    def _make_before_sleep_log(
+        integration_type: str, operation: str, correlation_id: str | None
+    ) -> Callable[[RetryCallState], None]:
+        """Callback before_sleep pour structlog WARNING à chaque retry tenacity (Story 86.7)."""
+        def _log(retry_state: RetryCallState) -> None:
+            exc = retry_state.outcome.exception() if retry_state.outcome is not None else None
+            logger.warning(
+                "service_call_retry",
+                integration_type=integration_type,
+                operation=operation,
+                attempt=retry_state.attempt_number + 1,
+                error=str(exc),
+                correlation_id=correlation_id,
+            )
+        return _log
 
     def execute(
         self,
@@ -60,8 +99,6 @@ class ServiceCallHandler:
             ValueError: Si integration_type inconnu, opération privée ou inexistante
             ServiceUnavailableError: Si le service est indisponible
         """
-        from core.exceptions import ServiceUnavailableError
-
         integration_type = step_config.get("integration_type")
         operation = step_config.get("operation")
 
@@ -165,24 +202,39 @@ class ServiceCallHandler:
                 f"{type(resolved_params).__name__}"
             )
 
+        # Story 86.7: Retry tenacity sur erreurs transitoires (VaultUnavailableError, ServiceNow 429/503).
+        # On utilise le max des deux settings pour couvrir les deux prédicats dans un seul Retrying.
+        _max_attempts = max(_VAULT_MAX_RETRIES, _SERVICENOW_MAX_RETRIES) + 1
+
         try:
-            if integration_type == "notification" and operation == "notify_execution_event":
-                # Injection des objets contextuels (non mappables depuis input_mapping).
-                # SÉCURITÉ : filtrer resolved_params pour empêcher le surécrasement des clés
-                # contextuelles (execution, action, correlation_id) via input_mapping utilisateur.
-                _protected_keys = frozenset({"execution", "action", "correlation_id"})
-                _user_params = {k: v for k, v in resolved_params.items() if k not in _protected_keys}
-                result = method(
-                    execution=execution,
-                    action=execution.action,
-                    correlation_id=correlation_id,
-                    **_user_params,
-                )
-            else:
-                # Note: send_email et send_teams capturent toutes les exceptions en interne
-                # (best-effort). En cas d'échec, la méthode retourne None et le step sera
-                # marqué comme réussi. Les erreurs sont visibles uniquement dans les logs.
-                result = method(**resolved_params)
+            for attempt in Retrying(
+                retry=(
+                    retry_if_exception_type(VaultUnavailableError)
+                    | retry_if_exception(_is_transient_servicenow_error)
+                ),
+                stop=stop_after_attempt(_max_attempts),
+                wait=self._retry_wait,
+                before_sleep=self._make_before_sleep_log(integration_type, operation, correlation_id),
+                reraise=True,
+            ):
+                with attempt:
+                    if integration_type == "notification" and operation == "notify_execution_event":
+                        # Injection des objets contextuels (non mappables depuis input_mapping).
+                        # SÉCURITÉ : filtrer resolved_params pour empêcher le surécrasement des clés
+                        # contextuelles (execution, action, correlation_id) via input_mapping utilisateur.
+                        _protected_keys = frozenset({"execution", "action", "correlation_id"})
+                        _user_params = {k: v for k, v in resolved_params.items() if k not in _protected_keys}
+                        result = method(
+                            execution=execution,
+                            action=execution.action,
+                            correlation_id=correlation_id,
+                            **_user_params,
+                        )
+                    else:
+                        # Note: send_email et send_teams capturent toutes les exceptions en interne
+                        # (best-effort). En cas d'échec, la méthode retourne None et le step sera
+                        # marqué comme réussi. Les erreurs sont visibles uniquement dans les logs.
+                        result = method(**resolved_params)
         except Exception:  # noqa: BLE001
             logger.error(
                 "service_call_handler_error",

@@ -235,6 +235,8 @@ DB_RETRY_BACKOFF_BASE = float(os.getenv('DB_RETRY_BACKOFF_BASE', '0.5'))
 # Story 32.4: Max total duration for all retry attempts (seconds).
 # Aligns with Data Guard FSFO < 1 min — default 120s is a generous upper bound.
 DB_RETRY_TIME_WINDOW_SECONDS = int(os.getenv('DB_RETRY_TIME_WINDOW_SECONDS', '120'))
+# Story 86.7: Max retry attempts for transient ServiceNow errors (429/503) in service_call handler
+SERVICENOW_MAX_RETRIES = int(os.getenv('SERVICENOW_MAX_RETRIES', '3'))
 
 DATABASES = {
     'default': {

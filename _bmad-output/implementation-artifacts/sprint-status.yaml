@@ -1052,7 +1052,7 @@ development_status:
     86-4-retry-inventory-service-maintenance-window: done # code-review 2026-03-16: 1 HIGH (patch sleep inefficace → _retry_wait class attr + wait_none()) + 2 MEDIUM + 1 LOW fixes, 15/15 tests pass en 0.72s
     86-5-gate-type-validation-definition-time: done # code-review 2026-03-16: M1 whitespace gate_type + M2 coverage AC#4 (service_call/evaluation/http_request) + L3 import hors boucle + L4 assertions + L5 step_type extraction, 50/50 tests pass
     86-6-cancellation-cache-redis: done # code-review 2026-03-16: H1 ne cacher que True (pas False) pour éviter staleness 24h si mark_cancelled échoue + M2 test TTL is_cancelled cache-miss + M3 docstring test file + L4 test mark_cancelled Redis failure, 12/12 tests pass
-    86-7-service-call-retry-transient: backlog # step_handlers/service_call_handler.py — tenacity retry sur Vault/ServiceNow (transient only: VaultUnavailableError, 429/503), VAULT_MAX_RETRIES, SERVICENOW_MAX_RETRIES
+    86-7-service-call-retry-transient: done # code-review 2026-03-16: M1 fix assertion test_retry_exhausted (max() des deux settings) + M2 test exhaustion ServiceNow 429 + M3 test logger.error après épuisement + L1 _retry_wait hygiene (noté), 27/27 tests pass
     # --- Low ---
     86-8-health-check-endpoint-timeout: backlog # integrations/health_check.py — ThreadPoolExecutor concurrent, deadline 10s, marquer timeout si dépassé
     86-9-splunk-batch-durability: backlog # services/splunk_service.py — SPLUNK_OUTBOX ou réutiliser outbox pattern ; Celery beat flush ; ou documenter limitation + métrique dropped batches
