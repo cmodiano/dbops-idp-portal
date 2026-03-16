@@ -17,6 +17,8 @@ from django.db import transaction
 from django.utils import timezone
 
 from catalog.workflow_definition_repository import get_steps as get_workflow_steps
+from executions.domain.commands import CommandType, VALID_COMMAND_TYPES
+from executions.domain.workflow_graph import find_step_config, get_linear_next_step_ids
 from executions.models import (
     Execution,
     ExecutionStatus,
@@ -24,7 +26,6 @@ from executions.models import (
     ExecutionStepStatus,
     WorkflowCommand,
     WorkflowCommandStatus,
-    VALID_COMMAND_TYPES,
 )
 
 logger = structlog.get_logger(__name__)
@@ -137,11 +138,11 @@ class WorkflowCommandService:
         )
 
         handler = {
-            "approve": cls._handle_approve,
-            "reject": cls._handle_reject,
-            "cancel": cls._handle_cancel,
-            "timeout_signal": cls._handle_timeout,
-            "resume_signal": cls._handle_resume,
+            CommandType.APPROVE.value: cls._handle_approve,
+            CommandType.REJECT.value: cls._handle_reject,
+            CommandType.CANCEL.value: cls._handle_cancel,
+            CommandType.TIMEOUT_SIGNAL.value: cls._handle_timeout,
+            CommandType.RESUME_SIGNAL.value: cls._handle_resume,
         }.get(cmd.command_type)
 
         if handler is None:
@@ -210,13 +211,13 @@ class WorkflowCommandService:
         # Determine and enqueue next steps
         execution = step.execution
         all_steps = get_workflow_steps(execution.action)
-        step_config = cls._find_step_config(all_steps, step.config_step_id)
+        step_config = find_step_config(all_steps, step.config_step_id)
 
         if step_config:
             on_success = step_config.get("on_success_step_ids") or []
             if not on_success:
                 # Linear fallback: next step by order
-                on_success = cls._get_linear_next_ids(all_steps, step_config)
+                on_success = get_linear_next_step_ids(step_config, all_steps)
 
             if on_success:
                 cls._enqueue_resume_steps(execution, on_success, all_steps)
@@ -286,7 +287,7 @@ class WorkflowCommandService:
         # Route to error path or fail execution
         execution = step.execution
         all_steps = get_workflow_steps(execution.action)
-        step_config = cls._find_step_config(all_steps, step.config_step_id)
+        step_config = find_step_config(all_steps, step.config_step_id)
 
         on_error = (step_config.get("on_error_step_ids") or []) if step_config else []
 
@@ -417,7 +418,7 @@ class WorkflowCommandService:
         # Route to error path
         execution = step.execution
         all_steps = get_workflow_steps(execution.action)
-        step_config = cls._find_step_config(all_steps, step.config_step_id)
+        step_config = find_step_config(all_steps, step.config_step_id)
         on_error = (step_config.get("on_error_step_ids") or []) if step_config else []
 
         if on_error:
@@ -469,25 +470,6 @@ class WorkflowCommandService:
     # -----------------------------------------------------------------------
     # Internal helpers
     # -----------------------------------------------------------------------
-
-    @staticmethod
-    def _find_step_config(all_steps: list, config_step_id: str | None) -> dict | None:
-        """Find step config dict by step_id in workflow definition."""
-        if not config_step_id:
-            return None
-        for s in all_steps:
-            if isinstance(s, dict) and s.get('step_id') == config_step_id:
-                return s
-        return None
-
-    @staticmethod
-    def _get_linear_next_ids(all_steps: list, step_config: dict) -> list[str]:
-        """Get the next step by order (linear fallback)."""
-        current_order = step_config.get('order', 0)
-        for s in sorted(all_steps, key=lambda x: x.get('order', 0)):
-            if isinstance(s, dict) and s.get('order', 0) > current_order and s.get('step_id'):
-                return [s['step_id']]
-        return []
 
     @classmethod
     def _enqueue_resume_steps(

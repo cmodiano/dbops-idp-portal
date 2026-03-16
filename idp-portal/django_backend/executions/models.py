@@ -6,6 +6,7 @@ from django.db import models
 from django.utils import timezone
 from idp_auth.models import User
 from catalog.models import Action
+from executions.domain.commands import VALID_COMMAND_TYPES  # noqa: F401
 
 logger = structlog.get_logger(__name__)
 
@@ -739,9 +740,6 @@ class WorkflowCommandStatus(models.TextChoices):
     FAILED = "failed", "Échoué"
 
 
-VALID_COMMAND_TYPES = {
-    "approve", "reject", "cancel", "timeout_signal", "resume_signal"
-}
 
 
 class WorkflowCommand(models.Model):

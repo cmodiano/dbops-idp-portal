@@ -1034,8 +1034,8 @@ development_status:
     # === Epic 85: Réorganisation structure packages orchestration (post Temporal-plan) ===
     # Réf: docs/architecture/temporal-plan-evaluation-2026-03-15.md § Remaining Gaps
     # Plan fonctionnel 85–90% livré. Reste: aligner layout domain/infra/app du temporal-advantages-without-temporal-implementation-plan.md
-    epic-85: backlog
-    85-1-domain-workflow-graph-commands: backlog # Créer domain/workflow_graph.py, domain/commands.py — extraire logique existante si pertinent
+    epic-85: in-progress
+    85-1-domain-workflow-graph-commands: done # Créer domain/workflow_graph.py, domain/commands.py — extraire logique existante si pertinent
     85-2-infra-repositories-outbox: backlog # Créer infra/repositories.py ; relocaliser services/outbox.py → infra/outbox.py
     85-3-app-orchestrator-command-processor: backlog # Relocaliser tasks/orchestration_worker.py → app/orchestrator.py ; services/workflow_commands.py → app/command_processor.py
     85-4-app-handlers: backlog # Relocaliser step_handlers/ → app/handlers/
