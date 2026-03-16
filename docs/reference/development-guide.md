@@ -110,6 +110,14 @@ Fichier `.env` à la racine de `idp-portal/` ou dans `django_backend/` : `ORACLE
 
 ---
 
+## Extensibilité
+
+Le backend utilise un pattern **Registry + Factory** pour permettre l'ajout de nouveaux adapters, services, gates et plateformes sans modifier le code existant.
+
+- **Guide complet :** [docs/backend/development-extensibility.md](../backend/development-extensibility.md) — Registries, injection de dépendances, procédures pas à pas
+
+---
+
 ## Contribution
 
 Voir **CONTRIBUTING.md** à la racine du dépôt :

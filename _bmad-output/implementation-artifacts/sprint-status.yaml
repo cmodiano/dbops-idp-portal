@@ -1066,7 +1066,7 @@ development_status:
     87-1-documentation-architecture-workflows-detaillee: done # Flow complet workflows: queue jobs, trigger, poll, gates, opérations BD, patterns (Outbox, RUNNABLE_STEPS)
     87-2-documentation-structure-frontend-consommation-backend: done # Structure frontend, api_client, services, JSON Schemas (parameters_schema, useDynamicForm)
     87-3-documentation-architecture-conteneurs-docker: done # Rôle de chaque conteneur (redis, oracle, backend, celery-worker, celery-beat, frontend), flux réseau
-    87-4-documentation-developpement-extensibilite: backlog # Registries (Adapter, Platform, Service, Gate, StepHandler), comment ajouter gates/adapters/services
+    87-4-documentation-developpement-extensibilite: done # Registries (Adapter, Platform, Service, Gate, StepHandler), comment ajouter gates/adapters/services
     87-5-documentation-schema-base-donnees: backlog # Toutes les tables, colonnes, descriptions, diagramme ER à jour
     87-6-reference-variables-environnement: backlog # Référence exhaustive env vars (backend, celery, beat, frontend, docker) — docs/operations/environment-variables-reference.md
     87-7-guide-onboarding-developpement-local: backlog # Prérequis, premier run, tests, migrations, conventions, problèmes courants — docs/reference/onboarding-guide.md
@@ -1074,3 +1074,17 @@ development_status:
     87-9-documentation-integrations-externes: backlog # Flow métier AAP, ServiceNow, Vault, Terraform, GitHub, Azure — docs/integrations/flows-by-platform.md
     87-10-documentation-observabilite-runbooks: backlog # Structlog, Splunk, audit, health checks, runbooks dépannage, checklist pré-déploiement
     epic-87-retrospective: optional
+    # === Epic 88: Correction des findings de la revue de code (Audit #8) ===
+    # Réf: idp-portal/CODEBASE-REVIEW.md §27, docs/backend/epic-88-fix-code-review-findings.md
+    # 27 findings ouverts post-refactoring Stories 83–87 — quick wins, bugs, sécurité, refactoring, performance, qualité
+    epic-88: backlog
+    88-1-quick-fixes-backend-bugs-securite: backlog # BUG-BE-01, ERR-BE-01, CELERY-BE-01, SEC-BE-01, TEST-BE-01
+    88-2-quick-fixes-frontend-bugs-erreurs: backlog # BUG-FE-01, ERR-FE-01
+    88-3-bugs-erreurs-restants: backlog # BUG-BE-02/03, BUG-FE-02/03, ERR-FE-02/03
+    88-4-securite-restante-low: backlog # SEC-BE-02/03, SEC-FE-01
+    88-5-refactoring-god-class-container-runtime: backlog # SMELL-BE-01
+    88-6-refactoring-code-smells: backlog # SMELL-BE-02, SMELL-FE-01, SMELL-FE-02
+    88-7-performance-servicenow-capabilities: backlog # PERF-BE-01, PERF-FE-01
+    88-8-architecture-imports-routing: backlog # ARCH-BE-01, ARCH-BE-02
+    88-9-qualite-accessibilite-types: backlog # A11Y-FE-01/02, TYPE-FE-01
+    epic-88-retrospective: optional
