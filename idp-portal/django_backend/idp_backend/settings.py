@@ -867,3 +867,23 @@ TOWER_SOCKET_TIMEOUT: float = _parse_adapter_timeout('TOWER_SOCKET_TIMEOUT', '30
 GITHUB_ACTIONS_SOCKET_TIMEOUT: float = _parse_adapter_timeout('GITHUB_ACTIONS_SOCKET_TIMEOUT', '30')
 AZURE_DEVOPS_SOCKET_TIMEOUT: float = _parse_adapter_timeout('AZURE_DEVOPS_SOCKET_TIMEOUT', '30')
 TERRAFORM_CLOUD_SOCKET_TIMEOUT: float = _parse_adapter_timeout('TERRAFORM_CLOUD_SOCKET_TIMEOUT', '30')
+
+# Story 86.3 — Gate polling backoff (configurable via env vars)
+def _parse_gate_poll_setting(name: str, default: str) -> float:
+    """Parse a gate polling setting from env var. Must be a positive float."""
+    raw = os.environ.get(name, default)
+    try:
+        val = float(raw)
+        if val <= 0:
+            raise ValueError("must be positive")
+        return val
+    except (ValueError, TypeError):
+        raise ImproperlyConfigured(
+            f"{name} must be a valid positive number. "
+            f"Current value: {raw!r}"
+        )
+
+
+GATE_BASE_POLL_INTERVAL: float = _parse_gate_poll_setting('GATE_BASE_POLL_INTERVAL', '30')
+GATE_MAX_POLL_INTERVAL: float = _parse_gate_poll_setting('GATE_MAX_POLL_INTERVAL', '300')
+GATE_POLL_BACKOFF_FACTOR: float = _parse_gate_poll_setting('GATE_POLL_BACKOFF_FACTOR', '1.5')
