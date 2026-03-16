@@ -51,7 +51,7 @@ export interface AvailableActionsPanelProps {
 export function AvailableActionsPanel({ selectedType }: AvailableActionsPanelProps) {
   if (!selectedType) return null;
 
-  const actions = selectedType.actions.filter((a) => a.is_active);
+  const actions = (selectedType.actions ?? []).filter((a) => a.is_active);
 
   return (
     <div style={{ marginTop: 16 }} data-testid="available-actions-panel">

@@ -3,6 +3,7 @@ import structlog
 from datetime import datetime
 from typing import Any, cast
 from django.db import models
+from django.utils import timezone
 from idp_auth.models import User
 from catalog.models import Action
 
@@ -11,16 +12,16 @@ logger = structlog.get_logger(__name__)
 
 class ExecutionStatus(models.TextChoices):
     """
-    Execution status enum matching Oracle CHECK constraint (V023, V030, V057).
+    Execution status enum matching Oracle CHECK constraint (V023, V030, V057, V135).
 
     Status flow:
     - SUBMITTED: Successfully submitted to platform (AAP, ServiceNow, etc.)
     - INTEGRATION_ERROR: Failed to submit to platform (platform unreachable, API error, etc.)
       This is a PRE-execution failure — the execution never reached the platform.
       Distinct from FAILED which means the platform received and processed the request but it failed.
-    - PENDING_APPROVAL: DEPRECATED (ADR-007) — kept for Oracle DB CHECK constraint compatibility.
-      Approvals are now handled via ExecutionStep WAITING gates.
-      Will be removed in a future migration.
+    - PENDING_APPROVAL: DEPRECATED (78.14, ADR-007) — REMOVED FROM DB CHECK constraint (V135).
+      Kept in Python enum for backward-compat (audit log mapping, state machine dead-state).
+      Retained indefinitely to avoid breaking audit log queries on historical data.
     - RUNNING: Execution in progress on platform
     - COMPLETED: Execution finished successfully
     - FAILED: Execution failed during/after platform processing
@@ -29,6 +30,7 @@ class ExecutionStatus(models.TextChoices):
     """
     SUBMITTED = 'SUBMITTED', 'Submitted'
     INTEGRATION_ERROR = 'INTEGRATION_ERROR', 'Integration Error'  # Story 18.6 (V057)
+    # DEPRECATED (78.14, ADR-007) — REMOVED FROM DB CHECK (V135). Kept for audit/state_machine backward-compat.
     PENDING_APPROVAL = 'PENDING_APPROVAL', 'Pending Approval'
     RUNNING = 'RUNNING', 'Running'
     COMPLETED = 'COMPLETED', 'Completed'
@@ -98,10 +100,8 @@ class Execution(models.Model):
     Execution model mapping to Oracle EXECUTIONS table (V023, V030, V033).
     Represents an execution of an action.
 
-    Champs dépréciés (ADR-007, Story 57.12) :
-    - approved_by, approved_at, approval_comment : source de vérité migrée vers
-      ExecutionStep (Story 57.1 / V099). Conservés pour données historiques et
-      backward compat. Ne plus écrire dans ces champs, utiliser ExecutionStep.approved_* à la place.
+    Note (Story 78.15, V136): approved_by, approved_at, approval_comment were removed.
+    Source of truth is ExecutionStep.approved_by/at/approval_comment (ADR-007).
     """
     id = models.BigAutoField(primary_key=True, db_column='ID')
     action = models.ForeignKey(
@@ -132,26 +132,6 @@ class Execution(models.Model):
         blank=True,
         db_column='SERVICENOW_CHANGE_ID'
     )
-    # Approval workflow fields (V030)
-    # DEPRECATED ADR-007 (Story 57.12) — La source de vérité est ExecutionStep.approved_by depuis Story 57.1.
-    # Ce champ sera supprimé dans une release future. Ne plus écrire dans ce champ.
-    approved_by = models.ForeignKey(
-        User,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='approved_executions',
-        db_column='APPROVED_BY'
-    )
-    # DEPRECATED ADR-007 (Story 57.12) — source de vérité: ExecutionStep.approved_at
-    approved_at = models.DateTimeField(null=True, blank=True, db_column='APPROVED_AT')
-    # DEPRECATED ADR-007 (Story 57.12) — source de vérité: ExecutionStep.approval_comment
-    approval_comment = models.CharField(
-        max_length=1000,
-        null=True,
-        blank=True,
-        db_column='APPROVAL_COMMENT'
-    )
     # Parent execution for remediation (V033)
     parent_execution = models.ForeignKey(
         'self',
@@ -174,6 +154,8 @@ class Execution(models.Model):
     started_at = models.DateTimeField(null=True, blank=True, db_column='STARTED_AT')
     completed_at = models.DateTimeField(null=True, blank=True, db_column='COMPLETED_AT')
     created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
+    # Story 76.3: heartbeat pour détection de staleness précise (updated à chaque progression significative)
+    updated_at = models.DateTimeField(null=True, blank=True, db_column='UPDATED_AT')
 
     # Custom manager
     objects = ExecutionManager()
@@ -183,6 +165,8 @@ class Execution(models.Model):
         ordering = ['-created_at']
         indexes = [
             models.Index(fields=['action', 'created_at'], name='idx_exec_action_created'),
+            # Story 76.3: index pour la détection de staleness via updated_at
+            models.Index(fields=['updated_at'], name='idx_exec_updated_at'),
         ]
 
     def __str__(self) -> str:
@@ -351,11 +335,10 @@ class ExecutionStep(models.Model):
         db_column='PLATFORM_JOB_ID'
     )
     error_message = models.TextField(null=True, blank=True, db_column='ERROR_MESSAGE')
-    # config_step_id: stores the step_id from action.execution_steps config.
-    # Used as the reliable identifier to match an ExecutionStep back to its
-    # workflow step definition (replaces fragile name-based matching).
-    # TextField supports arbitrarily long step_ids (no truncation).
-    config_step_id = models.TextField(
+    # config_step_id: step_id from action.execution_steps config (UUID format).
+    # Aligned to Oracle VARCHAR2(255) — see Flyway V116.
+    config_step_id = models.CharField(
+        max_length=255,
         null=True,
         blank=True,
         db_column='CONFIG_STEP_ID',
@@ -662,6 +645,30 @@ class WorkflowEvent(models.Model):
             self.payload = None
 
 
+class WorkflowEventCounter(models.Model):
+    """
+    WorkflowEventCounter model mapping to Oracle WORKFLOW_EVENT_COUNTER table (V122).
+
+    One row per execution. LAST_SEQUENCE_NUM is incremented atomically via
+    SELECT FOR UPDATE (row-level lock) to eliminate sequence collisions under
+    concurrent emitters (parallel workflow steps completing simultaneously).
+    """
+    execution = models.OneToOneField(
+        Execution,
+        primary_key=True,
+        on_delete=models.CASCADE,
+        related_name='event_counter',
+        db_column='EXECUTION_ID'
+    )
+    last_sequence_num = models.BigIntegerField(default=0, db_column='LAST_SEQUENCE_NUM')
+
+    class Meta:
+        db_table = 'WORKFLOW_EVENT_COUNTER'
+
+    def __str__(self) -> str:
+        return f"WorkflowEventCounter(execution_id={self.execution_id}, last_seq={self.last_sequence_num})"
+
+
 class RunnableStep(models.Model):
     """
     RunnableStep model mapping to Oracle RUNNABLE_STEPS table (V113).
@@ -690,13 +697,17 @@ class RunnableStep(models.Model):
     eligible_at = models.DateTimeField(auto_now_add=True, db_column='ELIGIBLE_AT')
     claimed_at = models.DateTimeField(null=True, blank=True, db_column='CLAIMED_AT')
     claimed_by = models.CharField(max_length=255, null=True, blank=True, db_column='CLAIMED_BY')
+    claimed_until = models.DateTimeField(null=True, blank=True, db_column='CLAIMED_UNTIL')
+    attempt_no = models.IntegerField(default=0, db_column='ATTEMPT_NO')
+    last_error = models.TextField(null=True, blank=True, db_column='LAST_ERROR')
+    max_attempts = models.IntegerField(default=3, db_column='MAX_ATTEMPTS')
     created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
 
     class Meta:
         db_table = 'RUNNABLE_STEPS'
         ordering = ['-priority', 'eligible_at']
         indexes = [
-            models.Index(fields=['claimed_at', '-priority', 'eligible_at'], name='idx_runnable_unclaimed'),
+            models.Index(fields=['eligible_at', 'claimed_until', '-priority'], name='idx_runnable_steps_lease'),
         ]
 
     def __str__(self) -> str:
@@ -704,5 +715,174 @@ class RunnableStep(models.Model):
 
     @property
     def is_claimed(self) -> bool:
-        """Whether this step has been claimed by a worker."""
-        return self.claimed_at is not None
+        """Active si lease non expiré."""
+        if self.claimed_until is None:
+            return False
+        return self.claimed_until > timezone.now()
+
+    @property
+    def is_lease_expired(self) -> bool:
+        """True si un claim existe mais le lease a expiré (crash worker)."""
+        if self.claimed_at is None or self.claimed_until is None:
+            return False
+        return self.claimed_until <= timezone.now()
+
+    @property
+    def has_exceeded_max_attempts(self) -> bool:
+        return self.attempt_no >= self.max_attempts
+
+
+class WorkflowCommandStatus(models.TextChoices):
+    """Statuts possibles d'une commande workflow."""
+    PENDING = "pending", "En attente"
+    PROCESSED = "processed", "Traité"
+    FAILED = "failed", "Échoué"
+
+
+VALID_COMMAND_TYPES = {
+    "approve", "reject", "cancel", "timeout_signal", "resume_signal"
+}
+
+
+class WorkflowCommand(models.Model):
+    """Commande workflow durable — persistée avant traitement.
+
+    Composant Command Store de l'architecture Temporal-like (Epic 78).
+    L'API écrit une commande et retourne rapidement, un processor séparé
+    traite les commandes en FIFO.
+    Ref: docs/backend/epic-78-temporal-like-orchestration-without-temporal.md#Section 3.1
+    """
+    id = models.BigAutoField(primary_key=True, db_column='ID')
+    execution = models.ForeignKey(
+        Execution,
+        on_delete=models.CASCADE,
+        related_name="workflow_commands",
+        db_column="EXECUTION_ID",
+    )
+    command_type = models.CharField(
+        max_length=50,
+        db_column="COMMAND_TYPE",
+    )
+    payload = models.JSONField(
+        null=True,
+        blank=True,
+        db_column="PAYLOAD",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=WorkflowCommandStatus.choices,
+        default=WorkflowCommandStatus.PENDING,
+        db_column="STATUS",
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        db_column="CREATED_AT",
+    )
+    processed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_column="PROCESSED_AT",
+    )
+    created_by = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        db_column="CREATED_BY",
+    )
+    error_message = models.TextField(
+        null=True,
+        blank=True,
+        db_column="ERROR_MESSAGE",
+    )
+
+    class Meta:
+        db_table = "WORKFLOW_COMMANDS"
+        ordering = ["created_at"]
+        indexes = [
+            models.Index(
+                fields=["status", "created_at"],
+                name="idx_wf_cmd_status_created",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"WorkflowCommand {self.id} - {self.command_type} ({self.status})"
+
+
+class OutboxEntryStatus(models.TextChoices):
+    PENDING = "pending", "En attente"
+    DISPATCHED = "dispatched", "Dispatché"
+    FAILED = "failed", "Échoué"
+
+
+class ExecutionOutbox(models.Model):
+    """Outbox transactionnel pour effets externes fiables.
+
+    Composant Outbox de l'architecture Temporal-like (Epic 78).
+    Les side-effects (notifications, websocket, events) sont persistés
+    dans la même transaction que la mutation métier, puis dispatchés
+    par un worker Celery Beat séparé.
+    Ref: docs/backend/epic-78-temporal-like-orchestration-without-temporal.md#Story 78.7
+    """
+    id = models.BigAutoField(primary_key=True, db_column='ID')
+    execution = models.ForeignKey(
+        Execution,
+        on_delete=models.CASCADE,
+        related_name="outbox_entries",
+        db_column="EXECUTION_ID",
+    )
+    event_type = models.CharField(
+        max_length=50,
+        db_column="EVENT_TYPE",
+    )
+    payload = models.JSONField(
+        null=True,
+        blank=True,
+        db_column="PAYLOAD",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=OutboxEntryStatus.choices,
+        default=OutboxEntryStatus.PENDING,
+        db_column="STATUS",
+    )
+    idempotency_key = models.CharField(
+        max_length=255,
+        unique=True,
+        db_column="IDEMPOTENCY_KEY",
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        db_column="CREATED_AT",
+    )
+    dispatched_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_column="DISPATCHED_AT",
+    )
+    attempt_no = models.IntegerField(
+        default=0,
+        db_column="ATTEMPT_NO",
+    )
+    max_attempts = models.IntegerField(
+        default=3,
+        db_column="MAX_ATTEMPTS",
+    )
+    last_error = models.TextField(
+        null=True,
+        blank=True,
+        db_column="LAST_ERROR",
+    )
+
+    class Meta:
+        db_table = "EXECUTION_OUTBOX"
+        ordering = ["created_at"]
+        indexes = [
+            models.Index(
+                fields=["status", "created_at"],
+                name="idx_outbox_status_created",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"ExecutionOutbox {self.id} - {self.event_type} ({self.status})"

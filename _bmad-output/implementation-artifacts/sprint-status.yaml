@@ -775,6 +775,7 @@ development_status:
     63-9-declarer-outputs-par-action: done # Déclarer les outputs par action : schémas OutputSchema par action (ou champ output_schema sur Action). Review: 2 HIGH + 3 MEDIUM + 1 LOW corrigés (output_schema_id ignoré PATCH multi-champs, Space direction, ActionListItem TS, test introspection, test PATCH multi-champs, test 7.4).
     63-10-github-actions-outputs-artifacts: done # GitHub Actions : récupérer outputs/artifacts du run et les exposer dans l'output du step. Review: 3 MEDIUM corrigés (assertions outputs/artifacts/job_conclusion dans queued+in_progress, docstring get_status(), assertion job_conclusion test artifacts). 63/63 tests verts.
     63-11-doc-syntaxe-steps-variables: done # Documenter la syntaxe {{ steps.<step_id>.<field> }} et le flux output_mapping → input_mapping. Review: 2 HIGH + 3 MEDIUM + 2 LOW corrigés (noms variables exécution, contenu orphelin, step_type incomplet, JSONPath comportement, condition formats, précisions mineures).
+    63-12-input-output-mapping-platform-steps: done # Input/output mapping UI pour steps platform — workflowConversion + StepConfigPanel (réutiliser ServiceCallStepConfig pattern) — code-review 2026-03-12: 6 fixes (H1,H2,M2,M3,M4)
     epic-63-retrospective: optional
     # === Epic 64: Infrastructure as Code — Git comme source de vérité ===
     # Réf: docs/architecture/infrastructure-as-code-strategy.md, docs/architecture/infrastructure-as-code-implementation-guide.md
@@ -907,3 +908,154 @@ development_status:
     72-3-aucun-uuid-audit-uniquement-noms-lisibles: done # Code review adversariale 2026-03-11: 5 issues corrigées (H1: referenced_action_name BLOCKED_INVALID_INTEGRATION, H2: test nom explicite, M1: correlation_id DETAIL_KEY_LABELS, M2: execution_id supprimé CSV, M3: correlation_id ALREADY_SHOWN_KEYS)
     72-4-formatage-json-pour-lisibilite: done # Code review adversarial 2026-03-11: 6 fixes (H1 StepDetailDrawer, H2 formatParamValue, M1 EventDetailsPopover, M2-M4 FormattedJson, L1 typo)
     epic-72-retrospective: optional
+    # === Epic 76: Reconcile Crash Recovery — Reprise et robustesse du réconciliateur ===
+    # Réf: docs/backend/epic-76-reconcile-crash-recovery.md
+    # Crash entre étapes → reprise au lieu de FAILED ; exécutions enfants ; détection staleness ; polling actions individuelles
+    epic-76: in-progress
+    76-1-reprise-crash-entre-etapes-container-workflow: done
+    76-2-inclusion-executions-enfants-reconciliateur: done
+    76-3-amelioration-detection-staleness: done
+    76-4-verification-polling-actions-individuelles-running: done # Code review 2026-03-12: 5 fixes (2 HIGH + 3 MEDIUM) — step.output, reprise immédiate, updated_at, 2 tests — 41/41 tests pass
+    76-5-retry-etapes-non-platform-service-call-http-eval: done # Code review 2026-03-13: 1 HIGH + 3 MEDIUM + 1 LOW corrigés
+    epic-76-retrospective: optional
+    # === Epic 77: Renforcer le moteur de workflow pour une base durable et fiable ===
+    # Réf: planning-artifacts/epic-77-workflow-engine-durability.md
+    # Rapport comparaison workflow 2026-03-12 — I/O durable, types natifs, platform réel, output_mapping artifacts, on_commit, tests
+    epic-77: in-progress
+    77-1-persister-outputs-handlers-steps: done # Code review 2026-03-13: 6 fixes (H1-H2, M1-M2-M4)
+    77-2-preserver-types-natifs-input-mapping: done # Code review 2026-03-12: H1+M1+M2+M3 fixes
+    77-3-executer-steps-platform-chemin-reel-dispatch: done # Code review 2026-03-12: M1-M4 fixes (enum, timeout test, patch redondant, imports, File List)
+    77-4-extraction-outputs-artifacts-reels-child-executions: done # Code review 2026-03-12: fix C1 guard item_type==ACTION, +2 tests (regression + no-integration)
+    77-5-side-effects-approve-reject-on-commit: done # Code review 2026-03-13: M1 fix _eid shadowing in ApproveStepView, M2 rollback test rendu significatif (assertion callbacks), M3 test rollback reject ajouté (6/6 tests, 21/21 régression)
+    77-6-tests-durabilite-workflow: done # Code review 2026-03-13: M1 assertions outcome renforcées (==completed), M2 assertions tautologiques AC3 vérifiées en valeurs, L1 @pytest.mark.django_db déplacé au niveau classe TestAC4, L2 config_step_id ajouté dans _make_approval_step_77_6 (7/7 tests, 45/45 régression)
+    77-7-valider-supporter-gate-steps-fan-out-parallele: done # Code review 2026-03-13: M2 BFS deque+popleft (O(1) vs O(n)), M3 test fan-out imbriqué ajouté, L4 docstring module mis à jour, L5 join_point exclus à l'enqueue (10/10 tests, 58/58 catalog, 45/45 epic 77)
+    epic-77-retrospective: optional
+    # === Epic 78: Orchestration Temporal-like sans Temporal ===
+    # Réf: docs/backend/epic-78-temporal-like-orchestration-without-temporal.md, docs/architecture/temporal-advantages-without-temporal-implementation-plan.md
+    # Fiabilité niveau entreprise : file pilote unique, séquence atomique, leases, normalisation CLOB, workers stateless
+    epic-78: in-progress
+    78-1-workflow-event-counter-sequence-atomique: done
+    78-2-runnable-steps-leases-reclaim: done # Code review 2026-03-13: 3 MEDIUM fixes (M1 eligible_at test helper, M2 double logging, M3 max_attempts enforcement) — 17/17 tests
+    78-3-alignement-config-step-id-model-schema: done # Code review 2026-03-13: 4 fixes (M1 test chaîne vide, M2 dead import, L1 File List, L2 comptage) — 9/9 tests
+    78-4-workflow-commands-table: done # Code review 2026-03-13: 6 fixes (H1 race condition select_for_update, H2 BigAutoField, M1 write_command atomique, M2 set vs list, M3 test FIFO batch, L1 exists()) — 23/23 tests
+    78-5-dispatch-file-container-workflow-runtime: done # Code review 2026-03-13: 6 fixes (H1 heartbeat worker, H2 cancel audit, H3 finalize atomic, M1 celery apply test, M2 step_type align, M3 cancel audit) — 56/56 tests
+    78-6-simplification-reconciliateur: done # Code review 2026-03-13: 5 fixes (H1 post-loop scope trop large, M1 docstring auto-référence, M2 import inutilisé ContainerWorkflowRuntime, M3 dict dupliqué step_lookup_by_id, M4 exception avalée à tort) + L1 dead code tests, L2 test failure path ajouté — 20/20 tests
+    78-7-execution-outbox: done # Code review 2026-03-13: 6 fixes (H1 migration AlterField séparée, H2 dead code skipped, M1 tests routing 3 event types, M2 fusion dispatch notification, M3 renommage F expression, M4 transaction.atomic tests AC2) — 29/29 tests + 76 régression
+    78-8-desactivation-runtime-legacy: done # Code review 2026-03-13: 4 fixes (H1 execution zombie RUNNING→FAILED avant raise, M1 test vérifie status FAILED, M2 tests log structuré fallback+retry, L1 docstring exceptions.py générique) — 10/10 tests
+    78-9-consolidation-state-machine-persistence: done # Code review 2026-03-13: 9 fixes (H1 suppression assert CAS inutile, H2/H3 params fantômes WorkQueue, M1 10+ transitions non gardées, M2 guard _handle_cancel, M3 renommage release(), M4 validation entity_id EventStore, L1/L2 commentaires stale) — 57/57 tests + 2021 régression
+    78-10-workflow-definitions-normalisees: done # Code review 2026-03-13: 4 fixes (H1-H3 parity check faux positifs nulls/empty arrays, M2 bulk_create edges, L1 test parity empty arrays). BLOQUANT: C1 fichiers non commités (_workflow_definition_test_helpers.py, test_story_78_10_dual_write.py + 3 fichiers modifiés non staged) — 37/37 tests
+    78-11-profile-action-permission-normalisees: done # Code review 2026-03-13: 4 fixes (H1 V131 DISTINCT doublons JSON, H2 sorted() JSON readers, M1 import hors boucle, M2 DRY tests conftest) — 36/36 tests
+    78-12-profile-target-permission-normalisees: done # Code review 2026-03-13: 3 fixes (H1 sorted/unsorted comparison _permissions_differ, M1 double query get_filter_by_attribute_from_normalized, M2 or[] redondants) — 48/48 tests
+    78-13-contraintes-json-tier2: done # Code review 2026-03-13: 4 fixes (H1 v_pk NUMBER, M1 troncature indicator, M2 verify script DRY+cas disabled, M3 commentaires SQLCODE) + L1 SET TIMING ON
+    78-14-deprecation-colonnes-runtime-legacy: done # Code review 2026-03-13: 6 fixes (CRIT V135 idempotence DROP/ADD, H1 services.py comments, H2 test_audit_trail PENDING_APPROVAL, H3 test_rbac_security, M1 test_models, M2 test_parametrized) + L1 baseline (informatif)
+    78-15-suppression-clob-permissions-legacy: done # Code review 2026-03-13 (2 passes): H2 assertions tables normalisées + 2 tests replace (15 tests), M1 comptage 14→15, M2 rollback fichier inexistant, M4 rollback feature flags inexistants post-78.15, L1 pyproject.toml exclusions mortes — pyproject.toml ajouté au File List
+    78-16-observabilite-metriques-runbooks-alertes: done # Code review 2026-03-13: H1 runbook déplacé docs/operations/ (AC4), H2 runnable_expired_leases = reclaim_expired() return value, M1 pending filter mutuellement exclusif, M2 pyproject.toml File List, L1 assert_any_call
+    epic-78-retrospective: optional
+    # === Epic 79: Notifications enrichies — Variables, CC, pièces jointes, webhook Teams par step ===
+    # Réf: docs/backend/epic-79-notifications-enrichies.md
+    # Variables {{ steps.* }}, CC email, pièces jointes, webhook Teams par step
+    epic-79: in-progress
+    79-1-variables-steps-notification: done
+    79-2-champ-cc-email: done
+    79-3-pieces-jointes-email: done
+    79-4-webhook-teams-par-step: done
+    epic-79-retrospective: optional
+    # === Epic 80: Reset dev workflows/actions via seed ===
+    # Réf: docs/architecture/dev-reset-workflows-actions-via-seed.md, docs/backend/epic-80-reset-dev-workflows-actions-via-seed.md
+    # Purge données, garde-fous dev, trace opérationnelle, validation QA
+    epic-80: in-progress
+    80-1-purge-tables-orchestration-reset: done # WORKFLOW_EVENT_COUNTER ajoutée (code review) ; validation manuelle Oracle dev requise
+    80-2-gardefous-environnement-dev: done # double indicateur --reset, validation --env inconnue, doc section 5 complète
+    80-3-trace-operationnelle-reset: done # Journaliser qui/quand a lancé le reset
+    80-4-validation-qa-reset-reseed: done # Scénarios QA catalogue, executions, admin après reset
+    epic-80-retrospective: optional
+    # === Epic 81: Decommission ancien code path workflow (dev-only) ===
+    # Réf: docs/architecture/dev-decommission-legacy-workflow-code-path.md, docs/backend/epic-81-decommission-legacy-workflow-code-path.md
+    # Suppression totale legacy — plateforme non utilisée, rien à conserver
+    # PR1 freeze, PR2 cutover, PR3 suppression fichiers+workflow_types, PR4 cleanup tests
+    epic-81: done
+    81-1-freeze-legacy-docstrings-ci: done # PR1 — docstrings, doc architecture, check CI
+    81-2-cutover-fonctionnel-suppression-appels-legacy: done # PR2 — gates.py old_style, container fallback thread (WORKFLOW_LEGACY_RUNTIME_ENABLED)
+    81-3-suppression-fichiers-legacy-config: done # PR3 — workflow_runtime, workflow_step_executor, workflow_retry, retry.py, workflow_types + settings
+    81-4-cleanup-tests-docs-observabilite: done # PR4 — 14+ tests legacy supprimés/migrés, KNOWN_ISSUES, ADR, doc arch — code review OK 2026-03-14
+    epic-81-retrospective: optional
+    # === Epic 82: Extensibilité gates, services et plateformes ===
+    # Réf: docs/reference/extensibility-plan-gates-services-platforms.md, docs/backend/epic-82-extensibilite-gates-services-platforms.md
+    # Source de vérité unique, registres, API capacités, formulaires schema-driven
+    epic-82: in-progress
+    82-1-phase0-stabilisation-reduction-derive: done # FUTURE_GATE_TYPES, GateHandler.condition_type_map class attr, platform-canonical-codes.md, extensibility-compatibility-matrix.md — code review: frozenset, 7 tests, warning log
+    82-2-platform-definition-registry: done # platforms/definitions.py, PlatformRegistry, build_platform_runtime_config(), health checks dérivés, aliases unifiés — review: C1 trigger/execution_views platform_type normalization, H1 action.py AC4, M2 type annotations
+    82-3-service-definition-registry: done # services/definitions.py, allowlist dérivée, service_call_handler générique, 28 tests unitaires — review: C1 test _ALLOWED_OPERATIONS→service_definition_registry mock, M1 __post_init__ frozenset validation, M2 commentaire SYNC mis à jour, L1 double lookup simplifié, L2 ServiceDefinition dans __all__
+    82-4-api-capabilities-backend: done # GET /capabilities/integrations, /workflow-steps — 16/16 tests pass, code review OK 2026-03-14
+    82-5-gate-registry-definition: done # GateRegistry, GateDefinition, GateHandler/GateEvaluator refactor — code review OK 2026-03-14: M1 cache valid_condition_types, M2 double get() views, M3 hard-code approval→requires_manual_resolution, M4 test approval_granted satisfied=False, L1-L4 commentaires/naming
+    82-6-frontend-capabilities-client: done # useCapabilities, ServiceCallStepConfig, GateStepConfig schema-driven — code review OK 2026-03-14: M1 fallback stepTypes vide, M2 fallback operations backend manquant, M3 pseudo-tests remplacés, M4 @internal annotation, L3 test concurrence
+    82-7-action-wizard-formulaires-schema-driven: done # code review OK 2026-03-14: M1 operation_labels→MappingProxyType, M2 test desc périmée isPlatformAAP, M3 commentaire SYNC misleading, M4 test capabilities vs fallback (T8.4), M5 platformCap useMemo, L1 test mutation dict
+    82-8-actions-workflows-capabilities: done # code review OK 2026-03-14: H1 test T6.6 assertion INTEGRATION_LABELS renforcée, H2 dead code action_config documenté, M1 SchemaError capturé, M2 tests intégration ActionSerializer ajoutés, M3 ActionCreateSerializer valide schéma, L1 docstring PlatformDefinition mise à jour
+    82-9-migration-nettoyage-constantes-legacy: done # Suppression mappings, aliases, tests E2E nouveau plugin
+    epic-82-retrospective: optional
+    # === Epic 83: Extensibilité state-of-the-art — achèvement architecture data-driven ===
+    # Réf: docs/reference/extensibility-remaining-work-state-of-the-art.md, docs/backend/epic-83-extensibilite-state-of-the-art.md
+    # Objectif: backend source de vérité unique, frontend thin client, schémas avant branches spéciales.
+    # Vision: definition → capability API → UI renderer → payload → runtime strategy
+    epic-83: in-progress
+    # --- Phase 1: Finir la source de vérité backend ---
+    83-1-supprimer-integration-type-choices-verrou: done # Remplacer validation enum IntegrationType.choices par validation dérivée du catalogue actif ou registre/capability backend. Fichier: integrations/serializers.py. Un nouveau type déclaré dans un registre ne doit plus être bloqué à l'écriture. Réf: extensibility-remaining-work-state-of-the-art.md § A.1
+    83-2-gate-evaluator-strategies-orchestrateur: done # GateEvaluationContext + GateEvaluationStrategy Protocol dans definitions.py, MaintenanceWindowEvaluationStrategy dans strategies.py, dispatch via evaluation_strategy dans GateEvaluator — match supprimé, _check_maintenance_window supprimée, 54 tests passent (2026-03-15)
+    83-3-introduire-workflow-step-definition: done # Introduire WorkflowStepDefinition. Centraliser les step definitions comme gates/services/plateformes. Supprimer _STEP_TYPES_STATIC dans capabilities/views.py. Le endpoint capabilities doit être un simple reflecteur de définitions. Réf: extensibility-remaining-work-state-of-the-art.md § A.4, § Roadmap Phase 1
+    83-4-enrichir-platform-service-gate-definitions: done # Enrichir PlatformDefinition (runtime_config_schema, action_config_schema, health_check_policy), ServiceDefinition (input_schema, output_schema, ui_hints par opération), GateDefinition (config_schema, evaluation_strategy, resolution_strategy). Réf: extensibility-remaining-work-state-of-the-art.md § A.3, § Design cible A/B/C
+    # --- Phase 2: Exposer des schémas complets via API capabilities ---
+    83-5-api-capabilities-schemas-complets: done # Exposer pour chaque opération/service/gate: input_schema, output_schema, ui_hints, contraintes, valeurs par défaut. Le frontend doit pouvoir générer un formulaire sans liste locale d'operations ou de champs. Fichier: capabilities/views.py. Réf: extensibility-remaining-work-state-of-the-art.md § A.3, § Roadmap Phase 2
+    83-6-capabilities-derivees-definitions-uniquement: done # Faire dériver les capabilities depuis les définitions uniquement. Toute nouvelle capacité visible dans l'API sans mapping supplémentaire ailleurs. Definition of done Phase 1. Réf: extensibility-remaining-work-state-of-the-art.md § Roadmap Phase 1
+    # --- Phase 3: Rendre le frontend déclaratif ---
+    83-7-schema-form-renderer-frontend: done # Créer SchemaFormRenderer pour string, number, boolean, enum, array simple, object simple, mapping key/value. Couvrir 80% des besoins sans branches spécifiques. Réf: extensibility-remaining-work-state-of-the-art.md § B.5, § Roadmap Phase 3
+    83-8-action-wizard-action-config-schema: done # Remplacer les blocs plateforme-spécifiques (notamment AAP) par un rendu de action_config_schema. Limiter les renderers spécifiques aux cas vraiment exceptionnels. Fichier: ActionWizard.tsx. Réf: extensibility-remaining-work-state-of-the-art.md § B.1, § Design cible A
+    83-9-gate-step-config-config-schema-declaratif: done # Construire le formulaire GateStepConfig à partir de config_schema. Rendre les champs conditionnels déclaratifs. Faire disparaître la dépendance aux noms spécifiques comme approval. Fichier: GateStepConfig.tsx. Réf: extensibility-remaining-work-state-of-the-art.md § B.2, § Design cible C
+    83-10-service-call-step-config-schema-complet: done # Rendre ServiceCallStepConfig complètement schema-driven. Supprimer toute logique locale de labels/operations. Réf: extensibility-remaining-work-state-of-the-art.md § Design cible B
+    83-11-workflow-step-node-labels-backend: done # Rendre les labels/variants de gates dérivés du backend. Titre et badge dépendants de metadata plutôt que if gate_type === .... Fichier: WorkflowStepNode.tsx. Réf: extensibility-remaining-work-state-of-the-art.md § B.3
+    # --- Phase 4: Simplifier et supprimer le legacy ---
+    83-12-supprimer-fallbacks-metier-frontend: done # Limiter les fallbacks à la résilience technique. Ne jamais réintroduire une vérité métier locale durable. Fichier: useWorkflowStepCapabilities.ts. Réf: extensibility-remaining-work-state-of-the-art.md § B.4, § Roadmap Phase 4
+    83-13-clarifier-action-platform-legacy: done # platform dérivé automatiquement backend depuis integration.type — supprimé des payloads frontend. _validate_action_config_schema corrigée (normalisation code canonique). 60 backend + 62 frontend tests verts.
+    83-14-nettoyage-helpers-mapping-aliases: done # Supprimer helpers de mapping devenus inutiles. Réduire les aliases résiduels. Comportement comprensible en suivant definitions → capabilities → UI/runtime. Réf: extensibility-remaining-work-state-of-the-art.md § Roadmap Phase 4
+    epic-83-retrospective: optional
+    # === Epic 84: Extensibilité phase 5 — atteindre 9/10 par composant ===
+    # Réf: docs/reference/extensibility-remaining-work-state-of-the-art.md § Roadmap cible 9/10, docs/backend/epic-84-extensibilite-phase5-9-sur-10.md
+    # Travail restant post-Epic 83 : runtime handler registry, gate resolution générique, workflow UI backend-driven, services schema-driven, plateformes/gates/legacy
+    epic-84: in-progress
+    84-1-registre-handlers-runtime-step-types: done # R1,R2,W5 — Remplacer match step_type par registre handlers. Aligner definitions et execution.
+    84-2-resolution-manuelle-generique-gates: done # G1,G3,G4,R3 — Découpler approval_granted, resolution_strategy déclaratif, réduire legacy
+    84-3-workflow-ui-backend-driven: done # W1-W4 — Palette, titres, validation, typing depuis capabilities
+    84-4-formulaires-service-schema-driven-complets: done # S1-S4 — input_schema, validation F/B, ui_hints, services non opérationnels
+    84-5-gate-step-config-renderer-generique: done # G2 — GateStepConfig branché sur SchemaFormRenderer
+    84-6-reduire-exception-aap: done # P1 — AAP au strict minimum ou chemin déclaratif
+    84-7-simplifier-action-platform-conversions-legacy: done # P2,P3 — Un seul code métier, PlatformDefinition
+    84-8-completer-usage-schemas-plateformes: done # P4 — runtime_config_schema, health_check_policy
+    84-9-schema-form-renderer-usage-partout: done # B.5 — WizardStep2Automatisme et flux restants
+    epic-84-retrospective: optional
+    # === Epic 85: Réorganisation structure packages orchestration (post Temporal-plan) ===
+    # Réf: docs/architecture/temporal-plan-evaluation-2026-03-15.md § Remaining Gaps
+    # Plan fonctionnel 85–90% livré. Reste: aligner layout domain/infra/app du temporal-advantages-without-temporal-implementation-plan.md
+    epic-85: backlog
+    85-1-domain-workflow-graph-commands: backlog # Créer domain/workflow_graph.py, domain/commands.py — extraire logique existante si pertinent
+    85-2-infra-repositories-outbox: backlog # Créer infra/repositories.py ; relocaliser services/outbox.py → infra/outbox.py
+    85-3-app-orchestrator-command-processor: backlog # Relocaliser tasks/orchestration_worker.py → app/orchestrator.py ; services/workflow_commands.py → app/command_processor.py
+    85-4-app-handlers: backlog # Relocaliser step_handlers/ → app/handlers/
+    epic-85-retrospective: optional
+    # === Epic 86: Robustesse — correction des gaps identifiés ===
+    # Réf: docs/robustness-issues.md
+    # Timeouts adapters, ServiceNow, backoff gates, validation gate_type, cache annulation Redis, retries services, health check, Splunk, transitions, jitter
+    epic-86: backlog
+    # --- Critical (HIGH) ---
+    86-1-timeout-adapter-calls: backlog # adapters/base_adapter.py — timeout_seconds sur trigger/get_status, AdapterTimeoutError, env vars par adapter (AAP_SOCKET_TIMEOUT, etc.), catch dans container_workflow_runtime
+    86-2-servicenow-update-change-get-status: backlog # services/servicenow_service.py — implémenter update_change() et get_change_status() (Table API PATCH/GET), mapping états, tests unitaires + @integration
+    # --- Medium ---
+    86-3-gate-polling-backoff: backlog # gate_evaluator.py — backoff exponentiel par gate (BASE/MAX_POLL_INTERVAL, POLL_BACKOFF_FACTOR), persister poll_attempt dans step.output ou cache
+    86-4-retry-inventory-service-maintenance-window: backlog # gates/strategies.py — tenacity retry sur get_next_maintenance_window (3 tentatives, backoff 2s/4s/8s), log WARNING par retry
+    86-5-gate-type-validation-definition-time: backlog # catalog/validation.py — valider gate_type via gate_registry à la sauvegarde workflow, ValidationError avec types valides
+    86-6-cancellation-cache-redis: backlog # cancellation_cache.py — remplacer dict in-memory par Redis (Django cache), clé cancellation:{execution_id}, TTL 24h, test multi-worker
+    86-7-service-call-retry-transient: backlog # step_handlers/service_call_handler.py — tenacity retry sur Vault/ServiceNow (transient only: VaultUnavailableError, 429/503), VAULT_MAX_RETRIES, SERVICENOW_MAX_RETRIES
+    # --- Low ---
+    86-8-health-check-endpoint-timeout: backlog # integrations/health_check.py — ThreadPoolExecutor concurrent, deadline 10s, marquer timeout si dépassé
+    86-9-splunk-batch-durability: backlog # services/splunk_service.py — SPLUNK_OUTBOX ou réutiliser outbox pattern ; Celery beat flush ; ou documenter limitation + métrique dropped batches
+    86-10-warning-max-step-transitions: backlog # container_workflow_runtime.py — WARNING à 80% limite, ERROR au plafond, settings.MAX_STEP_TRANSITIONS configurable
+    86-11-retry-backoff-jitter: backlog # services.py + api_client.ts — full jitter sur backoff (random.uniform / Math.random) pour éviter thundering herd
+    epic-86-retrospective: optional

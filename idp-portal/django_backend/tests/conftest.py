@@ -222,14 +222,18 @@ def sample_profile_auditor(db):
 @pytest.fixture
 def sample_profile_with_action_permissions(db, sample_action_published):
     """Profile with specific action permissions (LIST type)."""
+    from profiles.services import ProfileService
+
     profile = ProfileFactory.create(
         name='ProfileWithActionPerm',
         ad_group='CN=TestPerm,OU=Groups,DC=example,DC=com'
     )
-    ProfileActionPermissionFactory.create(
-        profile=profile,
-        permission_type='LIST',
-        action_ids_json=f'[{sample_action_published.id}]'
+    ProfileService().set_action_permissions(
+        profile.id,
+        {
+            'actions_type': 'list',
+            'action_ids': [sample_action_published.id],
+        },
     )
     return profile
 

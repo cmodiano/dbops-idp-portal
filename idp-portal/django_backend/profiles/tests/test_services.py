@@ -7,6 +7,8 @@ import pytest
 from django.test import TestCase
 from profiles.models import Profile, ProfileActionPermission, ProfileTargetPermission
 from profiles.services import ProfileService
+from profiles.action_permission_repository import get_action_ids, get_tag_patterns
+from profiles.target_permission_repository import get_target_names, get_target_patterns
 from core.models import AuditLog, AuditActionType, AuditEntityType
 from tests.factories import UserFactory
 
@@ -228,7 +230,7 @@ class TestProfileServiceActionPermissions(TestCase):
         })
         self.assertIsNotNone(perm)
         self.assertEqual(perm.permission_type, 'LIST')
-        self.assertEqual(perm.get_action_ids(), [1, 2, 3])
+        self.assertEqual(sorted(get_action_ids(perm)), [1, 2, 3])
 
     def test_set_action_permissions_pattern(self):
         """Test set_action_permissions() with pattern type."""
@@ -237,7 +239,7 @@ class TestProfileServiceActionPermissions(TestCase):
             'tag_patterns': ['oracle*'],
         })
         self.assertEqual(perm.permission_type, 'PATTERN')
-        self.assertEqual(perm.get_tag_patterns(), ['oracle*'])
+        self.assertEqual(get_tag_patterns(perm), ['oracle*'])
 
     def test_set_action_permissions_all(self):
         """Test set_action_permissions() with all type."""
@@ -307,7 +309,7 @@ class TestProfileServiceTargetPermissions(TestCase):
         })
         self.assertIsNotNone(perm)
         self.assertEqual(perm.permission_type, 'LIST')
-        self.assertEqual(perm.get_target_names(), ['srv-01', 'srv-02'])
+        self.assertEqual(sorted(get_target_names(perm)), ['srv-01', 'srv-02'])
 
     def test_set_target_permissions_pattern(self):
         """Test set_target_permissions() with pattern type."""
@@ -316,7 +318,7 @@ class TestProfileServiceTargetPermissions(TestCase):
             'target_patterns': ['db-*'],
         })
         self.assertEqual(perm.permission_type, 'PATTERN')
-        self.assertEqual(perm.get_target_patterns(), ['db-*'])
+        self.assertEqual(get_target_patterns(perm), ['db-*'])
 
     def test_set_target_permissions_all(self):
         """Test set_target_permissions() with all type."""
@@ -433,21 +435,17 @@ class TestProfileServiceCumulativePermissions(TestCase):
         """
         # Profil SQL : actions taguées sql-server
         profile_sql = Profile.objects.create(name='DBA-SQL', ad_group='GRP-DBA-SQL')
-        perm_sql = ProfileActionPermission.objects.create(
-            profile=profile_sql, permission_type='PATTERN'
+        self.service.set_action_permissions(
+            profile_sql.id,
+            {'actions_type': 'pattern', 'tag_patterns': ['sql-server'], 'environments': ['dev', 'staging']},
         )
-        perm_sql.set_tag_patterns(['sql-server'])
-        perm_sql.set_environments(['dev', 'staging'])
-        perm_sql.save()
 
         # Profil Oracle : actions taguées oracle
         profile_oracle = Profile.objects.create(name='DBA-ORACLE', ad_group='GRP-DBA-ORACLE')
-        perm_oracle = ProfileActionPermission.objects.create(
-            profile=profile_oracle, permission_type='PATTERN'
+        self.service.set_action_permissions(
+            profile_oracle.id,
+            {'actions_type': 'pattern', 'tag_patterns': ['oracle'], 'environments': ['prod']},
         )
-        perm_oracle.set_tag_patterns(['oracle'])
-        perm_oracle.set_environments(['prod'])
-        perm_oracle.save()
 
         result = self.service.get_cumulative_permissions(
             user_id=42,
@@ -479,21 +477,17 @@ class TestProfileServiceCumulativePermissions(TestCase):
         """
         # Profil 1 : autorise action_id=10
         profile1 = Profile.objects.create(name='Profil-Allow', ad_group='GRP-ALLOW')
-        perm1 = ProfileActionPermission.objects.create(
-            profile=profile1, permission_type='LIST'
+        self.service.set_action_permissions(
+            profile1.id,
+            {'actions_type': 'list', 'action_ids': [10], 'environments': ['dev']},
         )
-        perm1.set_action_ids([10])
-        perm1.set_environments(['dev'])
-        perm1.save()
 
         # Profil 2 : autorise uniquement action_id=20 (n'autorise pas 10)
         profile2 = Profile.objects.create(name='Profil-Deny', ad_group='GRP-DENY')
-        perm2 = ProfileActionPermission.objects.create(
-            profile=profile2, permission_type='LIST'
+        self.service.set_action_permissions(
+            profile2.id,
+            {'actions_type': 'list', 'action_ids': [20], 'environments': ['staging']},
         )
-        perm2.set_action_ids([20])
-        perm2.set_environments(['staging'])
-        perm2.save()
 
         result = self.service.get_cumulative_permissions(
             user_id=99,

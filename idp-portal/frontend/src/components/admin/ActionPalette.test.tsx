@@ -1,6 +1,9 @@
 /**
  * Tests for ActionPalette component (Story 55.5, Tâche 8).
  * Cible : ≥ 90 % de couverture sur ActionPalette.tsx (56.2 → 90 %).
+ *
+ * Story 84.3 (AC3/AC9): Les special steps dérivent des capabilities mockées.
+ * Plus de SPECIAL_STEP_TYPES local — vérification via capabilities mockées.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -13,12 +16,27 @@ vi.mock('../../hooks/useEligibleActions', () => ({
   useEligibleActions: vi.fn(),
 }));
 
+vi.mock('../../hooks/useCapabilities', () => ({
+  useCapabilities: vi.fn(),
+}));
+
 import { useEligibleActions } from '../../hooks/useEligibleActions';
+import { useCapabilities } from '../../hooks/useCapabilities';
 
 const mockActions: ActionListItem[] = [
   { id: 1, name: 'Deploy App', engine: 'Ansible', status: 'published', created_at: '', execution_count: 0 },
   { id: 2, name: 'Backup DB', engine: 'Oracle', status: 'published', created_at: '', execution_count: 0 },
   { id: 3, name: 'Patch Server', engine: 'Ansible', status: 'published', created_at: '', execution_count: 0 },
+];
+
+// Story 84.3: mock capabilities avec les step types backend
+const mockStepTypes = [
+  { code: 'platform', label: 'Exécuter', category: 'execution', config_schema: {}, constraints: {} },
+  { code: 'service_call', label: 'Service', category: 'integration', config_schema: {}, constraints: {} },
+  { code: 'gate', label: 'Attendre', category: 'control', config_schema: {}, constraints: {} },
+  { code: 'http_request', label: 'Requête HTTP', category: 'integration', config_schema: {}, constraints: {} },
+  { code: 'evaluation', label: 'Évaluation', category: 'control', config_schema: {}, constraints: {} },
+  { code: 'schedule_execution', label: 'Planifier', category: 'scheduling', config_schema: {}, constraints: {} },
 ];
 
 function mockUseEligibleActions(overrides = {}) {
@@ -30,10 +48,24 @@ function mockUseEligibleActions(overrides = {}) {
   });
 }
 
+function mockUseCapabilities(overrides = {}) {
+  vi.mocked(useCapabilities).mockReturnValue({
+    capabilities: {
+      platforms: [],
+      services: [],
+      stepTypes: mockStepTypes,
+    },
+    loading: false,
+    error: null,
+    ...overrides,
+  });
+}
+
 describe('ActionPalette', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseEligibleActions();
+    mockUseCapabilities();
   });
 
   it('affiche le titre de la section actions plateforme', () => {
@@ -148,10 +180,40 @@ describe('ActionPalette', () => {
     expect(searchInput).toBeDisabled();
   });
 
-  // Story 57.16: schedule_execution bouton
-  it('affiche le bouton "Planifier une exécution" (schedule_execution) dans les steps spéciaux', () => {
+  // Story 84.3 (AC3/AC9): special steps dérivés des capabilities mockées
+  it('affiche les special steps dérivés des capabilities (pas platform, pas parallel_group)', () => {
     render(<ActionPalette />);
-    expect(screen.getByText('Planifier une exécution')).toBeInTheDocument();
+    // Les types backend hors platform et parallel_group doivent apparaître
+    expect(screen.getByTestId('add-special-step-service_call')).toBeInTheDocument();
+    expect(screen.getByTestId('add-special-step-http_request')).toBeInTheDocument();
+    expect(screen.getByTestId('add-special-step-evaluation')).toBeInTheDocument();
+    expect(screen.getByTestId('add-special-step-gate')).toBeInTheDocument();
+    expect(screen.getByTestId('add-special-step-schedule_execution')).toBeInTheDocument();
+    // platform ne doit PAS être dans les special steps
+    expect(screen.queryByTestId('add-special-step-platform')).not.toBeInTheDocument();
+  });
+
+  it('les labels des special steps correspondent aux labels backend', () => {
+    render(<ActionPalette />);
+    // Le label vient du backend (capabilities), pas d'une constante locale
+    expect(screen.getByText('Service')).toBeInTheDocument();
+    expect(screen.getByText('Planifier')).toBeInTheDocument();
+    expect(screen.getByText('Attendre')).toBeInTheDocument();
+  });
+
+  it('affiche un Spin dans la section "Steps spéciaux" quand loading=true', () => {
+    mockUseCapabilities({ capabilities: null, loading: true, error: null });
+    render(<ActionPalette />);
+    // Au moins un spin (actions ou capabilities)
+    const spins = document.querySelectorAll('.ant-spin');
+    expect(spins.length).toBeGreaterThan(0);
+  });
+
+  it('affiche une section vide (sans crash) en cas d\'erreur capabilities', () => {
+    mockUseCapabilities({ capabilities: null, loading: false, error: 'Erreur API' });
+    render(<ActionPalette />);
+    // Pas de crash — la section special steps est vide
+    expect(screen.queryByTestId('add-special-step-service_call')).not.toBeInTheDocument();
   });
 
   it('le bouton schedule_execution appelle onAddSpecialStep avec le bon type', () => {
@@ -162,4 +224,39 @@ describe('ActionPalette', () => {
     expect(onAddSpecialStep).toHaveBeenCalledWith('schedule_execution');
   });
 
+  it('parallel_group est exclu des special steps même s\'il apparaît dans les capabilities', () => {
+    mockUseCapabilities({
+      capabilities: {
+        platforms: [],
+        services: [],
+        stepTypes: [
+          { code: 'service_call', label: 'Service', category: 'integration', config_schema: {}, constraints: {} },
+          { code: 'parallel_group', label: 'Parallèle', category: 'control', config_schema: {}, constraints: {} },
+        ],
+      },
+      loading: false,
+      error: null,
+    });
+    render(<ActionPalette />);
+    expect(screen.getByTestId('add-special-step-service_call')).toBeInTheDocument();
+    expect(screen.queryByTestId('add-special-step-parallel_group')).not.toBeInTheDocument();
+  });
+
+  it('un type inconnu du frontend utilise la couleur et icône fallback (_default)', () => {
+    // Un type backend non connu du STEP_TYPE_UI_META doit s'afficher avec fallback
+    mockUseCapabilities({
+      capabilities: {
+        platforms: [],
+        services: [],
+        stepTypes: [
+          { code: 'notification', label: 'Notifier', category: 'control', config_schema: {}, constraints: {} },
+        ],
+      },
+      loading: false,
+      error: null,
+    });
+    render(<ActionPalette />);
+    expect(screen.getByTestId('add-special-step-notification')).toBeInTheDocument();
+    expect(screen.getByText('Notifier')).toBeInTheDocument();
+  });
 });

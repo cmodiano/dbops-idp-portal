@@ -135,7 +135,8 @@ export interface ScheduleStepConfig {
 }
 
 /** @deprecated parallel_group: supprimé du builder (Story 67-5), conservé pour rétro-compat exécutions. Sera supprimé en Story 67.7. */
-export type WorkflowStepType = 'platform' | 'service_call' | 'http_request' | 'evaluation' | 'gate' | 'schedule_execution' | 'parallel_group';
+// Story 84.3 (AC7): élargi avec `(string & {})` pour supporter les types dynamiques du backend sans cascade de modifications TypeScript
+export type WorkflowStepType = 'platform' | 'service_call' | 'http_request' | 'evaluation' | 'gate' | 'schedule_execution' | 'parallel_group' | (string & {});
 
 /** Workflow step - reference to an existing action or special step type (Story 5.7, AC2; Story 16.2 branches & retry; Story 57.13 step types). */
 export interface WorkflowStep {

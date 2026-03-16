@@ -11,7 +11,7 @@ detection, state management, and audit trail patterns.
 
 Architecture:
 - ContainerWorkflowRuntime: Orchestrator for container workflows
-- Reuses WorkflowExecutionState from workflow_runtime for state tracking
+- Manages workflow execution state internally for state tracking
 - Uses ExecutionService.create_execution for child executions
 - Supports workflow_step_parameters injection (Story 4.12)
 """
@@ -19,18 +19,19 @@ Architecture:
 # loop detection, intégration ServiceNow) — volume justifié par la complexité inhérente
 # à l'orchestration async multi-étapes (Story 35.4 AC3).
 
+import time
 import threading
 import structlog
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Dict, Any, List, NamedTuple, Union, cast
+from typing import Dict, Any, List, NamedTuple, cast
 
 from django.db import close_old_connections, transaction
 from django.utils import timezone
 
-from catalog.models import Action, ActionStatus
+from catalog.models import Action, ActionItemType, ActionStatus
 from executions.models import (
     Execution, ExecutionStep, ExecutionStatus, ExecutionStepStatus,
-    ExecutionStepType,
+    ExecutionStepType, WorkflowEventType,
 )
 from executions.dtos import ExecutionRequest
 from executions.services import ExecutionService
@@ -42,14 +43,24 @@ from core.utils import sanitize_audit_changes
 from core.middleware import get_correlation_id
 from executions.output_extractor import OutputExtractor
 from executions.template_resolver import StepTemplateResolver
+from catalog.workflow_definition_repository import get_steps as get_workflow_steps
 from executions.utils.workflow_parsing import get_workflow_entry_step_ids
 from executions.step_handlers.condition_evaluator import StepConditionEvaluator
-from executions.step_handlers.service_call_handler import ServiceCallHandler
-from executions.step_handlers.http_request_handler import HttpRequestHandler
-from executions.step_handlers.evaluation_handler import EvaluationHandler
-from executions.step_handlers.gate_handler import GateHandler
+from executions.step_handlers.registry import step_handler_registry
+from executions.tasks.trigger import trigger_platform_job
+from executions.tasks.polling import get_platform_queue
+from executions.container_routing import (
+    get_linear_next_step_ids as _routing_get_linear_next_step_ids,
+    get_next_step_ids as _routing_get_next_step_ids,
+)
+from executions.container_parallel import apply_join_policy as _parallel_apply_join_policy
+from executions.domain.state_machine import assert_execution_transition, assert_step_transition
 
 logger = structlog.get_logger(__name__)
+
+# Story 77.3: Platform action polling constants
+PLATFORM_ACTION_POLL_INTERVAL_SECONDS: int = 5
+PLATFORM_ACTION_MAX_WAIT_SECONDS: int = 3600  # 1 heure
 
 
 def _broadcast_step(execution_id: int, step: ExecutionStep) -> None:
@@ -213,7 +224,7 @@ class ContainerWorkflowRuntime:
 
     def _load_workflow_steps(self) -> List[Dict[str, Any]]:
         """Load and sort workflow steps from action's execution_steps."""
-        steps = self.action.execution_steps or []
+        steps = get_workflow_steps(self.action)
         if not isinstance(steps, list):
             logger.warning(
                 "container_workflow_steps_invalid_format",
@@ -411,153 +422,41 @@ class ContainerWorkflowRuntime:
             return self._create_skipped_step(step_name, step_id, step_type, parallel_context)
 
         # Dispatcher selon step_type (ADR-007 §3d)
-        handler: Union[
-            ServiceCallHandler, HttpRequestHandler, EvaluationHandler, GateHandler
-        ]
-        match step_type:
-            case 'platform':
-                return self._execute_platform_step(step, resolved_params, step_name, step_id, parallel_context)
-            case 'service_call':
-                handler = ServiceCallHandler()
-            case 'http_request':
-                handler = HttpRequestHandler()
-            case 'evaluation':
-                handler = EvaluationHandler()
-            case 'gate':
-                handler = GateHandler()
-            case _:
-                if parallel_context is not None:
-                    logger.error(
-                        "container_workflow_parallel_unknown_step_type",
-                        step_type=step_type,
-                        execution_id=self.execution.id,
-                        correlation_id=self.correlation_id,
-                    )
-                    return ExecutionStatus.FAILED
-                raise ValueError(f"Unknown step_type: {step_type!r}")
+        # 'platform' : routing interne — crée des child executions via _execute_platform_step()
+        if step_type == 'platform':
+            return self._execute_platform_step(step, resolved_params, step_name, step_id, parallel_context)
 
+        # Lookup via registre (Story 84.1 — R1 extensibilité)
+        handler_class = step_handler_registry.get(step_type)
+        if handler_class is None:
+            if parallel_context is not None:
+                logger.error(
+                    "container_workflow_parallel_unknown_step_type",
+                    step_type=step_type,
+                    execution_id=self.execution.id,
+                    correlation_id=self.correlation_id,
+                )
+                return ExecutionStatus.FAILED
+            raise ValueError(f"Unknown step_type: {step_type!r}")
+
+        handler = handler_class()
         return self._execute_handler_step(step, resolved_params, step_name, step_id, step_type, handler, parallel_context)
 
     def _get_next_step_ids(self, step: dict, outcome: ExecutionStatus) -> list[str]:
-        """Retourne les step_id cibles selon l'outcome, avec rétrocompat singulier.
-
-        Si aucun champ de routing n'est présent (ancien mode linéaire), retourne
-        le step suivant par ordre (rétrocompat workflows sans routing explicite).
-
-        Story 67.2 — AC1, AC2, AC7.
-        """
-        if outcome == ExecutionStatus.COMPLETED:
-            # Opt out of linear fallback only if step defines explicit success routing.
-            # Steps with only on_error_step_ids must use linear fallback on success.
-            # Note: on_success_step_id (singular) is legacy; no active code uses it (RC-02).
-            has_routing = 'on_success_step_ids' in step
-            if not has_routing:
-                # Mode linéaire sans routing explicite — fallback sur step suivant par ordre
-                return self._get_linear_next_step_ids(step)
-            ids = step.get('on_success_step_ids')
-            return ids or []
-        else:  # FAILED, CANCELLED, etc.
-            ids = step.get('on_error_step_ids')
-            return ids or []
+        """Retourne les step_id cibles selon l'outcome (delegates to container_routing)."""
+        return _routing_get_next_step_ids(step, outcome, self.workflow_steps)
 
     def _get_linear_next_step_ids(self, step: dict) -> list[str]:
-        """Retourne le step suivant par ordre (mode linéaire sans routing explicite).
-
-        Rétrocompatibilité pour les workflows créés avant le support multi-cibles.
-        """
-        current_order = step.get('order', 0)
-        next_steps = [
-            s for s in self.workflow_steps
-            if s.get('order', 0) > current_order and s.get('step_id')
-        ]
-        if next_steps:
-            next_step = min(next_steps, key=lambda s: s.get('order', 0))
-            return [next_step['step_id']]
-        return []  # exit point
+        """Retourne le step suivant par ordre (delegates to container_routing)."""
+        return _routing_get_linear_next_step_ids(step, self.workflow_steps)
 
     def _apply_join_policy(
         self,
         wave_steps: list[dict],
         results: dict[str, tuple[ExecutionStatus, list[str]]],
     ) -> list[str]:
-        """
-        Construit la prochaine vague en appliquant join_policy pour les steps convergents.
-
-        Pour chaque step cible candidat :
-        - Si 1 seul prédécesseur dans la vague → inclus inconditionnellement
-        - Si 2+ prédécesseurs dans la vague → apply join_policy du step cible (défaut all_success)
-
-        Limitation connue : join_policy s'applique uniquement aux prédécesseurs de la vague COURANTE.
-        Les convergences cross-waves (prédécesseurs dans des vagues BFS différentes) ne sont pas
-        gérées dans cette story.
-
-        Story 67.3 — AC: #1, #5, #6, #7, #8.
-        Story 67.8 — all_failed (tous les prédécesseurs en échec) | one_failed (au moins un en échec).
-
-        Note : join_policy n'est évaluée que si le step cible a 2+ prédécesseurs dans la vague courante.
-        Si 1 seul prédécesseur, le step est inclus inconditionnellement (politique ignorée).
-        """
-        # Build: target_step_id → [(source_step_id, source_outcome)]
-        # Considère TOUS les targets possibles de la vague (success ET error paths)
-        target_preds: dict[str, list[tuple[str, ExecutionStatus]]] = {}
-        for step in wave_steps:
-            sid = step.get('step_id', '')
-            if not sid:
-                continue
-            status, _ = results.get(sid, (ExecutionStatus.FAILED, []))
-            all_targets: set[str] = set()
-            for t in (step.get('on_success_step_ids') or []):
-                if t:
-                    all_targets.add(t)
-            for t in (step.get('on_error_step_ids') or []):
-                if t:
-                    all_targets.add(t)
-            for target_id in all_targets:
-                target_preds.setdefault(target_id, []).append((sid, status))
-
-        # Collecter les candidats : union déduplicée des next_ids per-branch (déjà routés)
-        candidate_ids: list[str] = []
-        for _, (_, next_ids) in results.items():
-            for nid in next_ids:
-                if nid not in candidate_ids:
-                    candidate_ids.append(nid)
-
-        # Appliquer join_policy pour chaque candidat
-        result: list[str] = []
-        for target_id in candidate_ids:
-            preds = target_preds.get(target_id, [])
-            if len(preds) <= 1:
-                # Prédécesseur unique → inclure sans condition
-                result.append(target_id)
-                continue
-
-            target_step = self._step_lookup_by_id.get(target_id)
-            join_policy = (target_step or {}).get('join_policy', 'all_success')
-            pred_statuses = [s for _, s in preds]
-
-            if join_policy == 'all_success':
-                if all(s == ExecutionStatus.COMPLETED for s in pred_statuses):
-                    result.append(target_id)
-            elif join_policy == 'one_success':
-                if any(s == ExecutionStatus.COMPLETED for s in pred_statuses):
-                    result.append(target_id)
-            elif join_policy == 'all_done':
-                # Tous terminés par définition dans le contexte fan-out
-                result.append(target_id)
-            elif join_policy == 'all_failed':
-                # Story 67.8: D runs only if ALL predecessors failed
-                if all(s == ExecutionStatus.FAILED for s in pred_statuses):
-                    result.append(target_id)
-            elif join_policy == 'one_failed':
-                # Story 67.8: D runs if at least one predecessor failed
-                if any(s == ExecutionStatus.FAILED for s in pred_statuses):
-                    result.append(target_id)
-            else:
-                # Politique inconnue → all_success par défaut (défensif)
-                if all(s == ExecutionStatus.COMPLETED for s in pred_statuses):
-                    result.append(target_id)
-
-        return result
+        """Construit la prochaine vague (delegates to container_parallel)."""
+        return _parallel_apply_join_policy(wave_steps, results, self._step_lookup_by_id)
 
     def _execute_fan_out(
         self, step_ids: list[str]
@@ -663,9 +562,10 @@ class ContainerWorkflowRuntime:
                 for pending_id in pending_ids:
                     results[pending_id] = (ExecutionStatus.FAILED, [])
 
-        # Phase 1 limitation: gate steps returning RUNNING inside a fan-out are treated
-        # as FAILED (they cannot pause the fan-out — ThreadPoolExecutor has already joined).
-        # Full gate support in fan-out is deferred to a future story.
+        # Safety net: gate steps inside a fan-out are treated as FAILED.
+        # Story 77.7: workflows with gate steps in parallel branches are now rejected at validation
+        # (catalog/validation.py _detect_gates_in_parallel_branches). This path should no longer
+        # be reached for correctly validated workflows.
 
         # CANCELLED prioritaire sur tout
         if any(s == ExecutionStatus.CANCELLED for s, _ in results.values()):
@@ -706,7 +606,7 @@ class ContainerWorkflowRuntime:
             return None
 
         try:
-            return cast(Action, Action.objects.get(id=referenced_action_id, status=ActionStatus.PUBLISHED))
+            return cast(Action, Action.objects.select_related('integration').get(id=referenced_action_id, status=ActionStatus.PUBLISHED))
         except Action.DoesNotExist:
             parent_step.status = ExecutionStepStatus.FAILED
             parent_step.completed_at = timezone.now()
@@ -755,11 +655,12 @@ class ContainerWorkflowRuntime:
         parent_step.save(update_fields=['platform_job_id'])
         return child_execution
 
-    def _run_child_execution(self, child_execution: Execution) -> None:
+    def _run_child_execution(self, child_execution: Execution, integration: Any = None) -> None:
         """
         Run the child execution (simulation or production fallback).
 
         Story 71.6: Extracted from _execute_platform_step (subtask 9.3).
+        Story 77.3: Added integration parameter for real platform dispatch.
         """
         if SimulationService.is_enabled():
             SimulationService.create_simulated_steps(child_execution)
@@ -786,7 +687,7 @@ class ContainerWorkflowRuntime:
             # For workflows, run_sync blocks until completion; for other types,
             # no runtime is registered — keep placeholder behavior.
             action = child_execution.action
-            if action and action.item_type == "workflow":
+            if action and action.item_type == ActionItemType.WORKFLOW:
                 try:
                     ContainerWorkflowRuntime(child_execution).run_sync()
                 except Exception as run_err:  # noqa: BLE001
@@ -806,13 +707,108 @@ class ContainerWorkflowRuntime:
                         error_message=str(run_err),
                     )
             else:
-                # No runtime for item_type='action' — placeholder: mark completed
-                now = timezone.now()
-                Execution.objects.filter(id=child_execution.id).update(
-                    status=ExecutionStatus.COMPLETED,
-                    started_at=now,
-                    completed_at=now,
+                # Story 77.3: Real dispatch for item_type='action' via platform job.
+                if integration is None:
+                    # AC2: No integration configured — mark child FAILED explicitly
+                    now = timezone.now()
+                    Execution.objects.filter(id=child_execution.id).update(
+                        status=ExecutionStatus.FAILED,
+                        started_at=now,
+                        completed_at=now,
+                        error_message="Action has no integration configured",
+                    )
+                    logger.error(
+                        "container_workflow_platform_action_no_integration",
+                        child_execution_id=child_execution.id,
+                        parent_execution_id=self.execution.id,
+                        correlation_id=self.correlation_id,
+                    )
+                    return
+
+                # AC1: Integration available — dispatch real platform job
+                # Create an ExecutionStep on the child execution for the platform job tracker
+                child_step = ExecutionStep.objects.create(
+                    execution=child_execution,
+                    step_order=1,
+                    step_name="Platform Job",
+                    step_type=ExecutionStepType.PLATFORM,
+                    status=ExecutionStepStatus.RUNNING,
+                    started_at=timezone.now(),
                 )
+
+                # Set child execution to RUNNING
+                Execution.objects.filter(id=child_execution.id).update(
+                    status=ExecutionStatus.RUNNING,
+                    started_at=timezone.now(),
+                )
+
+                # Build trigger_kwargs from child execution parameters
+                params = child_execution.get_parameters() or {}
+                trigger_kwargs: dict = {"correlation_id": self.correlation_id}
+                if params.get("template_id"):
+                    trigger_kwargs["template_id"] = str(params["template_id"])
+                if params.get("resource_type"):
+                    trigger_kwargs["resource_type"] = params["resource_type"]
+                if params.get("extra_vars"):
+                    trigger_kwargs["extra_vars"] = params["extra_vars"]
+
+                trigger_platform_job.apply_async(
+                    kwargs={
+                        "execution_step_id": child_step.id,
+                        "execution_id": child_execution.id,
+                        "integration_id": integration.id,
+                        "trigger_kwargs": trigger_kwargs,
+                    },
+                    queue=get_platform_queue(integration.type),
+                )
+
+                logger.info(
+                    "container_workflow_platform_action_dispatched",
+                    child_execution_id=child_execution.id,
+                    parent_execution_id=self.execution.id,
+                    integration_id=integration.id,
+                    child_step_id=child_step.id,
+                    correlation_id=self.correlation_id,
+                )
+
+                # Poll child_step.status until terminal or timeout (Task 4)
+                elapsed = 0
+                while elapsed < PLATFORM_ACTION_MAX_WAIT_SECONDS:
+                    child_step.refresh_from_db()
+                    if child_step.status in (
+                        ExecutionStepStatus.COMPLETED,
+                        ExecutionStepStatus.FAILED,
+                    ):
+                        break
+                    time.sleep(PLATFORM_ACTION_POLL_INTERVAL_SECONDS)
+                    elapsed += PLATFORM_ACTION_POLL_INTERVAL_SECONDS
+                else:
+                    # Timeout: mark step and execution as FAILED
+                    ExecutionStep.objects.filter(id=child_step.id).update(
+                        status=ExecutionStepStatus.FAILED,
+                        completed_at=timezone.now(),
+                        error_message="Platform action wait timeout",
+                    )
+                    child_step.refresh_from_db()
+                    logger.error(
+                        "container_workflow_platform_action_timeout",
+                        child_execution_id=child_execution.id,
+                        parent_execution_id=self.execution.id,
+                        elapsed=elapsed,
+                        correlation_id=self.correlation_id,
+                    )
+
+                # Derive final child execution status from child_step.status
+                final_exec_status = (
+                    ExecutionStatus.COMPLETED
+                    if child_step.status == ExecutionStepStatus.COMPLETED
+                    else ExecutionStatus.FAILED
+                )
+                Execution.objects.filter(id=child_execution.id).update(
+                    status=final_exec_status,
+                    completed_at=timezone.now(),
+                )
+                child_execution.refresh_from_db()
 
     def _extract_and_store_output(
         self, step_id: str, parent_step: ExecutionStep, output_mapping: Any,
@@ -874,6 +870,9 @@ class ContainerWorkflowRuntime:
 
         _broadcast_step(self.execution.id, parent_step)  # RUNNING
 
+        # Story 77.3: Extract integration pre-loaded via select_related
+        integration = getattr(referenced_action, 'integration', None)
+
         # Pure computation outside transaction to minimize lock duration
         child_params = self._get_step_parameters(step)
         if resolved_params:
@@ -897,30 +896,76 @@ class ContainerWorkflowRuntime:
             )
 
             # Execution runs OUTSIDE transaction (can be long-running)
-            self._run_child_execution(child_execution)
+            self._run_child_execution(child_execution, integration=integration)
             child_execution.refresh_from_db()
 
             # Story 71.7 AC#4: Transaction 2 — finalize parent_step after execution
             with transaction.atomic():
-                parent_step.status = (
+                final_step_status = (
                     ExecutionStepStatus.FAILED
                     if child_execution.status == ExecutionStatus.FAILED
                     else ExecutionStepStatus.COMPLETED
                 )
+                parent_step.status = final_step_status
                 parent_step.completed_at = timezone.now()
-                parent_step.set_output({
+
+                # Story 77.4: Enrich raw_output with real platform artifacts from child_step.
+                # child_platform_output may contain: artifacts, job_status, platform_logs,
+                # outputs, failed_tasks, changed_hosts, platform_job_id, etc.
+                # Guard: only query for item_type=ACTION — _run_child_execution creates exactly
+                # one PLATFORM tracking step in that case. For WORKFLOW items, the child
+                # execution may have its own PLATFORM steps (from its internal workflow steps)
+                # which must NOT be merged into the outer raw_output (AC3).
+                if referenced_action.item_type == ActionItemType.ACTION:
+                    child_platform_step = (
+                        ExecutionStep.objects.filter(
+                            execution=child_execution,
+                            step_type=ExecutionStepType.PLATFORM,
+                        )
+                        .order_by('step_order')
+                        .first()
+                    )
+                else:
+                    child_platform_step = None
+                child_platform_output = child_platform_step.get_output() if child_platform_step else {}
+
+                raw_output = {
+                    # Story 77.4: real platform data (artifacts, outputs, job_status, etc.) — merged first
+                    **(child_platform_output or {}),
+                    # Metadata fields — always present, take priority over any conflicting keys
                     'child_execution_id': child_execution.id,
                     'referenced_action_id': referenced_action.id,
                     'referenced_action_name': referenced_action.name,
                     'child_status': child_execution.status,
                     'parameters_injected': bool(child_params),
+                }
+                output_mapping = step.get('output_mapping', {})
+                if output_mapping and not isinstance(output_mapping, dict):
+                    logger.warning(
+                        "container_workflow_output_mapping_not_dict",
+                        execution_id=self.execution.id,
+                        step_id=step_id,
+                        output_mapping_type=type(output_mapping).__name__,
+                        correlation_id=self.correlation_id,
+                    )
+                    output_mapping = {}
+                extractor = OutputExtractor()
+                extracted = extractor.extract(raw_output, output_mapping)
+                parent_step.set_output({
+                    'raw_output': raw_output,
+                    'extracted_output': extracted,
+                    'status_context': {
+                        'status': final_step_status,
+                        'completed_at': parent_step.completed_at.isoformat(),
+                    },
                 })
                 parent_step.save()
 
             _broadcast_step(self.execution.id, parent_step)  # COMPLETED or FAILED
 
             if step_id is not None:
-                self._extract_and_store_output(step_id, parent_step, step.get('output_mapping', {}))
+                with self._step_outputs_lock:
+                    self._step_outputs[step_id] = extracted
 
             return cast(ExecutionStatus, child_execution.status)
         except Exception as exc:  # noqa: BLE001
@@ -1013,6 +1058,7 @@ class ContainerWorkflowRuntime:
                 'approval' if cond_type == 'approval_granted' else 'maintenance_window'
             )
         parent_step.set_output(gate_output)
+        assert_step_transition(parent_step.status, ExecutionStepStatus.WAITING)
         parent_step.status = ExecutionStepStatus.WAITING
         parent_step.save()
 
@@ -1033,8 +1079,17 @@ class ContainerWorkflowRuntime:
             if self._has_approval_notification_configured():
                 self._schedule_approval_notification()
             try:
-                from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
-                WorkflowEventService.emit_approval_requested(self.execution.id, parent_step)
+                from executions.infra.event_store import EventStore  # noqa: PLC0415
+                EventStore.append_event(
+                    execution_id=self.execution.id,
+                    event_type=WorkflowEventType.APPROVAL_REQUESTED,
+                    payload={
+                        "step_order": parent_step.step_order,
+                        "step_name": parent_step.step_name,
+                        "status": parent_step.status,
+                    },
+                    step_id=parent_step.id,
+                )
             except Exception as e:  # noqa: BLE001 — best-effort: must not fail runtime
                 logger.error(
                     "container_workflow_emit_approval_requested_failed",
@@ -1058,9 +1113,11 @@ class ContainerWorkflowRuntime:
         Extract output and finalize handler step status.
 
         Story 71.6: Extracted from _execute_handler_step (subtask 10.2).
+        Story 77.1: Persists standard {raw_output, extracted_output, status_context}
+        in ExecutionStep.output for durable resume after gates.
         """
-        if step_id is not None:
-            if not isinstance(output_mapping, dict):
+        if not isinstance(output_mapping, dict):
+            if step_id is not None:
                 logger.warning(
                     "container_workflow_output_mapping_not_dict",
                     execution_id=self.execution.id,
@@ -1068,13 +1125,16 @@ class ContainerWorkflowRuntime:
                     output_mapping_type=type(output_mapping).__name__,
                     correlation_id=self.correlation_id,
                 )
-                output_mapping = {}
-            extractor = OutputExtractor()
-            if isinstance(result, dict) and 'raw_output' in result:
-                raw_output = result.get('raw_output', {}) or {}
-            else:
-                raw_output = result if isinstance(result, dict) else {}
-            extracted = extractor.extract(raw_output, output_mapping)
+            output_mapping = {}
+
+        extractor = OutputExtractor()
+        if isinstance(result, dict) and 'raw_output' in result:
+            raw_output = result.get('raw_output', {}) or {}
+        else:
+            raw_output = result if isinstance(result, dict) else {}
+        extracted = extractor.extract(raw_output, output_mapping)
+
+        if step_id is not None:
             with self._step_outputs_lock:
                 self._step_outputs[step_id] = extracted
 
@@ -1085,12 +1145,25 @@ class ContainerWorkflowRuntime:
             if isinstance(handler_status, ExecutionStatus):
                 result_execution_status = handler_status
 
-        parent_step.status = (
+        final_step_status = (
             ExecutionStepStatus.FAILED
             if result_execution_status == ExecutionStatus.FAILED
             else ExecutionStepStatus.COMPLETED
         )
+        assert_step_transition(parent_step.status, final_step_status)
+        parent_step.status = final_step_status
         parent_step.completed_at = timezone.now()
+
+        # Story 77.1: Persist standard output structure for durable resume after gates.
+        parent_step.set_output({
+            'raw_output': raw_output,
+            'extracted_output': extracted,
+            'status_context': {
+                'status': final_step_status,
+                'completed_at': parent_step.completed_at.isoformat(),
+            },
+        })
+
         parent_step.save()
         _broadcast_step(self.execution.id, parent_step)  # COMPLETED or FAILED
         return result_execution_status
@@ -1102,9 +1175,7 @@ class ContainerWorkflowRuntime:
         step_name: str,
         step_id: str | None,
         step_type: str,
-        handler: Union[
-            ServiceCallHandler, HttpRequestHandler, EvaluationHandler, GateHandler
-        ],
+        handler: Any,  # Instance d'un handler enregistré dans step_handler_registry (Story 84.1)
         parallel_context: ParallelContext | None = None,
     ) -> ExecutionStatus:
         """
@@ -1141,6 +1212,7 @@ class ContainerWorkflowRuntime:
                 execution_id=self.execution.id,
                 correlation_id=self.correlation_id,
             )
+            assert_step_transition(parent_step.status, ExecutionStepStatus.FAILED)
             parent_step.status = ExecutionStepStatus.FAILED
             parent_step.completed_at = timezone.now()
             parent_step.save()
@@ -1150,6 +1222,9 @@ class ContainerWorkflowRuntime:
         # Protocole WAITING pour gate steps (story 57.7)
         if isinstance(result, dict) and result.get('waiting'):
             if parallel_context is not None:
+                # Safety net — should be prevented by catalog/validation.py _detect_gates_in_parallel_branches
+                # Story 77.7: gate steps inside fan-out are rejected at validation; this path
+                # should no longer be reached for correctly validated workflows.
                 logger.warning(
                     "container_workflow_parallel_gate_not_supported",
                     step_name=step_name,
@@ -1169,10 +1244,11 @@ class ContainerWorkflowRuntime:
         """
         Start the container workflow execution asynchronously.
 
-        Sets the execution to RUNNING and launches the workflow loop in a
-        background daemon thread so the HTTP response returns immediately
-        with the execution_id. The frontend can then poll / subscribe via
-        WebSocket to follow real-time progress.
+        Story 78.5: Sets the execution to RUNNING and enqueues root steps
+        to RUNNABLE_STEPS for queue-based orchestration. Returns immediately.
+        Workers will claim and execute steps via process_runnable_steps.
+
+        Legacy fallback: steps without step_id use thread-based execution.
         """
         logger.info(
             "container_workflow_execution_starting",
@@ -1184,12 +1260,14 @@ class ContainerWorkflowRuntime:
         )
 
         # CAS transition SUBMITTED→RUNNING to prevent double-start (Story 71.7 AC#3)
+        # Note: no assert_execution_transition here — the CAS IS the guard for concurrency.
         updated = Execution.objects.filter(
             id=self.execution.id,
             status=ExecutionStatus.SUBMITTED,
         ).update(
             status=ExecutionStatus.RUNNING,
             started_at=timezone.now(),
+            updated_at=timezone.now(),  # Story 76.3: heartbeat initial
         )
         if updated == 0:
             logger.warning(
@@ -1207,22 +1285,73 @@ class ContainerWorkflowRuntime:
                 action_id=self.action.id,
                 correlation_id=self.correlation_id,
             )
+            assert_execution_transition(self.execution.status, ExecutionStatus.FAILED)
             self.execution.status = ExecutionStatus.FAILED
             self.execution.completed_at = timezone.now()
             self.execution.error_message = "Workflow has no steps"
             self.execution.save(update_fields=['status', 'completed_at', 'error_message'])
             return
 
-        # Launch background thread for step-by-step execution
-        thread = threading.Thread(
-            target=self._run_workflow_loop,
-            args=(self.execution.id,),
-            daemon=True,
-        )
-        thread.start()
+        # Story 78.5: Enqueue root steps to RUNNABLE_STEPS (queue-based dispatch)
+        # Story 81.2: Legacy fallback removed — steps without step_id are now FAILED directly
+        initial_wave = self._determine_initial_wave()
+        if initial_wave is None:
+            logger.error(
+                "container_workflow_no_initial_wave_failed",
+                execution_id=self.execution.id,
+                correlation_id=self.correlation_id,
+            )
+            assert_execution_transition(self.execution.status, ExecutionStatus.FAILED)
+            self.execution.status = ExecutionStatus.FAILED
+            self.execution.completed_at = timezone.now()
+            self.execution.error_message = "No initial wave: workflow steps have no step_id. Legacy fallback removed."
+            self.execution.save(update_fields=["status", "completed_at", "error_message"])
+            return
+
+        from executions.infra.work_queue import WorkQueue  # noqa: PLC0415
+
+        enqueued_count = 0
+        for step_id in initial_wave:
+            step_config = self._step_lookup_by_id.get(step_id)
+            if not step_config:
+                logger.warning(
+                    "container_workflow_root_step_not_found",
+                    execution_id=self.execution.id,
+                    step_id=step_id,
+                    correlation_id=self.correlation_id,
+                )
+                continue
+
+            step_type_str = step_config.get('step_type', 'platform')
+            db_step_type = self._STEP_TYPE_TO_DB_TYPE.get(step_type_str, ExecutionStepType.PLATFORM)
+            step_name = step_config.get('name') or f"Étape {step_config.get('order', 0)}"
+
+            self._step_order_counter += 1
+            exec_step = ExecutionStep.objects.create(
+                execution=self.execution,
+                step_order=self._step_order_counter,
+                step_name=step_name,
+                config_step_id=step_id,
+                step_type=db_step_type,
+                status=ExecutionStepStatus.PENDING,
+            )
+            WorkQueue.enqueue(exec_step)
+            enqueued_count += 1
+
+        if enqueued_count == 0:
+            # No root steps could be enqueued — mark FAILED
+            assert_execution_transition(self.execution.status, ExecutionStatus.FAILED)
+            self.execution.status = ExecutionStatus.FAILED
+            self.execution.completed_at = timezone.now()
+            self.execution.error_message = "No root steps found to enqueue"
+            self.execution.save(update_fields=['status', 'completed_at', 'error_message'])
+            return
+
         logger.info(
-            "container_workflow_thread_started",
+            "container_workflow_steps_enqueued",
             execution_id=self.execution.id,
+            initial_wave=initial_wave,
+            enqueued_count=enqueued_count,
             correlation_id=self.correlation_id,
         )
 
@@ -1242,12 +1371,14 @@ class ContainerWorkflowRuntime:
         )
 
         # CAS transition SUBMITTED→RUNNING to prevent double-start (Story 71.7 AC#3)
+        # Note: no assert_execution_transition here — the CAS IS the guard for concurrency.
         updated = Execution.objects.filter(
             id=self.execution.id,
             status=ExecutionStatus.SUBMITTED,
         ).update(
             status=ExecutionStatus.RUNNING,
             started_at=timezone.now(),
+            updated_at=timezone.now(),  # Story 76.3: heartbeat initial
         )
         if updated == 0:
             # Allow proceeding if already RUNNING (test scenario / resume)
@@ -1263,6 +1394,7 @@ class ContainerWorkflowRuntime:
             self.execution.refresh_from_db(fields=['status', 'started_at'])
 
         if not self.workflow_steps:
+            assert_execution_transition(self.execution.status, ExecutionStatus.FAILED)
             self.execution.status = ExecutionStatus.FAILED
             self.execution.completed_at = timezone.now()
             self.execution.error_message = "Workflow has no steps"
@@ -1270,58 +1402,6 @@ class ContainerWorkflowRuntime:
             return ExecutionStatus.FAILED
 
         return self._execute_workflow_steps()
-
-    def _run_workflow_loop(self, execution_id: int) -> None:
-        """Background workflow execution loop (runs in a daemon thread)."""
-        try:
-            close_old_connections()
-
-            # Re-load execution from DB in this thread's connection
-            self.execution = Execution.objects.select_related('action').get(id=execution_id)
-            self.action = self.execution.action
-            self.workflow_steps = self._load_workflow_steps()
-            self.child_executions = []
-            self._step_order_counter = 0
-            self._transition_count = 0
-            self._step_outputs = {}
-            # Réinitialiser le lookup step_id → step (Story 67.2)
-            self._step_lookup_by_id = {
-                s['step_id']: s for s in self.workflow_steps if s.get('step_id')
-            }
-
-            self._execute_workflow_steps()
-
-        except Exception as e:  # noqa: BLE001 — catch-all-mark-failed: ensures parent execution is marked FAILED on any error
-            # Catch-all: ensure the parent execution is marked as FAILED
-            logger.error(
-                "container_workflow_thread_error",
-                execution_id=execution_id,
-                error=str(e),
-                error_type=type(e).__name__,
-                correlation_id=self.correlation_id,
-                exc_info=True,
-            )
-            # Story 71.7 AC#7: CAS pattern to avoid overwriting terminal status
-            try:
-                updated = Execution.objects.filter(
-                    id=execution_id,
-                ).exclude(
-                    status__in=[ExecutionStatus.COMPLETED, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED],
-                ).update(
-                    status=ExecutionStatus.FAILED,
-                    completed_at=timezone.now(),
-                    error_message=f"Workflow thread error: {e}",
-                )
-                if updated > 0:
-                    logger.info(
-                        "container_workflow_thread_error_marked_failed",
-                        execution_id=execution_id,
-                        correlation_id=self.correlation_id,
-                    )
-            except Exception as _:  # noqa: BLE001 — best-effort-non-critical: cleanup after thread error must not raise
-                logger.error("container_workflow_thread_cleanup_failed", execution_id=execution_id, exc_info=True)
-        finally:
-            close_old_connections()
 
     def _determine_initial_wave(self) -> list[str] | None:
         """
@@ -1349,6 +1429,240 @@ class ContainerWorkflowRuntime:
 
         return current_wave if current_wave else None
 
+    def _touch_heartbeat(self) -> None:
+        """Story 76.3: Update updated_at only when execution is RUNNING (avoid unconditional writes)."""
+        if self.execution.status == ExecutionStatus.RUNNING:
+            Execution.objects.filter(id=self.execution.id).update(updated_at=timezone.now())
+
+    def execute_single_step(
+        self, exec_step: ExecutionStep, step_config: dict,
+    ) -> tuple[ExecutionStatus, list[str]]:
+        """
+        Story 78.5: Execute a single pre-existing ExecutionStep (used by orchestration worker).
+
+        Transitions PENDING→RUNNING, dispatches to handler, finalizes result,
+        and returns (outcome_status, next_step_ids).
+
+        Args:
+            exec_step: ExecutionStep record (already created, status=PENDING).
+            step_config: Step dict from the workflow definition.
+
+        Returns:
+            (ExecutionStatus, list of next step_id strings)
+        """
+        step_id = step_config.get('step_id')
+        step_type = step_config.get('step_type') or 'platform'
+
+        # Heartbeat
+        self._touch_heartbeat()
+
+        # Transition to RUNNING (state_machine validates PENDING→RUNNING)
+        assert_step_transition(exec_step.status, ExecutionStepStatus.RUNNING)
+        exec_step.status = ExecutionStepStatus.RUNNING
+        exec_step.started_at = timezone.now()
+        exec_step.save(update_fields=['status', 'started_at'])
+        _broadcast_step(self.execution.id, exec_step)
+
+        # Check cancellation
+        if self._check_cancelled():
+            assert_step_transition(exec_step.status, ExecutionStepStatus.FAILED)
+            exec_step.status = ExecutionStepStatus.FAILED
+            exec_step.completed_at = timezone.now()
+            exec_step.error_message = "Execution cancelled"
+            exec_step.save(update_fields=['status', 'completed_at', 'error_message'])
+            _broadcast_step(self.execution.id, exec_step)
+            return ExecutionStatus.CANCELLED, []
+
+        # Resolve input_mapping
+        input_mapping = step_config.get('input_mapping', {})
+        resolved_params: dict = {}
+        if input_mapping and isinstance(input_mapping, dict):
+            resolver = StepTemplateResolver(
+                self._step_outputs,
+                execution_context={
+                    'action_name': getattr(self.action, 'name', ''),
+                    'environment': self.execution.environment,
+                    'execution_id': self.execution.id,
+                },
+            )
+            resolved_params = resolver.resolve(input_mapping)
+
+        # Condition evaluation
+        condition_evaluator = StepConditionEvaluator()
+        if not condition_evaluator.should_execute(step_config, self.execution):
+            now = timezone.now()
+            assert_step_transition(exec_step.status, ExecutionStepStatus.SKIPPED)
+            exec_step.status = ExecutionStepStatus.SKIPPED
+            exec_step.completed_at = now
+            exec_step.save(update_fields=['status', 'completed_at'])
+            if step_id is not None:
+                self._step_outputs[step_id] = {}
+            next_ids = self._get_next_step_ids(step_config, ExecutionStatus.COMPLETED)
+            return ExecutionStatus.COMPLETED, next_ids
+
+        # Dispatch by step_type (Story 84.1 — R1 extensibilité, cohérence avec _execute_step)
+        if step_type == 'platform':
+            status = self._worker_execute_platform(exec_step, step_config, resolved_params)
+        elif step_handler_registry.is_registered(step_type):
+            status = self._worker_execute_handler(exec_step, step_config, step_type, resolved_params)
+        else:
+            assert_step_transition(exec_step.status, ExecutionStepStatus.FAILED)
+            exec_step.status = ExecutionStepStatus.FAILED
+            exec_step.completed_at = timezone.now()
+            exec_step.error_message = f"Unknown step_type: {step_type!r}"
+            exec_step.save(update_fields=['status', 'completed_at', 'error_message'])
+            _broadcast_step(self.execution.id, exec_step)
+            return ExecutionStatus.FAILED, []
+
+        # Gate WAITING — no next steps, resume will happen via command
+        if status == ExecutionStatus.RUNNING:
+            return ExecutionStatus.RUNNING, []
+
+        next_ids = self._get_next_step_ids(step_config, status)
+        return status, next_ids
+
+    def _worker_execute_platform(
+        self,
+        exec_step: ExecutionStep,
+        step_config: dict,
+        resolved_params: dict,
+    ) -> ExecutionStatus:
+        """Story 78.5: Execute a platform step using a pre-existing ExecutionStep."""
+        step_id = step_config.get('step_id')
+        referenced_action_id = step_config.get('referenced_action_id')
+
+        referenced_action = self._validate_and_load_referenced_action(
+            step_config.get('order', 0), referenced_action_id, exec_step,
+        )
+        if referenced_action is None:
+            _broadcast_step(self.execution.id, exec_step)
+            return ExecutionStatus.FAILED
+
+        integration = getattr(referenced_action, 'integration', None)
+        child_params = self._get_step_parameters(step_config)
+        if resolved_params:
+            child_params = {**child_params, **resolved_params}
+
+        child_execution = None
+        try:
+            child_execution = self._create_child_execution(
+                referenced_action, child_params, exec_step, None,
+            )
+            self._run_child_execution(child_execution, integration)
+            child_execution.refresh_from_db()
+
+            final_step_status = (
+                ExecutionStepStatus.COMPLETED
+                if child_execution.status == ExecutionStatus.COMPLETED
+                else ExecutionStepStatus.FAILED
+            )
+            assert_step_transition(exec_step.status, final_step_status)
+            exec_step.status = final_step_status
+            exec_step.completed_at = timezone.now()
+
+            # Extract and store output
+            raw_output = {
+                'child_execution_id': child_execution.id,
+                'referenced_action_id': referenced_action.id,
+                'referenced_action_name': referenced_action.name,
+                'child_status': child_execution.status,
+                'parameters_injected': bool(child_params),
+            }
+            output_mapping = step_config.get('output_mapping', {})
+            if not isinstance(output_mapping, dict):
+                output_mapping = {}
+            extractor = OutputExtractor()
+            extracted = extractor.extract(raw_output, output_mapping)
+            exec_step.set_output({
+                'raw_output': raw_output,
+                'extracted_output': extracted,
+                'status_context': {
+                    'status': final_step_status,
+                    'completed_at': exec_step.completed_at.isoformat(),
+                },
+            })
+            exec_step.save()
+            _broadcast_step(self.execution.id, exec_step)
+
+            if step_id is not None:
+                self._step_outputs[step_id] = extracted
+
+            return cast(ExecutionStatus, child_execution.status)
+        except Exception as exc:  # noqa: BLE001
+            with transaction.atomic():
+                assert_step_transition(exec_step.status, ExecutionStepStatus.FAILED)
+                exec_step.status = ExecutionStepStatus.FAILED
+                exec_step.completed_at = timezone.now()
+                exec_step.error_message = f"Platform step failed: {exc}"
+                exec_step.save()
+                if child_execution is not None:
+                    now = timezone.now()
+                    Execution.objects.filter(id=child_execution.id).update(
+                        status=ExecutionStatus.FAILED, started_at=now,
+                        completed_at=now, error_message=str(exc),
+                    )
+            _broadcast_step(self.execution.id, exec_step)
+            logger.error(
+                "worker_platform_step_exception",
+                execution_id=self.execution.id,
+                step_id=step_config.get('step_id'),
+                error=str(exc),
+                correlation_id=self.correlation_id,
+                exc_info=True,
+            )
+            return ExecutionStatus.FAILED
+
+    def _worker_execute_handler(
+        self,
+        exec_step: ExecutionStep,
+        step_config: dict,
+        step_type: str,
+        resolved_params: dict,
+    ) -> ExecutionStatus:
+        """Story 78.5: Execute a non-platform handler step using a pre-existing ExecutionStep."""
+        step_id = step_config.get('step_id')
+        step_name = step_config.get('name') or f"Étape {step_config.get('order', 0)}"
+
+        # Lookup via registre (Story 84.1 — cohérence avec _execute_step, R1 extensibilité)
+        handler_class = step_handler_registry.get(step_type)
+        if handler_class is None:
+            assert_step_transition(exec_step.status, ExecutionStepStatus.FAILED)
+            exec_step.status = ExecutionStepStatus.FAILED
+            exec_step.completed_at = timezone.now()
+            exec_step.error_message = f"Unknown handler step_type: {step_type!r}"
+            exec_step.save(update_fields=['status', 'completed_at', 'error_message'])
+            _broadcast_step(self.execution.id, exec_step)
+            return ExecutionStatus.FAILED
+        handler: Any = handler_class()
+
+        try:
+            result = handler.execute(
+                step_config=step_config,
+                resolved_params=resolved_params,
+                execution=self.execution,
+                step=step_config,
+                correlation_id=self.correlation_id,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "worker_handler_step_exception",
+                step_name=step_name,
+                execution_id=self.execution.id,
+                correlation_id=self.correlation_id,
+            )
+            assert_step_transition(exec_step.status, ExecutionStepStatus.FAILED)
+            exec_step.status = ExecutionStepStatus.FAILED
+            exec_step.completed_at = timezone.now()
+            exec_step.save(update_fields=['status', 'completed_at'])
+            _broadcast_step(self.execution.id, exec_step)
+            return ExecutionStatus.FAILED
+
+        # Gate WAITING protocol
+        if isinstance(result, dict) and result.get('waiting'):
+            return self._handle_gate_waiting(result, exec_step, step_name, step_id)
+
+        return self._finalize_handler_step(result, exec_step, step_id, step_config.get('output_mapping', {}))
+
     def _execute_workflow_steps(self) -> ExecutionStatus:
         """
         Execute workflow steps via BFS-wave graph traversal (Story 67.2).
@@ -1374,6 +1688,9 @@ class ContainerWorkflowRuntime:
             return self._execute_workflow_steps_sequential()
 
         while current_wave:
+            # Story 76.3: Heartbeat — mise à jour de updated_at à chaque vague pour éviter faux positifs staleness
+            self._touch_heartbeat()
+
             # Check cancellation avant chaque vague (AC4)
             if self._check_cancelled():
                 logger.info(
@@ -1489,7 +1806,7 @@ class ContainerWorkflowRuntime:
         }.get(final_status, AuditActionType.EXECUTION_FAILED)
 
         # Story 71.7 AC#1: Atomic update + audit to prevent inconsistent state
-        # CAS guard: do not overwrite a terminal status set by _run_workflow_loop error handler
+        # CAS guard: do not overwrite a terminal status set by a concurrent worker or upstream error path
         with transaction.atomic():
             updated = Execution.objects.filter(
                 id=self.execution.id,
@@ -1552,6 +1869,9 @@ class ContainerWorkflowRuntime:
         _failed_step_name: str | None = None
 
         for step in self.workflow_steps:
+            # Story 76.3: Heartbeat — mise à jour de updated_at à chaque step (chemin séquentiel)
+            self._touch_heartbeat()
+
             if self._check_cancelled():
                 logger.info(
                     "container_workflow_cancelled",

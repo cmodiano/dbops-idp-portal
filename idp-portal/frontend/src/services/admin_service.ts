@@ -76,7 +76,7 @@ export async function getAction(id: number): Promise<ActionDetail> {
  */
 export async function updateAction(actionId: number, action: ActionCreate): Promise<ActionDetail> {
   return apiFetch<ActionDetail>(`/admin/actions/${actionId}/`, {
-    method: 'PUT',
+    method: 'PATCH',
     body: JSON.stringify(action),
   });
 }

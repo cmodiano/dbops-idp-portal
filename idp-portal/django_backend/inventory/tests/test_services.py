@@ -9,7 +9,8 @@ from django.test import TestCase, override_settings
 
 from inventory.services import InventoryService, InventoryServiceError
 from integrations.models import Integration, IntegrationType
-from profiles.models import Profile, ProfileActionPermission, ProfileTargetPermission
+from profiles.models import Profile, ProfileTargetPermission
+from profiles.services import ProfileService
 
 
 class InventoryServiceIntegrationTests(TestCase):
@@ -248,15 +249,13 @@ class InventoryServiceRBACTests(TestCase):
             description='Development team',
             ad_group='GRP-DEV-TEAM'
         )
-        ProfileActionPermission.objects.create(
-            profile=self.dev_profile,
-            permission_type='ALL',
-            environments_json='["developpement", "certification"]'
+        ProfileService().set_action_permissions(
+            self.dev_profile.id,
+            {'actions_type': 'all', 'environments': ['developpement', 'certification']},
         )
-        ProfileTargetPermission.objects.create(
-            profile=self.dev_profile,
-            permission_type='PATTERN',
-            target_patterns_json='["web-*", "api-*"]'
+        ProfileService().set_target_permissions(
+            self.dev_profile.id,
+            {'targets_type': 'pattern', 'target_patterns': ['web-*', 'api-*']},
         )
 
         # Profile with all access
@@ -266,10 +265,9 @@ class InventoryServiceRBACTests(TestCase):
             ad_group='GRP-ADMIN',
             is_admin=1
         )
-        ProfileActionPermission.objects.create(
-            profile=self.admin_profile,
-            permission_type='ALL',
-            environments_json='["developpement", "certification", "production"]'
+        ProfileService().set_action_permissions(
+            self.admin_profile.id,
+            {'actions_type': 'all', 'environments': ['developpement', 'certification', 'production']},
         )
         ProfileTargetPermission.objects.create(
             profile=self.admin_profile,
@@ -364,10 +362,9 @@ class InventoryServiceRBACTests(TestCase):
             description='Certif access',
             ad_group='GRP-CERTIF'
         )
-        ProfileActionPermission.objects.create(
-            profile=certif_profile,
-            permission_type='ALL',
-            environments_json='["certif", "lab"]'
+        ProfileService().set_action_permissions(
+            certif_profile.id,
+            {'actions_type': 'all', 'environments': ['certif', 'lab']},
         )
 
         envs = self.service.get_allowed_environments_for_user(['GRP-CERTIF'])
@@ -553,10 +550,9 @@ class RBACEnvironmentFilterTests(TestCase):
             description='Dev and Staging access',
             ad_group='GRP-DEV-STAGING'
         )
-        ProfileActionPermission.objects.create(
-            profile=self.dev_staging_profile,
-            permission_type='ALL',
-            environments_json='["developpement", "certification"]'
+        ProfileService().set_action_permissions(
+            self.dev_staging_profile.id,
+            {'actions_type': 'all', 'environments': ['developpement', 'certification']},
         )
         ProfileTargetPermission.objects.create(
             profile=self.dev_staging_profile,
@@ -630,10 +626,9 @@ class RBACEnvironmentFilterTests(TestCase):
             description='Certif only',
             ad_group='GRP-CERTIF-ONLY'
         )
-        ProfileActionPermission.objects.create(
-            profile=certif_only_profile,
-            permission_type='ALL',
-            environments_json='["certif"]'
+        ProfileService().set_action_permissions(
+            certif_only_profile.id,
+            {'actions_type': 'all', 'environments': ['certif']},
         )
         ProfileTargetPermission.objects.create(
             profile=certif_only_profile,
@@ -670,10 +665,9 @@ class RBACEnvironmentFilterTests(TestCase):
             description='Lab and developpement access',
             ad_group='GRP-LAB-DEV'
         )
-        ProfileActionPermission.objects.create(
-            profile=lab_dev_profile,
-            permission_type='ALL',
-            environments_json='["lab", "developpement"]'
+        ProfileService().set_action_permissions(
+            lab_dev_profile.id,
+            {'actions_type': 'all', 'environments': ['lab', 'developpement']},
         )
         ProfileTargetPermission.objects.create(
             profile=lab_dev_profile,
@@ -711,10 +705,9 @@ class RBACEnvironmentFilterTests(TestCase):
             description='Multi environment',
             ad_group='GRP-MULTI'
         )
-        ProfileActionPermission.objects.create(
-            profile=profile,
-            permission_type='ALL',
-            environments_json='["lab", "developpement", "certification"]'
+        ProfileService().set_action_permissions(
+            profile.id,
+            {'actions_type': 'all', 'environments': ['lab', 'developpement', 'certification']},
         )
         ProfileTargetPermission.objects.create(
             profile=profile,
@@ -757,15 +750,13 @@ class RBACPatternRestrictionTests(TestCase):
             description='Web servers only',
             ad_group='GRP-WEB-TEAM'
         )
-        ProfileActionPermission.objects.create(
-            profile=self.web_only_profile,
-            permission_type='ALL',
-            environments_json='["developpement"]'
+        ProfileService().set_action_permissions(
+            self.web_only_profile.id,
+            {'actions_type': 'all', 'environments': ['developpement']},
         )
-        ProfileTargetPermission.objects.create(
-            profile=self.web_only_profile,
-            permission_type='PATTERN',
-            target_patterns_json='["web-*"]'
+        ProfileService().set_target_permissions(
+            self.web_only_profile.id,
+            {'targets_type': 'pattern', 'target_patterns': ['web-*']},
         )
 
     @patch('inventory.services.connection')
@@ -860,15 +851,13 @@ class RBACListRestrictionTests(TestCase):
             description='Access to specific servers only',
             ad_group='GRP-SPECIFIC'
         )
-        ProfileActionPermission.objects.create(
-            profile=self.explicit_list_profile,
-            permission_type='ALL',
-            environments_json='["developpement", "certification"]'
+        ProfileService().set_action_permissions(
+            self.explicit_list_profile.id,
+            {'actions_type': 'all', 'environments': ['developpement', 'certification']},
         )
-        ProfileTargetPermission.objects.create(
-            profile=self.explicit_list_profile,
-            permission_type='LIST',
-            target_names_json='["srv-01", "srv-02"]'
+        ProfileService().set_target_permissions(
+            self.explicit_list_profile.id,
+            {'targets_type': 'list', 'target_names': ['srv-01', 'srv-02']},
         )
 
     @patch('inventory.services.connection')
@@ -968,15 +957,13 @@ class RBACMultiProfileUnionTests(TestCase):
             description='DEV access with specific target',
             ad_group='GRP-PROFILE-A'
         )
-        ProfileActionPermission.objects.create(
-            profile=self.profile_a,
-            permission_type='ALL',
-            environments_json='["developpement"]'
+        ProfileService().set_action_permissions(
+            self.profile_a.id,
+            {'actions_type': 'all', 'environments': ['developpement']},
         )
-        ProfileTargetPermission.objects.create(
-            profile=self.profile_a,
-            permission_type='LIST',
-            target_names_json='["srv-01"]'
+        ProfileService().set_target_permissions(
+            self.profile_a.id,
+            {'targets_type': 'list', 'target_names': ['srv-01']},
         )
 
         # Profile B: STAGING access with ALL targets
@@ -985,10 +972,9 @@ class RBACMultiProfileUnionTests(TestCase):
             description='STAGING access with all targets',
             ad_group='GRP-PROFILE-B'
         )
-        ProfileActionPermission.objects.create(
-            profile=self.profile_b,
-            permission_type='ALL',
-            environments_json='["certification"]'
+        ProfileService().set_action_permissions(
+            self.profile_b.id,
+            {'actions_type': 'all', 'environments': ['certification']},
         )
         ProfileTargetPermission.objects.create(
             profile=self.profile_b,
@@ -1045,15 +1031,13 @@ class RBACMultiProfileUnionTests(TestCase):
             description='DEV access with db-* pattern',
             ad_group='GRP-PROFILE-C'
         )
-        ProfileActionPermission.objects.create(
-            profile=profile_c,
-            permission_type='ALL',
-            environments_json='["developpement"]'
+        ProfileService().set_action_permissions(
+            profile_c.id,
+            {'actions_type': 'all', 'environments': ['developpement']},
         )
-        ProfileTargetPermission.objects.create(
-            profile=profile_c,
-            permission_type='PATTERN',
-            target_patterns_json='["db-*"]'
+        ProfileService().set_target_permissions(
+            profile_c.id,
+            {'targets_type': 'pattern', 'target_patterns': ['db-*']},
         )
 
         # Profile D with web-* pattern
@@ -1062,15 +1046,13 @@ class RBACMultiProfileUnionTests(TestCase):
             description='DEV access with web-* pattern',
             ad_group='GRP-PROFILE-D'
         )
-        ProfileActionPermission.objects.create(
-            profile=profile_d,
-            permission_type='ALL',
-            environments_json='["developpement"]'
+        ProfileService().set_action_permissions(
+            profile_d.id,
+            {'actions_type': 'all', 'environments': ['developpement']},
         )
-        ProfileTargetPermission.objects.create(
-            profile=profile_d,
-            permission_type='PATTERN',
-            target_patterns_json='["web-*"]'
+        ProfileService().set_target_permissions(
+            profile_d.id,
+            {'targets_type': 'pattern', 'target_patterns': ['web-*']},
         )
 
         mock_cursor = MagicMock()
@@ -1149,10 +1131,9 @@ class RBACEdgeCaseTests(TestCase):
             ad_group='GRP-SUPERADMIN',
             is_admin=1
         )
-        ProfileActionPermission.objects.create(
-            profile=admin_profile,
-            permission_type='ALL',
-            environments_json='["developpement", "certification", "production"]'
+        ProfileService().set_action_permissions(
+            admin_profile.id,
+            {'actions_type': 'all', 'environments': ['developpement', 'certification', 'production']},
         )
         ProfileTargetPermission.objects.create(
             profile=admin_profile,
@@ -1185,10 +1166,9 @@ class RBACEdgeCaseTests(TestCase):
             description='For pagination test',
             ad_group='GRP-PAGINATED'
         )
-        ProfileActionPermission.objects.create(
-            profile=profile,
-            permission_type='ALL',
-            environments_json='["developpement"]'
+        ProfileService().set_action_permissions(
+            profile.id,
+            {'actions_type': 'all', 'environments': ['developpement']},
         )
         ProfileTargetPermission.objects.create(
             profile=profile,
@@ -1388,13 +1368,13 @@ class RBACNonStandardEnvironmentTests(TestCase):
 
     @patch('inventory.services.connection')
     def test_profile_lab_allows_lab_targets(self, mock_connection):
-        """Profile with environments_json='["lab"]' + targets lab → authorized."""
+        """Profile with # environments: ['lab'] + targets lab → authorized."""
         lab_profile = Profile.objects.create(
             name='lab-team', description='Lab team', ad_group='GRP-LAB-TEAM'
         )
-        ProfileActionPermission.objects.create(
-            profile=lab_profile, permission_type='ALL',
-            environments_json='["lab"]'
+        ProfileService().set_action_permissions(
+            lab_profile.id,
+            {'actions_type': 'all', 'environments': ['lab']},
         )
         ProfileTargetPermission.objects.create(
             profile=lab_profile, permission_type='ALL'
@@ -1425,9 +1405,9 @@ class RBACNonStandardEnvironmentTests(TestCase):
         certif_profile = Profile.objects.create(
             name='certif-team', description='Certif', ad_group='GRP-CERTIF-TEAM'
         )
-        ProfileActionPermission.objects.create(
-            profile=certif_profile, permission_type='ALL',
-            environments_json='["certif"]'
+        ProfileService().set_action_permissions(
+            certif_profile.id,
+            {'actions_type': 'all', 'environments': ['certif']},
         )
         ProfileTargetPermission.objects.create(
             profile=certif_profile, permission_type='ALL'
@@ -1458,9 +1438,9 @@ class RBACNonStandardEnvironmentTests(TestCase):
         multi_profile = Profile.objects.create(
             name='multi-env', description='Multi', ad_group='GRP-MULTI-ENV'
         )
-        ProfileActionPermission.objects.create(
-            profile=multi_profile, permission_type='ALL',
-            environments_json='["lab", "developpement", "certification"]'
+        ProfileService().set_action_permissions(
+            multi_profile.id,
+            {'actions_type': 'all', 'environments': ['lab', 'developpement', 'certification']},
         )
 
         envs = self.service.get_allowed_environments_for_user(['GRP-MULTI-ENV'])
@@ -1478,9 +1458,9 @@ class RBACNonStandardEnvironmentTests(TestCase):
         profile = Profile.objects.create(
             name='lab-ci', description='Lab CI', ad_group='GRP-LAB-CI'
         )
-        ProfileActionPermission.objects.create(
-            profile=profile, permission_type='ALL',
-            environments_json='["lab"]'
+        ProfileService().set_action_permissions(
+            profile.id,
+            {'actions_type': 'all', 'environments': ['lab']},
         )
         ProfileTargetPermission.objects.create(
             profile=profile, permission_type='ALL'
@@ -1514,9 +1494,9 @@ class RBACNonStandardEnvironmentTests(TestCase):
         profile_a = Profile.objects.create(
             name='profile-lab-dev', description='Lab+Dev', ad_group='GRP-A-LD'
         )
-        ProfileActionPermission.objects.create(
-            profile=profile_a, permission_type='ALL',
-            environments_json='["lab", "developpement"]'
+        ProfileService().set_action_permissions(
+            profile_a.id,
+            {'actions_type': 'all', 'environments': ['lab', 'developpement']},
         )
         ProfileTargetPermission.objects.create(
             profile=profile_a, permission_type='ALL'
@@ -1525,9 +1505,9 @@ class RBACNonStandardEnvironmentTests(TestCase):
         profile_b = Profile.objects.create(
             name='profile-staging', description='Staging', ad_group='GRP-B-STG'
         )
-        ProfileActionPermission.objects.create(
-            profile=profile_b, permission_type='ALL',
-            environments_json='["certification"]'
+        ProfileService().set_action_permissions(
+            profile_b.id,
+            {'actions_type': 'all', 'environments': ['certification']},
         )
         ProfileTargetPermission.objects.create(
             profile=profile_b, permission_type='ALL'
@@ -1557,16 +1537,16 @@ class RBACNonStandardEnvironmentTests(TestCase):
         p_a = Profile.objects.create(
             name='pa', description='PA', ad_group='GRP-PA-UNION'
         )
-        ProfileActionPermission.objects.create(
-            profile=p_a, permission_type='ALL',
-            environments_json='["lab", "developpement"]'
+        ProfileService().set_action_permissions(
+            p_a.id,
+            {'actions_type': 'all', 'environments': ['lab', 'developpement']},
         )
         p_b = Profile.objects.create(
             name='pb', description='PB', ad_group='GRP-PB-UNION'
         )
-        ProfileActionPermission.objects.create(
-            profile=p_b, permission_type='ALL',
-            environments_json='["certification"]'
+        ProfileService().set_action_permissions(
+            p_b.id,
+            {'actions_type': 'all', 'environments': ['certification']},
         )
 
         envs = self.service.get_allowed_environments_for_user(
@@ -1614,9 +1594,9 @@ class EnvironmentVariantLegacyAliasTests(TestCase):
         certif_profile = Profile.objects.create(
             name='certif-rbac', description='Certif RBAC', ad_group='GRP-CERTIF-RBAC'
         )
-        ProfileActionPermission.objects.create(
-            profile=certif_profile, permission_type='ALL',
-            environments_json='["certif"]'
+        ProfileService().set_action_permissions(
+            certif_profile.id,
+            {'actions_type': 'all', 'environments': ['certif']},
         )
         ProfileTargetPermission.objects.create(
             profile=certif_profile, permission_type='ALL'
@@ -1645,9 +1625,9 @@ class EnvironmentVariantLegacyAliasTests(TestCase):
         profile = Profile.objects.create(
             name='certif-env', description='Certif env', ad_group='GRP-CERTIF-ENV'
         )
-        ProfileActionPermission.objects.create(
-            profile=profile, permission_type='ALL',
-            environments_json='["certif"]'
+        ProfileService().set_action_permissions(
+            profile.id,
+            {'actions_type': 'all', 'environments': ['certif']},
         )
 
         envs = self.service.get_allowed_environments_for_user(['GRP-CERTIF-ENV'])
@@ -1675,9 +1655,9 @@ class InventoryIntegrationEndToEndTests(TestCase):
         profile = Profile.objects.create(
             name='e2e-lab', description='E2E Lab', ad_group='GRP-E2E-LAB'
         )
-        ProfileActionPermission.objects.create(
-            profile=profile, permission_type='ALL',
-            environments_json='["lab", "developpement"]'
+        ProfileService().set_action_permissions(
+            profile.id,
+            {'actions_type': 'all', 'environments': ['lab', 'developpement']},
         )
         ProfileTargetPermission.objects.create(
             profile=profile, permission_type='ALL'
@@ -1725,9 +1705,9 @@ class InventoryIntegrationEndToEndTests(TestCase):
         profile = Profile.objects.create(
             name='e2e-oracle', description='E2E Oracle values', ad_group='GRP-E2E-ORACLE'
         )
-        ProfileActionPermission.objects.create(
-            profile=profile, permission_type='ALL',
-            environments_json='["developpement", "certification", "production"]'
+        ProfileService().set_action_permissions(
+            profile.id,
+            {'actions_type': 'all', 'environments': ['developpement', 'certification', 'production']},
         )
         ProfileTargetPermission.objects.create(
             profile=profile, permission_type='ALL'
@@ -1774,9 +1754,9 @@ class InventoryIntegrationEndToEndTests(TestCase):
         profile = Profile.objects.create(
             name='e2e-mixed', description='E2E Mixed', ad_group='GRP-E2E-MIXED'
         )
-        ProfileActionPermission.objects.create(
-            profile=profile, permission_type='ALL',
-            environments_json='["lab", "certif", "developpement"]'
+        ProfileService().set_action_permissions(
+            profile.id,
+            {'actions_type': 'all', 'environments': ['lab', 'certif', 'developpement']},
         )
         ProfileTargetPermission.objects.create(
             profile=profile, permission_type='ALL'
@@ -1812,9 +1792,9 @@ class InventoryIntegrationEndToEndTests(TestCase):
         profile = Profile.objects.create(
             name='e2e-case', description='E2E Case', ad_group='GRP-E2E-CASE'
         )
-        ProfileActionPermission.objects.create(
-            profile=profile, permission_type='ALL',
-            environments_json='["lab"]'
+        ProfileService().set_action_permissions(
+            profile.id,
+            {'actions_type': 'all', 'environments': ['lab']},
         )
         ProfileTargetPermission.objects.create(
             profile=profile, permission_type='ALL'
@@ -1846,9 +1826,9 @@ class InventoryIntegrationEndToEndTests(TestCase):
         profile = Profile.objects.create(
             name='e2e-page', description='E2E Pagination', ad_group='GRP-E2E-PAGE'
         )
-        ProfileActionPermission.objects.create(
-            profile=profile, permission_type='ALL',
-            environments_json='["lab"]'
+        ProfileService().set_action_permissions(
+            profile.id,
+            {'actions_type': 'all', 'environments': ['lab']},
         )
         ProfileTargetPermission.objects.create(
             profile=profile, permission_type='ALL'

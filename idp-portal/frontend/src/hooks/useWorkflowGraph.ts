@@ -33,6 +33,7 @@ import {
 } from '../utils/workflowConversion';
 import { getStepLabel } from '../utils/workflowStepLabels';
 import { validateWorkflowGraph, type ValidationResult } from '../utils/workflowValidation';
+import { useCapabilities } from './useCapabilities';
 
 export interface UseWorkflowGraphProps {
   steps: WorkflowStep[];
@@ -90,6 +91,8 @@ export function useWorkflowGraph({
 }: UseWorkflowGraphProps): UseWorkflowGraphReturn {
   const { notification } = App.useApp();
   const { screenToFlowPosition, fitView, getNode, setCenter } = useReactFlow();
+  // Story 84.3 (T9): capabilities pour passer stepTypes à validateWorkflowGraph
+  const { capabilities } = useCapabilities();
 
   // Convert initial steps to React Flow format
   // eslint-disable-next-line react-hooks/exhaustive-deps -- Intentional: only compute on mount, steps changes handled via parent re-render
@@ -446,12 +449,13 @@ export function useWorkflowGraph({
   const onEdgesDelete = useCallback((_deletedEdges: Edge[]) => { /* no-op */ }, []);
 
   // Run validation and open report panel
+  // Story 84.3 (T9): passe capabilities?.stepTypes pour la validation backend-driven
   const handleValidate = useCallback(() => {
-    const result = validateWorkflowGraph(nodes, edges);
+    const result = validateWorkflowGraph(nodes, edges, capabilities?.stepTypes);
     setValidation(result);
     applyValidation(result);
     setValidationReportOpen(true);
-  }, [nodes, edges, applyValidation]);
+  }, [nodes, edges, capabilities?.stepTypes, applyValidation]);
 
   // Clear validation highlights
   const clearValidation = useCallback(() => {

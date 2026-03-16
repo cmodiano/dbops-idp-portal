@@ -246,7 +246,7 @@
 - **SRP — Services split** : `ExecutionService` et `SchedulingService` dans des fichiers séparés.
 - **ISP — Adapters séparés** : `ITriggerableAdapter` et `ICancellableAdapter` interfaces distinctes.
 - **LSP — Serializers corrigés** : `ActionSerializer` n'override plus `create()`/`update()` avec `NotImplementedError`.
-- **DRY — Validation partagée** : `_validate_platform_integration_consistency()` helper partagé entre serializers.
+- **DRY — Validation partagée** : ~~`_validate_platform_integration_consistency()` helper partagé entre serializers~~ — supprimé en Story 83-14 (dead code confirmé : tautologie depuis la dérivation automatique de `platform` en 83-13).
 
 ### SOLID-BE-1 [HIGH] — ✅ RESOLVED (Story 34.6) — `executions/utils.py` (828 lignes) éclaté en package
 
@@ -355,7 +355,9 @@
 
 **Avant :** `ActionSerializer` et `ActionCreateSerializer` dupliquaient `validate_engine`, `validate_platform`, `validate_category`.
 
-**Fix appliqué :** `ActionFieldValidationMixin` avec méthodes `validate_engine` et `validate_platform` partagées. `validate_category` a un override intentionnel dans `ActionCreateSerializer` (blank → None vs blank → erreur). Helper partagé `_validate_platform_integration_consistency()`.
+**Fix appliqué (Story 34.1) :** `ActionFieldValidationMixin` avec méthodes `validate_engine`, `validate_platform` et `validate_category` partagées. Helper `_validate_platform_integration_consistency()` extrait.
+
+**Évolution ultérieure (Story 83-14) :** `validate_platform()` supprimée de `ActionFieldValidationMixin` (dead code — DRF ne l'appelle plus depuis que `platform` n'est plus déclaré dans les serializers de création/mise à jour). `validate_platform_integration_consistency()` supprimée de `validators.py` (tautologie inactive depuis 83-13). `ActionFieldValidationMixin` conservée pour `validate_engine()` et `validate_category()`.
 
 ---
 

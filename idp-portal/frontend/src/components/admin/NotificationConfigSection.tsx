@@ -45,7 +45,7 @@ export const NotificationConfigSection: FC<NotificationConfigSectionProps> = ({
     page_individual_enabled: false,
   };
 
-  const channels = config.channels.length > 0
+  const channels = Array.isArray(config.channels) && config.channels.length > 0
     ? config.channels
     : [...DEFAULT_CHANNELS];
 

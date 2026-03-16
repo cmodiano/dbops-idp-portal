@@ -21,6 +21,8 @@ class TestIntegrationViewSet(TestCase):
     def setUp(self):
         """Set up test data."""
         from conftest import ensure_admin_profiles
+        from django.core.management import call_command
+        call_command('loaddata', 'integration_type_catalogue', verbosity=0)
         ensure_admin_profiles()
         self.client = APIClient()
 

@@ -7,6 +7,8 @@ from django.test import TestCase
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 from profiles.models import Profile, ProfileTargetPermission
+from profiles.services import ProfileService
+from profiles.target_permission_repository import get_exclusion_patterns
 
 User = get_user_model()
 
@@ -67,19 +69,17 @@ class TestProfileTargetPermissionsAPIWithExclusion(TestCase):
     def test_get_target_permissions_returns_exclusion_patterns(self):
         """Test GET returns exclusion_patterns when set."""
         # Create permission with exclusion
-        perm = ProfileTargetPermission.objects.create(
-            profile=self.profile,
-            permission_type='ALL'
-        )
         exclusion_patterns = ["PROD-CRITICAL-*", "DR-*"]
-        perm.set_exclusion_patterns(exclusion_patterns)
-        perm.save()
-        
+        ProfileService().set_target_permissions(
+            self.profile.id,
+            {'targets_type': 'all', 'exclusion_patterns': exclusion_patterns},
+        )
+
         response = self.client.get(f'/api/v1/admin/profiles/{self.profile.id}/targets/')
         
         self.assertEqual(response.status_code, 200)
         data = response.json()['data']
-        self.assertEqual(data['exclusion_patterns'], exclusion_patterns)
+        self.assertEqual(data['exclusion_patterns'], sorted(exclusion_patterns))
     
     def test_put_target_permissions_with_exclusion_patterns(self):
         """Test PUT creates/updates permission with exclusion_patterns."""
@@ -102,18 +102,16 @@ class TestProfileTargetPermissionsAPIWithExclusion(TestCase):
         
         # Verify in DB
         perm = ProfileTargetPermission.objects.get(profile=self.profile)
-        self.assertEqual(perm.get_exclusion_patterns(), ["PROD-CRITICAL-*", "STAGING-DR-*"])
+        self.assertEqual(sorted(get_exclusion_patterns(perm)), sorted(["PROD-CRITICAL-*", "STAGING-DR-*"]))
     
     def test_put_target_permissions_update_exclusion_patterns(self):
         """Test PUT updates existing exclusion_patterns."""
         # Create permission with initial exclusion
-        perm = ProfileTargetPermission.objects.create(
-            profile=self.profile,
-            permission_type='ALL'
+        ProfileService().set_target_permissions(
+            self.profile.id,
+            {'targets_type': 'all', 'exclusion_patterns': ['OLD-PATTERN-*']},
         )
-        perm.set_exclusion_patterns(["OLD-PATTERN-*"])
-        perm.save()
-        
+
         # Update with new exclusion
         payload = {
             'targets_type': 'all',
@@ -121,29 +119,27 @@ class TestProfileTargetPermissionsAPIWithExclusion(TestCase):
             'target_patterns': [],
             'exclusion_patterns': ["NEW-PATTERN-*"]
         }
-        
+
         response = self.client.put(
             f'/api/v1/admin/profiles/{self.profile.id}/targets/',
             data=payload,
             format='json'
         )
-        
+
         self.assertEqual(response.status_code, 200)
-        
+
         # Verify updated
-        perm.refresh_from_db()
-        self.assertEqual(perm.get_exclusion_patterns(), ["NEW-PATTERN-*"])
+        perm = ProfileTargetPermission.objects.get(profile=self.profile)
+        self.assertEqual(get_exclusion_patterns(perm), ["NEW-PATTERN-*"])
     
     def test_put_target_permissions_clear_exclusion_patterns(self):
         """Test PUT with empty list clears exclusion_patterns."""
         # Create permission with exclusion
-        perm = ProfileTargetPermission.objects.create(
-            profile=self.profile,
-            permission_type='ALL'
+        ProfileService().set_target_permissions(
+            self.profile.id,
+            {'targets_type': 'all', 'exclusion_patterns': ['TEMP-*']},
         )
-        perm.set_exclusion_patterns(["TEMP-*"])
-        perm.save()
-        
+
         # Clear exclusion
         payload = {
             'targets_type': 'all',
@@ -151,18 +147,18 @@ class TestProfileTargetPermissionsAPIWithExclusion(TestCase):
             'target_patterns': [],
             'exclusion_patterns': []
         }
-        
+
         response = self.client.put(
             f'/api/v1/admin/profiles/{self.profile.id}/targets/',
             data=payload,
             format='json'
         )
-        
+
         self.assertEqual(response.status_code, 200)
-        
+
         # Verify cleared
-        perm.refresh_from_db()
-        self.assertEqual(perm.get_exclusion_patterns(), [])
+        perm = ProfileTargetPermission.objects.get(profile=self.profile)
+        self.assertEqual(get_exclusion_patterns(perm), [])
     
     def test_validation_rejects_non_string_patterns(self):
         """Test validation rejects exclusion_patterns with non-string entries."""
@@ -203,32 +199,30 @@ class TestProfileTargetPermissionsAPIWithExclusion(TestCase):
         self.assertIn('exclusion_patterns', errors)
     
     def test_put_without_exclusion_patterns_field(self):
-        """Test PUT without exclusion_patterns field preserves existing value."""
+        """Test PUT without exclusion_patterns field.
+
+        Story 78.12: When payload omits exclusion_patterns, normalized replace
+        uses default []; exclusion_patterns is not merged from existing.
+        """
         # Create permission with exclusion
-        perm = ProfileTargetPermission.objects.create(
-            profile=self.profile,
-            permission_type='PATTERN'
+        ProfileService().set_target_permissions(
+            self.profile.id,
+            {'targets_type': 'pattern', 'target_patterns': ['PROD-*'], 'exclusion_patterns': ['PROD-CRITICAL-*']},
         )
-        perm.set_target_patterns(["PROD-*"])
-        perm.set_exclusion_patterns(["PROD-CRITICAL-*"])
-        perm.save()
-        
-        # Update other fields without touching exclusion_patterns
+
+        # Update other fields without exclusion_patterns in payload
         payload = {
             'targets_type': 'pattern',
             'target_names': [],
-            'target_patterns': ["STAGING-*"]  # Changed
-            # exclusion_patterns not included
+            'target_patterns': ["STAGING-*"],
         }
-        
+
         response = self.client.put(
             f'/api/v1/admin/profiles/{self.profile.id}/targets/',
             data=payload,
             format='json'
         )
-        
+
         self.assertEqual(response.status_code, 200)
-        
-        # Verify exclusion_patterns preserved
-        perm.refresh_from_db()
-        self.assertEqual(perm.get_exclusion_patterns(), ["PROD-CRITICAL-*"])
+        # Omitted field → default [] in response (Story 78.12 replace semantics)
+        self.assertEqual(response.json()['data']['exclusion_patterns'], [])

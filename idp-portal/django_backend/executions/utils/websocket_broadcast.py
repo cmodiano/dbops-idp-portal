@@ -4,6 +4,8 @@ from __future__ import annotations
 import structlog
 from typing import TYPE_CHECKING
 
+from core.utils import ensure_utc_isoformat
+
 if TYPE_CHECKING:
     from executions.models import ExecutionStep
 
@@ -47,10 +49,10 @@ def broadcast_step_update(execution_id: int, step: "ExecutionStep") -> None:
                     "config_step_id": getattr(step, "config_step_id", None),
                     "status": step.status,
                     "started_at": (
-                        step.started_at.isoformat() if step.started_at else None
+                        ensure_utc_isoformat(step.started_at)
                     ),
                     "completed_at": (
-                        step.completed_at.isoformat() if step.completed_at else None
+                        ensure_utc_isoformat(step.completed_at)
                     ),
                     "output": step.get_output() if hasattr(step, "get_output") else None,
                     "platform_job_id": step.platform_job_id,

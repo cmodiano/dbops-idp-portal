@@ -5,17 +5,16 @@ Guides, conventions et documentation de référence.
 ## Guides
 
 - [Guide de développement](development-guide.md)
-- [Guide de contribution](contribution-guide.md)
+- [Glossaire](glossary.md)
 
 ## Conventions
 
-- [Glossaire](glossary.md)
 - [Conventions dates et timezone](conventions-dates-timezone.md)
-- [Conventions de logging](logging-conventions.md)
+- [Configuration linters](linters-configuration.md)
 
-## Autres
+## Configuration
 
 - [Feature flags](feature-flags.md)
 - [Règles métier](business-rule-policies.md)
-- [Configuration linters](linters-configuration.md)
 - [Guide mapping inventaire](inventory-mapping-guide.md)
+- [Configuration mapping inventaire](inventory-mapping-config.md)

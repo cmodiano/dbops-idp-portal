@@ -17,10 +17,6 @@ vi.mock('../utils/impactRulesSchema', () => ({
   impactRulesToList: vi.fn(() => []),
 }));
 
-vi.mock('../utils/integrationHelpers', () => ({
-  integrationTypeToPlatformCode: vi.fn((type: string) => type?.toUpperCase() ?? ''),
-}));
-
 const mockGetIntegrationById = vi.fn();
 
 function renderStateHook(open: boolean, editAction?: ActionDetail | null) {
@@ -121,5 +117,28 @@ describe('useActionFormState', () => {
     const { result } = renderStateHook(true, editAction);
     expect(result.current.selectedTags).toEqual(['oracle', 'prod']);
     expect(result.current.defaultImpactLevel).toBe('high');
+  });
+
+  // Story 83-13 — T3.6: previewData.platform toujours null (dérivé côté backend, pas frontend)
+  it('T3.6 — previewData.platform est null (platform dérivé par le backend, pas le frontend)', () => {
+    mockGetIntegrationById.mockReturnValue({ id: 1, type: 'aap', name: 'Test AAP' });
+
+    const { result } = renderHook(() => {
+      const [form] = Form.useForm();
+      form.setFieldsValue({ integration_id: 1 });
+      return useActionFormState({ open: true, editAction: null, form, getIntegrationById: mockGetIntegrationById });
+    });
+
+    expect(result.current.previewData).toBeDefined();
+    // Story 83-13: platform toujours null dans previewData — le backend dérive depuis integration.type
+    expect(result.current.previewData.platform).toBeNull();
+  });
+
+  it('T3.6 — previewData.platform = null même sans integration sélectionnée', () => {
+    mockGetIntegrationById.mockReturnValue(undefined);
+
+    const { result } = renderStateHook(true);
+
+    expect(result.current.previewData.platform).toBeNull();
   });
 });

@@ -10,9 +10,13 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { StepConfigPanel } from './StepConfigPanel';
 import type { Node } from '@xyflow/react';
+
+vi.mock('../../hooks/useOutputSchemas', () => ({
+  useOutputSchemas: () => ({ availableVariables: [], loading: false, error: null }),
+}));
 
 const makeNode = (overrides: Record<string, unknown> = {}): Node => ({
   id: 'step-1',
@@ -523,6 +527,180 @@ describe('StepConfigPanel — coverage extras', () => {
     const backoffInput = screen.getByRole('spinbutton', { name: 'Multiplicateur de backoff' });
     fireEvent.change(backoffInput, { target: { value: '3.0' } });
     expect(onNodeUpdate).toHaveBeenCalled();
+  });
+});
+
+// ─── Story 63.12: input/output mapping for platform steps ────────────────────
+describe('StepConfigPanel — platform input/output mapping (Story 63.12)', () => {
+  it('affiche la section input_mapping pour un step platform', () => {
+    render(
+      <StepConfigPanel
+        node={makeNode({ step_type: 'platform' })}
+        open={true}
+        onClose={vi.fn()}
+        onNodeUpdate={vi.fn()}
+        onNodeDelete={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('platform-input-mapping-editor')).toBeInTheDocument();
+  });
+
+  it('affiche la section output_mapping pour un step platform', () => {
+    render(
+      <StepConfigPanel
+        node={makeNode({ step_type: 'platform' })}
+        open={true}
+        onClose={vi.fn()}
+        onNodeUpdate={vi.fn()}
+        onNodeDelete={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('platform-output-mapping-editor')).toBeInTheDocument();
+  });
+
+  it('affiche les labels "Mapping d\'entrée" et "Mapping de sortie"', () => {
+    render(
+      <StepConfigPanel
+        node={makeNode({ step_type: 'platform' })}
+        open={true}
+        onClose={vi.fn()}
+        onNodeUpdate={vi.fn()}
+        onNodeDelete={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Mapping d'entrée (input_mapping)")).toBeInTheDocument();
+    expect(screen.getByText('Mapping de sortie (output_mapping)')).toBeInTheDocument();
+  });
+
+  it('appelle onNodeUpdate avec input_mapping mis à jour quand une clé est saisie', () => {
+    const onNodeUpdate = vi.fn();
+    render(
+      <StepConfigPanel
+        node={makeNode({ step_type: 'platform', input_mapping: null })}
+        open={true}
+        onClose={vi.fn()}
+        onNodeUpdate={onNodeUpdate}
+        onNodeDelete={vi.fn()}
+      />,
+    );
+    // Scope to the input_mapping KeyValueEditor (platform has both input and output mapping editors)
+    const inputMappingEditor = screen.getByTestId('platform-input-mapping-editor');
+    const addButton = within(inputMappingEditor).getByText('Ajouter une entrée');
+    fireEvent.click(addButton);
+    const keyInput = within(inputMappingEditor).getByPlaceholderText('Paramètre');
+    fireEvent.change(keyInput, { target: { value: 'my_param' } });
+    expect(onNodeUpdate).toHaveBeenCalledWith(
+      'step-1',
+      expect.objectContaining({
+        input_mapping: expect.objectContaining({ my_param: expect.anything() }),
+      }),
+    );
+  });
+
+  it('n\'affiche pas le bouton "Ajouter une entrée" quand disabled=true', () => {
+    render(
+      <StepConfigPanel
+        node={makeNode({ step_type: 'platform', input_mapping: null })}
+        open={true}
+        onClose={vi.fn()}
+        onNodeUpdate={vi.fn()}
+        onNodeDelete={vi.fn()}
+        disabled={true}
+      />,
+    );
+    // KeyValueEditor masque le bouton "Ajouter une entrée" quand disabled=true
+    expect(screen.queryByText('Ajouter une entrée')).not.toBeInTheDocument();
+  });
+
+  it('charge correctement les valeurs input_mapping existantes', () => {
+    render(
+      <StepConfigPanel
+        node={makeNode({ step_type: 'platform', input_mapping: { job_id: '{{ steps.step1.job_id }}' } })}
+        open={true}
+        onClose={vi.fn()}
+        onNodeUpdate={vi.fn()}
+        onNodeDelete={vi.fn()}
+      />,
+    );
+    expect(screen.getByDisplayValue('job_id')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('{{ steps.step1.job_id }}')).toBeInTheDocument();
+  });
+
+  it('charge correctement les valeurs output_mapping existantes', () => {
+    render(
+      <StepConfigPanel
+        node={makeNode({ step_type: 'platform', output_mapping: { result: '$.output.value' } })}
+        open={true}
+        onClose={vi.fn()}
+        onNodeUpdate={vi.fn()}
+        onNodeDelete={vi.fn()}
+      />,
+    );
+    expect(screen.getByDisplayValue('result')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('$.output.value')).toBeInTheDocument();
+  });
+
+  it('fonctionne sans input_mapping ni output_mapping (rétrocompatibilité)', () => {
+    expect(() =>
+      render(
+        <StepConfigPanel
+          node={makeNode({ step_type: 'platform', input_mapping: undefined, output_mapping: undefined })}
+          open={true}
+          onClose={vi.fn()}
+          onNodeUpdate={vi.fn()}
+          onNodeDelete={vi.fn()}
+        />,
+      ),
+    ).not.toThrow();
+    expect(screen.getByTestId('platform-input-mapping-editor')).toBeInTheDocument();
+    expect(screen.getByTestId('platform-output-mapping-editor')).toBeInTheDocument();
+  });
+
+  it('passe currentStepId au KeyValueEditor input_mapping (node.id quand data.step_id absent) pour VariablePicker', () => {
+    // Quand data.step_id est undefined (ex: node depuis workflowStepsToReactFlow), on utilise node.id.
+    // Cela permet au VariablePicker de s'afficher (workflowId + currentStepId requis).
+    render(
+      <StepConfigPanel
+        node={makeNode({
+          step_type: 'platform',
+          input_mapping: { job_id: '{{ steps.step-2.platform_job_id }}' },
+        })}
+        open={true}
+        onClose={vi.fn()}
+        onNodeUpdate={vi.fn()}
+        onNodeDelete={vi.fn()}
+        workflowId={42}
+        availableStepIds={['step-1', 'step-2']}
+        availableStepOptions={[
+          { value: 'step-1', label: 'Étape 1' },
+          { value: 'step-2', label: 'Étape 2' },
+        ]}
+      />,
+    );
+    // Vérifie que l'éditeur input_mapping est présent (le fix currentStepId permet au VariablePicker de s'afficher)
+    expect(screen.getByTestId('platform-input-mapping-editor')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('{{ steps.step-2.platform_job_id }}')).toBeInTheDocument();
+  });
+
+  it('affiche un avertissement pour référence step_id invalide dans input_mapping (platform)', () => {
+    render(
+      <StepConfigPanel
+        node={makeNode({
+          step_type: 'platform',
+          input_mapping: { job_id: '{{ steps.inexistant.job_id }}' },
+        })}
+        open={true}
+        onClose={vi.fn()}
+        onNodeUpdate={vi.fn()}
+        onNodeDelete={vi.fn()}
+        availableStepOptions={[
+          { value: 'step-1', label: 'Étape 1' },
+          { value: 'step-2', label: 'Étape 2' },
+        ]}
+      />,
+    );
+    expect(screen.getByTestId('platform-input-mapping-editor-warning')).toBeInTheDocument();
+    expect(screen.getByText(/Référence inconnue : step_id 'inexistant'/)).toBeInTheDocument();
   });
 });
 

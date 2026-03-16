@@ -35,10 +35,8 @@ class ExecutionSerializer(serializers.Serializer):
     """
     Serializer matching frontend ExecutionResponse (see frontend/src/types/api.ts).
 
-    ADR-007: approved_by, approved_at, approval_comment have been removed from the API output.
+    ADR-007: approved_by, approved_at, approval_comment removed from Execution model (V136, Story 78.15).
     Source of truth is ExecutionStep.approved_by/at/approval_comment.
-    DB fields on Execution model are kept for now (Oracle CHECK constraint) but will be
-    cleaned up in a future migration.
     """
     id = serializers.IntegerField(read_only=True, help_text="Identifiant unique de l'exécution")
     action_id = serializers.IntegerField(help_text="ID de l'action exécutée")
@@ -52,9 +50,8 @@ class ExecutionSerializer(serializers.Serializer):
     started_at = serializers.DateTimeField(read_only=True, allow_null=True)
     completed_at = serializers.DateTimeField(read_only=True, allow_null=True)
     created_at = serializers.DateTimeField(read_only=True)
-    # DEPRECATED ADR-007: approved_by, approved_at, approval_comment removed from serializer.
-    # Source of truth is now ExecutionStep.approved_by/at/approval_comment.
-    # DB fields will be cleaned up in a future migration.
+    # ADR-007: approved_by, approved_at, approval_comment removed from Execution (V136, Story 78.15).
+    # Source of truth: ExecutionStep.approved_by/at/approval_comment.
     parent_execution_id = serializers.IntegerField(read_only=True, allow_null=True)
     # Distinguish workflow child (parent is workflow) vs remediation (parent is action)
     parent_item_type = serializers.CharField(read_only=True, allow_null=True)
@@ -88,10 +85,6 @@ class ExecutionSerializer(serializers.Serializer):
             "started_at": ensure_utc_isoformat(obj.started_at),
             "completed_at": ensure_utc_isoformat(obj.completed_at),
             "created_at": ensure_utc_isoformat(obj.created_at),
-            # DEPRECATED ADR-007: approved_by, approved_at, approval_comment removed.
-            # Source of truth is now ExecutionStep.approved_by/at/approval_comment.
-            # DB fields (Execution.approved_by/at/approval_comment) will be cleaned up
-            # in a future migration.
             "parent_execution_id": obj.parent_execution_id,
             "parent_item_type": (
                 obj.parent_execution

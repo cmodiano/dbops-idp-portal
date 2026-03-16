@@ -159,28 +159,36 @@ class ProfileFactory(DjangoModelFactory):
 
 
 class ProfileActionPermissionFactory(DjangoModelFactory):
-    """Factory for profiles.ProfileActionPermission model."""
+    """Factory for profiles.ProfileActionPermission model.
+
+    Story 78.15: Legacy CLOB fields removed. Data is in normalized tables
+    (PROFILE_ACTION_ALLOWLIST, PROFILE_ACTION_TAG_PATTERNS, PROFILE_ACTION_ENVS).
+    Use ProfileService.set_action_permissions() or the normalized model factories
+    directly to populate action permission data in tests.
+    """
 
     class Meta:
         model = 'profiles.ProfileActionPermission'
 
     profile = factory.SubFactory(ProfileFactory)
     permission_type = 'ALL'
-    action_ids_json = None
-    tag_patterns_json = None
-    environments_json = factory.LazyFunction(lambda: json.dumps(['dev', 'staging', 'prod']))
 
 
 class ProfileTargetPermissionFactory(DjangoModelFactory):
-    """Factory for profiles.ProfileTargetPermission model."""
+    """Factory for profiles.ProfileTargetPermission model.
+
+    Story 78.15: Legacy CLOB fields removed. Data is in normalized tables
+    (PROFILE_TARGET_ALLOWLIST, PROFILE_TARGET_PATTERNS, PROFILE_TARGET_ATTR_FILTERS,
+    PROFILE_TARGET_EXCLUSIONS).
+    Use ProfileService.set_target_permissions() or the normalized model factories
+    directly to populate target permission data in tests.
+    """
 
     class Meta:
         model = 'profiles.ProfileTargetPermission'
 
     profile = factory.SubFactory(ProfileFactory)
     permission_type = 'ALL'
-    target_names_json = None
-    target_patterns_json = None
 
 
 # ============================================================================
@@ -202,9 +210,6 @@ class ExecutionFactory(DjangoModelFactory):
     }))
     status = 'SUBMITTED'
     servicenow_change_id = None
-    approved_by = None
-    approved_at = None
-    approval_comment = None
     parent_execution = None
     started_at = None
     completed_at = None

@@ -12,7 +12,7 @@ from integrations.serializers import (
     IntegrationListSerializer,
     validate_url,
 )
-from integrations.models import Integration, AuthFlow
+from integrations.models import Integration, AuthFlow, IntegrationTypeCatalogue
 from rest_framework import serializers as drf_serializers
 
 
@@ -207,6 +207,10 @@ class TestValidateUrl(TestCase):
 class TestIntegrationCreateSerializerSsrf(TestCase):
     """Story 48.1: SSRF validation applied to base_url and token_url in IntegrationCreateSerializer."""
 
+    def setUp(self):
+        from django.core.management import call_command
+        call_command('loaddata', 'integration_type_catalogue', verbosity=0)
+
     def test_base_url_localhost_rejected(self):
         """AC6: base_url with localhost is rejected by IntegrationCreateSerializer."""
         data = {'type': 'aap', 'name': 'Test', 'base_url': 'http://localhost/api'}
@@ -253,6 +257,10 @@ class TestIntegrationUpdateSerializerSsrf(TestCase):
 class TestIntegrationCreateSerializerSsrfStory541(TestCase):
     """Story 54.1: IPv4-mapped IPv6 SSRF validation on create serializer."""
 
+    def setUp(self):
+        from django.core.management import call_command
+        call_command('loaddata', 'integration_type_catalogue', verbosity=0)
+
     def test_base_url_ipv4_mapped_ipv6_rejected(self):
         """AC-8: base_url with IPv4-mapped IPv6 private IP is rejected on create."""
         data = {'type': 'aap', 'name': 'Test', 'base_url': 'http://[::ffff:10.0.0.1]/api'}
@@ -291,6 +299,10 @@ class TestIntegrationUpdateSerializerSsrfStory541(TestCase):
 
 class TestIntegrationCreateSerializer(TestCase):
     """Tests for IntegrationCreateSerializer."""
+
+    def setUp(self):
+        from django.core.management import call_command
+        call_command('loaddata', 'integration_type_catalogue', verbosity=0)
 
     def test_valid_minimal(self):
         data = {'type': 'aap', 'name': 'Test', 'base_url': 'https://aap.example.com'}
@@ -435,6 +447,10 @@ class TestIntegrationUpdateSerializer(TestCase):
 class TestIntegrationUpdateSerializerVaultValidation(TestCase):
     """Story 30.8 ERR-2: Cross-field validation for IntegrationUpdateSerializer."""
 
+    def setUp(self):
+        from django.core.management import call_command
+        call_command('loaddata', 'integration_type_catalogue', verbosity=0)
+
     def test_update_vault_type_with_credential_ref_rejected(self):
         """Updating to vault type with credential_ref should be rejected."""
         data = {'type': 'vault', 'credential_ref': 'vault:secret/path'}
@@ -499,6 +515,10 @@ class TestIntegrationUpdateSerializerVaultValidation(TestCase):
 class TestIntegrationCreateSerializerStory3112(TestCase):
     """Story 31.12: oauth2_client_credentials and api_key are valid auth_flow values."""
 
+    def setUp(self):
+        from django.core.management import call_command
+        call_command('loaddata', 'integration_type_catalogue', verbosity=0)
+
     def test_create_with_oauth2_client_credentials(self):
         data = {
             'type': 'aap', 'name': 'Jira Cloud', 'base_url': 'https://jira.example.com',
@@ -541,3 +561,112 @@ class TestIntegrationReadSerializers(TestCase):
         data = s.data
         self.assertEqual(data['name'], 'Read Test')
         self.assertNotIn('config', data)
+
+
+# ============================================================================
+# Story 83-1: Catalogue-based type validation tests (AC#3-#7)
+# ============================================================================
+
+@pytest.mark.django_db
+class TestIntegrationCreateSerializerTypeCatalogueValidation(TestCase):
+    """Story 83-1: IntegrationCreateSerializer validates type against catalogue (AC#3, #5, #6, #7)."""
+
+    def setUp(self):
+        self.active_type = IntegrationTypeCatalogue.objects.create(
+            code='custom_platform',
+            name='Custom Platform',
+            description='A test platform type',
+            version='1.0',
+            is_active=True,
+        )
+        self.inactive_type = IntegrationTypeCatalogue.objects.create(
+            code='legacy_platform',
+            name='Legacy Platform',
+            description='An inactive platform type',
+            version='1.0',
+            is_active=False,
+        )
+
+    def _base_data(self, type_code):
+        return {'type': type_code, 'name': 'Test Integration', 'base_url': 'https://platform.example.com'}
+
+    def test_type_valid_in_catalogue_accepted(self):
+        """AC#5: Type present and active in catalogue is accepted."""
+        s = IntegrationCreateSerializer(data=self._base_data('custom_platform'))
+        self.assertTrue(s.is_valid(), s.errors)
+        self.assertEqual(s.validated_data['type'], 'custom_platform')
+
+    def test_type_absent_from_catalogue_rejected(self):
+        """AC#6: Type absent from catalogue raises ValidationError."""
+        s = IntegrationCreateSerializer(data=self._base_data('unknown_type'))
+        self.assertFalse(s.is_valid())
+        self.assertIn('type', s.errors)
+        self.assertIn("Type inconnu ou inactif", str(s.errors['type']))
+
+    def test_type_inactive_in_catalogue_rejected(self):
+        """AC#7: Type present but is_active=False raises ValidationError."""
+        s = IntegrationCreateSerializer(data=self._base_data('legacy_platform'))
+        self.assertFalse(s.is_valid())
+        self.assertIn('type', s.errors)
+        self.assertIn("Type inconnu ou inactif", str(s.errors['type']))
+
+    def test_type_not_in_enum_but_active_in_catalogue_accepted(self):
+        """AC#5: Type outside IntegrationType enum but active in catalogue is accepted."""
+        # 'custom_platform' is not in IntegrationType enum — validates purely via catalogue
+        s = IntegrationCreateSerializer(data=self._base_data('custom_platform'))
+        self.assertTrue(s.is_valid(), s.errors)
+
+    def test_error_message_mentions_api(self):
+        """AC#6: Error message references the capabilities API for discovery."""
+        s = IntegrationCreateSerializer(data=self._base_data('no_such_type'))
+        s.is_valid()
+        self.assertIn('/api/capabilities/', str(s.errors['type']))
+
+
+@pytest.mark.django_db
+class TestIntegrationUpdateSerializerTypeCatalogueValidation(TestCase):
+    """Story 83-1: IntegrationUpdateSerializer validates type against catalogue (AC#4, #7)."""
+
+    def setUp(self):
+        self.active_type = IntegrationTypeCatalogue.objects.create(
+            code='custom_platform',
+            name='Custom Platform',
+            description='A test platform type',
+            version='1.0',
+            is_active=True,
+        )
+        IntegrationTypeCatalogue.objects.create(
+            code='legacy_platform',
+            name='Legacy Platform',
+            description='An inactive platform type',
+            version='1.0',
+            is_active=False,
+        )
+
+    def test_type_valid_in_catalogue_accepted(self):
+        """AC#4: Update with type present and active in catalogue is accepted."""
+        s = IntegrationUpdateSerializer(data={'type': 'custom_platform'})
+        self.assertTrue(s.is_valid(), s.errors)
+
+    def test_type_absent_from_catalogue_rejected(self):
+        """AC#7: Update with type absent from catalogue raises ValidationError."""
+        s = IntegrationUpdateSerializer(data={'type': 'unknown_type'})
+        self.assertFalse(s.is_valid())
+        self.assertIn('type', s.errors)
+        self.assertIn("Type inconnu ou inactif", str(s.errors['type']))
+
+    def test_type_inactive_in_catalogue_rejected(self):
+        """AC#7: Update with type inactive in catalogue raises ValidationError."""
+        s = IntegrationUpdateSerializer(data={'type': 'legacy_platform'})
+        self.assertFalse(s.is_valid())
+        self.assertIn('type', s.errors)
+
+    def test_type_null_on_update_accepted(self):
+        """AC#4: Update with type=None (not provided) skips validation, no error."""
+        s = IntegrationUpdateSerializer(data={'type': None})
+        self.assertTrue(s.is_valid(), s.errors)
+
+    def test_type_not_provided_on_update_accepted(self):
+        """AC#4: Update without type field skips validation entirely."""
+        s = IntegrationUpdateSerializer(data={'name': 'Updated'})
+        self.assertTrue(s.is_valid(), s.errors)

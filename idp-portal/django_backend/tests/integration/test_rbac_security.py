@@ -193,22 +193,21 @@ class TestRBACActionPermissions(TestCase):
 
     def test_list_permission_type(self):
         """Test LIST permission type limits to specific actions."""
-        import json
+        from profiles.services import ProfileService
+        from profiles.action_permission_repository import get_action_ids
 
         profile = Profile.objects.create(
             name='ListPerm',
             ad_group='CN=ListPerm,OU=Groups,DC=corp,DC=com'
         )
 
-        # Grant access to only action1 and action2
-        ProfileActionPermission.objects.create(
-            profile=profile,
-            permission_type='LIST',
-            action_ids_json=json.dumps([self.action1.id, self.action2.id])
+        ProfileService().set_action_permissions(
+            profile.id,
+            {'actions_type': 'list', 'action_ids': [self.action1.id, self.action2.id]},
         )
 
         perm = ProfileActionPermission.objects.get(profile=profile)
-        allowed_ids = perm.get_action_ids()
+        allowed_ids = get_action_ids(perm)
 
         self.assertIn(self.action1.id, allowed_ids)
         self.assertIn(self.action2.id, allowed_ids)
@@ -231,9 +230,9 @@ class TestRBACActionPermissions(TestCase):
 
     def test_pattern_permission_type(self):
         """Test PATTERN permission type with tag patterns."""
-        import json
-
         from catalog.models import Tag, ActionTag
+        from profiles.services import ProfileService
+        from profiles.action_permission_repository import get_tag_patterns
 
         # Create tags and assign to actions
         tag_oracle = Tag.objects.create(name='oracle')
@@ -248,17 +247,15 @@ class TestRBACActionPermissions(TestCase):
             ad_group='CN=PatternPerm,OU=Groups,DC=corp,DC=com'
         )
 
-        # Grant access to actions with 'oracle' tag
-        ProfileActionPermission.objects.create(
-            profile=profile,
-            permission_type='PATTERN',
-            tag_patterns_json=json.dumps(['oracle'])
+        ProfileService().set_action_permissions(
+            profile.id,
+            {'actions_type': 'pattern', 'tag_patterns': ['oracle']},
         )
 
         perm = ProfileActionPermission.objects.get(profile=profile)
-        tag_patterns = perm.get_tag_patterns()
+        tag_patterns_result = get_tag_patterns(perm)
 
-        self.assertIn('oracle', tag_patterns)
+        self.assertIn('oracle', tag_patterns_result)
 
 
 @pytest.mark.django_db
@@ -286,21 +283,21 @@ class TestRBACEnvironmentPermissions(TestCase):
 
     def test_dev_only_permission(self):
         """Test permission limited to dev environment."""
-        import json
+        from profiles.services import ProfileService
+        from profiles.action_permission_repository import get_environments
 
         profile = Profile.objects.create(
             name='DevOnly',
             ad_group='CN=DevOnly,OU=Groups,DC=corp,DC=com'
         )
 
-        ProfileActionPermission.objects.create(
-            profile=profile,
-            permission_type='ALL',
-            environments_json=json.dumps(['dev'])
+        ProfileService().set_action_permissions(
+            profile.id,
+            {'actions_type': 'all', 'environments': ['dev']},
         )
 
         perm = ProfileActionPermission.objects.get(profile=profile)
-        envs = perm.get_environments()
+        envs = get_environments(perm)
 
         self.assertIn('dev', envs)
         self.assertNotIn('staging', envs)
@@ -308,37 +305,40 @@ class TestRBACEnvironmentPermissions(TestCase):
 
     def test_all_environments_permission(self):
         """Test permission for all environments."""
-        import json
+        from profiles.services import ProfileService
+        from profiles.action_permission_repository import get_environments
 
         profile = Profile.objects.create(
             name='AllEnvs',
             ad_group='CN=AllEnvs,OU=Groups,DC=corp,DC=com'
         )
 
-        ProfileActionPermission.objects.create(
-            profile=profile,
-            permission_type='ALL',
-            environments_json=json.dumps(['dev', 'staging', 'prod'])
+        ProfileService().set_action_permissions(
+            profile.id,
+            {'actions_type': 'all', 'environments': ['dev', 'staging', 'prod']},
         )
 
         perm = ProfileActionPermission.objects.get(profile=profile)
-        envs = perm.get_environments()
+        envs = get_environments(perm)
 
         self.assertIn('dev', envs)
         self.assertIn('staging', envs)
         self.assertIn('prod', envs)
 
     def test_prod_requires_approval(self):
-        """Test that prod executions require approval workflow."""
+        """Test that prod executions require approval workflow.
+        ADR-007: approval is now step-based (SUBMITTED + gate step), not PENDING_APPROVAL status.
+        DEPRECATED (78.14): PENDING_APPROVAL removed from DB CHECK (V135).
+        """
         execution = Execution.objects.create(
             action=self.action,
             user=self.user,
             environment='prod',
-            status=ExecutionStatus.PENDING_APPROVAL  # Must go through approval
+            status=ExecutionStatus.SUBMITTED  # ADR-007: approval via gate step, not status
         )
 
         self.assertEqual(execution.environment, 'prod')
-        self.assertEqual(execution.status, ExecutionStatus.PENDING_APPROVAL)
+        self.assertEqual(execution.status, ExecutionStatus.SUBMITTED)
 
 
 @pytest.mark.django_db
@@ -348,7 +348,6 @@ class TestRBACMultiProfileAccumulation(TestCase):
 
     def setUp(self):
         """Set up test data with multiple profiles."""
-        import json
 
         self.integration = Integration.objects.create(
             type='aap',
@@ -379,30 +378,31 @@ class TestRBACMultiProfileAccumulation(TestCase):
         )
 
         # Create profiles with different permissions
+        from profiles.services import ProfileService
+        _svc = ProfileService()
+
         self.profile1 = Profile.objects.create(
             name='Profile1',
             ad_group='CN=Profile1,OU=Groups,DC=corp,DC=com'
         )
-        ProfileActionPermission.objects.create(
-            profile=self.profile1,
-            permission_type='LIST',
-            action_ids_json=json.dumps([self.action1.id]),
-            environments_json=json.dumps(['dev'])
+        _svc.set_action_permissions(
+            self.profile1.id,
+            {'actions_type': 'list', 'action_ids': [self.action1.id], 'environments': ['dev']},
         )
 
         self.profile2 = Profile.objects.create(
             name='Profile2',
             ad_group='CN=Profile2,OU=Groups,DC=corp,DC=com'
         )
-        ProfileActionPermission.objects.create(
-            profile=self.profile2,
-            permission_type='LIST',
-            action_ids_json=json.dumps([self.action2.id]),
-            environments_json=json.dumps(['staging'])
+        _svc.set_action_permissions(
+            self.profile2.id,
+            {'actions_type': 'list', 'action_ids': [self.action2.id], 'environments': ['staging']},
         )
 
     def test_user_with_multiple_ad_groups(self):
         """Test that user with multiple AD groups gets cumulative permissions."""
+        from profiles.action_permission_repository import get_action_ids, get_environments
+
         user_ad_groups = [
             'CN=Profile1,OU=Groups,DC=corp,DC=com',
             'CN=Profile2,OU=Groups,DC=corp,DC=com'
@@ -419,8 +419,8 @@ class TestRBACMultiProfileAccumulation(TestCase):
         for profile in profiles:
             try:
                 perm = ProfileActionPermission.objects.get(profile=profile)
-                all_action_ids.update(perm.get_action_ids())
-                all_environments.update(perm.get_environments())
+                all_action_ids.update(get_action_ids(perm))
+                all_environments.update(get_environments(perm))
             except ProfileActionPermission.DoesNotExist:
                 pass
 

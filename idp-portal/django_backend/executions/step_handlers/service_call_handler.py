@@ -15,32 +15,15 @@ import structlog
 from adapters.utils import build_auth_headers
 from integrations.services import IntegrationService
 from services import get_service_client
+from services.definitions import service_definition_registry
 
 from executions.models import Execution
 
 logger = structlog.get_logger(__name__)
-
-# Opérations autorisées par service (liste positive = défense en profondeur).
-# Les méthodes _* sont toujours bloquées même si absentes de ce dict.
-# SYNC: serviceCallConstants.ts#SERVICE_CALL_OPERATIONS
-_ALLOWED_OPERATIONS: dict[str, frozenset[str]] = {
-    "servicenow": frozenset({
-        "create_change", "update_change", "close_change",
-        "get_change_status", "cancel_change",
-    }),
-    "vault": frozenset({
-        "get_secret",
-    }),
-    "jira": frozenset({
-        "create_issue", "update_issue", "get_issue",
-    }),
-    "notification": frozenset({
-        "send_email", "send_teams", "notify_execution_event",
-    }),
-}
-
-# Types qui n'ont pas de record Integration en base (instanciation directe sans base_url ni credentials).
-_CREDENTIAL_FREE_TYPES: frozenset[str] = frozenset({"notification"})
+# Opérations autorisées et détection credential-free dérivées de service_definition_registry.
+# Story 82.3: _ALLOWED_OPERATIONS et _CREDENTIAL_FREE_TYPES supprimés.
+# Source de vérité : services/definitions.py (service_definition_registry)
+# Story 82.9: serviceCallConstants.ts supprimé — le frontend lit désormais les opérations via l'API /capabilities/.
 
 
 class ServiceCallHandler:
@@ -100,12 +83,11 @@ class ServiceCallHandler:
             )
 
         # Sécurité : vérification par liste positive (défense en profondeur, deny-by-default)
-        _allowed = _ALLOWED_OPERATIONS.get(integration_type)
-        if _allowed is None:
-            raise ValueError(
-                f"Unknown integration_type: '{integration_type}'. "
-                f"Allowed types: {sorted(_ALLOWED_OPERATIONS)}"
-            )
+        # Story 82.3: délègue à service_definition_registry (source de vérité).
+        try:
+            _allowed = service_definition_registry.get_allowed_operations(integration_type)
+        except ValueError:
+            raise  # propager tel quel — message déjà formaté dans get_allowed_operations()
         if operation not in _allowed:
             raise ValueError(
                 f"Operation '{operation}' is not in the allowed list for '{integration_type}'. "
@@ -121,7 +103,8 @@ class ServiceCallHandler:
         )
 
         # Résolution de l'intégration
-        if integration_type in _CREDENTIAL_FREE_TYPES:
+        # Story 82.3: credential-free dérivé de service_definition_registry.
+        if service_definition_registry.is_credential_free(integration_type):
             # Types sans record Integration en base (ex: notification) — instanciation directe
             service = get_service_client(integration_type)
         else:

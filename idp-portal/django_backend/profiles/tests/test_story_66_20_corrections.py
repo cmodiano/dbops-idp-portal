@@ -12,7 +12,7 @@ from unittest.mock import patch, MagicMock
 
 from django.test import TestCase
 
-from profiles.models import Profile, ProfileActionPermission, ProfileTargetPermission
+from profiles.models import Profile
 from profiles.serializers import (
     ProfileBoolFieldsMixin,
     ProfileSerializer,
@@ -218,10 +218,8 @@ class TestCumulativePermissionsSinglePass(TestCase):
     def test_collects_both_action_and_target_permissions(self):
         """Les permissions action ET target sont collectées pour le même profil."""
         profile = _make_profile(name='CumulBothPerms')
-        ProfileActionPermission.objects.create(profile=profile, permission_type='ALL')
-        perm_t = ProfileTargetPermission.objects.create(profile=profile, permission_type='LIST')
-        perm_t.set_target_names(['srv-01'])
-        perm_t.save()
+        ProfileService().set_action_permissions(profile.id, {'actions_type': 'all'})
+        ProfileService().set_target_permissions(profile.id, {'targets_type': 'list', 'target_names': ['srv-01']})
 
         result = ProfileService().get_cumulative_permissions(user_id=1, ad_groups=['GRP-TEST-6620'])
         assert len(result['action_permissions']) == 1

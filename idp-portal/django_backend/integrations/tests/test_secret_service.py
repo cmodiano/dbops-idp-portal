@@ -96,6 +96,10 @@ class TestIntegrationSecretServiceModel(TestCase):
 class TestVaultCredentialRefValidation(TestCase):
     """Tests for credential_ref validation when type is vault."""
 
+    def setUp(self):
+        from django.core.management import call_command
+        call_command('loaddata', 'integration_type_catalogue', verbosity=0)
+
     def test_vault_type_with_credential_ref_rejected(self):
         """Creating a vault integration with credential_ref should fail validation."""
         data = {
@@ -146,6 +150,8 @@ class TestSecretServiceIdValidation(TestCase):
     """Tests for secret_service_id validation in create/update serializers."""
 
     def setUp(self):
+        from django.core.management import call_command
+        call_command('loaddata', 'integration_type_catalogue', verbosity=0)
         self.vault = Integration.objects.create(
             type=IntegrationType.VAULT,
             name='Vault Prod',

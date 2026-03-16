@@ -8,6 +8,10 @@ Story 33.1: OCP — replaced if/elif chains with ServiceRegistry.
   New services are registered here; get_service_client() delegates to
   the registry without any if/elif.
 
+Story 83.4: Migration des enregistrements ServiceDefinition vers operation_defs
+  (ServiceOperationDefinition). Suppression de operations=frozenset(...) et
+  operation_labels={...} remplacés par operation_defs=(...).
+
 Distinction:
 - Platform adapters (adapters/): Execute jobs/workflows on remote platforms
   (AAP, Tower, Azure DevOps, GitHub Actions, Terraform Cloud).
@@ -20,6 +24,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from services.definitions import ServiceDefinition, ServiceOperationDefinition, service_definition_registry
 from services.registry import service_registry
 
 
@@ -62,35 +67,217 @@ service_registry.register("servicenow", _factory_servicenow)
 service_registry.register("jira", _factory_jira)
 service_registry.register("notification", _factory_notification)
 
+# ---------------------------------------------------------------------------
+# ServiceDefinition registry — source de vérité pour opérations, credential-free,
+# et health check routing. Story 82.3.
+# ---------------------------------------------------------------------------
+
+service_definition_registry.register(ServiceDefinition(
+    code="vault",
+    display_name="HashiCorp Vault",
+    requires_integration=True,
+    operation_defs=(
+        ServiceOperationDefinition(  # pragma: allowlist secret
+            code="get_secret",
+            label="Lire un secret",
+            input_schema={
+                "type": "object",
+                "required": ["credential_ref"],
+                "properties": {
+                    "credential_ref": {
+                        "type": "string",
+                        "title": "Référence de secret Vault",
+                        "description": "Chemin du secret dans Vault (ex: secret/myapp/password)",
+                    },
+                },
+            },
+        ),
+    ),
+    supports_health_check=True,
+))
+service_definition_registry.register(ServiceDefinition(
+    code="splunk",
+    display_name="Splunk",
+    requires_integration=True,
+    operation_defs=(),
+    supports_health_check=True,
+))
+service_definition_registry.register(ServiceDefinition(
+    code="servicenow",
+    display_name="ServiceNow",
+    requires_integration=True,
+    operation_defs=(
+        ServiceOperationDefinition(
+            code="create_change",
+            label="Créer un change",
+            input_schema={
+                "type": "object",
+                "required": ["short_description"],
+                "properties": {
+                    "short_description": {"type": "string", "title": "Description courte"},
+                    "description": {"type": "string", "title": "Description détaillée"},
+                    "change_type": {
+                        "type": "string",
+                        "title": "Type de change",
+                        "description": "normal, standard ou emergency",
+                        "enum": ["normal", "standard", "emergency"],
+                    },
+                    "change_model_code": {"type": "string", "title": "Code modèle de change"},
+                },
+            },
+        ),
+        ServiceOperationDefinition(
+            code="update_change",
+            label="Mettre à jour le change",
+            input_schema={
+                "type": "object",
+                "required": ["change_id"],
+                "properties": {
+                    "change_id": {"type": "string", "title": "Identifiant du change (sys_id)"},
+                },
+            },
+        ),
+        ServiceOperationDefinition(
+            code="close_change",
+            label="Fermer le change",
+            input_schema={
+                "type": "object",
+                "required": ["change_id"],
+                "properties": {
+                    "change_id": {"type": "string", "title": "Identifiant du change (sys_id)"},
+                    "close_code": {
+                        "type": "string",
+                        "title": "Code de fermeture",
+                        "description": "successful, successful_issues, unsuccessful, skipped",
+                        "enum": ["successful", "successful_issues", "unsuccessful", "skipped"],
+                    },
+                    "close_notes": {"type": "string", "title": "Notes de fermeture"},
+                },
+            },
+        ),
+        ServiceOperationDefinition(
+            code="get_change_status",
+            label="Statut du change",
+            input_schema={
+                "type": "object",
+                "required": ["change_id"],
+                "properties": {
+                    "change_id": {"type": "string", "title": "Identifiant du change (sys_id)"},
+                },
+            },
+        ),
+        ServiceOperationDefinition(
+            code="cancel_change",
+            label="Annuler le change",
+            input_schema={
+                "type": "object",
+                "required": ["change_id"],
+                "properties": {
+                    "change_id": {"type": "string", "title": "Identifiant du change (sys_id)"},
+                    "reason": {"type": "string", "title": "Raison d'annulation"},
+                },
+            },
+        ),
+    ),
+    supports_health_check=True,
+))
+service_definition_registry.register(ServiceDefinition(
+    code="jira",
+    display_name="Jira",
+    requires_integration=True,
+    operation_defs=(
+        ServiceOperationDefinition(
+            code="create_issue",
+            label="Créer un ticket",
+            input_schema={
+                "type": "object",
+                "required": ["project_key", "issue_type", "summary"],
+                "properties": {
+                    "project_key": {"type": "string", "title": "Clé du projet Jira"},
+                    "issue_type": {
+                        "type": "string",
+                        "title": "Type de ticket",
+                        "description": "Bug, Task, Story, Epic",
+                    },
+                    "summary": {"type": "string", "title": "Résumé"},
+                    "description": {"type": "string", "title": "Description"},
+                    "assignee": {"type": "string", "title": "Assigné (username Jira)"},
+                },
+            },
+        ),
+        ServiceOperationDefinition(
+            code="update_issue",
+            label="Mettre à jour le ticket",
+            input_schema={
+                "type": "object",
+                "required": ["issue_key"],
+                "properties": {
+                    "issue_key": {"type": "string", "title": "Clé du ticket Jira (ex: PROJ-123)"},
+                },
+            },
+        ),
+        ServiceOperationDefinition(
+            code="get_issue",
+            label="Lire le ticket",
+            input_schema={
+                "type": "object",
+                "required": ["issue_key"],
+                "properties": {
+                    "issue_key": {"type": "string", "title": "Clé du ticket Jira (ex: PROJ-123)"},
+                },
+            },
+        ),
+    ),
+    supports_health_check=True,
+))
+service_definition_registry.register(ServiceDefinition(
+    code="notification",
+    display_name="Notification",
+    requires_integration=False,
+    operation_defs=(
+        ServiceOperationDefinition(
+            code="send_email",
+            label="Envoyer un email",
+            ui_hints={"input_renderer": "notification_template"},
+        ),
+        ServiceOperationDefinition(
+            code="send_teams",
+            label="Envoyer un message Teams",
+            ui_hints={"input_renderer": "notification_template"},
+        ),
+        ServiceOperationDefinition(code="notify_execution_event", label="Notifier un événement d'exécution", ui_hints={}),
+    ),
+    supports_health_check=False,
+))
+
 
 # ---------------------------------------------------------------------------
 # Public API — signature and SERVICE_TYPES dict unchanged (backward-compatible)
 # ---------------------------------------------------------------------------
 
-# Kept in sync with the registry — test_service_types_registry() verifies len == 5
-# WARNING: Adding a service to the registry MUST be accompanied by an entry here.
+# Story 82.3: SERVICE_TYPES dérivé depuis service_definition_registry (source de vérité).
+# Conservé pour la compatibilité avec test_factories.py et autres consommateurs.
+# Les consommateurs qui ont besoin des métadonnées complètes doivent utiliser
+# service_definition_registry directement.
 SERVICE_TYPES: dict[str, str] = {
-    "vault": "services.vault_service.VaultService",
-    "splunk": "services.splunk_service.SplunkService",
-    "servicenow": "services.servicenow_service.ServiceNowService",
-    "jira": "services.jira_service.JiraService",
-    "notification": "services.notification_service.NotificationService",
+    code: code for code in service_definition_registry.list_types()
 }
 
-# Guard: detect drift between SERVICE_TYPES and the registry at import time.
+# Guard: detect drift between SERVICE_TYPES and service_registry at import time.
+# Story 82.3: le guard est maintenant basé sur service_definition_registry (source de vérité).
 _registry_types = set(service_registry.list_types())
-_declared_types = set(SERVICE_TYPES.keys())
-assert _registry_types == _declared_types, (
-    f"SERVICE_TYPES and service_registry are out of sync. "
-    f"Registry-only: {_registry_types - _declared_types}, "
-    f"SERVICE_TYPES-only: {_declared_types - _registry_types}"
+_definition_types = set(service_definition_registry.list_types())
+assert _registry_types == _definition_types, (
+    f"service_registry and service_definition_registry are out of sync. "
+    f"service_registry-only: {_registry_types - _definition_types}, "
+    f"service_definition_registry-only: {_definition_types - _registry_types}"
 )
-del _registry_types, _declared_types
+del _registry_types, _definition_types
 
 
 # Re-exported for consumers who need to register custom services at runtime.
 # Preferred over importing from services.registry directly.
-__all__ = ["get_service_client", "SERVICE_TYPES", "service_registry"]
+__all__ = ["get_service_client", "SERVICE_TYPES", "service_registry", "service_definition_registry", "ServiceDefinition", "ServiceOperationDefinition"]
 
 
 def get_service_client(

@@ -8,7 +8,7 @@
  */
 
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
 // Mock @xyflow/react before importing the component
@@ -18,8 +18,13 @@ vi.mock('@xyflow/react', () => ({
   Position: { Top: 'top', Bottom: 'bottom', Left: 'left', Right: 'right' },
 }));
 
+vi.mock('../../hooks/useCapabilities');
+
 // Import after mocks
 import WorkflowStepNode from './WorkflowStepNode';
+import * as useCapabilitiesModule from '../../hooks/useCapabilities';
+
+const mockUseCapabilities = vi.mocked(useCapabilitiesModule.useCapabilities);
 
 const defaultData = {
   action_id: 100,
@@ -49,6 +54,11 @@ const makeProps = (dataOverrides: Record<string, unknown> = {}, selected = false
 });
 
 describe('WorkflowStepNode', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseCapabilities.mockReturnValue({ capabilities: null, loading: false, error: null });
+  });
+
   it('renders action name', () => {
     render(<WorkflowStepNode {...makeProps()} />);
     expect(screen.getByText('Create PDB')).toBeInTheDocument();
@@ -360,6 +370,201 @@ describe('WorkflowStepNode', () => {
       );
       expect(screen.queryByText('Paramètre utilisateur')).not.toBeInTheDocument();
       expect(screen.queryByText('Récurrent')).not.toBeInTheDocument();
+    });
+  });
+
+  // Story 83-11: WorkflowStepNode — labels et badge de gate dérivés du backend
+  describe('Story 83-11: gate labels dérivés des capabilities', () => {
+    const mockCapabilitiesWithGates = {
+      platforms: [],
+      services: [],
+      stepTypes: [
+        {
+          code: 'gate',
+          label: 'Attendre',
+          category: 'control',
+          config_schema: {},
+          constraints: {},
+          variants: [
+            { code: 'maintenance_window', label: 'Fenêtre de maintenance', config_schema: {} },
+            { code: 'approval', label: 'Approbation manuelle', config_schema: { type: 'object', properties: {} } },
+          ],
+        },
+      ],
+    };
+
+    it('affiche_le_variant_label_maintenance_window_depuis_capabilities', () => {
+      mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithGates, loading: false, error: null });
+
+      render(
+        <WorkflowStepNode
+          {...makeProps({ step_type: 'gate', gate_type: 'maintenance_window', name: null })}
+        />,
+      );
+
+      // Doit apparaître au moins 2 fois : une fois comme titre, une fois comme badge
+      expect(screen.getAllByText('Fenêtre de maintenance').length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('affiche_le_variant_label_approval_depuis_capabilities', () => {
+      mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithGates, loading: false, error: null });
+
+      render(
+        <WorkflowStepNode
+          {...makeProps({ step_type: 'gate', gate_type: 'approval', name: null })}
+        />,
+      );
+
+      // Doit apparaître au moins 2 fois : une fois comme titre, une fois comme badge
+      expect(screen.getAllByText('Approbation manuelle').length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('gate_type_inconnu_fallback_gate', () => {
+      mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithGates, loading: false, error: null });
+
+      render(
+        <WorkflowStepNode
+          {...makeProps({ step_type: 'gate', gate_type: 'futur_gate', name: null })}
+        />,
+      );
+
+      expect(screen.getByText('Gate')).toBeInTheDocument();
+      expect(screen.getByText('Attendre')).toBeInTheDocument();
+    });
+
+    it('capabilities_null_gate_fallback', () => {
+      mockUseCapabilities.mockReturnValue({ capabilities: null, loading: false, error: null });
+
+      render(
+        <WorkflowStepNode
+          {...makeProps({ step_type: 'gate', gate_type: 'approval', name: null })}
+        />,
+      );
+
+      expect(screen.getByText('Gate')).toBeInTheDocument();
+      expect(screen.getByText('Attendre')).toBeInTheDocument();
+    });
+
+    it('gate_name_utilisateur_prioritaire_sur_variant', () => {
+      mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithGates, loading: false, error: null });
+
+      render(
+        <WorkflowStepNode
+          {...makeProps({ step_type: 'gate', gate_type: 'approval', name: 'Mon approbation' })}
+        />,
+      );
+
+      expect(screen.getByText('Mon approbation')).toBeInTheDocument();
+      expect(screen.getByText('Approbation manuelle')).toBeInTheDocument();
+    });
+
+    it('gate_type_null_fallback_gate', () => {
+      mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithGates, loading: false, error: null });
+
+      render(
+        <WorkflowStepNode
+          {...makeProps({ step_type: 'gate', gate_type: null, name: null })}
+        />,
+      );
+
+      // gate_type null (step gate nouvellement créé) → fallback titre 'Gate', badge 'Attendre'
+      expect(screen.getByText('Gate')).toBeInTheDocument();
+      expect(screen.getByText('Attendre')).toBeInTheDocument();
+    });
+  });
+
+  // Story 82.8: WorkflowStepNode — labels service depuis capabilities
+  describe('Story 82.8: WorkflowStepNode service_call labels depuis capabilities', () => {
+    const mockCapabilities = {
+      platforms: [],
+      services: [
+        {
+          code: 'servicenow',
+          display_name: 'ServiceNow',
+          credential_mode: 'integration' as const,
+          supports_health_check: false,
+          supports_service_call: true,
+          operations: [
+            { code: 'create_change', label: 'Créer un change', input_schema: {}, output_schema: {}, ui_hints: {} },
+            { code: 'close_change', label: 'Fermer le change', input_schema: {}, output_schema: {}, ui_hints: {} },
+          ],
+        },
+        {
+          code: 'vault',
+          display_name: 'HashiCorp Vault',
+          credential_mode: 'integration' as const,
+          supports_health_check: false,
+          supports_service_call: true,
+          operations: [{ code: 'get_secret', label: 'Lire un secret', input_schema: {}, output_schema: {}, ui_hints: {} }],
+        },
+      ],
+      stepTypes: [],
+    };
+
+    it('T6.4 — step service_call avec capabilities mock → label intégration = display_name depuis capabilities', () => {
+      mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilities, loading: false, error: null });
+
+      render(
+        <WorkflowStepNode
+          {...makeProps({
+            step_type: 'service_call',
+            integration_type: 'servicenow',
+            operation: 'create_change',
+            name: null,
+          })}
+        />,
+      );
+
+      // display_name 'ServiceNow' doit apparaître dans le primaryTitle
+      expect(screen.getByText(/ServiceNow/)).toBeInTheDocument();
+    });
+
+    it('T6.5 — step service_call avec capabilities mock → label opération depuis operations[]', () => {
+      mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilities, loading: false, error: null });
+
+      render(
+        <WorkflowStepNode
+          {...makeProps({
+            step_type: 'service_call',
+            integration_type: 'servicenow',
+            operation: 'create_change',
+            name: null,
+          })}
+        />,
+      );
+
+      // 'Créer un change' est le label de l'opération — pas le code brut 'create_change'
+      expect(screen.getByText(/Créer un change/)).toBeInTheDocument();
+      expect(screen.queryByText('create_change')).not.toBeInTheDocument();
+    });
+
+    it('T6.6 — capabilities null → label intégration = code brut (pas de fallback INTEGRATION_LABELS)', () => {
+      mockUseCapabilities.mockReturnValue({ capabilities: null, loading: false, error: null });
+
+      render(
+        <WorkflowStepNode
+          {...makeProps({
+            step_type: 'service_call',
+            integration_type: 'servicenow',
+            operation: 'create_change',
+            name: null,
+          })}
+        />,
+      );
+
+      // Avec capabilities null :
+      // - integration = code brut 'servicenow' (pas de fallback INTEGRATION_LABELS)
+      // - opLabel = code brut 'create_change' (pas de label capabilities)
+      // - primaryTitle = 'servicenow — create_change'
+      const node = screen.getByRole('img');
+      expect(node.getAttribute('aria-label')).toBe('Étape: servicenow — create_change');
+
+      // Code brut 'servicenow' affiché (pas 'ServiceNow')
+      expect(screen.getByText(/servicenow — create_change/)).toBeInTheDocument();
+      expect(screen.queryByText(/ServiceNow — create_change/)).not.toBeInTheDocument();
+
+      // Le code brut de l'opération est affiché (pas de label capabilities)
+      expect(screen.queryByText('Créer un change')).not.toBeInTheDocument();
     });
   });
 

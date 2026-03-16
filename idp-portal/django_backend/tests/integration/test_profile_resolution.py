@@ -109,18 +109,19 @@ class TestProfileResolution(TestCase):
 
     def test_cumulative_permissions_from_multiple_profiles(self):
         """Test that permissions accumulate from multiple profiles."""
+        from profiles.services import ProfileService
+        _svc = ProfileService()
+
         # Set up permissions for DBA profile (LIST type - specific actions)
-        ProfileActionPermission.objects.create(
-            profile=self.profile_dba,
-            permission_type='LIST',
-            action_ids_json=f'[{self.action.id}]',
-            environments_json='["dev", "staging"]'
+        _svc.set_action_permissions(
+            self.profile_dba.id,
+            {'actions_type': 'list', 'action_ids': [self.action.id], 'environments': ['dev', 'staging']},
         )
 
         # Set up permissions for AUDITOR profile (ALL targets)
-        ProfileTargetPermission.objects.create(
-            profile=self.profile_auditor,
-            permission_type='ALL'
+        _svc.set_target_permissions(
+            self.profile_auditor.id,
+            {'targets_type': 'all'},
         )
 
         # User with both groups
@@ -154,6 +155,9 @@ class TestProfileResolution(TestCase):
 
     def test_profile_with_pattern_permissions(self):
         """Test profile with tag-based pattern permissions."""
+        from profiles.services import ProfileService
+        from profiles.action_permission_repository import get_tag_patterns
+
         # Create tags
         tag_oracle = Tag.objects.create(name='oracle')
         tag_db2 = Tag.objects.create(name='db2')
@@ -172,19 +176,17 @@ class TestProfileResolution(TestCase):
         ActionTag.objects.create(action=action_db2, tag=tag_db2)
 
         # Set up pattern permission for oracle tag only
-        ProfileActionPermission.objects.create(
-            profile=self.profile_dba,
-            permission_type='PATTERN',
-            tag_patterns_json='["oracle"]',
-            environments_json='["dev", "staging", "prod"]'
+        ProfileService().set_action_permissions(
+            self.profile_dba.id,
+            {'actions_type': 'pattern', 'tag_patterns': ['oracle'], 'environments': ['dev', 'staging', 'prod']},
         )
 
         # Verify permission configuration
         perm = ProfileActionPermission.objects.get(profile=self.profile_dba)
-        tag_patterns = perm.get_tag_patterns()
+        tag_patterns_result = get_tag_patterns(perm)
 
-        self.assertIn('oracle', tag_patterns)
-        self.assertNotIn('db2', tag_patterns)
+        self.assertIn('oracle', tag_patterns_result)
+        self.assertNotIn('db2', tag_patterns_result)
 
     def test_no_matching_ad_group_returns_empty(self):
         """Test that unknown AD groups return no profiles."""
@@ -196,15 +198,17 @@ class TestProfileResolution(TestCase):
 
     def test_profile_environment_permissions(self):
         """Test that environment permissions are correctly stored and retrieved."""
+        from profiles.services import ProfileService
+        from profiles.action_permission_repository import get_environments
+
         # Set up permission with specific environments
-        ProfileActionPermission.objects.create(
-            profile=self.profile_dba,
-            permission_type='ALL',
-            environments_json='["dev", "staging"]'  # No prod access
+        ProfileService().set_action_permissions(
+            self.profile_dba.id,
+            {'actions_type': 'all', 'environments': ['dev', 'staging']},
         )
 
         perm = ProfileActionPermission.objects.get(profile=self.profile_dba)
-        environments = perm.get_environments()
+        environments = get_environments(perm)
 
         self.assertIn('dev', environments)
         self.assertIn('staging', environments)
@@ -246,14 +250,16 @@ class TestProfilePermissionHierarchy(TestCase):
 
     def test_permission_type_list_limits_to_specific_actions(self):
         """Test that 'LIST' permission type limits to specific action IDs."""
-        ProfileActionPermission.objects.create(
-            profile=self.profile_restricted,
-            permission_type='LIST',
-            action_ids_json='[1, 2, 3]'
+        from profiles.services import ProfileService
+        from profiles.action_permission_repository import get_action_ids
+
+        ProfileService().set_action_permissions(
+            self.profile_restricted.id,
+            {'actions_type': 'list', 'action_ids': [1, 2, 3]},
         )
 
         perm = ProfileActionPermission.objects.get(profile=self.profile_restricted)
-        action_ids = perm.get_action_ids()
+        action_ids = get_action_ids(perm)
 
         self.assertEqual(perm.permission_type, 'LIST')
         self.assertEqual(action_ids, [1, 2, 3])

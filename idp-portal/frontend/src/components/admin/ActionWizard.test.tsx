@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ActionWizard } from './ActionWizard';
@@ -74,16 +74,19 @@ vi.mock('../../hooks/usePlatformIntegrations', () => ({
     integrations: [
       { id: 1, type: 'aap', name: 'AAP-PROD', status: 'valid', base_url: 'https://aap.local', credential_ref: null, icon: null, auth_flow: null, created_at: '', updated_at: '' },
       { id: 2, type: 'github_actions', name: 'GitHub CI', status: 'valid', base_url: 'https://github.com', credential_ref: null, icon: null, auth_flow: null, created_at: '', updated_at: '' },
+      { id: 3, type: 'tower', name: 'Tower-PROD', status: 'valid', base_url: 'https://tower.local', credential_ref: null, icon: null, auth_flow: null, created_at: '', updated_at: '' },
     ],
     integrationOptions: [
       { value: 1, label: 'AAP-PROD — aap' },
       { value: 2, label: 'GitHub CI — github_actions' },
+      { value: 3, label: 'Tower-PROD — tower' },
     ],
     loading: false,
     error: null,
     getIntegrationById: (id: number) => {
       if (id === 1) return { id: 1, type: 'aap', name: 'AAP-PROD', status: 'valid', base_url: 'https://aap.local', credential_ref: null, icon: null, auth_flow: null, created_at: '', updated_at: '' };
       if (id === 2) return { id: 2, type: 'github_actions', name: 'GitHub CI', status: 'valid', base_url: 'https://github.com', credential_ref: null, icon: null, auth_flow: null, created_at: '', updated_at: '' };
+      if (id === 3) return { id: 3, type: 'tower', name: 'Tower-PROD', status: 'valid', base_url: 'https://tower.local', credential_ref: null, icon: null, auth_flow: null, created_at: '', updated_at: '' };
       return undefined;
     },
   }),
@@ -98,8 +101,78 @@ vi.mock('../../hooks/useAAPTemplates', () => ({
   useAAPTemplates: vi.fn(),
 }));
 
+// Story 82.7: mock useCapabilities pour capabilities-driven tests
+vi.mock('../../hooks/useCapabilities', () => ({
+  useCapabilities: vi.fn(),
+}));
+
 import { useAAPTemplates } from '../../hooks/useAAPTemplates';
+import * as useCapabilitiesModule from '../../hooks/useCapabilities';
 const mockUseAAPTemplates = useAAPTemplates as ReturnType<typeof vi.fn>;
+const mockUseCapabilities = vi.mocked(useCapabilitiesModule.useCapabilities);
+
+// Story 83-8: Mock capabilities avec schéma AAP non vide
+const mockCapabilities = {
+  platforms: [
+    {
+      code: 'aap',
+      display_name: 'Ansible Automation Platform',
+      aliases: [],
+      icon: 'aap',
+      connector_type: 'aap',
+      action_platform_code: 'AAP',
+      supports_health_check: true,
+      action_config_schema: {
+        type: 'object',
+        properties: {
+          resource_type: { type: 'string', enum: ['job_template', 'workflow_job'], title: 'Type de ressource' },
+          template_id: { type: 'integer', title: 'ID du template', minimum: 1 },
+        },
+        required: ['template_id'],
+      },
+    },
+    {
+      // Story 83-8 fix: Tower a le même schema qu'AAP (connector_type=aap)
+      code: 'tower',
+      display_name: 'Ansible Tower',
+      aliases: [],
+      icon: 'aap',
+      connector_type: 'aap',
+      action_platform_code: 'Tower',
+      supports_health_check: true,
+      action_config_schema: {
+        type: 'object',
+        properties: {
+          resource_type: { type: 'string', enum: ['job_template', 'workflow_job'], title: 'Type de ressource' },
+          template_id: { type: 'integer', title: 'ID du template', minimum: 1 },
+        },
+        required: ['template_id'],
+      },
+    },
+    {
+      code: 'terraform_cloud',
+      display_name: 'Terraform Cloud',
+      aliases: ['terraform'],
+      icon: 'terraform',
+      connector_type: 'terraform',
+      action_platform_code: 'Terraform',
+      supports_health_check: false,
+      action_config_schema: {},
+    },
+    {
+      code: 'github_actions',
+      display_name: 'GitHub Actions',
+      aliases: [],
+      icon: 'github_actions',
+      connector_type: 'github_actions',
+      action_platform_code: 'GitHub Actions',
+      supports_health_check: false,
+      action_config_schema: {},
+    },
+  ],
+  services: [],
+  stepTypes: [],
+};
 
 const defaultAAPMockWizard = {
   templates: [],
@@ -127,6 +200,8 @@ describe('ActionWizard', () => {
     vi.clearAllMocks();
     // M3 fix: default AAP mock (fallback = manual input)
     mockUseAAPTemplates.mockReturnValue(defaultAAPMockWizard);
+    // Story 82.7: default capabilities mock
+    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilities, loading: false, error: null });
   });
 
   describe('AC1: Ouverture du wizard', () => {
@@ -267,9 +342,9 @@ describe('ActionWizard', () => {
         const payload = mockOnSubmit.mock.calls[0][0];
         expect(payload.name).toBe('Action à modifier');
         expect(payload.engine).toBe('Oracle');
-        // Story 31.1: integration_id sent, platform derived from integration type
+        // Story 83-13: integration_id sent, platform derived by backend (not in payload)
         expect(payload.integration_id).toBe(1);
-        expect(payload.platform).toBe('AAP');
+        expect(payload.platform).toBeUndefined();
         expect(payload.parameters_schema).toBeDefined();
         expect(payload.impact_rules).toBeDefined();
       });
@@ -320,9 +395,9 @@ describe('ActionWizard', () => {
         const payload = mockOnSubmit.mock.calls[0][0];
         expect(payload.name).toBe('Action à modifier');
         expect(payload.engine).toBe('Oracle');
-        // Story 31.1: integration_id sent, platform derived
+        // Story 83-13: integration_id sent, platform derived by backend (not in payload)
         expect(payload.integration_id).toBe(1);
-        expect(payload.platform).toBe('AAP');
+        expect(payload.platform).toBeUndefined();
         expect(payload.parameters_schema).toBeDefined();
         expect(payload.impact_rules).toBeDefined();
       });
@@ -726,7 +801,7 @@ describe('ActionWizard', () => {
       expect(screen.queryByLabelText('Plateforme')).not.toBeInTheDocument();
     });
 
-    it('envoie integration_id et platform dérivé dans le payload', async () => {
+    it('envoie integration_id sans platform dans le payload (Story 83-13: platform dérivé côté backend)', async () => {
       const user = userEvent.setup();
       const editAction: ActionDetail = {
         id: 10,
@@ -765,7 +840,8 @@ describe('ActionWizard', () => {
         expect(mockOnSubmit).toHaveBeenCalledTimes(1);
         const payload = mockOnSubmit.mock.calls[0][0];
         expect(payload.integration_id).toBe(1);
-        expect(payload.platform).toBe('AAP');
+        // Story 83-13: platform not sent by frontend — derived by backend from integration.type
+        expect(payload.platform).toBeUndefined();
       });
     });
 
@@ -1435,6 +1511,184 @@ describe('ActionWizard — additional coverage', () => {
       // Enregistrer is disabled for published
       expect(screen.getByRole('button', { name: /Enregistrer/i })).toBeDisabled();
     }, 30000);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Story 82.7 — T8.1/T8.2/T8.3: ActionWizard capabilities-driven connectorType
+// ---------------------------------------------------------------------------
+
+describe('ActionWizard — capabilities-driven connectorType (Story 82.7)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseAAPTemplates.mockReturnValue(defaultAAPMockWizard);
+    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilities, loading: false, error: null });
+  });
+
+  const aapEditAction: ActionDetail = {
+    id: 1,
+    name: 'Action AAP',
+    description: 'Test',
+    item_type: 'action',
+    engine: 'Oracle',
+    platform: 'AAP',
+    integration_id: 1, // id 1 → type 'aap'
+    parameters_schema: null,
+    impact_rules: null,
+    default_impact_level: null,
+    status: 'draft',
+    created_by: null,
+    created_at: '',
+    updated_at: null,
+    execution_steps: null,
+    workflow_steps: null,
+    tags: [],
+  };
+
+  const githubEditAction: ActionDetail = {
+    ...aapEditAction,
+    id: 2,
+    name: 'Action GitHub',
+    platform: 'GitHub Actions',
+    integration_id: 2, // id 2 → type 'github_actions'
+  };
+
+  it('T8.1 — intégration AAP → section template visible (connectorType=aap depuis capabilities)', async () => {
+    await act(async () => {
+      render(<ActionWizard {...defaultProps} editAction={aapEditAction} />);
+    });
+    await waitFor(() => expect(screen.getByLabelText("Nom de l'action")).toHaveValue('Action AAP'));
+    const nextBtn = await screen.findByRole('button', { name: /Suivant/i });
+    await userEvent.setup().click(nextBtn);
+    await waitFor(() => {
+      expect(screen.getByText(/Quel automatisme appeler/i)).toBeInTheDocument();
+    }, { timeout: 8000 });
+  });
+
+  it('T8.2 — intégration non-AAP (github_actions) → section template cachée', async () => {
+    await act(async () => {
+      render(<ActionWizard {...defaultProps} editAction={githubEditAction} />);
+    });
+    await waitFor(() => expect(screen.getByLabelText("Nom de l'action")).toHaveValue('Action GitHub'));
+    const nextBtn = await screen.findByRole('button', { name: /Suivant/i });
+    await userEvent.setup().click(nextBtn);
+    await waitFor(() => {
+      expect(screen.queryByText(/Quel automatisme appeler/i)).not.toBeInTheDocument();
+    }, { timeout: 8000 });
+  });
+
+  it('T8.3 — capabilities null → connectorType = "none" → section AAP non visible', async () => {
+    // Capabilities null → connectorType = 'none' (pas de fallback integrationHelpers)
+    mockUseCapabilities.mockReturnValue({ capabilities: null, loading: false, error: null });
+    await act(async () => {
+      render(<ActionWizard {...defaultProps} editAction={aapEditAction} />);
+    });
+    await waitFor(() => expect(screen.getByLabelText("Nom de l'action")).toHaveValue('Action AAP'));
+    const nextBtn = await screen.findByRole('button', { name: /Suivant/i });
+    await userEvent.setup().click(nextBtn);
+    // Sans capabilities, connectorType = 'none' → section AAP non visible
+    await waitFor(() => {
+      expect(screen.queryByText(/Quel automatisme appeler/i)).not.toBeInTheDocument();
+    }, { timeout: 8000 });
+  });
+
+  it('T8.4 — capabilities override : connector_type non-standard depuis capabilities prime (pas de fallback local)', async () => {
+    // Mock capabilities where github_actions has connector_type='aap' (override) —
+    // prouvant que le code lit bien capabilities et non un mapping local hard-codé.
+    mockUseCapabilities.mockReturnValue({
+      capabilities: {
+        ...mockCapabilities,
+        platforms: [
+          ...mockCapabilities.platforms.filter((p) => p.code !== 'github_actions'),
+          {
+            code: 'github_actions',
+            display_name: 'GitHub Actions',
+            aliases: [],
+            icon: 'github_actions',
+            connector_type: 'aap', // Override: capabilities retourne 'aap' pour github_actions
+            action_platform_code: 'GitHub Actions',
+            supports_health_check: false,
+            // Story 83-8: schéma non vide requis pour que WizardAAPTemplateSection s'affiche
+            action_config_schema: {
+              type: 'object',
+              properties: {
+                resource_type: { type: 'string', enum: ['job_template', 'workflow_job'] },
+                template_id: { type: 'integer', minimum: 1 },
+              },
+            },
+          },
+        ],
+      },
+      loading: false,
+      error: null,
+    });
+    // Integration id 2 → type 'github_actions' — un mapping local retournerait 'github_actions'
+    // mais capabilities retourne 'aap' → section AAP doit être VISIBLE (capabilities prime)
+    const githubEditAction: ActionDetail = {
+      id: 2,
+      name: 'Action GitHub Override',
+      description: 'Test',
+      item_type: 'action',
+      engine: 'Oracle',
+      platform: 'GitHub Actions',
+      integration_id: 2,
+      parameters_schema: null,
+      impact_rules: null,
+      default_impact_level: null,
+      status: 'draft',
+      created_by: null,
+      created_at: '',
+      updated_at: null,
+      execution_steps: null,
+      workflow_steps: null,
+      tags: [],
+    };
+    await act(async () => {
+      render(<ActionWizard {...defaultProps} editAction={githubEditAction} />);
+    });
+    await waitFor(() => expect(screen.getByLabelText("Nom de l'action")).toHaveValue('Action GitHub Override'));
+    const nextBtn = await screen.findByRole('button', { name: /Suivant/i });
+    await userEvent.setup().click(nextBtn);
+    // Si capabilities prime (connector_type='aap'), la section AAP doit être visible
+    await waitFor(() => {
+      expect(screen.getByText(/Quel automatisme appeler/i)).toBeInTheDocument();
+    }, { timeout: 8000 });
+  });
+
+  it('T8.5 — Tower (connector_type=aap, schéma non vide) → WizardAAPTemplateSection visible (régression fix 83-8)', async () => {
+    // Régression : Tower avait action_config_schema={} ce qui bloquait les utilisateurs Tower
+    // (validation exigeait template_id mais le champ n'était jamais rendu).
+    // Fix : Tower a maintenant le même schema qu'AAP.
+    const towerEditAction: ActionDetail = {
+      id: 3,
+      name: 'Action Tower',
+      description: 'Test Tower regression',
+      item_type: 'action',
+      engine: 'Oracle',
+      platform: 'Tower',
+      integration_id: 3,
+      parameters_schema: null,
+      impact_rules: null,
+      default_impact_level: null,
+      status: 'draft',
+      created_by: null,
+      created_at: '',
+      updated_at: null,
+      execution_steps: null,
+      workflow_steps: null,
+      tags: [],
+    };
+    await act(async () => {
+      render(<ActionWizard {...defaultProps} editAction={towerEditAction} />);
+    });
+    await waitFor(() => expect(screen.getByLabelText("Nom de l'action")).toHaveValue('Action Tower'));
+    const nextBtn = await screen.findByRole('button', { name: /Suivant/i });
+    await userEvent.setup().click(nextBtn);
+    // Tower (connector_type=aap + schéma non vide) → WizardAAPTemplateSection doit être rendu
+    await waitFor(() => {
+      expect(screen.getByText(/Quel automatisme appeler/i)).toBeInTheDocument();
+      expect(screen.getByText(/Type de ressource/i)).toBeInTheDocument();
+    }, { timeout: 8000 });
   });
 });
 

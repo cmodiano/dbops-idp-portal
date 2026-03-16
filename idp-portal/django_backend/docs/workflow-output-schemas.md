@@ -842,3 +842,75 @@ stats = import_output_schemas_yaml(yaml_content, mode='additive')
 | `vault-read-secret` | `integration` | Lecture de secret Vault |
 | `notification-standard` | `platform_convention` | Convention notification standard |
 | `notification-with-details` | `platform_convention` | Convention notification avec détails |
+
+---
+
+## Format standard `ExecutionStep.output` (Story 77.1)
+
+### Contexte
+
+Chaque step d'un workflow conteneur (service_call, http_request, evaluation, platform) persiste
+son résultat dans `ExecutionStep.output` (CLOB/TextField JSON). Ce format standard garantit la
+**durabilité des outputs** entre les sessions, notamment lors de la reprise après une gate
+(approbation ou maintenance_window).
+
+### Structure standard
+
+```json
+{
+  "raw_output": {
+    "key": "valeur brute retournée par le handler ou le child execution"
+  },
+  "extracted_output": {
+    "alias1": "valeur extraite via output_mapping",
+    "alias2": 42
+  },
+  "status_context": {
+    "status": "COMPLETED",
+    "completed_at": "2026-03-13T10:00:00Z"
+  }
+}
+```
+
+| Champ | Requis | Description |
+|-------|--------|-------------|
+| `raw_output` | Oui | Sortie brute du handler (service, HTTP, evaluation) ou du child execution (platform) |
+| `extracted_output` | Oui | Résultat de `OutputExtractor.extract(raw_output, output_mapping)` — utilisé directement au resume pour reconstruire `_step_outputs` |
+| `status_context` | Non | Métadonnées optionnelles : status, timestamps, etc. |
+
+### Rétrocompatibilité
+
+Si un `ExecutionStep.output` existant ne contient **pas** de clé `extracted_output`
+(enregistrements antérieurs à Story 77.1), le système utilise le fallback suivant :
+
+1. `raw_output` = `get_output() or {}`
+2. `extracted_output` = recalculé via `OutputExtractor.extract(raw_output, output_mapping)` depuis la config du workflow
+
+Ce fallback est appliqué dans `resume_container_workflow_from_gate()` (gates.py) et dans
+`_retry_non_platform_step()` (reconcile.py).
+
+### Cas spécifiques par type de step
+
+#### service_call / http_request / evaluation
+
+- `raw_output` : dict brut retourné par le handler (ex : réponse JSON d'une API)
+- Si le handler retourne `{'raw_output': {...}, ...}`, `raw_output` est extrait de ce dict
+- Sinon, tout le résultat du handler est utilisé comme `raw_output`
+
+#### platform (step référençant une action child execution)
+
+- `raw_output` contient au minimum :
+  - `child_execution_id` : ID de l'exécution enfant
+  - `referenced_action_id` : ID de l'action référencée
+  - `referenced_action_name` : nom de l'action référencée
+  - `child_status` : statut final de l'exécution enfant
+  - `parameters_injected` : bool indiquant si des paramètres ont été injectés
+- L'enrichissement des artifacts réels du child execution est couvert par Story 77.4
+
+### Utilisation au resume (après gate)
+
+Lors de la reprise après une gate, `resume_container_workflow_from_gate()` reconstruit
+`_step_outputs` depuis les `ExecutionStep` COMPLETED :
+
+1. Si `get_output()` retourne un dict avec clé `extracted_output` → utiliser directement `extracted_output` comme `_step_outputs[step_id]`
+2. Sinon (rétrocompatibilité) → recalculer via `OutputExtractor.extract(raw_output, output_mapping)` depuis la config du workflow

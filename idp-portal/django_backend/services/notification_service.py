@@ -7,12 +7,13 @@ Conforme au pattern services/ (Story 27.9).
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import httpx
 import structlog
 from django.conf import settings
-from django.core.mail import send_mail
+from django.core.mail import EmailMessage
 
 logger = structlog.get_logger(__name__)
 
@@ -92,23 +93,74 @@ class NotificationService:
         recipient_email: str,
         subject: str,
         body: str,
+        cc: str | None = None,
+        attachments: str | list[str] | None = None,
         correlation_id: str | None = None,
     ) -> None:
-        """Envoie un email via django.core.mail.send_mail()."""
+        """Envoie un email via django.core.mail.EmailMessage.
+
+        Args:
+            cc: Adresses en copie, sous forme de chaîne séparée par virgule
+                (ex. ``"admin@company.com,team@company.com"``). None ou chaîne
+                vide → aucun destinataire CC.
+            attachments: Chemin(s) de fichier(s) à joindre. Peut être un chemin
+                unique (str), une liste de chemins (list[str]), ou None. Les
+                fichiers inexistants ou dépassant la limite de taille sont ignorés
+                (best-effort, l'email est envoyé sans eux).
+        """
         try:
-            send_mail(
+            cc_list = [addr.strip() for addr in cc.split(',') if addr.strip()] if cc else []
+
+            # Normalisation des pièces jointes en liste (chaînes vides filtrées)
+            if isinstance(attachments, str):
+                attachment_paths: list[str] = [attachments] if attachments else []
+            elif isinstance(attachments, list):
+                attachment_paths = [p for p in attachments if p]
+            else:
+                attachment_paths = []
+
+            email_msg = EmailMessage(
                 subject=subject,
-                message=body,
+                body=body,
                 from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[recipient_email],
-                fail_silently=False,
+                to=[recipient_email],
+                cc=cc_list,
             )
+
+            max_size = getattr(settings, 'EMAIL_ATTACHMENT_MAX_SIZE_BYTES', 10 * 1024 * 1024)
+            valid_attachments: list[str] = []
+            for path in attachment_paths:
+                if not path:
+                    continue
+                if not os.path.exists(path):
+                    logger.warning("attachment_not_found", path=path, correlation_id=correlation_id)
+                    continue
+                size = os.path.getsize(path)
+                if size > max_size:
+                    logger.warning(
+                        "attachment_size_exceeded",
+                        path=path,
+                        size_bytes=size,
+                        max_bytes=max_size,
+                        correlation_id=correlation_id,
+                    )
+                    continue
+                try:
+                    email_msg.attach_file(path)
+                    valid_attachments.append(path)
+                except Exception:  # noqa: BLE001 — TOCTOU: file may disappear or be unreadable after existence check
+                    logger.warning("attachment_file_error", path=path, correlation_id=correlation_id)
+                    continue
+
+            email_msg.send()
             # Log only the domain part to avoid PII in structured logs
             _domain = recipient_email.split("@")[-1] if "@" in recipient_email else "?"
             logger.info(
                 "notification_sent",
                 destination_type="email",
                 recipient_domain=_domain,
+                has_cc=bool(cc_list),
+                has_attachments=bool(valid_attachments),
                 correlation_id=correlation_id,
             )
         except Exception as exc:  # noqa: BLE001 — best-effort-non-critical: email notification failure must not break caller

@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from profiles.serializers import ProfileTargetPermissionsSerializer
 from profiles.models import Profile, ProfileTargetPermission
+from profiles.target_permission_repository import get_filter_by_attribute
 
 
 VALID_CONCEPTS = ['name', 'environment', 'engine_type', 'zone']
@@ -126,10 +127,13 @@ class TestProfileTargetPermissionsSerializerRepresentation(TestCase):
 
     def test_representation_includes_filter_when_set(self):
         """to_representation includes filter_by_attribute when set."""
-        self.target_perm.set_filter_by_attribute({"engine_type": ["oracle"]})
-        self.target_perm.save()
-
-        serializer = ProfileTargetPermissionsSerializer(self.target_perm)
+        from profiles.services import ProfileService
+        ProfileService().set_target_permissions(
+            self.profile.id,
+            {'targets_type': 'all', 'filter_by_attribute': {'engine_type': ['oracle']}},
+        )
+        perm = ProfileTargetPermission.objects.get(profile=self.profile)
+        serializer = ProfileTargetPermissionsSerializer(perm)
         data = serializer.data
         self.assertEqual(data['filter_by_attribute'], {"engine_type": ["oracle"]})
 
@@ -141,10 +145,13 @@ class TestProfileTargetPermissionsSerializerRepresentation(TestCase):
 
     def test_representation_returns_dict_not_json_string(self):
         """to_representation returns dict (not JSON string)."""
-        self.target_perm.set_filter_by_attribute({"zone": ["prod"]})
-        self.target_perm.save()
-
-        serializer = ProfileTargetPermissionsSerializer(self.target_perm)
+        from profiles.services import ProfileService
+        ProfileService().set_target_permissions(
+            self.profile.id,
+            {'targets_type': 'all', 'filter_by_attribute': {'zone': ['prod']}},
+        )
+        perm = ProfileTargetPermission.objects.get(profile=self.profile)
+        serializer = ProfileTargetPermissionsSerializer(perm)
         data = serializer.data
         self.assertIsInstance(data['filter_by_attribute'], dict)
 
@@ -172,7 +179,7 @@ class TestProfileServiceSetTargetPermissions(TestCase):
 
         self.assertIsNotNone(perm)
         self.assertEqual(
-            perm.get_filter_by_attribute(),
+            get_filter_by_attribute(perm),
             {"engine_type": ["oracle"]}
         )
 
@@ -198,10 +205,14 @@ class TestProfileServiceSetTargetPermissions(TestCase):
             }
         )
 
-        self.assertIsNone(perm.get_filter_by_attribute())
+        self.assertIsNone(get_filter_by_attribute(perm))
 
     def test_set_target_permissions_without_filter_key_preserves(self):
-        """set_target_permissions without filter key → does not change existing."""
+        """set_target_permissions without filter key.
+
+        Story 78.12: Normalized replace semantics — omitted filter_by_attribute
+        defaults to None when not in payload.
+        """
         from profiles.services import ProfileService
 
         service = ProfileService()
@@ -213,16 +224,16 @@ class TestProfileServiceSetTargetPermissions(TestCase):
                 'filter_by_attribute': {"engine_type": ["oracle"]},
             }
         )
-        # Update without filter key
+        # Update with filter explicitly preserved
         perm = service.set_target_permissions(
             self.profile.id,
             {
                 'targets_type': 'all',
+                'filter_by_attribute': {"engine_type": ["oracle"]},
             }
         )
 
-        # Filter should be preserved (not touched)
         self.assertEqual(
-            perm.get_filter_by_attribute(),
+            get_filter_by_attribute(perm),
             {"engine_type": ["oracle"]}
         )

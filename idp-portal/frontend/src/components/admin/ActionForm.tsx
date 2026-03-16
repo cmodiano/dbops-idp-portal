@@ -27,7 +27,6 @@ import { parameterListToSchema } from '../../utils/parametersSchema';
 import { listToImpactRules } from '../../utils/impactRulesSchema';
 import { useEngines } from '../../hooks/useEngines';
 import { usePlatformIntegrations } from '../../hooks/usePlatformIntegrations';
-import { integrationTypeToPlatformCode } from '../../utils/integrationHelpers';
 import { ParametersEditor } from './ParametersEditor';
 import { ImpactRulesEditor } from './ImpactRulesEditor';
 import SectionHelp from '../common/SectionHelp';
@@ -121,23 +120,12 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
         return;
       }
 
-      // Story 31.1: Derive platform from integration type, send both
-      const selectedIntegration = values.integration_id ? getIntegrationById(values.integration_id) : undefined;
-      const rawPlatform =
-        selectedIntegration?.type && String(selectedIntegration.type).trim() !== ''
-          ? integrationTypeToPlatformCode(selectedIntegration.type)
-          : undefined;
-      const derivedPlatform =
-        rawPlatform !== undefined && rawPlatform !== ''
-          ? (rawPlatform as ActionCreate['platform'])
-          : undefined;
-
+      // Story 83-13: platform derived by backend from integration.type — not sent by frontend
       const action: ActionCreate = {
         name: values.name,
         description: values.description,
         engine: values.engine,
         integration_id: values.integration_id,
-        platform: derivedPlatform,
         parameters_schema: parameterListToSchema(parameterList),
         impact_rules: listToImpactRules(impactRulesList),
         default_impact_level: defaultImpactLevel,

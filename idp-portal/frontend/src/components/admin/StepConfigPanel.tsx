@@ -22,8 +22,12 @@ import { EvaluationStepConfig } from './step-config/EvaluationStepConfig';
 import { GateStepConfig } from './step-config/GateStepConfig';
 import { HttpRequestStepConfig } from './step-config/HttpRequestStepConfig';
 import { ScheduleStepConfig } from './step-config/ScheduleStepConfig';
+import { KeyValueEditor } from './step-config/KeyValueEditor';
+import { MappingHelpPopover } from './step-config/MappingHelpPopover';
+import { useInputMappingWarnings } from '../../hooks/useInputMappingWarnings';
 import type { WorkflowStepType } from '../../types/api';
 import { getStepLabel } from '../../utils/workflowStepLabels';
+import { useCapabilities } from '../../hooks/useCapabilities';
 
 const { Text, Title } = Typography;
 
@@ -70,6 +74,24 @@ export const StepConfigPanel: FC<StepConfigPanelProps> = ({
     [retryEnabled, maxAttempts, intervalSeconds, backoffMultiplier],
   );
 
+  // Story 63.12: input_mapping warnings for platform steps
+  const filteredStepOptionsForPlatform = useMemo(
+    () => availableStepOptions?.filter((s) => s.value !== node?.id),
+    [availableStepOptions, node?.id],
+  );
+
+  // Normalize input_mapping: null instead of undefined for consistent handling (matches output_mapping)
+  const normalizedInputMapping = data?.input_mapping ?? null;
+
+  const platformInputMappingWarnings = useInputMappingWarnings(
+    stepType === 'platform' ? (normalizedInputMapping as Record<string, string> | null) : null,
+    filteredStepOptionsForPlatform,
+  );
+
+  // Story 84.3 (AC5/T7): STEP_TYPE_TITLES supprimé — titre dérivé des capabilities backend
+  const { capabilities } = useCapabilities();
+  const stepTypeTitle = capabilities?.stepTypes?.find((s) => s.code === stepType)?.label ?? stepType;
+
   if (!node || !data) return null;
 
   // Validation helpers (platform only)
@@ -97,20 +119,9 @@ export const StepConfigPanel: FC<StepConfigPanelProps> = ({
     onNodeUpdate(node.id, updates);
   };
 
-  // Step type titles
-  const STEP_TYPE_TITLES: Record<WorkflowStepType, string> = {
-    platform: 'Action (Exécuter)',
-    service_call: 'Appel de service',
-    evaluation: 'Évaluation (Politique)',
-    gate: 'Attente / Gate',
-    http_request: 'Requête HTTP',
-    schedule_execution: 'Planifier une exécution', // Story 57.16
-    parallel_group: 'Groupe parallèle (déprécié)', // rétro-compat
-  };
-
   return (
     <Drawer
-      title={`Configuration — ${STEP_TYPE_TITLES[stepType]}`}
+      title={`Configuration — ${stepTypeTitle}`}
       open={open}
       onClose={onClose}
       size="default"
@@ -264,6 +275,40 @@ export const StepConfigPanel: FC<StepConfigPanelProps> = ({
                   </div>
                 )}
               </Space>
+            </div>
+
+            <Divider style={{ margin: '8px 0' }} />
+
+            {/* Story 63.12: Input mapping for platform steps */}
+            <div style={{ marginBottom: 12 }}>
+              <KeyValueEditor
+                label="Mapping d'entrée (input_mapping)"
+                helpContent={<MappingHelpPopover type="input" availableSteps={filteredStepOptionsForPlatform} />}
+                value={normalizedInputMapping as Record<string, string> | null}
+                onChange={(v) => handleUpdate({ input_mapping: v })}
+                disabled={disabled}
+                keyPlaceholder="Paramètre"
+                valuePlaceholder="{{ steps.<step_id>.<champ> }}"
+                data-testid="platform-input-mapping-editor"
+                warnings={platformInputMappingWarnings}
+                workflowId={workflowId}
+                currentStepId={data.step_id ?? node.id}
+                availableStepIds={availableStepIds}
+              />
+            </div>
+
+            {/* Story 63.12: Output mapping for platform steps */}
+            <div style={{ marginBottom: 12 }}>
+              <KeyValueEditor
+                label="Mapping de sortie (output_mapping)"
+                helpContent={<MappingHelpPopover type="output" stepType="platform" />}
+                value={data.output_mapping ?? null}
+                onChange={(v) => handleUpdate({ output_mapping: v })}
+                disabled={disabled}
+                keyPlaceholder="Variable"
+                valuePlaceholder="$.chemin.vers.champ"
+                data-testid="platform-output-mapping-editor"
+              />
             </div>
           </>
         )}

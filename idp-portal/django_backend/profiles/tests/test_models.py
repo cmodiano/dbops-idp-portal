@@ -141,67 +141,97 @@ class ProfileModelTest(TestCase):
 
 @pytest.mark.django_db
 class ProfileActionPermissionModelTest(TestCase):
-    """Tests for ProfileActionPermission model."""
+    """Tests for ProfileActionPermission model.
+
+    Story 78.15: Legacy CLOB fields removed. Tests now verify normalized table writes
+    via ProfileService.set_action_permissions().
+    """
 
     def setUp(self):
         """Set up test data."""
+        from profiles.services import ProfileService
         self.profile, _ = Profile.objects.get_or_create(
             name='DBA',
             defaults={'ad_group': 'GRP-IDP-DBA'}
         )
+        self.service = ProfileService()
 
     def test_create_profile_action_permission(self):
-        """Test creating a profile action permission."""
-        permission = ProfileActionPermission.objects.create(
-            profile=self.profile,
-            permission_type='LIST',
-            action_ids_json='[1, 2, 3]'
+        """Test creating a profile action permission via service."""
+        from profiles.models_action_permission_normalized import ProfileActionAllowlist
+        self.service.set_action_permissions(
+            self.profile.id,
+            {'actions_type': 'list', 'action_ids': [1, 2, 3]},
         )
+        permission = ProfileActionPermission.objects.get(profile=self.profile)
         self.assertEqual(permission.profile, self.profile)
         self.assertEqual(permission.permission_type, 'LIST')
-        self.assertEqual(permission.get_action_ids(), [1, 2, 3])
-
-    def test_profile_action_permission_json_helpers(self):
-        """Test JSON field helpers."""
-        permission = ProfileActionPermission.objects.create(
-            profile=self.profile,
-            permission_type='PATTERN',
-            tag_patterns_json='["oracle", "provisioning"]'
+        self.assertEqual(
+            sorted(ProfileActionAllowlist.objects.filter(
+                profile_id=self.profile.id
+            ).values_list('action_id', flat=True)),
+            [1, 2, 3],
         )
-        self.assertEqual(permission.get_tag_patterns(), ['oracle', 'provisioning'])
 
-        permission.set_environments(['DEV', 'STAGING'])
-        permission.save()
-        self.assertEqual(permission.get_environments(), ['DEV', 'STAGING'])
+    def test_profile_action_permission_normalized_read(self):
+        """Test normalized readers via repository."""
+        from profiles.action_permission_repository import get_tag_patterns, get_environments
+        self.service.set_action_permissions(
+            self.profile.id,
+            {
+                'actions_type': 'pattern',
+                'tag_patterns': ['oracle', 'provisioning'],
+                'environments': ['DEV', 'STAGING'],
+            },
+        )
+        permission = ProfileActionPermission.objects.get(profile=self.profile)
+        self.assertEqual(get_tag_patterns(permission), ['oracle', 'provisioning'])
+        self.assertEqual(get_environments(permission), ['DEV', 'STAGING'])
 
 
 @pytest.mark.django_db
 class ProfileTargetPermissionModelTest(TestCase):
-    """Tests for ProfileTargetPermission model."""
+    """Tests for ProfileTargetPermission model.
+
+    Story 78.15: Legacy CLOB fields removed. Tests now verify normalized table writes
+    via ProfileService.set_target_permissions().
+    """
 
     def setUp(self):
         """Set up test data."""
+        from profiles.services import ProfileService
         self.profile, _ = Profile.objects.get_or_create(
             name='DBA',
             defaults={'ad_group': 'GRP-IDP-DBA'}
         )
+        self.service = ProfileService()
 
     def test_create_profile_target_permission(self):
-        """Test creating a profile target permission."""
-        permission = ProfileTargetPermission.objects.create(
-            profile=self.profile,
-            permission_type='LIST',
-            target_names_json='["db01", "db02"]'
+        """Test creating a profile target permission via service."""
+        from profiles.models_target_permission_normalized import ProfileTargetAllowlist
+        self.service.set_target_permissions(
+            self.profile.id,
+            {'targets_type': 'list', 'target_names': ['db01', 'db02']},
         )
+        permission = ProfileTargetPermission.objects.get(profile=self.profile)
         self.assertEqual(permission.profile, self.profile)
         self.assertEqual(permission.permission_type, 'LIST')
-        self.assertEqual(permission.get_target_names(), ['db01', 'db02'])
-
-    def test_profile_target_permission_json_helpers(self):
-        """Test JSON field helpers."""
-        permission = ProfileTargetPermission.objects.create(
-            profile=self.profile,
-            permission_type='PATTERN',
-            target_patterns_json='["assurance-*", "infra-*"]'
+        self.assertEqual(
+            sorted(ProfileTargetAllowlist.objects.filter(
+                profile_id=self.profile.id
+            ).values_list('target_name', flat=True)),
+            ['db01', 'db02'],
         )
-        self.assertEqual(permission.get_target_patterns(), ['assurance-*', 'infra-*'])
+
+    def test_profile_target_permission_normalized_read(self):
+        """Test normalized readers via repository."""
+        from profiles.target_permission_repository import get_target_patterns
+        self.service.set_target_permissions(
+            self.profile.id,
+            {
+                'targets_type': 'pattern',
+                'target_patterns': ['assurance-*', 'infra-*'],
+            },
+        )
+        permission = ProfileTargetPermission.objects.get(profile=self.profile)
+        self.assertEqual(get_target_patterns(permission), ['assurance-*', 'infra-*'])

@@ -10,6 +10,7 @@ import structlog
 
 from catalog.models import Action, ActionStatus
 from catalog.validators import validate_schedule_config
+from catalog.workflow_definition_repository import get_steps
 from core.exceptions import BadRequestError, NotFoundError
 from core.middleware import get_correlation_id
 from core.models import AuditActionType, AuditEntityType
@@ -17,7 +18,7 @@ from core.services import AuditService
 from utils.json_helpers import validate_json_schema
 
 try:
-    import jsonschema  # type: ignore
+    import jsonschema
     JSONSCHEMA_AVAILABLE = True
 except ImportError:  # pragma: no cover
     JSONSCHEMA_AVAILABLE = False
@@ -37,7 +38,7 @@ def extract_workflow_referenced_action_ids(workflow_action: Action) -> list[int]
         ]
     Returns IDs in step order, skipping invalid/missing entries.
     """
-    steps = workflow_action.execution_steps or []
+    steps = get_steps(workflow_action)
     if not isinstance(steps, list):
         return []
 
@@ -124,7 +125,7 @@ def extract_workflow_step_map(workflow_action: Action) -> dict[int, int]:
     Build mapping step_order -> referenced_action_id for a workflow.
     Story 26.10: Renamed from _extract_workflow_step_map to respect Python convention (PEP 8).
     """
-    steps = workflow_action.execution_steps or []
+    steps = get_steps(workflow_action)
     if not isinstance(steps, list):
         return {}
     out: dict[int, int] = {}
@@ -146,7 +147,7 @@ def extract_workflow_step_ids_by_order(workflow_action: Action) -> dict[int, str
     step_id is the canonical identifier (routing, validation, edges).
     Used to enrich workflow_step_parameters for approval modal display.
     """
-    steps = workflow_action.execution_steps or []
+    steps = get_steps(workflow_action)
     if not isinstance(steps, list):
         return {}
     out: dict[int, str] = {}
@@ -172,7 +173,7 @@ def extract_workflow_step_names_by_order(workflow_action: Action) -> dict[int, s
     Includes all steps (platform, gate, etc.) so keys match workflow_step_parameters.
     Falls back to action_name (from referenced action) when step name is missing.
     """
-    steps = workflow_action.execution_steps or []
+    steps = get_steps(workflow_action)
     if not isinstance(steps, list):
         return {}
     # Load action names for steps with referenced_action_id (fallback when name is missing)
@@ -219,7 +220,7 @@ def enrich_workflow_step_parameters_for_display(
     if not isinstance(wsp, dict):
         return parameters
     step_names_by_order = extract_workflow_step_names_by_order(workflow_action)
-    steps = workflow_action.execution_steps or []
+    steps = get_steps(workflow_action)
     step_names_by_id: dict[str, str] = {}
     for step in steps:
         if not isinstance(step, dict):
@@ -423,7 +424,7 @@ def validate_workflow_referenced_actions(
       - BadRequestError if any referenced action is not published
     """
     # Story 57.15: Validate schedule_config for schedule_execution steps
-    steps = workflow_action.execution_steps or []
+    steps = get_steps(workflow_action)
     if isinstance(steps, list):
         for step in steps:
             if not isinstance(step, dict):

@@ -39,6 +39,7 @@ export function workflowStepsToReactFlow(
     position: { x: (index % 4) * GRID_SPACING_X, y: Math.floor(index / 4) * GRID_SPACING_Y + START_OFFSET_Y },
     data: {
       // platform fields
+      step_id: step.step_id ?? `step-${index}`,
       action_id: step.referenced_action_id ?? null,
       action_name: step.action_name ?? (step.referenced_action_id ? `Action #${step.referenced_action_id}` : ''),
       action_engine: '',
@@ -265,6 +266,9 @@ export function reactFlowToWorkflowSteps(
         retry_max_attempts: data.retry_max_attempts ?? null,
         retry_interval_seconds: data.retry_interval_seconds ?? null,
         retry_backoff_multiplier: data.retry_backoff_multiplier ?? null,
+        // Story 63.12: input/output mapping for platform steps
+        input_mapping: data.input_mapping ?? null,
+        output_mapping: data.output_mapping ?? null,
       };
     }
 
@@ -289,7 +293,7 @@ export function reactFlowToWorkflowSteps(
     if (stepType === 'gate') {
       return {
         ...baseStep,
-        gate_type: data.gate_type ?? null,
+        gate_type: (data.gate_type ?? null) as 'maintenance_window' | 'approval' | null,
         on_timeout: data.on_timeout ?? null,
         context_from: data.context_from ?? null,
         approver_profile_ids: data.approver_profile_ids ?? null,

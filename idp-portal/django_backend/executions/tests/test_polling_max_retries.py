@@ -270,7 +270,8 @@ class TestHandleGateTimeout:
         gate_status = {"action": "SKIPPED", "timeout_hours": 2}
 
         with patch("executions.tasks.AuditService.create_entry"):
-            with patch("executions.tasks.retry_workflow_step.apply_async"):
+            with patch("executions.tasks.gates.resume_container_workflow_from_gate") as mock_resume:
+                mock_resume.apply_async = MagicMock()
                 _handle_gate_timeout(step, gate_status, "test-corr")
 
         step.refresh_from_db()
@@ -301,13 +302,13 @@ class TestHandleGateTimeout:
         assert execution.status == ExecutionStatus.FAILED
 
     def test_skipped_triggers_next_step(self) -> None:
-        """CELERY-4: SKIPPED timeout triggers next step execution."""
+        """CELERY-4: SKIPPED timeout triggers resume_container_workflow_from_gate (ADR-007)."""
         from tests.factories import ExecutionFactory, ExecutionStepFactory, ActionFactory
 
         action = ActionFactory(
             execution_steps=[
-                {"name": "gate-step", "step_id": "s1"},
-                {"name": "next-step", "step_id": "s2"},
+                {"name": "gate-step", "step_id": "s1", "step_type": "gate", "order": 1},
+                {"name": "next-step", "step_id": "s2", "step_type": "platform", "order": 2},
             ]
         )
         execution = ExecutionFactory(action=action, status=ExecutionStatus.RUNNING)
@@ -315,19 +316,22 @@ class TestHandleGateTimeout:
             execution=execution,
             status=ExecutionStepStatus.WAITING,
             step_name="gate-step",
-            config_step_id="s1",  # match action step pour step_def lookup
+            config_step_id="s1",
         )
 
         gate_status = {"action": "SKIPPED", "timeout_hours": 1}
 
         with patch("executions.tasks.AuditService.create_entry"):
-            with patch("executions.tasks.retry_workflow_step.apply_async") as mock_apply:
+            with patch(
+                "executions.tasks.gates.resume_container_workflow_from_gate"
+            ) as mock_resume:
+                mock_resume.apply_async = MagicMock()
                 _handle_gate_timeout(step, gate_status, "test-corr")
 
-        mock_apply.assert_called_once()
-        args = mock_apply.call_args[1]["args"]
+        mock_resume.apply_async.assert_called_once()
+        args = mock_resume.apply_async.call_args[1]["args"]
         assert args[0] == execution.id
-        assert args[1]["name"] == "next-step"
+        assert args[1] == ["s2"]  # on_success_step_ids
 
     def test_skipped_container_workflow_uses_resume_task(self) -> None:
         """Story 57.7: Container workflow (ADR-007) timeout SKIP → resume_container_workflow_from_gate."""
@@ -364,19 +368,15 @@ class TestHandleGateTimeout:
 
         with patch("executions.tasks.AuditService.create_entry"):
             with patch(
-                "executions.tasks.retry_workflow_step"
-            ) as mock_retry:
-                with patch(
-                    "executions.tasks.gates.resume_container_workflow_from_gate"
-                ) as mock_resume:
-                    mock_resume.apply_async = MagicMock()
-                    _handle_gate_timeout(step, gate_status, "test-corr")
+                "executions.tasks.gates.resume_container_workflow_from_gate"
+            ) as mock_resume:
+                mock_resume.apply_async = MagicMock()
+                _handle_gate_timeout(step, gate_status, "test-corr")
 
         mock_resume.apply_async.assert_called_once()
         args = mock_resume.apply_async.call_args[1]["args"]
         assert args[0] == execution.id
         assert args[1] == ["platform-1"]
-        mock_retry.apply_async.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

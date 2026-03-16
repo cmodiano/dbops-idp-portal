@@ -54,6 +54,10 @@ CELERY_TASK_EAGER_PROPAGATES = True
 # Story 20.3: Disable cancellation cache in tests by default
 WORKFLOW_RETRY_USE_CANCELLATION_CACHE = False
 
+# Story 78.10: Normalized definitions disabled by default in tests
+WORKFLOW_NORMALIZED_DEFINITIONS_ENABLED = False
+
+
 # Story 20.5: Use in-memory cache for tests (avoids Redis dependency)
 CACHES = {
     'default': {

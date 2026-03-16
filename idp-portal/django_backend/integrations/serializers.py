@@ -191,10 +191,9 @@ class IntegrationCreateSerializer(IntegrationVaultValidationMixin, serializers.S
     """
     Serializer for creating integrations (POST /admin/integrations).
     """
-    type = serializers.ChoiceField(
-        choices=IntegrationType.choices,
+    type = serializers.CharField(
         required=True,
-        help_text="Integration type (enum: aap, servicenow, terraform, etc.)"
+        help_text="Code du type d'intégration (doit exister dans le catalogue actif)"
     )
     name = serializers.CharField(
         max_length=255,
@@ -247,10 +246,14 @@ class IntegrationCreateSerializer(IntegrationVaultValidationMixin, serializers.S
     )
 
     def validate_type(self, value):
-        """Validate type is a valid IntegrationType enum value."""
-        if value not in [choice[0] for choice in IntegrationType.choices]:
+        """Validate type against active IntegrationTypeCatalogue entries."""
+        active_codes = list(
+            IntegrationTypeCatalogue.objects.filter(is_active=True).values_list('code', flat=True)
+        )
+        if value not in active_codes:
             raise serializers.ValidationError(
-                f"type must be one of: {', '.join([c[0] for c in IntegrationType.choices])}"
+                f"Type inconnu ou inactif : '{value}'. "
+                f"Consultez l'API /api/capabilities/ pour la liste des types actifs."
             )
         return value
 
@@ -288,10 +291,10 @@ class IntegrationUpdateSerializer(IntegrationVaultValidationMixin, serializers.S
     Serializer for updating integrations (PUT /admin/integrations/{id}).
     All fields optional for partial update.
     """
-    type = serializers.ChoiceField(
-        choices=IntegrationType.choices,
+    type = serializers.CharField(
         required=False,
-        allow_null=True
+        allow_null=True,
+        allow_blank=False
     )
     name = serializers.CharField(
         max_length=255,
@@ -341,15 +344,19 @@ class IntegrationUpdateSerializer(IntegrationVaultValidationMixin, serializers.S
     )
 
     def validate_type(self, value):
-        """Validate type is a valid IntegrationType enum value."""
+        """Validate type against active IntegrationTypeCatalogue entries (skip if None)."""
         if value is None:
-            return None
-        if value not in [choice[0] for choice in IntegrationType.choices]:
+            return value
+        active_codes = list(
+            IntegrationTypeCatalogue.objects.filter(is_active=True).values_list('code', flat=True)
+        )
+        if value not in active_codes:
             raise serializers.ValidationError(
-                f"type must be one of: {', '.join([c[0] for c in IntegrationType.choices])}"
+                f"Type inconnu ou inactif : '{value}'. "
+                f"Consultez l'API /api/capabilities/ pour la liste des types actifs."
             )
         return value
-    
+
     def validate_name(self, value):
         """Strip whitespace and validate not empty."""
         if value is None:

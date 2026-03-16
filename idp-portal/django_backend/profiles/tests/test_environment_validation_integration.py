@@ -150,7 +150,7 @@ class TestProfileEnvironmentValidationViews:
         )
 
         assert response.status_code == http_status.HTTP_200_OK
-        assert response.data['data']['environments'] == ['lab', 'dev']
+        assert sorted(response.data['data']['environments']) == ['dev', 'lab']
 
     def test_put_actions_mixed_case_normalized(self, mocker):
         """PUT /admin/profiles/{id}/actions/ normalizes case (AC2)."""
@@ -164,8 +164,8 @@ class TestProfileEnvironmentValidationViews:
         )
 
         assert response.status_code == http_status.HTTP_200_OK
-        # Environments stored as lowercase
-        assert response.data['data']['environments'] == ['lab', 'dev']
+        # Environments stored as lowercase (order may vary from normalized tables)
+        assert sorted(response.data['data']['environments']) == ['dev', 'lab']
 
     def test_put_actions_inventory_unavailable_http_503(self, mocker):
         """PUT /admin/profiles/{id}/actions/ with inventory down returns HTTP 503 (AC3)."""

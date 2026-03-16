@@ -472,7 +472,8 @@ class ExecutionService:
 
         ADR-007: PENDING_APPROVAL is no longer used at the Execution level.
         Approvals are handled via ExecutionStep WAITING gates.
-        The PENDING_APPROVAL enum value is kept for DB CHECK constraint compatibility.
+        The PENDING_APPROVAL enum value is kept in Python for backward-compat (audit log mapping,
+        state machine dead-state) but has been REMOVED from the DB CHECK constraint (V135, Story 78.14).
 
         Valid transitions by state (with business rationale):
         ┌─────────────────────┬────────────────────────────────────────────────────────┐
@@ -495,8 +496,8 @@ class ExecutionService:
         └─────────────────────┴────────────────────────────────────────────────────────┘
         """
         # PENDING_APPROVAL transitions removed (ADR-007): approval is now step-based.
-        # PENDING_APPROVAL status is kept in the enum for DB CHECK constraint compatibility
-        # but is no longer reachable. Any attempt to transition to/from it will raise ValueError.
+        # PENDING_APPROVAL kept in Python enum for backward-compat (audit/state_machine)
+        # but REMOVED from DB CHECK constraint (V135, Story 78.14). No longer reachable.
         valid_transitions = {
             ExecutionStatus.SUBMITTED: [ExecutionStatus.RUNNING, ExecutionStatus.CANCELLED, ExecutionStatus.FAILED, ExecutionStatus.INTEGRATION_ERROR],
             ExecutionStatus.RUNNING: [ExecutionStatus.COMPLETED, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED],

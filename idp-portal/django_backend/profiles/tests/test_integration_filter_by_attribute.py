@@ -6,7 +6,8 @@ Story 23.4 - AC8: Flow complet création profil → list_targets_for_user → se
 from django.test import TestCase
 from unittest.mock import patch, MagicMock
 
-from profiles.models import Profile, ProfileActionPermission, ProfileTargetPermission
+from profiles.models import Profile
+from profiles.services import ProfileService
 from inventory.services import InventoryService
 
 
@@ -26,22 +27,20 @@ class TestIntegrationFilterByAttribute(TestCase):
 
     def _create_profile_with_filter(self, name, ad_group, envs, perm_type, filter_attr, target_names=None):
         """Helper: create profile with action + target permissions."""
+        svc = ProfileService()
         profile = Profile.objects.create(name=name, ad_group=ad_group)
 
-        action_perm = ProfileActionPermission.objects.create(
-            profile=profile, permission_type='ALL',
+        svc.set_action_permissions(
+            profile.id,
+            {'actions_type': 'all', 'environments': envs},
         )
-        action_perm.set_environments(envs)
-        action_perm.save()
 
-        target_perm = ProfileTargetPermission.objects.create(
-            profile=profile, permission_type=perm_type,
-        )
+        target_payload = {'targets_type': perm_type.lower()}
         if target_names:
-            target_perm.set_target_names(target_names)
+            target_payload['target_names'] = target_names
         if filter_attr:
-            target_perm.set_filter_by_attribute(filter_attr)
-        target_perm.save()
+            target_payload['filter_by_attribute'] = filter_attr
+        svc.set_target_permissions(profile.id, target_payload)
 
         return profile
 

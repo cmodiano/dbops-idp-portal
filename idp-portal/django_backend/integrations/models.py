@@ -56,12 +56,19 @@ class IntegrationStatus(models.TextChoices):
 
 
 class IntegrationType(models.TextChoices):
-    """Integration type enum. DB allows free-form type (V024); these are suggested values."""
+    """Integration type enum. DB allows free-form type (V024); these are suggested values.
+
+    Règle d'utilisation des codes legacy :
+    Les entrées marquées DEPRECATED correspondent à des valeurs BD historiques qui peuvent encore
+    être présentes dans integration.type. Les flux runtime doivent passer par
+    platform_registry.resolve_alias() pour résoudre ces codes vers leur code canonique actuel.
+    Ex: 'azuredevops' → resolve_alias() → 'azure_devops' ; 'terraform' → resolve_alias() → 'terraform_cloud'.
+    """
     AAP = 'aap', 'AAP'
     SERVICENOW = 'servicenow', 'ServiceNow'
-    TERRAFORM = 'terraform', 'Terraform'
+    TERRAFORM = 'terraform', 'Terraform'           # DEPRECATED — legacy BD value, alias géré par PlatformRegistry
     TERRAFORM_CLOUD = 'terraform_cloud', 'Terraform Cloud'
-    AZUREDEVOPS = 'azuredevops', 'Azure DevOps'
+    AZUREDEVOPS = 'azuredevops', 'Azure DevOps'    # DEPRECATED — legacy BD value, alias géré par PlatformRegistry
     AZURE_DEVOPS = 'azure_devops', 'Azure DevOps Pipelines'
     JIRA = 'jira', 'Jira'
     GITHUB_ACTIONS = 'github_actions', 'GitHub Actions'

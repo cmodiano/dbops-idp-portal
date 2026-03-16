@@ -77,6 +77,7 @@ INSTALLED_APPS = [
     'reference',
     'help',  # Story 31.7 - Aide contextuelle
     'output_schemas',  # Story 63.1 - Infrastructure des Schémas d'Output
+    'capabilities',  # Story 82.4 - API de capacités backend
 ]
 
 # ─── Django Jazzmin Admin Theme (Story 45.2) ────────────────────────────────
@@ -517,6 +518,12 @@ CORS_ALLOW_HEADERS = [
 # Leave empty in non-LDAP environments; LDAPService raises LDAPUnavailableError if LDAP_URI is empty.
 LDAP_URI = os.getenv("LDAP_URI", "")           # ex: ldap://dc.example.com:389
 LDAP_BASE_DN = os.getenv("LDAP_BASE_DN", "")   # ex: DC=example,DC=com
+# Compte de bind technique (optionnel). Si LDAP_BIND_DN et LDAP_BIND_PASSWORD sont définis,
+# le service se connecte d'abord avec ce compte pour rechercher l'utilisateur, puis
+# vérifie le mot de passe via un re-bind avec le DN trouvé. Sinon, bind direct avec
+# le DN construit via LDAP_USER_DN_TEMPLATE.
+LDAP_BIND_DN = os.getenv("LDAP_BIND_DN", "")       # ex: CN=svc-ldap,OU=ServiceAccounts,DC=example,DC=com
+LDAP_BIND_PASSWORD = os.getenv("LDAP_BIND_PASSWORD", "")
 # Template for user DN used in LDAP bind. Supports two formats:
 #   UPN:     "{username}@example.com"
 #   Full DN: "CN={username},OU=ServiceAccounts,DC=example,DC=com"
@@ -716,7 +723,6 @@ CELERY_TASK_ROUTES = {
     # Tasks Beat restent sur default
     'executions.tasks.evaluate_waiting_gates': {'queue': 'default'},
     'executions.tasks.process_pending_scheduled_executions': {'queue': 'default'},
-    'executions.tasks.retry_workflow_step': {'queue': 'default'},
     # Story 47.2 — Trigger async ; la queue spécifique est passée via apply_async(queue=...) au runtime.
     'executions.tasks.trigger_platform_job': {'queue': 'default'},
     # Story 57.7 — Reprise workflow après gate (approbation) — doit être sur default (worker écoute cette queue)
@@ -734,7 +740,6 @@ CELERY_TASK_TIME_LIMITS = {
     "trigger_platform_job": {"soft": 600, "hard": 630},                    # 10min — external API call
     "poll_platform_job_status": {"soft": 300, "hard": 330},                # 5min — single poll cycle
     "process_pending_scheduled_executions": {"soft": 300, "hard": 330},    # 5min — batch
-    "retry_workflow_step": {"soft": 600, "hard": 630},                     # 10min — step execution
     "purge_old_platform_logs": {"soft": 900, "hard": 930},                 # 15min — bulk delete
     "purge_old_workflow_events": {"soft": 300, "hard": 330},               # 5min — bulk delete
     "evaluate_waiting_gates": {"soft": 300, "hard": 330},                  # 5min — batch eval
@@ -789,6 +794,16 @@ WORKFLOW_RETRY_USE_CANCELLATION_CACHE = os.getenv(
     'WORKFLOW_RETRY_USE_CANCELLATION_CACHE', 'False'
 ).lower() == 'true'
 
+# Story 78.10: Feature flag for normalized workflow definitions
+# Default: False (read from JSON CLOB). Set to True to read from normalized tables.
+WORKFLOW_NORMALIZED_DEFINITIONS_ENABLED = os.getenv(
+    'WORKFLOW_NORMALIZED_DEFINITIONS_ENABLED', 'False'
+).lower() == 'true'
+
+# Story 78.15: PROFILE_ACTION_PERMISSIONS_NORMALIZED_ENABLED and
+# PROFILE_TARGET_PERMISSIONS_NORMALIZED_ENABLED feature flags removed.
+# Legacy CLOB columns dropped in V136. Reads come exclusively from normalized tables.
+
 # ============================================================================
 # External Services Configuration (Story M.8 - Health Check)
 # ============================================================================
@@ -806,6 +821,9 @@ DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'idp-portal@example.com')
 PAGE_INDIVIDUAL_API_URL = os.getenv('PAGE_INDIVIDUAL_API_URL', '')
 # Epic 56 — Décorrélation : canal page on-call (agnostique)
 PAGE_ONCALL_API_URL = os.getenv('PAGE_ONCALL_API_URL', '')
+# Story 79.3 — Email — limite de taille des pièces jointes (10 Mo par défaut)
+# Configurable via EMAIL_ATTACHMENT_MAX_SIZE_BYTES env var (octets entiers).
+EMAIL_ATTACHMENT_MAX_SIZE_BYTES: int = int(os.getenv('EMAIL_ATTACHMENT_MAX_SIZE_BYTES', str(10 * 1024 * 1024)))
 
 # Story 57.5 — ADR-007 http_request SSRF allowlist
 # Comma-separated list of allowed hostnames for http_request workflow steps.

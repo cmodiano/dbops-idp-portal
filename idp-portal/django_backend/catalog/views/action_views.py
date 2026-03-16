@@ -160,10 +160,11 @@ class ActionViewSet(viewsets.ModelViewSet):
     def update(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """PUT/PATCH /admin/actions/{id} - Update action metadata."""
         instance = self.get_object()
-        partial = kwargs.get('partial', False)
+        # PUT: full replacement, all required fields enforced. PATCH: partial update (DRF injects partial=True via partial_update).
+        partial = kwargs.get('partial', request.method == 'PATCH')
 
-        # Story 63.9: Handle output_schema_id in PATCH requests (direct update, no ActionCreateSerializer)
-        if 'output_schema_id' in request.data and len(request.data) == 1:
+        # Story 63.9: Handle output_schema_id in PATCH requests only (direct update, no ActionCreateSerializer)
+        if partial and 'output_schema_id' in request.data and len(request.data) == 1:
             raw_schema_id = request.data.get('output_schema_id')
             if raw_schema_id is not None:
                 from output_schemas.models import OutputSchema  # noqa: PLC0415
@@ -177,8 +178,8 @@ class ActionViewSet(viewsets.ModelViewSet):
             response_serializer = ActionSerializer(instance)
             return Response({"data": response_serializer.data})
 
-        # Story 28.4: Handle business_rule_policy_id in PATCH requests
-        if 'business_rule_policy_id' in request.data or 'business_rule_policies' in request.data:
+        # Story 28.4: Handle business_rule_policy_id in PATCH requests only
+        if partial and ('business_rule_policy_id' in request.data or 'business_rule_policies' in request.data):
             brp_id = request.data.get('business_rule_policy_id')
             brp_inline = request.data.get('business_rule_policies')
 
@@ -207,8 +208,12 @@ class ActionViewSet(viewsets.ModelViewSet):
             response_serializer = ActionSerializer(instance)
             return Response({"data": response_serializer.data})
 
-        # Handle other fields via ActionCreateSerializer
-        serializer = ActionCreateSerializer(data=request.data, partial=partial)
+        # Handle other fields via ActionCreateSerializer (context is_update pour validation partielle)
+        serializer = ActionCreateSerializer(
+            data=request.data,
+            partial=partial,
+            context={'is_update': True, 'instance': instance},
+        )
         serializer.is_valid(raise_exception=True)
         update_data = serializer.validated_data
         svc = self.get_catalog_service()
@@ -642,37 +647,43 @@ class ActionViewSet(viewsets.ModelViewSet):
             serializer.is_valid(raise_exception=True)
 
             # CAT-NEW-02: Wrap both creates in atomic to prevent orphan primary rule
-            with transaction.atomic():
-                # Create the primary rule (A→B)
-                # Allow NULL description (no forced empty string)
-                mutex_rule = ActionMutex.objects.create(
-                    action=action,
-                    incompatible_with_id=serializer.validated_data['incompatible_with_id'],
-                    same_target=serializer.validated_data['same_target'],
-                    description=serializer.validated_data.get('description'),
-                )
-
-                # Story 25.5, Task 2.3 Option A: Create symmetric rule (B→A) automatically
-                # Check if symmetric rule already exists
-                symmetric_exists = ActionMutex.objects.filter(
-                    action_id=serializer.validated_data['incompatible_with_id'],
-                    incompatible_with=action
-                ).exists()
-
-                if not symmetric_exists:
-                    ActionMutex.objects.create(
-                        action_id=serializer.validated_data['incompatible_with_id'],
-                        incompatible_with=action,
+            try:
+                with transaction.atomic():
+                    # Create the primary rule (A→B)
+                    # Allow NULL description (no forced empty string)
+                    mutex_rule = ActionMutex.objects.create(
+                        action=action,
+                        incompatible_with_id=serializer.validated_data['incompatible_with_id'],
                         same_target=serializer.validated_data['same_target'],
                         description=serializer.validated_data.get('description'),
                     )
-                    logger.info(
-                        "mutex_symmetric_rule_created",
-                        action_id=action.id,
-                        incompatible_with_id=serializer.validated_data['incompatible_with_id'],
-                        same_target=serializer.validated_data['same_target'],
-                        correlation_id=get_correlation_id(),
-                    )
+
+                    # Story 25.5, Task 2.3 Option A: Create symmetric rule (B→A) automatically
+                    # Check if symmetric rule already exists
+                    symmetric_exists = ActionMutex.objects.filter(
+                        action_id=serializer.validated_data['incompatible_with_id'],
+                        incompatible_with=action
+                    ).exists()
+
+                    if not symmetric_exists:
+                        ActionMutex.objects.create(
+                            action_id=serializer.validated_data['incompatible_with_id'],
+                            incompatible_with=action,
+                            same_target=serializer.validated_data['same_target'],
+                            description=serializer.validated_data.get('description'),
+                        )
+                        logger.info(
+                            "mutex_symmetric_rule_created",
+                            action_id=action.id,
+                            incompatible_with_id=serializer.validated_data['incompatible_with_id'],
+                            same_target=serializer.validated_data['same_target'],
+                            correlation_id=get_correlation_id(),
+                        )
+            except IntegrityError:
+                # Race condition: concurrent create of reversed pair violated DB constraint
+                raise DRFValidationError({
+                    'incompatible_with_id': "Une règle mutex existe déjà entre ces deux actions (conflit détecté)",
+                })
 
             response_serializer = ActionMutexSerializer(mutex_rule)
             return Response({"data": response_serializer.data}, status=status.HTTP_201_CREATED)

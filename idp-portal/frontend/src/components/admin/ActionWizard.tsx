@@ -7,14 +7,13 @@
  * Story 9.5: Support for workflows (item_type='workflow') with WorkflowStepsEditor.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { Modal, Steps, Button, Form, Alert, Space, App, List } from 'antd';
 import { CloseCircleOutlined } from '@ant-design/icons';
 import type {
   ActionCreate,
   ActionDetail,
   ActionResponse,
-  ActionPlatform,
   ActionEngine,
   ParameterDefinition,
   ImpactRuleDefinition,
@@ -22,6 +21,7 @@ import type {
   ExecutionStep,
   ItemType,
   WorkflowStep,
+  ConnectorType,
 } from '../../types/api';
 import { schemaToParameterList, parameterListToSchema } from '../../utils/parametersSchema';
 import { impactRulesToList, listToImpactRules } from '../../utils/impactRulesSchema';
@@ -32,12 +32,45 @@ import { useActionWizardState, ApiError } from '../../hooks/useActionWizardState
 import { useEngines } from '../../hooks/useEngines';
 import { usePlatformIntegrations } from '../../hooks/usePlatformIntegrations';
 import { useCategories } from '../../hooks/useCategories';
-import { integrationTypeToPlatformCode, integrationToConnector } from '../../utils/integrationHelpers';
+import { useCapabilities } from '../../hooks/useCapabilities';
+import type { CapabilitiesState } from '../../hooks/useCapabilities';
+import type { PlatformCapability } from '../../services/capabilities_service';
 import { useActionWizardValidation } from '../../hooks/useActionWizardValidation';
 import { WizardStep1General } from './WizardStep1General';
 import { WizardStep2Automatisme } from './WizardStep2Automatisme';
 import { WizardStep3ImpactChangement } from './WizardStep3ImpactChangement';
 import { OutputSchemaPanel } from './OutputSchemaPanel';
+
+/** Story 83-8 — construire connector_config depuis actionConfig + platformCap. */
+function buildConnectorConfig(
+  platformCap: PlatformCapability | null,
+  actionConfig: Record<string, unknown>,
+): Record<string, unknown> | null {
+  if (!platformCap || platformCap.connector_type === 'none') return null;
+  // Cas exceptionnel connecteur aap : transformation structurelle du payload runtime
+  // (template_id → job_template_id / workflow_job_template_id selon resource_type) — non déclaratisable (Story 83-14)
+  if (platformCap.connector_type === 'aap') {
+    const resource_type = (actionConfig.resource_type as string) ?? 'job_template';
+    const template_id = actionConfig.template_id as number | undefined;
+    if (!template_id || template_id < 1) return null;
+    return resource_type === 'workflow_job'
+      ? { resource_type: 'workflow_job' as const, workflow_job_template_id: template_id }
+      : { resource_type: 'job_template' as const, job_template_id: template_id };
+  }
+  // Autres connecteurs : retourner action_config tel quel
+  return Object.keys(actionConfig).length > 0 ? actionConfig : null;
+}
+
+/** Story 82.7 — lookup dans capabilities.platforms par code canonique.
+ *  Story 83-14: le lookup par alias supprimé — integrationType est toujours un code canonique
+ *  (integration.type depuis l'API, qui expose IntegrationTypeCatalogue.code). */
+function getPlatformCapability(
+  integrationType: string,
+  capabilities: CapabilitiesState | null,
+): PlatformCapability | null {
+  if (!capabilities || !integrationType) return null;
+  return capabilities.platforms.find((p) => p.code === integrationType) ?? null;
+}
 
 const STEP_ITEMS = [
   { title: 'Général', content: 'Type, nom, moteur, intégration, tags' },
@@ -79,6 +112,8 @@ export function ActionWizard({
   const [impactRulesList, setImpactRulesList] = useState<ImpactRuleDefinition[]>([]);
   const [defaultImpactLevel, setDefaultImpactLevel] = useState<ImpactLevel | null>(null);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  /** Valeurs de l'étape 1 capturées à la navigation — évite la perte quand step 1 est masqué (display:none) */
+  const _step1ValuesRef = useRef<{ integration_id?: number; engine?: string; category?: string } | null>(null);
 
   // DIP: services encapsulés via useActionWizardState — SOLID-FE-4
   const {
@@ -87,9 +122,8 @@ export function ActionWizard({
     handleUpdateActionSteps,
     handleUpdateWorkflowSteps,
   } = useActionWizardState({ open });
-  /** Pour AAP : type de ressource (job_template | workflow_job) et ID template. 1 action = 1 étape. */
-  const [aapResourceType, setAapResourceType] = useState<'job_template' | 'workflow_job'>('job_template');
-  const [aapTemplateId, setAapTemplateId] = useState<number | undefined>(undefined);
+  /** Story 83-8: État unifié de configuration de plateforme (remplace aapResourceType + aapTemplateId). */
+  const [actionConfig, setActionConfig] = useState<Record<string, unknown>>({});
   /** Story 9.5: Workflow steps for item_type='workflow'. */
   const [workflowSteps, setWorkflowSteps] = useState<WorkflowStep[]>([]);
   /** Story 16.5: Toggle between list and visual mode for workflow steps. */
@@ -111,10 +145,26 @@ export function ActionWizard({
   const { integrationOptions, loading: integrationsLoading, getIntegrationById } = usePlatformIntegrations();
   // Story 2.30: Load categories from REF_CATEGORIES table
   const { categoryOptions, loading: categoriesLoading } = useCategories();
+  // Story 82.7: capacités backend pour dériver connector_type et action_platform_code
+  const { capabilities } = useCapabilities();
 
   // Story 31.1: Derive AAP check from selected integration
   const selectedIntegration = integrationId ? getIntegrationById(integrationId) : undefined;
-  const isPlatformAAP = selectedIntegration?.type === 'aap' || selectedIntegration?.type === 'tower';
+  // Story 82.7/82.9: lookup dans capabilities.platforms — pas de fallback (supprimé en 82.9)
+  const platformCap = useMemo(
+    () => getPlatformCapability(selectedIntegration?.type ?? '', capabilities),
+    [selectedIntegration?.type, capabilities],
+  );
+  // Inclure l'intégration courante dans les options si absente (ex: statut invalid, filtrée)
+  const integrationOptionsWithCurrent = useMemo(() => {
+    const currentId = editAction?.integration_id ?? integrationId;
+    if (!currentId || integrationOptions.some((o) => o.value === currentId)) {
+      return integrationOptions;
+    }
+    const current = getIntegrationById(currentId);
+    const label = current ? `${current.name} — ${current.type}` : `Intégration #${currentId}`;
+    return [{ value: currentId, label }, ...integrationOptions];
+  }, [integrationOptions, editAction?.integration_id, integrationId, getIntegrationById]);
 
   useEffect(() => {
     if (open && editAction) {
@@ -144,28 +194,32 @@ export function ActionWizard({
       } else {
         setWorkflowSteps([]);
       }
+      // Story 83-8: pré-remplir actionConfig depuis connector_config
       const singleStep = editAction.execution_steps?.[0];
-      if (singleStep?.connector_type === 'aap' && singleStep.connector_config) {
-        const rt = singleStep.connector_config.resource_type as string;
-        setAapResourceType(rt === 'workflow_job' ? 'workflow_job' : 'job_template');
-        const tid =
-          rt === 'workflow_job'
-            ? singleStep.connector_config.workflow_job_template_id
-            : singleStep.connector_config.job_template_id;
-        setAapTemplateId(tid != null ? Number(tid) : undefined);
+      if (singleStep?.connector_config) {
+        const cfg = singleStep.connector_config;
+        if (singleStep.connector_type === 'aap') {
+          const resource_type = (cfg.resource_type as string) ?? 'job_template';
+          const template_id = resource_type === 'workflow_job'
+            ? cfg.workflow_job_template_id
+            : cfg.job_template_id;
+          setActionConfig({ resource_type, template_id: template_id != null ? Number(template_id) : undefined });
+        } else {
+          setActionConfig(cfg as Record<string, unknown>);
+        }
       } else {
-        setAapResourceType('job_template');
-        setAapTemplateId(undefined);
+        setActionConfig({});
       }
       setCurrentStep(0);
+      _step1ValuesRef.current = null;
     } else if (!open) {
       form.resetFields();
+      _step1ValuesRef.current = null;
       setParameterList([]);
       setImpactRulesList([]);
       setDefaultImpactLevel(null);
       setSelectedTags([]);
-      setAapResourceType('job_template');
-      setAapTemplateId(undefined);
+      setActionConfig({});
       setWorkflowSteps([]);
       setOutputSchemaId(null);
       setCurrentStep(0);
@@ -190,7 +244,7 @@ export function ActionWizard({
     }
     // Story 16.7, AC8: Graph validation — block save on critical errors
     const { nodes, edges } = workflowStepsToReactFlow(workflowSteps);
-    const graphValidation = validateWorkflowGraph(nodes, edges);
+    const graphValidation = validateWorkflowGraph(nodes, edges, capabilities?.stepTypes);
     if (!graphValidation.valid) {
       const errors = graphValidation.errors.filter((e) => e.type === 'error');
       modal.error({
@@ -232,6 +286,13 @@ export function ActionWizard({
       } catch {
         return;
       }
+      // Capturer les valeurs de l'étape 1 avant de masquer (évite perte integration_id, engine, etc.)
+      const vals = form.getFieldsValue();
+      _step1ValuesRef.current = {
+        integration_id: vals.integration_id,
+        engine: vals.engine,
+        category: vals.category,
+      };
     }
     // Step 2 validation for workflows
     if (currentStep === 1 && isWorkflow) {
@@ -243,7 +304,10 @@ export function ActionWizard({
     setCurrentStep((s) => Math.min(s + 1, 2));
   };
 
-  const handlePrev = () => setCurrentStep((s) => Math.max(s - 1, 0));
+  const handlePrev = () => {
+    if (currentStep === 1) _step1ValuesRef.current = null;
+    setCurrentStep((s) => Math.max(s - 1, 0));
+  };
 
   const handleSave = async () => {
     setSubmitError(null);
@@ -262,7 +326,8 @@ export function ActionWizard({
       isWorkflowSave,
       parameterList,
       impactRulesList,
-      aapTemplateId,
+      platformCap,
+      actionConfig,
       integrationId: values.integration_id,
       getIntegrationById,
     });
@@ -274,6 +339,12 @@ export function ActionWizard({
 
     setSaving(true);
     try {
+      // Priorité: _step1ValuesRef (capturé à la nav) > values (validateFields) > form (getFieldsValue)
+      const captured = _step1ValuesRef.current;
+      const formValues = form.getFieldsValue();
+      const integrationId = captured?.integration_id ?? values.integration_id ?? formValues.integration_id;
+      const engine = captured?.engine ?? values.engine ?? formValues.engine;
+
       const payload: ActionCreate = {
         name: values.name,
         description: values.description,
@@ -287,17 +358,13 @@ export function ActionWizard({
         // Story 63.9: Schéma d'output déclaré par l'admin
         output_schema_id: outputSchemaId,
         // category: both actions and workflows (workflows: optional, backend defaults to 'autres')
-        category: (values as Record<string, unknown>).category as string | undefined ?? null,
-        // Only include engine/platform/integration_id/parameters_schema for actions
+        category: (captured?.category ?? (values as Record<string, unknown>).category ?? formValues.category) as string | undefined ?? null,
+        // Only include engine/integration_id/parameters_schema for actions (platform derived by backend — Story 83-13)
         ...(isWorkflowSave
           ? {}
           : {
-              engine: values.engine,
-              // Story 31.1: Derive platform from integration type, send both
-              integration_id: values.integration_id,
-              platform: values.integration_id
-                ? (integrationTypeToPlatformCode(getIntegrationById(values.integration_id)?.type ?? '') as ActionPlatform)
-                : undefined,
+              engine,
+              integration_id: integrationId,
               parameters_schema: parameterListToSchema(parameterList),
             }),
       };
@@ -352,21 +419,18 @@ export function ActionWizard({
         } else {
           // Save execution steps for actions (only if draft or disabled)
           if (canEditSteps) {
-            // Story 31.1: Derive connector from integration type
-            const connector = values.integration_id
-              ? integrationToConnector(getIntegrationById(values.integration_id)?.type ?? '')
+            const connector = integrationId
+              ? (platformCap?.connector_type ?? 'none')
               : 'none';
-            const connector_config =
-              connector === 'aap' && aapTemplateId != null && aapTemplateId >= 1
-                ? aapResourceType === 'workflow_job'
-                  ? { resource_type: 'workflow_job' as const, workflow_job_template_id: aapTemplateId }
-                  : { resource_type: 'job_template' as const, job_template_id: aapTemplateId }
-                : null;
+            // Story 83-8: buildConnectorConfig dérive connector_config depuis actionConfig
+            const connector_config = integrationId
+              ? buildConnectorConfig(platformCap, actionConfig)
+              : null;
             const singleStep: ExecutionStep = {
               order: 1,
               name: 'Exécution',
               type: 'execution',
-              connector_type: connector,
+              connector_type: connector as ConnectorType,
               connector_config: connector_config ?? undefined,
               conditional_environments: null,
             };
@@ -464,7 +528,7 @@ export function ActionWizard({
               isReadOnly={!!isReadOnly}
               engineOptions={engineOptions}
               enginesLoading={enginesLoading}
-              integrationOptions={integrationOptions}
+              integrationOptions={integrationOptionsWithCurrent}
               integrationsLoading={integrationsLoading}
               isEditMode={isEditMode}
               editAction={editAction}
@@ -480,12 +544,10 @@ export function ActionWizard({
             <WizardStep2Automatisme
               isWorkflow={isWorkflow}
               isReadOnly={!!isReadOnly}
-              isPlatformAAP={isPlatformAAP}
+              platformCap={platformCap}
               integrationId={integrationId}
-              aapResourceType={aapResourceType}
-              setAapResourceType={setAapResourceType}
-              aapTemplateId={aapTemplateId}
-              setAapTemplateId={setAapTemplateId}
+              actionConfig={actionConfig}
+              setActionConfig={setActionConfig}
               parameterList={parameterList}
               setParameterList={setParameterList}
               workflowSteps={workflowSteps}

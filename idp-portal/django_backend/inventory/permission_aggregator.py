@@ -13,6 +13,13 @@ from django.db.models import QuerySet
 
 from core.environment import EnvironmentHelper
 from inventory.query_executor import InventoryServiceError
+from profiles.action_permission_repository import get_environments as repo_get_environments
+from profiles.target_permission_repository import (
+    get_filter_by_attribute as repo_get_filter_by_attribute,
+    get_exclusion_patterns as repo_get_exclusion_patterns,
+    get_target_patterns as repo_get_target_patterns,
+    get_target_names as repo_get_target_names,
+)
 from profiles.models import Profile
 
 logger = structlog.get_logger(__name__)
@@ -60,7 +67,7 @@ class RBACPermissionAggregator:
 
             action_perm = getattr(profile, 'profileactionpermission', None)
             if action_perm:
-                envs = action_perm.get_environments()
+                envs = repo_get_environments(action_perm)
                 if envs:
                     self._add_normalized_environments(envs, allowed_environments)
             elif is_admin:
@@ -73,7 +80,7 @@ class RBACPermissionAggregator:
             attr_filter = None
             if target_perm:
                 try:
-                    attr_filter = target_perm.get_filter_by_attribute()
+                    attr_filter = repo_get_filter_by_attribute(target_perm)
                 except Exception as e:  # noqa: BLE001 — graceful-degradation: filter attribute error logged, aggregation continues
                     logger.error(
                         "rbac_filter_by_attribute_error",
@@ -84,7 +91,7 @@ class RBACPermissionAggregator:
                     )
 
                 try:
-                    patterns = target_perm.get_exclusion_patterns()
+                    patterns = repo_get_exclusion_patterns(target_perm)
                     if patterns:
                         all_exclusion_patterns.extend(patterns)
                         logger.debug(
@@ -109,7 +116,7 @@ class RBACPermissionAggregator:
                     all_access_attribute_filters.append(attr_filter)
                 elif perm_type == 'PATTERN':
                     try:
-                        patterns = target_perm.get_target_patterns()
+                        patterns = repo_get_target_patterns(target_perm)
                         if patterns:
                             target_restrictions.append(('PATTERN', patterns))
                             attribute_filters.append(attr_filter)
@@ -123,7 +130,7 @@ class RBACPermissionAggregator:
                         )
                 elif perm_type == 'LIST':
                     try:
-                        names = target_perm.get_target_names()
+                        names = repo_get_target_names(target_perm)
                         if names:
                             target_restrictions.append(('LIST', names))
                             attribute_filters.append(attr_filter)
@@ -184,7 +191,7 @@ class RBACPermissionAggregator:
         for profile in profiles:
             action_perm = getattr(profile, 'profileactionpermission', None)
             if action_perm:
-                envs = action_perm.get_environments()
+                envs = repo_get_environments(action_perm)
                 if envs:
                     self._add_normalized_environments(envs, allowed_environments)
 

@@ -113,6 +113,19 @@ class ExportIntegrationYamlTests(TestCase):
         self.assertIsInstance(parsed["spec"]["config"], dict)
         self.assertTrue(parsed["spec"]["config"]["verify_ssl"])
 
+    def test_export_config_already_dict(self):
+        """Oracle/oracledb may return config as dict; export must handle both str and dict."""
+        from unittest.mock import patch
+
+        obj = Integration.objects.select_related("secret_service").get(name="aap-prod")
+        obj.config = {"verify_ssl": False, "timeout": 30}  # dict, not JSON string (Oracle behavior)
+        with patch.object(Integration.objects, "select_related") as mock_sr:
+            mock_sr.return_value.get.return_value = obj
+            parsed = yaml.safe_load(export_integration_yaml("aap-prod"))
+        self.assertIsInstance(parsed["spec"]["config"], dict)
+        self.assertFalse(parsed["spec"]["config"]["verify_ssl"])
+        self.assertEqual(parsed["spec"]["config"]["timeout"], 30)
+
     def test_export_not_found_raises(self):
         with self.assertRaises(InvalidStateError) as ctx:
             export_integration_yaml("nonexistent")

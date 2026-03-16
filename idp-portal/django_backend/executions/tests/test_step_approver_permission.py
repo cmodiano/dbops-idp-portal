@@ -94,7 +94,7 @@ class TestApproveStepViewPermission58_4(TestCase):
             f"/api/v1/executions/{execution.id}/steps/{step.id}/approve/",
             format='json',
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
 
     def test_user_without_profile_in_approver_list_is_forbidden(self):
         """User sans profil dans approver_profile_ids → 403 Forbidden."""
@@ -186,7 +186,7 @@ class TestRejectStepViewPermission58_4(TestCase):
             {"comment": "Rejeté"},
             format='json',
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
 
     def test_user_without_profile_in_approver_list_cannot_reject(self):
         """User sans profil dans approver_profile_ids → 403 Forbidden pour reject."""

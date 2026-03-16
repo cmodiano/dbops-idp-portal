@@ -18,6 +18,8 @@ from catalog.models import Action, Tag, ActionTag
 from executions.models import Execution, ExecutionStatus
 from idp_auth.models import User
 from profiles.models import Profile, ProfileActionPermission
+from profiles.services import ProfileService
+from profiles.action_permission_repository import get_action_ids, get_environments, get_tag_patterns
 from idp_auth.jwt_utils import create_access_token
 from tests.security.conftest import make_auth_client, _token_data
 
@@ -63,13 +65,10 @@ class TestActionPermissionTypeList:
             created_by=user,
             integration=sec_integration,
         )
-        perm = ProfileActionPermission.objects.create(
-            profile=profile,
-            permission_type='LIST',
+        ProfileService().set_action_permissions(
+            profile.id,
+            {'actions_type': 'list', 'action_ids': [action_a.id], 'environments': ['dev', 'staging']},
         )
-        perm.set_action_ids([action_a.id])
-        perm.set_environments(['dev', 'staging'])
-        perm.save()
 
         token = create_access_token(_token_data(user, ['dba_list_test']))
         return {
@@ -90,16 +89,16 @@ class TestActionPermissionTypeList:
         assert list_profile_setup['action_a'].id in action_ids
 
     def test_list_permission_get_action_ids(self, list_profile_setup):
-        """ProfileActionPermission.get_action_ids returns the stored list."""
+        """Repository get_action_ids returns the stored list from normalized tables."""
         perm = ProfileActionPermission.objects.get(profile=list_profile_setup['profile'])
-        ids = perm.get_action_ids()
+        ids = get_action_ids(perm)
         assert list_profile_setup['action_a'].id in ids
         assert list_profile_setup['action_b'].id not in ids
 
     def test_list_permission_environments(self, list_profile_setup):
-        """ProfileActionPermission.get_environments returns configured envs."""
+        """Repository get_environments returns configured envs from normalized tables."""
         perm = ProfileActionPermission.objects.get(profile=list_profile_setup['profile'])
-        envs = perm.get_environments()
+        envs = get_environments(perm)
         assert 'dev' in envs
         assert 'staging' in envs
         assert 'prod' not in envs
@@ -209,12 +208,10 @@ class TestActionPermissionTypePattern:
         ActionTag.objects.create(action=action_postgres, tag=tag_postgres)
 
         # Setup PATTERN permission that only allows 'oracle' tag
-        perm = ProfileActionPermission.objects.create(
-            profile=profile,
-            permission_type='PATTERN',
+        ProfileService().set_action_permissions(
+            profile.id,
+            {'actions_type': 'pattern', 'tag_patterns': ['oracle']},
         )
-        perm.set_tag_patterns(['oracle'])
-        perm.save()
 
         token = create_access_token(_token_data(user, ['dba_pattern_test']))
         return {
@@ -227,12 +224,12 @@ class TestActionPermissionTypePattern:
         }
 
     def test_pattern_permission_tag_patterns(self, pattern_profile_setup):
-        """ProfileActionPermission stores tag patterns correctly."""
+        """Repository get_tag_patterns returns tag patterns from normalized tables."""
         perm = ProfileActionPermission.objects.get(
             profile=pattern_profile_setup['profile']
         )
         assert perm.permission_type == 'PATTERN'
-        patterns = perm.get_tag_patterns()
+        patterns = get_tag_patterns(perm)
         assert 'oracle' in patterns
 
     def test_pattern_permission_resolves_action_ids(self, pattern_profile_setup):
@@ -280,12 +277,10 @@ class TestEnvironmentRestrictions:
             created_by=user,
             integration=sec_integration,
         )
-        perm = ProfileActionPermission.objects.create(
-            profile=profile,
-            permission_type='ALL',
+        ProfileService().set_action_permissions(
+            profile.id,
+            {'actions_type': 'all', 'environments': ['dev']},
         )
-        perm.set_environments(['dev'])
-        perm.save()
 
         token = create_access_token(_token_data(user, ['dba_dev_only']))
         return {
@@ -300,12 +295,12 @@ class TestEnvironmentRestrictions:
         perm = ProfileActionPermission.objects.get(
             profile=env_profile_setup['profile']
         )
-        envs = perm.get_environments()
+        envs = get_environments(perm)
         assert 'dev' in envs
         assert 'prod' not in envs
 
     def test_environment_restriction_empty_means_all(self, db):
-        """Profile with no environments_json means all environments allowed."""
+        """Profile with no normalized environments means all environments allowed."""
         profile = Profile.objects.create(
             name='DBA_ALL_ENVS',
             ad_group='dba_all_envs',
@@ -316,7 +311,7 @@ class TestEnvironmentRestrictions:
             profile=profile,
             permission_type='ALL',
         )
-        envs = perm.get_environments()
+        envs = get_environments(perm)
         assert envs == []  # Empty means no restrictions (all allowed)
 
 
@@ -485,13 +480,10 @@ class TestMultiProfileAccumulation:
             created_by=user,
             integration=sec_integration,
         )
-        perm_a = ProfileActionPermission.objects.create(
-            profile=profile_a,
-            permission_type='LIST',
+        ProfileService().set_action_permissions(
+            profile_a.id,
+            {'actions_type': 'list', 'action_ids': [action_a.id], 'environments': ['dev']},
         )
-        perm_a.set_action_ids([action_a.id])
-        perm_a.set_environments(['dev'])
-        perm_a.save()
 
         # Profile B: PATTERN perm with 'oracle' tag, staging env
         profile_b = Profile.objects.create(
@@ -512,13 +504,10 @@ class TestMultiProfileAccumulation:
         )
         ActionTag.objects.create(action=action_b, tag=tag)
 
-        perm_b = ProfileActionPermission.objects.create(
-            profile=profile_b,
-            permission_type='PATTERN',
+        ProfileService().set_action_permissions(
+            profile_b.id,
+            {'actions_type': 'pattern', 'tag_patterns': ['oracle_multi'], 'environments': ['staging']},
         )
-        perm_b.set_tag_patterns(['oracle_multi'])
-        perm_b.set_environments(['staging'])
-        perm_b.save()
 
         token = create_access_token(_token_data(user, ['multi_a', 'multi_b']))
         return {

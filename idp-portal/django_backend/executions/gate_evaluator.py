@@ -1,6 +1,8 @@
 """
 GateEvaluator service for evaluating gate_conditions on WAITING ExecutionSteps.
 Story 25.3: Evaluates conditions and determines if a step can transition WAITING → RUNNING.
+Story 82.5: Utilise gate_registry pour valider les types et déléguer via requires_manual_resolution.
+Story 83.2: Orchestrateur pur — délègue l'évaluation à GateDefinition.evaluation_strategy.
 """
 from typing import Any
 
@@ -8,7 +10,9 @@ import structlog
 from django.utils import timezone
 
 from core.middleware import get_correlation_id
-from inventory.services import InventoryService, InventoryServiceError
+from executions.gates.definitions import GateEvaluationContext
+from executions.gates.registry import gate_registry
+from inventory.services import InventoryService
 
 logger = structlog.get_logger(__name__)
 
@@ -121,129 +125,50 @@ class GateEvaluator:
         all_satisfied = True
 
         for condition in gate_conditions:
-            gate_type = condition.get('type')
-            match gate_type:
-                case 'maintenance_window':
-                    # Story 25.4: if maintenance window is not required for this env, auto-satisfy.
-                    if not requires_maintenance_window:
-                        satisfied = True
-                        context = {'reason': "Plage de maintenance non requise pour cet environnement"}
-                    else:
-                        satisfied, context = self._check_maintenance_window(step, condition)
-                case 'approval_granted':
-                    # Approval gates ALWAYS require explicit user approval via POST /approve/.
-                    # env_config.requires_approval was for the old execution-level flow.
-                    # Gate steps with type approval_granted are never auto-satisfied by the
-                    # evaluator — the approve endpoint marks COMPLETED and resumes the workflow.
-                    satisfied = False
-                    context = {'reason': "En attente d'approbation explicite"}
-                case _:
-                    # Unsupported gate types are not satisfied (future stories)
-                    satisfied = False
-                    context = {'reason': f'Unsupported gate type: {gate_type}'}
+            # condition_type est la valeur runtime stockée par GateHandler (ex: 'approval_granted')
+            condition_type = condition.get('type')
+
+            # Valider via le registre (condition_type side) — Story 82.5
+            try:
+                definition = gate_registry.get_for_condition_type(condition_type)
+            except KeyError:
+                # Type véritablement inconnu du registre
+                satisfied = False
+                context = {'reason': f'Unsupported gate type: {condition_type}'}
+                gate_status.append({'type': condition_type, 'satisfied': satisfied, **context})
+                all_satisfied = False
+                continue
+
+            if definition.requires_manual_resolution:
+                # Gates nécessitant résolution humaine (ex: approval_granted)
+                # Jamais auto-satisfaits par le poll GateEvaluator.
+                satisfied = False
+                context = {'reason': "En attente d'approbation explicite"}
+            elif definition.evaluation_strategy is not None:
+                # Gate auto-évalué : déléguer à la stratégie (Story 83.2)
+                ctx = GateEvaluationContext(
+                    step=step,
+                    condition=condition,
+                    inventory_service=self.inventory_service,
+                    requires_maintenance_window=requires_maintenance_window,
+                )
+                satisfied, context = definition.evaluation_strategy.evaluate(ctx)
+            else:
+                # Gate enregistré sans stratégie d'évaluation (comportement case _: préservé)
+                satisfied = False
+                context = {'reason': f'No evaluator implemented for: {condition_type}'}
 
             gate_status.append({
-                'type': gate_type,
-                'satisfied': satisfied,
                 **context,
+                # Mandatory keys last: prevent strategy context from silently overriding them.
+                'type': condition_type,
+                'satisfied': satisfied,
             })
 
             if not satisfied:
                 all_satisfied = False
 
         return all_satisfied, {'gates': gate_status, 'timeout_triggered': False}
-
-    def _check_maintenance_window(self, step: Any, condition: dict) -> tuple[bool, dict]:
-        """
-        Check that ALL execution targets are within their maintenance window.
-
-        Args:
-            step: ExecutionStep instance
-            condition: gate_condition dict with type='maintenance_window'
-
-        Returns:
-            tuple[bool, dict]: (satisfied, context with reason/next_possible_at/details)
-        """
-        correlation_id = get_correlation_id()
-        targets = step.execution.targets.all()
-
-        if not targets.exists():
-            logger.info(
-                "gate_evaluator_no_targets",
-                step_id=step.id,
-                correlation_id=correlation_id,
-            )
-            return True, {'reason': 'No targets configured — condition satisfied by default'}
-
-        all_in_window = True
-        next_starts = []
-        target_details = []
-
-        for target in targets:
-            try:
-                window = self.inventory_service.get_next_maintenance_window(target.target_id)
-
-                if window is None:
-                    # Story 25.3 code review: No maintenance window defined → BLOCK by default (fail-safe)
-                    # Rationale: maintenance_window gates are security controls for PROD changes.
-                    # If inventory doesn't define a window, safer to block than to allow.
-                    # This prevents accidental PROD executions outside maintenance hours.
-                    all_in_window = False
-                    target_details.append({
-                        'target_id': target.target_id,
-                        'target_name': target.target_name,
-                        'is_active': False,
-                        'reason': 'No maintenance window configured in inventory (blocked by default)',
-                    })
-                    continue
-
-                if window.get('is_active'):
-                    target_details.append({
-                        'target_id': target.target_id,
-                        'target_name': target.target_name,
-                        'is_active': True,
-                        'reason': 'Within maintenance window',
-                    })
-                else:
-                    all_in_window = False
-                    next_start = window.get('start')
-                    if next_start:
-                        next_starts.append(next_start)
-                    target_details.append({
-                        'target_id': target.target_id,
-                        'target_name': target.target_name,
-                        'is_active': False,
-                        'reason': 'Outside maintenance window',
-                        'next_start': next_start.isoformat() if next_start else None,
-                    })
-
-            except InventoryServiceError as e:
-                logger.error(
-                    "gate_evaluator_inventory_error",
-                    step_id=step.id,
-                    target_id=target.target_id,
-                    error=str(e),
-                    correlation_id=correlation_id,
-                )
-                # Inventory error → condition NOT satisfied (safe default)
-                all_in_window = False
-                target_details.append({
-                    'target_id': target.target_id,
-                    'target_name': target.target_name,
-                    'is_active': False,
-                    'reason': f'Inventory service error: {str(e)}',
-                })
-
-        context = {
-            'reason': 'All targets in maintenance window' if all_in_window
-                      else 'One or more targets outside maintenance window',
-            'details': target_details,
-        }
-
-        if next_starts:
-            context['next_possible_at'] = max(next_starts).isoformat()
-
-        return all_in_window, context
 
     def _check_timeout(self, step: Any, condition: dict) -> tuple[bool, str | None]:
         """

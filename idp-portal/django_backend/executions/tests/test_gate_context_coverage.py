@@ -1,10 +1,33 @@
 """
 Tests de couverture pour executions/gate_context.py (Story 55).
 Couvre les lignes 29-34 : validation de type gate_conditions + ValueError.
+
+Inclut aussi les tests migrés depuis test_condition_gates.py (Epic 81 PR4) :
+- TestWaitingStatus : vérification de ExecutionStepStatus.WAITING
 """
 import pytest
 from unittest.mock import MagicMock, patch
 from datetime import datetime, timezone
+
+
+# =============================================================================
+# Migré depuis test_condition_gates.py (AC1) — Epic 81 PR4
+# =============================================================================
+
+
+class TestWaitingStatus:
+    """Test WAITING status est disponible sur ExecutionStepStatus (migré de test_condition_gates)."""
+
+    def test_waiting_status_exists_in_choices(self):
+        """ExecutionStepStatus contient WAITING avec la valeur string correcte."""
+        from executions.models import ExecutionStepStatus
+        assert hasattr(ExecutionStepStatus, 'WAITING')
+        assert ExecutionStepStatus.WAITING == 'WAITING'
+
+    def test_waiting_status_label(self):
+        """WAITING status a le label 'Waiting'."""
+        from executions.models import ExecutionStepStatus
+        assert ExecutionStepStatus.WAITING.label == 'Waiting'
 
 
 class TestBuildWaitingContext:

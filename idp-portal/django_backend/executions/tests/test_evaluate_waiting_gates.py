@@ -76,9 +76,8 @@ class TestEvaluateWaitingGatesTask:
                 'timeout_triggered': False,
             }),
         ):
-            mock_task = MagicMock()
-            with patch('executions.tasks.retry_workflow_step') as mock_retry:
-                mock_retry.apply_async = mock_task
+            with patch('executions.tasks.gates.resume_container_workflow_from_gate') as mock_resume:
+                mock_resume.apply_async = MagicMock()
                 result = evaluate_waiting_gates()
 
         assert result['unblocked'] == 1
@@ -212,8 +211,8 @@ class TestEvaluateWaitingGatesTask:
             })
 
         with patch.object(GateEvaluator, 'evaluate', mock_evaluate):
-            with patch('executions.tasks.retry_workflow_step') as mock_retry:
-                mock_retry.apply_async = MagicMock()
+            with patch('executions.tasks.gates.resume_container_workflow_from_gate') as mock_resume:
+                mock_resume.apply_async = MagicMock()
                 result = evaluate_waiting_gates()
 
         # One errored, one unblocked
@@ -258,13 +257,14 @@ class TestEvaluateWaitingGatesTask:
                 'timeout_triggered': False,
             }),
         ):
-            with patch('executions.tasks.retry_workflow_step') as mock_retry:
-                mock_retry.apply_async = MagicMock()
+            with patch('executions.tasks.gates.resume_container_workflow_from_gate') as mock_resume:
+                mock_resume.apply_async = MagicMock()
                 evaluate_waiting_gates()
 
         # Step transitions to RUNNING even though execution_steps is None
         step.refresh_from_db()
         assert step.status == ExecutionStepStatus.RUNNING
 
-        # retry_workflow_step NOT called (no step_def found)
-        assert mock_retry.apply_async.call_count == 0
+        # resume_container_workflow_from_gate may or may not be called depending on step_def.
+        # Avec execution_steps=None, step_def=None → _resume_workflow_after_gate logue gate_resume_step_def_not_found.
+        assert mock_resume.apply_async.call_count == 0

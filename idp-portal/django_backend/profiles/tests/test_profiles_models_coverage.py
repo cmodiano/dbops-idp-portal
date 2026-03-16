@@ -1,16 +1,15 @@
 """
 Targeted coverage tests for profiles/models.py.
 
-Covers the branches/lines missing from the 88.39% baseline:
-  - find_by_ad_groups: falsy items (line 44), whitespace-only strings (line 47),
-    empty CN= value after strip (line 60->42), ValueError branch (lines 62-63),
-    empty normalized set (line 66)
-  - ProfileActionPermission.__str__ (line 169)
-  - ProfileActionPermission JSON error paths: get_action_ids (177-179),
-    get_tag_patterns (194-196), get_environments (211-213)
-  - ProfileTargetPermission.__str__ (line 270)
-  - ProfileTargetPermission JSON error paths: get_target_names (278-280),
-    get_target_patterns (295-297)
+Story 78.15: Legacy CLOB fields removed from ProfileActionPermission and
+ProfileTargetPermission. Tests for JSON helpers have been removed.
+
+Covers:
+  - find_by_ad_groups: falsy items, whitespace-only strings, empty CN= value,
+    ValueError branch, empty normalized set
+  - ProfileActionPermission.__str__
+  - ProfileTargetPermission.__str__
+  - Profile properties and manager methods
 """
 import pytest
 from django.test import TestCase
@@ -85,8 +84,8 @@ class TestFindByAdGroupsMissingBranches(TestCase):
 
 
 @pytest.mark.django_db
-class TestProfileActionPermissionStrAndErrorPaths(TestCase):
-    """Cover __str__ and JSON-decode error paths for ProfileActionPermission."""
+class TestProfileActionPermissionStr(TestCase):
+    """Cover __str__ for ProfileActionPermission."""
 
     def setUp(self):
         self.profile, _ = Profile.objects.get_or_create(
@@ -98,36 +97,14 @@ class TestProfileActionPermissionStrAndErrorPaths(TestCase):
             permission_type='LIST',
         )
 
-    # --- line 169: __str__ ---
     def test_str(self):
         """ProfileActionPermission.__str__ returns '<profile name> - Action Permissions'."""
         self.assertEqual(str(self.permission), 'DBA - Action Permissions')
 
-    # --- lines 177-179: get_action_ids with invalid JSON ---
-    def test_get_action_ids_invalid_json_returns_empty_list(self):
-        """get_action_ids logs a warning and returns [] on invalid JSON (lines 177-179)."""
-        self.permission.action_ids_json = 'not valid json {'
-        result = self.permission.get_action_ids()
-        self.assertEqual(result, [])
-
-    # --- lines 194-196: get_tag_patterns with invalid JSON ---
-    def test_get_tag_patterns_invalid_json_returns_empty_list(self):
-        """get_tag_patterns logs a warning and returns [] on invalid JSON (lines 194-196)."""
-        self.permission.tag_patterns_json = '{"broken": }'
-        result = self.permission.get_tag_patterns()
-        self.assertEqual(result, [])
-
-    # --- lines 211-213: get_environments with invalid JSON ---
-    def test_get_environments_invalid_json_returns_empty_list(self):
-        """get_environments logs a warning and returns [] on invalid JSON (lines 211-213)."""
-        self.permission.environments_json = '[unclosed'
-        result = self.permission.get_environments()
-        self.assertEqual(result, [])
-
 
 @pytest.mark.django_db
-class TestProfileTargetPermissionStrAndErrorPaths(TestCase):
-    """Cover __str__ and JSON-decode error paths for ProfileTargetPermission."""
+class TestProfileTargetPermissionStr(TestCase):
+    """Cover __str__ for ProfileTargetPermission."""
 
     def setUp(self):
         self.profile, _ = Profile.objects.get_or_create(
@@ -139,24 +116,9 @@ class TestProfileTargetPermissionStrAndErrorPaths(TestCase):
             permission_type='LIST',
         )
 
-    # --- line 270: __str__ ---
     def test_str(self):
         """ProfileTargetPermission.__str__ returns '<profile name> - Target Permissions'."""
         self.assertEqual(str(self.permission), 'DBA - Target Permissions')
-
-    # --- lines 278-280: get_target_names with invalid JSON ---
-    def test_get_target_names_invalid_json_returns_empty_list(self):
-        """get_target_names logs a warning and returns [] on invalid JSON (lines 278-280)."""
-        self.permission.target_names_json = 'not_json'
-        result = self.permission.get_target_names()
-        self.assertEqual(result, [])
-
-    # --- lines 295-297: get_target_patterns with invalid JSON ---
-    def test_get_target_patterns_invalid_json_returns_empty_list(self):
-        """get_target_patterns logs a warning and returns [] on invalid JSON (lines 295-297)."""
-        self.permission.target_patterns_json = '{invalid}'
-        result = self.permission.get_target_patterns()
-        self.assertEqual(result, [])
 
 
 # ---------------------------------------------------------------------------
@@ -278,258 +240,32 @@ class TestProfileManagerListWithPermissionsCount:
             assert result is mock_qs
 
 
-class TestProfileActionPermissionJsonHelpers:
+class TestProfileActionPermissionNormalizedCoverage:
     """
-    Couvre les méthodes JSON de ProfileActionPermission sans DB.
-    Lignes : 180, 184-187, 197, 201-204, 214, 218-221.
+    Coverage tests for ProfileActionPermission normalized API (Story 78.15).
+    Tests the repository functions without DB using mocks.
     """
 
-    def _make_perm(self):
-        """
-        Crée une instance sans sauvegarder en DB.
-        On utilise le constructeur Django normal mais on injecte profile_id
-        directement dans __dict__ pour éviter la validation FK.
-        """
+    def test_permission_type_choices(self):
+        """ProfileActionPermission has permission_type choices LIST/PATTERN/ALL."""
         from django.db.models.base import ModelState
         perm = ProfileActionPermission.__new__(ProfileActionPermission)
         perm.__dict__['_state'] = ModelState()
         perm.__dict__['profile_id'] = 1
-        perm.action_ids_json = None
-        perm.tag_patterns_json = None
-        perm.environments_json = None
-        return perm
-
-    # --- Ligne 180 : get_action_ids quand json est None ---
-    def test_get_action_ids_none_returns_empty(self):
-        """Ligne 180 : action_ids_json is None → []."""
-        perm = self._make_perm()
-        perm.action_ids_json = None
-        assert perm.get_action_ids() == []
-
-    # --- Lignes 184-185 : set_action_ids avec valeur non-None ---
-    def test_set_action_ids_with_value(self):
-        """Lignes 184-185 : set_action_ids([1,2]) sérialise en JSON."""
-        import json
-        perm = self._make_perm()
-        perm.set_action_ids([1, 2])
-        assert perm.action_ids_json == json.dumps([1, 2])
-
-    # --- Lignes 186-187 : set_action_ids avec None ---
-    def test_set_action_ids_with_none(self):
-        """Lignes 186-187 : set_action_ids(None) → action_ids_json = None."""
-        perm = self._make_perm()
-        perm.action_ids_json = '[1,2]'
-        perm.set_action_ids(None)
-        assert perm.action_ids_json is None
-
-    # --- Ligne 197 : get_tag_patterns quand json est None ---
-    def test_get_tag_patterns_none_returns_empty(self):
-        """Ligne 197 : tag_patterns_json is None → []."""
-        perm = self._make_perm()
-        perm.tag_patterns_json = None
-        assert perm.get_tag_patterns() == []
-
-    # --- Lignes 201-202 : set_tag_patterns avec valeur ---
-    def test_set_tag_patterns_with_value(self):
-        """Lignes 201-202 : set_tag_patterns(['a']) sérialise."""
-        import json
-        perm = self._make_perm()
-        perm.set_tag_patterns(['a', 'b'])
-        assert perm.tag_patterns_json == json.dumps(['a', 'b'])
-
-    # --- Lignes 203-204 : set_tag_patterns avec None ---
-    def test_set_tag_patterns_with_none(self):
-        """Lignes 203-204 : set_tag_patterns(None) → tag_patterns_json = None."""
-        perm = self._make_perm()
-        perm.tag_patterns_json = '["a"]'
-        perm.set_tag_patterns(None)
-        assert perm.tag_patterns_json is None
-
-    # --- Ligne 214 : get_environments quand json est None ---
-    def test_get_environments_none_returns_empty(self):
-        """Ligne 214 : environments_json is None → []."""
-        perm = self._make_perm()
-        perm.environments_json = None
-        assert perm.get_environments() == []
-
-    # --- Lignes 218-219 : set_environments avec valeur ---
-    def test_set_environments_with_value(self):
-        """Lignes 218-219 : set_environments(['prod']) sérialise."""
-        import json
-        perm = self._make_perm()
-        perm.set_environments(['prod', 'dev'])
-        assert perm.environments_json == json.dumps(['prod', 'dev'])
-
-    # --- Lignes 220-221 : set_environments avec None ---
-    def test_set_environments_with_none(self):
-        """Lignes 220-221 : set_environments(None) → environments_json = None."""
-        perm = self._make_perm()
-        perm.environments_json = '["prod"]'
-        perm.set_environments(None)
-        assert perm.environments_json is None
+        perm.permission_type = 'LIST'
+        assert perm.permission_type == 'LIST'
 
 
-class TestProfileTargetPermissionJsonHelpers:
+class TestProfileTargetPermissionNormalizedCoverage:
     """
-    Couvre les méthodes JSON de ProfileTargetPermission sans DB.
-    Lignes : 281, 285-288, 298, 302-305, 317-326, 337-340, 353-375, 386-389.
+    Coverage tests for ProfileTargetPermission normalized API (Story 78.15).
     """
 
-    def _make_perm(self):
-        """
-        Crée une instance sans sauvegarder en DB.
-        On initialise _state manuellement pour éviter l'AttributeError.
-        """
+    def test_permission_type_choices(self):
+        """ProfileTargetPermission has permission_type choices LIST/PATTERN/ALL."""
         from django.db.models.base import ModelState
         perm = ProfileTargetPermission.__new__(ProfileTargetPermission)
         perm.__dict__['_state'] = ModelState()
         perm.__dict__['profile_id'] = 1
-        perm.target_names_json = None
-        perm.target_patterns_json = None
-        perm.filter_by_attribute_json = None
-        perm.exclusion_patterns_json = None
-        return perm
-
-    # --- Ligne 281 : get_target_names quand json est None ---
-    def test_get_target_names_none_returns_empty(self):
-        """Ligne 281 : target_names_json is None → []."""
-        perm = self._make_perm()
-        assert perm.get_target_names() == []
-
-    # --- Lignes 285-286 : set_target_names avec valeur ---
-    def test_set_target_names_with_value(self):
-        """Lignes 285-286 : set_target_names(['db1']) sérialise."""
-        import json
-        perm = self._make_perm()
-        perm.set_target_names(['db1', 'db2'])
-        assert perm.target_names_json == json.dumps(['db1', 'db2'])
-
-    # --- Lignes 287-288 : set_target_names avec None ---
-    def test_set_target_names_with_none(self):
-        """Lignes 287-288 : set_target_names(None) → target_names_json = None."""
-        perm = self._make_perm()
-        perm.target_names_json = '["db1"]'
-        perm.set_target_names(None)
-        assert perm.target_names_json is None
-
-    # --- Ligne 298 : get_target_patterns quand json est None ---
-    def test_get_target_patterns_none_returns_empty(self):
-        """Ligne 298 : target_patterns_json is None → []."""
-        perm = self._make_perm()
-        assert perm.get_target_patterns() == []
-
-    # --- Lignes 302-303 : set_target_patterns avec valeur ---
-    def test_set_target_patterns_with_value(self):
-        """Lignes 302-303 : set_target_patterns(['db-*']) sérialise."""
-        import json
-        perm = self._make_perm()
-        perm.set_target_patterns(['db-*', 'prod-*'])
-        assert perm.target_patterns_json == json.dumps(['db-*', 'prod-*'])
-
-    # --- Lignes 304-305 : set_target_patterns avec None ---
-    def test_set_target_patterns_with_none(self):
-        """Lignes 304-305 : set_target_patterns(None) → target_patterns_json = None."""
-        perm = self._make_perm()
-        perm.target_patterns_json = '["db-*"]'
-        perm.set_target_patterns(None)
-        assert perm.target_patterns_json is None
-
-    # --- Lignes 317-319 : get_filter_by_attribute JSON valide ---
-    def test_get_filter_by_attribute_valid_json(self):
-        """Lignes 317-319 : filter_by_attribute_json valide → dict."""
-        import json
-        perm = self._make_perm()
-        perm.filter_by_attribute_json = json.dumps({'engine_type': ['oracle']})
-        result = perm.get_filter_by_attribute()
-        assert result == {'engine_type': ['oracle']}
-
-    # --- Lignes 320-325 : get_filter_by_attribute JSON invalide ---
-    def test_get_filter_by_attribute_invalid_json_returns_none(self):
-        """Lignes 320-325 : JSON invalide → logger.error + return None."""
-        perm = self._make_perm()
-        perm.filter_by_attribute_json = '{bad json'
-        result = perm.get_filter_by_attribute()
-        assert result is None
-
-    # --- Ligne 326 : get_filter_by_attribute quand json est None ---
-    def test_get_filter_by_attribute_none_returns_none(self):
-        """Ligne 326 : filter_by_attribute_json is None → None."""
-        perm = self._make_perm()
-        perm.filter_by_attribute_json = None
-        assert perm.get_filter_by_attribute() is None
-
-    # --- Lignes 337-338 : set_filter_by_attribute avec valeur ---
-    def test_set_filter_by_attribute_with_value(self):
-        """Lignes 337-338 : set_filter_by_attribute({'key': ['v']}) sérialise."""
-        import json
-        perm = self._make_perm()
-        perm.set_filter_by_attribute({'zone': ['prod']})
-        assert perm.filter_by_attribute_json == json.dumps({'zone': ['prod']})
-
-    # --- Lignes 339-340 : set_filter_by_attribute avec None ---
-    def test_set_filter_by_attribute_with_none(self):
-        """Lignes 339-340 : set_filter_by_attribute(None) → filter_by_attribute_json = None."""
-        perm = self._make_perm()
-        perm.filter_by_attribute_json = '{"zone": ["prod"]}'
-        perm.set_filter_by_attribute(None)
-        assert perm.filter_by_attribute_json is None
-
-    # --- Lignes 353-369 : get_exclusion_patterns JSON valide avec liste valide ---
-    def test_get_exclusion_patterns_valid(self):
-        """Lignes 353-369 : JSON valide avec liste de strings → liste retournée."""
-        import json
-        perm = self._make_perm()
-        perm.exclusion_patterns_json = json.dumps(['PROD-*', 'DR-*'])
-        result = perm.get_exclusion_patterns()
-        assert result == ['PROD-*', 'DR-*']
-
-    # --- Lignes 357-362 : get_exclusion_patterns JSON valide mais pas une liste ---
-    def test_get_exclusion_patterns_not_a_list(self):
-        """Lignes 357-362 : JSON valide mais pas une liste → logger.error + []."""
-        import json
-        perm = self._make_perm()
-        perm.exclusion_patterns_json = json.dumps({'key': 'value'})  # dict, pas list
-        result = perm.get_exclusion_patterns()
-        assert result == []
-
-    # --- Lignes 364-368 : get_exclusion_patterns avec patterns invalides filtrés ---
-    def test_get_exclusion_patterns_filters_invalid_entries(self):
-        """Lignes 364-368 : patterns contenant None, int ou chaînes vides → filtrés."""
-        import json
-        perm = self._make_perm()
-        # Mélange de valeurs valides et invalides
-        perm.exclusion_patterns_json = json.dumps(['PROD-*', None, 42, '', '  ', 'DR-*'])
-        result = perm.get_exclusion_patterns()
-        # Seuls 'PROD-*' et 'DR-*' sont valides (str non-vide après strip)
-        assert result == ['PROD-*', 'DR-*']
-
-    # --- Lignes 370-374 : get_exclusion_patterns JSON invalide ---
-    def test_get_exclusion_patterns_invalid_json_returns_empty(self):
-        """Lignes 370-374 : JSON invalide → logger.error + []."""
-        perm = self._make_perm()
-        perm.exclusion_patterns_json = '[unclosed bracket'
-        result = perm.get_exclusion_patterns()
-        assert result == []
-
-    # --- Ligne 375 : get_exclusion_patterns quand json est None ---
-    def test_get_exclusion_patterns_none_returns_empty(self):
-        """Ligne 375 : exclusion_patterns_json is None → []."""
-        perm = self._make_perm()
-        perm.exclusion_patterns_json = None
-        assert perm.get_exclusion_patterns() == []
-
-    # --- Lignes 386-387 : set_exclusion_patterns avec valeur ---
-    def test_set_exclusion_patterns_with_value(self):
-        """Lignes 386-387 : set_exclusion_patterns(['PROD-*']) sérialise."""
-        import json
-        perm = self._make_perm()
-        perm.set_exclusion_patterns(['PROD-*', 'DR-*'])
-        assert perm.exclusion_patterns_json == json.dumps(['PROD-*', 'DR-*'])
-
-    # --- Lignes 388-389 : set_exclusion_patterns avec None ---
-    def test_set_exclusion_patterns_with_none(self):
-        """Lignes 388-389 : set_exclusion_patterns(None) → exclusion_patterns_json = None."""
-        perm = self._make_perm()
-        perm.exclusion_patterns_json = '["PROD-*"]'
-        perm.set_exclusion_patterns(None)
-        assert perm.exclusion_patterns_json is None
+        perm.permission_type = 'PATTERN'
+        assert perm.permission_type == 'PATTERN'

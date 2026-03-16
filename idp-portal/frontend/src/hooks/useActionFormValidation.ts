@@ -75,6 +75,8 @@ export function useActionFormValidation() {
         if (!s.name?.trim()) {
           return `L'étape ${i + 1} doit avoir un nom.`;
         }
+        // Cas exceptionnel connecteur servicenow : validation métier — conditional_environments
+        // requis pour ServiceNow — non déclaratisable (Story 83-14)
         if (s.connector_type === 'servicenow' && (!s.conditional_environments || s.conditional_environments.length === 0)) {
           return `L'étape "${s.name}" (ServiceNow) requiert au moins un environnement conditionné.`;
         }

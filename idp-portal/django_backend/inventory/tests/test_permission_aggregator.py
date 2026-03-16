@@ -11,6 +11,27 @@ from inventory.permission_aggregator import RBACPermissionAggregator
 from inventory.query_executor import InventoryServiceError
 
 
+def _patch_all_repo_fns(test_case):
+    """Patch all repo functions in permission_aggregator that hit the DB.
+
+    These were refactored from ORM method calls (story 78-11/78-15) to repo
+    functions. The mock profiles in this module still configure the legacy
+    method names (get_environments(), get_target_names(), etc.), so we bridge
+    via side_effect.
+    """
+    _defs = [
+        ('repo_get_environments', lambda p: p.get_environments()),
+        ('repo_get_filter_by_attribute', lambda p: p.get_filter_by_attribute()),
+        ('repo_get_exclusion_patterns', lambda p: p.get_exclusion_patterns()),
+        ('repo_get_target_patterns', lambda p: sorted(p.get_target_patterns())),
+        ('repo_get_target_names', lambda p: p.get_target_names()),
+    ]
+    for name, fn in _defs:
+        p = patch(f'inventory.permission_aggregator.{name}', side_effect=fn)
+        p.start()
+        test_case.addCleanup(p.stop)
+
+
 def _make_aggregator(environments=None):
     """Helper: build RBACPermissionAggregator with mocked callables.
 
@@ -100,6 +121,7 @@ class TestRBACPermissionAggregatorAggregateAllAccess(TestCase):
 
     def setUp(self):
         self.agg = _make_aggregator()
+        _patch_all_repo_fns(self)
 
     def test_profile_all_access_with_environments(self):
         profile = _make_profile(
@@ -125,6 +147,7 @@ class TestRBACPermissionAggregatorAggregatePattern(TestCase):
 
     def setUp(self):
         self.agg = _make_aggregator()
+        _patch_all_repo_fns(self)
 
     def test_profile_pattern_with_environments(self):
         profile = _make_profile(
@@ -138,7 +161,7 @@ class TestRBACPermissionAggregatorAggregatePattern(TestCase):
         self.assertEqual(len(result['target_restrictions']), 1)
         perm_type, patterns = result['target_restrictions'][0]
         self.assertEqual(perm_type, 'PATTERN')
-        self.assertEqual(patterns, ['srv-*', 'db-*'])
+        self.assertEqual(patterns, ['db-*', 'srv-*'])
 
     def test_profile_pattern_empty_patterns_excluded(self):
         """PATTERN with empty patterns list is not added to target_restrictions."""
@@ -157,6 +180,7 @@ class TestRBACPermissionAggregatorAggregateList(TestCase):
 
     def setUp(self):
         self.agg = _make_aggregator()
+        _patch_all_repo_fns(self)
 
     def test_profile_list_with_environments(self):
         profile = _make_profile(
@@ -215,6 +239,7 @@ class TestRBACPermissionAggregatorAggregateMixedAdminNonAdmin(TestCase):
 
     def setUp(self):
         self.agg = _make_aggregator(environments=['developpement', 'certification', 'production', 'lab'])
+        _patch_all_repo_fns(self)
 
     def test_admin_and_non_admin_environments_merged(self):
         """Admin brings all environments; non-admin brings specific ones; union is returned."""
@@ -250,6 +275,7 @@ class TestRBACPermissionAggregatorAggregateMultiProfile(TestCase):
 
     def setUp(self):
         self.agg = _make_aggregator()
+        _patch_all_repo_fns(self)
 
     def test_multi_profile_union_environments(self):
         p1 = _make_profile(action_envs=['dev'], perm_type='ALL')
@@ -280,6 +306,7 @@ class TestRBACPermissionAggregatorAggregateEnvironmentFilter(TestCase):
 
     def setUp(self):
         self.agg = _make_aggregator()
+        _patch_all_repo_fns(self)
 
     def test_environment_filter_allowed_returns_result(self):
         profile = _make_profile(action_envs=['dev', 'prod'], perm_type='ALL')
@@ -304,6 +331,7 @@ class TestRBACPermissionAggregatorGetAllowedEnvironments(TestCase):
 
     def setUp(self):
         self.agg = _make_aggregator()
+        _patch_all_repo_fns(self)
 
     @patch('inventory.permission_aggregator.Profile')
     def test_profiles_found_returns_environments(self, mock_profile_cls):

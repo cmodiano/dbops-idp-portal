@@ -11,6 +11,7 @@ from asgiref.sync import sync_to_async
 from channels.exceptions import StopConsumer
 
 from core.consumers import AuthenticatedWebSocketConsumer
+from core.utils import ensure_utc_isoformat
 
 logger = structlog.get_logger(__name__)
 
@@ -173,10 +174,10 @@ class ExecutionConsumer(AuthenticatedWebSocketConsumer):
                 "execution_id": execution_id_int,
                 "status": execution.status,
                 "started": (
-                    execution.started_at.isoformat() if execution.started_at else None
+                    ensure_utc_isoformat(execution.started_at)
                 ),
                 "finished": (
-                    execution.completed_at.isoformat() if execution.completed_at else None
+                    ensure_utc_isoformat(execution.completed_at)
                 ),
             },
         })
@@ -197,10 +198,10 @@ class ExecutionConsumer(AuthenticatedWebSocketConsumer):
                     "config_step_id": getattr(step, "config_step_id", None),
                     "status": step.status,
                     "started_at": (
-                        step.started_at.isoformat() if step.started_at else None
+                        ensure_utc_isoformat(step.started_at)
                     ),
                     "completed_at": (
-                        step.completed_at.isoformat() if step.completed_at else None
+                        ensure_utc_isoformat(step.completed_at)
                     ),
                     "output": step.get_output() if hasattr(step, "get_output") else None,
                     "platform_job_id": step.platform_job_id,
@@ -232,10 +233,7 @@ class ExecutionConsumer(AuthenticatedWebSocketConsumer):
                 "data": {
                     "execution_id": execution_id_int,
                     "status": execution.status,
-                    "finished": (
-                        execution.completed_at.isoformat()
-                        if execution.completed_at else None
-                    ),
+                    "finished": ensure_utc_isoformat(execution.completed_at),
                 },
             })
 

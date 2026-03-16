@@ -17,7 +17,7 @@ from catalog.validation import (
 from reference.models import RefEngine
 from integrations.models import IntegrationTypeCatalogue, IntegrationRole
 from profiles.models import Profile
-from tests.factories import UserFactory
+from tests.factories import UserFactory, IntegrationFactory
 
 
 class CatalogValidationTests(TestCase):
@@ -41,13 +41,18 @@ class CatalogValidationTests(TestCase):
         RefEngine.objects.create(code='SQL Server', label='SQL Server', display_order=2, is_active=1)
         IntegrationTypeCatalogue.objects.create(code='aap', name='AAP', integration_role=IntegrationRole.PLATFORM, is_active=True)
         IntegrationTypeCatalogue.objects.create(code='github_actions', name='GitHub Actions', integration_role=IntegrationRole.PLATFORM, is_active=True)
+        IntegrationTypeCatalogue.objects.create(code='terraform_cloud', name='Terraform Cloud', integration_role=IntegrationRole.PLATFORM, is_active=True)
+        # Story 83-13: integration instances needed so platform can be auto-derived
+        self.integration_aap = IntegrationFactory(type='aap', name='Test AAP')
+        self.integration_github = IntegrationFactory(type='github_actions', name='Test GitHub')
+        self.integration_terraform = IntegrationFactory(type='terraform_cloud', name='Test Terraform')
 
     def test_create_action_with_valid_engine(self):
         """Test creating action with valid engine."""
         response = self.client.post('/api/v1/admin/actions/', {
             'name': 'Test Action',
             'engine': 'Oracle',
-            'platform': 'AAP',
+            'integration_id': self.integration_aap.id,
             'item_type': 'action'
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
@@ -77,11 +82,11 @@ class CatalogValidationTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_create_action_with_valid_platform(self):
-        """Test creating action with valid platform."""
+        """Test creating action with valid platform derived from integration."""
         response = self.client.post('/api/v1/admin/actions/', {
             'name': 'Test Action',
             'engine': 'Oracle',
-            'platform': 'GitHub Actions',
+            'integration_id': self.integration_github.id,
             'item_type': 'action'
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
@@ -111,34 +116,30 @@ class CatalogValidationTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_validate_platform_catalogue_codes_normalized(self):
-        """Story 31.9 (5.5): validate_platform accepts catalogue codes with normalization."""
-        IntegrationTypeCatalogue.objects.create(
-            code='terraform_cloud', name='Terraform Cloud',
-            integration_role=IntegrationRole.PLATFORM, is_active=True,
-        )
-        # Human-readable label → normalized catalogue code
-        for platform_label in ['AAP', 'GitHub Actions', 'Terraform Cloud']:
+        """Story 83-13: platform dérivé depuis integration.type — toutes les plateformes acceptées."""
+        # platform is now derived from integration.type, not sent in payload
+        for label, integration in [
+            ('AAP', self.integration_aap),
+            ('GitHub Actions', self.integration_github),
+            ('Terraform Cloud', self.integration_terraform),
+        ]:
             response = self.client.post('/api/v1/admin/actions/', {
-                'name': f'Action {platform_label}',
+                'name': f'Action {label}',
                 'engine': 'Oracle',
-                'platform': platform_label,
+                'integration_id': integration.id,
                 'item_type': 'action',
             }, format='json')
             self.assertEqual(
                 response.status_code, status.HTTP_201_CREATED,
-                f"Platform '{platform_label}' should be accepted: {response.data}"
+                f"Platform '{label}' should be accepted via integration: {response.data}"
             )
 
     def test_validate_platform_alias_terraform(self):
-        """Story 31.9 (5.5): validate_platform resolves alias 'Terraform' → 'terraform_cloud'."""
-        IntegrationTypeCatalogue.objects.create(
-            code='terraform_cloud', name='Terraform Cloud',
-            integration_role=IntegrationRole.PLATFORM, is_active=True,
-        )
+        """Story 83-13: platform dérivé depuis integration terraform_cloud → 'Terraform'."""
         response = self.client.post('/api/v1/admin/actions/', {
             'name': 'Terraform Alias Action',
             'engine': 'Oracle',
-            'platform': 'Terraform',
+            'integration_id': self.integration_terraform.id,
             'item_type': 'action',
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)

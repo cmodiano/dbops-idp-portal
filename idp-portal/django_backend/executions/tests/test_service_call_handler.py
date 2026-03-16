@@ -110,19 +110,27 @@ class TestServiceCallHandler:
             )
         assert exc_info.value.code == "SERVICE_INTEGRATION_MISSING"
 
-    @patch("executions.step_handlers.service_call_handler._ALLOWED_OPERATIONS", {
-        "servicenow": frozenset({"create_change", "update_change", "close_change", "get_change_status", "cancel_change", "nonexistent_op"}),
-        "vault": frozenset({"get_secret"}),
-        "jira": frozenset({"create_issue", "update_issue", "get_issue"}),
-    })
+    @patch("executions.step_handlers.service_call_handler.service_definition_registry")
     @patch("executions.step_handlers.service_call_handler.get_service_client")
     @patch("executions.step_handlers.service_call_handler.build_auth_headers")
     @patch("executions.step_handlers.service_call_handler.IntegrationService")
-    def test_nonexistent_operation_raises_value_error(self, mock_is_class, mock_bah, mock_gsc):
-        """AC#3 : opération inexistante sur le service → ValueError (allowlist OK, hasattr False)."""
+    def test_nonexistent_operation_raises_value_error(self, mock_is_class, mock_bah, mock_gsc, mock_registry):
+        """AC#3 : opération inexistante sur le service → ValueError (allowlist OK, hasattr False).
+
+        Story 82.3: _ALLOWED_OPERATIONS supprimé — on mock service_definition_registry pour
+        injecter 'nonexistent_op' dans l'allowlist sans modifier le registre global.
+        """
         integration = self._make_integration()
         mock_is_class.return_value.get_by_type.return_value = integration
         mock_bah.return_value = {}
+
+        # Allowlist inclut 'nonexistent_op' pour passer la vérification positive
+        mock_registry.get_allowed_operations.return_value = frozenset({
+            "create_change", "update_change", "close_change",
+            "get_change_status", "cancel_change", "nonexistent_op",
+        })
+        # servicenow nécessite un record Integration (non credential-free)
+        mock_registry.is_credential_free.return_value = False
 
         mock_service = MagicMock(spec=[])  # Pas d'attributs → hasattr retourne False
         mock_gsc.return_value = mock_service
@@ -314,3 +322,182 @@ class TestServiceCallHandler:
                 step=step_config,
                 correlation_id=None,
             )
+
+    @patch("executions.step_handlers.service_call_handler.get_service_client")
+    def test_send_email_with_step_variable_input_mapping(self, mock_gsc):
+        """AC1, AC4 (story 79.1) : send_email appelé avec les valeurs résolues depuis steps.*.output.*
+
+        Simule le cas où StepTemplateResolver a déjà résolu l'input_mapping :
+            - steps.patch_step.output.contact_email → 'dba-team@company.com'
+            - steps.patch_step.output.subject_line  → 'Patch Oracle terminé'
+            - body statique résolu
+
+        Le handler doit appeler send_email(**resolved_params) sans transformation.
+        """
+        mock_notification_service = MagicMock()
+        mock_notification_service.send_email.return_value = None
+        mock_gsc.return_value = mock_notification_service
+
+        step_config = {
+            "integration_type": "notification",
+            "operation": "send_email",
+        }
+        # resolved_params = ce que StepTemplateResolver produit après résolution des {{ steps.* }}
+        resolved_params = {
+            "recipient_email": "dba-team@company.com",
+            "subject": "Patch Oracle terminé",
+            "body": "L'exécution de patch_oracle s'est terminée avec succès.",
+        }
+
+        result = self.handler.execute(
+            step_config=step_config,
+            resolved_params=resolved_params,
+            execution=self._make_execution(),
+            step=step_config,
+            correlation_id="corr-79-1",
+        )
+
+        mock_notification_service.send_email.assert_called_once_with(
+            recipient_email="dba-team@company.com",
+            subject="Patch Oracle terminé",
+            body="L'exécution de patch_oracle s'est terminée avec succès.",
+        )
+        assert result == {"result": None}
+
+    @patch("executions.step_handlers.service_call_handler.get_service_client")
+    def test_send_email_exception_propagates(self, mock_gsc):
+        """AC4 (story 79.1) : exception de send_email propagée + loguée (chemin d'échec)."""
+        mock_notification_service = MagicMock()
+        mock_notification_service.send_email.side_effect = RuntimeError("SMTP timeout")
+        mock_gsc.return_value = mock_notification_service
+
+        step_config = {
+            "integration_type": "notification",
+            "operation": "send_email",
+        }
+        resolved_params = {
+            "recipient_email": "dba@company.com",
+            "subject": "Test",
+            "body": "Body",
+        }
+
+        with pytest.raises(RuntimeError, match="SMTP timeout"):
+            self.handler.execute(
+                step_config=step_config,
+                resolved_params=resolved_params,
+                execution=self._make_execution(),
+                step=step_config,
+                correlation_id="corr-fail",
+            )
+
+    @patch("executions.step_handlers.service_call_handler.get_service_client")
+    def test_send_email_with_cc(self, mock_gsc):
+        """AC1, AC4 (story 79.2) : send_email avec cc dans resolved_params → send_email appelé avec cc.
+
+        Simule un step send_email où StepTemplateResolver a résolu input_mapping incluant cc.
+        Vérifie que le handler achemine cc vers send_email sans transformation.
+        """
+        mock_notification_service = MagicMock()
+        mock_notification_service.send_email.return_value = None
+        mock_gsc.return_value = mock_notification_service
+
+        step_config = {
+            "integration_type": "notification",
+            "operation": "send_email",
+        }
+        resolved_params = {
+            "recipient_email": "dba-team@company.com",
+            "subject": "Patch Oracle terminé",
+            "body": "L'exécution s'est terminée avec succès.",
+            "cc": "admin@company.com,team@company.com",
+        }
+
+        result = self.handler.execute(
+            step_config=step_config,
+            resolved_params=resolved_params,
+            execution=self._make_execution(),
+            step=step_config,
+            correlation_id="corr-79-2-cc",
+        )
+
+        mock_notification_service.send_email.assert_called_once_with(
+            recipient_email="dba-team@company.com",
+            subject="Patch Oracle terminé",
+            body="L'exécution s'est terminée avec succès.",
+            cc="admin@company.com,team@company.com",
+        )
+        assert result == {"result": None}
+
+    @patch("executions.step_handlers.service_call_handler.get_service_client")
+    def test_send_email_without_cc_unchanged(self, mock_gsc):
+        """AC1 (story 79.2) : send_email sans cc dans resolved_params → comportement inchangé (rétrocompatibilité).
+
+        Vérifie que l'absence de cc dans resolved_params ne casse pas l'appel send_email existant.
+        """
+        mock_notification_service = MagicMock()
+        mock_notification_service.send_email.return_value = None
+        mock_gsc.return_value = mock_notification_service
+
+        step_config = {
+            "integration_type": "notification",
+            "operation": "send_email",
+        }
+        resolved_params = {
+            "recipient_email": "dba@company.com",
+            "subject": "Notification sans CC",
+            "body": "Corps du message.",
+        }
+
+        result = self.handler.execute(
+            step_config=step_config,
+            resolved_params=resolved_params,
+            execution=self._make_execution(),
+            step=step_config,
+            correlation_id="corr-79-2-nocc",
+        )
+
+        mock_notification_service.send_email.assert_called_once_with(
+            recipient_email="dba@company.com",
+            subject="Notification sans CC",
+            body="Corps du message.",
+        )
+        assert result == {"result": None}
+
+    @patch("executions.step_handlers.service_call_handler.get_service_client")
+    def test_send_teams_with_step_variable_input_mapping(self, mock_gsc):
+        """AC1, AC4 (story 79.1) : send_teams appelé avec les valeurs résolues depuis steps.*.output.*
+
+        Simule le cas où StepTemplateResolver a déjà résolu l'input_mapping :
+            - steps.patch_step.output.env_name → 'production'
+            - steps.patch_step.output.action_label → 'Oracle Patch 19.3'
+
+        Le handler doit appeler send_teams(**resolved_params) sans transformation.
+        """
+        mock_notification_service = MagicMock()
+        mock_notification_service.send_teams.return_value = None
+        mock_gsc.return_value = mock_notification_service
+
+        step_config = {
+            "integration_type": "notification",
+            "operation": "send_teams",
+        }
+        resolved_params = {
+            "webhook_url": "https://teams.example.com/webhook/abc123",
+            "title": "Oracle Patch 19.3 — production",
+            "message": "Exécution terminée avec succès dans production.",
+        }
+
+        result = self.handler.execute(
+            step_config=step_config,
+            resolved_params=resolved_params,
+            execution=self._make_execution(),
+            step=step_config,
+            correlation_id="corr-79-1-teams",
+        )
+
+        mock_notification_service.send_teams.assert_called_once_with(
+            webhook_url="https://teams.example.com/webhook/abc123",
+            title="Oracle Patch 19.3 — production",
+            message="Exécution terminée avec succès dans production.",
+        )
+        assert result == {"result": None}

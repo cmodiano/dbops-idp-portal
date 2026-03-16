@@ -23,6 +23,7 @@ from core.exceptions import NotFoundError, InvalidStateError
 from core.models import AuditActionType, AuditEntityType
 from core.services import AuditService
 from core.middleware import get_correlation_id
+from core.utils import ensure_utc_isoformat
 
 logger = structlog.get_logger(__name__)
 
@@ -415,13 +416,12 @@ class IntegrationViewSet(viewsets.ViewSet):
             _resolve_and_check_service,
             _resolve_and_check_vault,
             _sanitize_health_error_message,
-            _ADAPTER_TYPE_ALIASES,
-            _ADAPTER_TYPES,
             _SERVICE_TYPES,
             _VAULT_TYPE,
         )
         from integrations.health_check import HealthCheckStatus, HealthCheckResult
         from integrations.models import Integration
+        from platforms.registry import platform_registry
         from django.utils import timezone
 
         try:
@@ -444,10 +444,11 @@ class IntegrationViewSet(viewsets.ViewSet):
             )
 
         # Dispatch synchrone (même logique que run_integration_health_check)
+        # Story 82.2: normalisation via PlatformRegistry
         itype = integration.type
-        normalized_type = _ADAPTER_TYPE_ALIASES.get(itype, itype)
+        normalized_type = platform_registry.resolve_alias(itype)
         try:
-            if normalized_type in _ADAPTER_TYPES:
+            if platform_registry.is_registered(normalized_type):
                 result = _resolve_and_check_adapter(integration)
             elif itype == _VAULT_TYPE:
                 result = _resolve_and_check_vault(integration)
@@ -480,7 +481,7 @@ class IntegrationViewSet(viewsets.ViewSet):
                 entity_id=integration_id,
                 details={
                     'status': result.status.value,
-                    'checked_at': result.checked_at.isoformat(),
+                    'checked_at': ensure_utc_isoformat(result.checked_at),
                     'error_message': sanitized_error,
                 },
                 correlation_id=get_correlation_id(),
@@ -489,7 +490,7 @@ class IntegrationViewSet(viewsets.ViewSet):
         return Response({"data": {
             "status": result.status.value,
             "message": sanitized_error,
-            "checked_at": result.checked_at.isoformat(),
+            "checked_at": ensure_utc_isoformat(result.checked_at),
         }})
 
     @extend_schema(

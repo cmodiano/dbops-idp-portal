@@ -12,7 +12,7 @@ from catalog.services import CatalogService
 from reference.models import RefEngine
 from integrations.models import IntegrationTypeCatalogue, IntegrationRole
 from profiles.models import Profile
-from tests.factories import UserFactory
+from tests.factories import UserFactory, IntegrationFactory
 
 
 @pytest.mark.django_db
@@ -34,6 +34,8 @@ class TestAdminActionViewSet(TestCase):
         # Create reference data (required for serializer validation)
         RefEngine.objects.get_or_create(code='Oracle', defaults={'label': 'Oracle', 'display_order': 1})
         IntegrationTypeCatalogue.objects.get_or_create(code='aap', defaults={'name': 'AAP', 'integration_role': IntegrationRole.PLATFORM, 'is_active': True})
+        # Story 83-13: integration needed so platform can be auto-derived
+        self.integration_aap = IntegrationFactory(type='aap', name='Test AAP')
 
         # Create DBOPS user
         self.dbops_user = UserFactory(
@@ -75,14 +77,15 @@ class TestAdminActionViewSet(TestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_create_action_success(self):
-        """Test POST /admin/actions creates action successfully."""
+        """Test POST /admin/actions creates action successfully (Story 83-13: platform dérivé, pas envoyé)."""
         self.client.force_authenticate(user=self.dbops_user)
         new_action_data = {
             'name': 'New Action',
             'description': 'New Description',
             'engine': 'Oracle',
-            'platform': 'AAP',
+            'integration_id': self.integration_aap.id,
             'item_type': 'action',
+            # platform absent — dérivé automatiquement depuis integration.type
         }
         response = self.client.post('/api/v1/admin/actions/', new_action_data, format='json')
 
@@ -143,14 +146,15 @@ class TestAdminActionViewSet(TestCase):
         self.assertIn(response.data['error']['code'], ('NOT_FOUND', 'VALIDATION_ERROR'))
 
     def test_update_action_success(self):
-        """Test PUT /admin/actions/{id} updates action metadata."""
+        """Test PUT /admin/actions/{id} updates action metadata (Story 83-13: platform dérivé)."""
         self.client.force_authenticate(user=self.dbops_user)
         update_data = {
             'name': 'Updated Action',
             'description': 'Updated Description',
             'engine': 'Oracle',
-            'platform': 'AAP',
+            'integration_id': self.integration_aap.id,
             'item_type': 'action',
+            # platform absent — dérivé automatiquement depuis integration
         }
         response = self.client.put(f'/api/v1/admin/actions/{self.action.id}/', update_data, format='json')
 

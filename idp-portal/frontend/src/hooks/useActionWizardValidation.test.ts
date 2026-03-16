@@ -9,7 +9,8 @@ const baseParams: ActionWizardValidationParams = {
   isWorkflowSave: false,
   parameterList: [],
   impactRulesList: [],
-  aapTemplateId: undefined,
+  platformCap: null,
+  actionConfig: {},
   integrationId: undefined,
   getIntegrationById: vi.fn(() => undefined),
 };
@@ -86,7 +87,7 @@ describe('useActionWizardValidation', () => {
       ...baseParams,
       integrationId: 1,
       getIntegrationById,
-      aapTemplateId: undefined,
+      actionConfig: {},
     };
     const error = result.current.validateForSave(params);
     expect(error).toMatch(/ID du template.*requis/);

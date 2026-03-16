@@ -6,11 +6,23 @@ import json
 import pytest
 from unittest.mock import patch
 from django.test import TestCase
+from django.utils import timezone
 
 from executions.container_workflow_runtime import ContainerWorkflowRuntime, MAX_STEP_TRANSITIONS
 from executions.models import Execution, ExecutionStep, ExecutionStatus, ExecutionStepStatus
 from catalog.models import ActionStatus, ActionItemType
 from tests.factories import UserFactory, ActionFactory
+
+
+def _make_trigger_mock_completing():
+    """Return a side_effect function that marks child step COMPLETED immediately (Story 77.3)."""
+    def _complete_child_step(kwargs, queue):
+        exec_step_id = kwargs['execution_step_id']
+        ExecutionStep.objects.filter(id=exec_step_id).update(
+            status=ExecutionStepStatus.COMPLETED,
+            completed_at=timezone.now(),
+        )
+    return _complete_child_step
 
 TEST_ENV = 'developpement'
 
@@ -169,9 +181,8 @@ class TestRunMethodCoverage(TestCase):
         self.assertIn("no steps", execution.error_message)
 
     @patch('executions.container_workflow_runtime.AuditService')
-    def test_run_normal_starts_thread(self, mock_audit):
-        """Run normal → thread démarré, execution en RUNNING."""
-        import time
+    def test_run_normal_enqueues_steps(self, mock_audit):
+        """Run normal (ADR-007 steps) → execution en RUNNING, steps enqueués (Story 81.2)."""
         wf = ActionFactory(
             status=ActionStatus.PUBLISHED, item_type=ActionItemType.WORKFLOW,
             execution_steps=_make_steps([self.action_a.id]), created_by=self.user,
@@ -180,54 +191,53 @@ class TestRunMethodCoverage(TestCase):
             action=wf, user=self.user, environment=TEST_ENV, status=ExecutionStatus.SUBMITTED,
         )
         runtime = ContainerWorkflowRuntime(execution)
-        with patch.object(runtime, '_run_workflow_loop') as _mock_loop:
-            runtime.run()
-            time.sleep(0.1)  # let thread start
-        # Thread should have been started (mock_loop may or may not have been called yet)
+        runtime.run()
         execution.refresh_from_db()
         self.assertEqual(execution.status, ExecutionStatus.RUNNING)
 
 
-# ─── Tests _run_workflow_loop exception handling ──────────────────────────────
+# ─── Tests initial_wave is None → FAILED (Story 81.2) ────────────────────────
 
 @pytest.mark.django_db
-class TestRunWorkflowLoopException(TestCase):
-    """_run_workflow_loop — gestion des exceptions et marquage FAILED."""
+class TestRunNoInitialWaveFailed(TestCase):
+    """run() — initial_wave is None → execution marquée FAILED directement (Story 81.2)."""
 
     def setUp(self):
-        self.user = UserFactory(username='loop_exc_user', profile='DBA')
+        self.user = UserFactory(username='no_wave_user', profile='DBA')
         self.action_a = ActionFactory(
             status=ActionStatus.PUBLISHED, item_type=ActionItemType.ACTION, created_by=self.user,
         )
+        # Steps sans step_id → _determine_initial_wave retourne None
         self.wf = ActionFactory(
             status=ActionStatus.PUBLISHED, item_type=ActionItemType.WORKFLOW,
-            execution_steps=_make_steps([self.action_a.id]), created_by=self.user,
+            execution_steps=[{"order": 1, "name": "Legacy Step", "referenced_action_id": self.action_a.id}],
+            created_by=self.user,
         )
 
     @patch('executions.container_workflow_runtime.AuditService')
-    def test_run_workflow_loop_invalid_id_handles_exception(self, mock_audit):
-        """ID invalide → Execution.DoesNotExist gérée sans exception propagée."""
+    def test_run_no_initial_wave_marks_failed(self, mock_audit):
+        """Steps sans step_id → initial_wave=None → execution FAILED, pas de thread."""
         execution = Execution.objects.create(
-            action=self.wf, user=self.user, environment=TEST_ENV, status=ExecutionStatus.RUNNING,
+            action=self.wf, user=self.user, environment=TEST_ENV, status=ExecutionStatus.SUBMITTED,
         )
         runtime = ContainerWorkflowRuntime(execution)
-        # Call with invalid ID → Execution.DoesNotExist → exception handled
-        runtime._run_workflow_loop(99999)  # no exception raised = covered
-
-    @patch('executions.container_workflow_runtime.AuditService')
-    def test_run_workflow_loop_marks_failed_on_exception(self, mock_audit):
-        """Exception dans _execute_workflow_steps → execution marquée FAILED."""
-        execution = Execution.objects.create(
-            action=self.wf, user=self.user, environment=TEST_ENV, status=ExecutionStatus.RUNNING,
-        )
-        runtime = ContainerWorkflowRuntime(execution)
-
-        with patch.object(runtime, '_execute_workflow_steps', side_effect=RuntimeError("thread error")):
-            runtime._run_workflow_loop(execution.id)
+        runtime.run()
 
         execution.refresh_from_db()
         self.assertEqual(execution.status, ExecutionStatus.FAILED)
-        self.assertIn("thread error", execution.error_message)
+        self.assertIn("Legacy fallback removed", execution.error_message)
+
+    @patch('executions.container_workflow_runtime.AuditService')
+    def test_run_no_initial_wave_error_message(self, mock_audit):
+        """Steps sans step_id → error_message contient 'No initial wave'."""
+        execution = Execution.objects.create(
+            action=self.wf, user=self.user, environment=TEST_ENV, status=ExecutionStatus.SUBMITTED,
+        )
+        runtime = ContainerWorkflowRuntime(execution)
+        runtime.run()
+
+        execution.refresh_from_db()
+        self.assertIn("No initial wave", execution.error_message)
 
 
 # ─── Tests _execute_workflow_steps — CANCELLED step path ─────────────────────
@@ -446,7 +456,7 @@ class TestExecuteStepActionNotFound(TestCase):
 
 @pytest.mark.django_db
 class TestExecuteStepNoSimulation(TestCase):
-    """Simulation désactivée → fallback direct status update sur child execution."""
+    """Simulation désactivée → dispatch réel via trigger_platform_job (Story 77.3)."""
 
     def setUp(self):
         self.user = UserFactory(username='exec_step_nosim_user', profile='DBA')
@@ -458,10 +468,15 @@ class TestExecuteStepNoSimulation(TestCase):
             execution_steps=_make_steps([self.action_a.id]),
             created_by=self.user,
         )
+        # Story 77.3: mock trigger_platform_job pour que le child step soit COMPLETED
+        patcher = patch('executions.container_workflow_runtime.trigger_platform_job')
+        self.mock_trigger = patcher.start()
+        self.mock_trigger.apply_async.side_effect = _make_trigger_mock_completing()
+        self.addCleanup(patcher.stop)
 
     @patch('executions.container_workflow_runtime.AuditService')
     def test_no_simulation_marks_child_completed(self, mock_audit):
-        """Simulation off → child COMPLETED via direct update."""
+        """Simulation off → child COMPLETED via dispatch réel (trigger_platform_job mocké)."""
         execution = Execution.objects.create(
             action=self.wf, user=self.user, environment=TEST_ENV, status=ExecutionStatus.RUNNING,
         )
@@ -582,53 +597,45 @@ class TestExecuteWorkflowStepsEdgeCases(TestCase):
         self.assertEqual(call_count[0], 2)  # les deux steps ont été exécutés
 
 
-# ─── Tests _run_workflow_loop — finally close_old_connections ─────────────────
+# ─── Tests run() no initial wave — completed_at et completed_at set (Story 81.2) ─
 
 @pytest.mark.django_db
-class TestRunWorkflowLoopFinally(TestCase):
-    """_run_workflow_loop — finally close_old_connections toujours appelé."""
+class TestRunNoInitialWaveFields(TestCase):
+    """run() initial_wave=None — champs completed_at et error_message sauvegardés (Story 81.2)."""
 
     def setUp(self):
-        self.user = UserFactory(username='loop_finally_user', profile='DBA')
+        self.user = UserFactory(username='no_wave_fields_user', profile='DBA')
         self.action_a = ActionFactory(
             status=ActionStatus.PUBLISHED, item_type=ActionItemType.ACTION, created_by=self.user,
         )
+        # Steps sans step_id → _determine_initial_wave retourne None
         self.wf = ActionFactory(
             status=ActionStatus.PUBLISHED, item_type=ActionItemType.WORKFLOW,
-            execution_steps=_make_steps([self.action_a.id]), created_by=self.user,
+            execution_steps=[{"order": 1, "name": "Legacy Step", "referenced_action_id": self.action_a.id}],
+            created_by=self.user,
         )
 
     @patch('executions.container_workflow_runtime.AuditService')
-    def test_run_workflow_loop_exception_already_failed_not_updated(self, mock_audit):
-        """Exception mais execution déjà FAILED → pas de double update."""
+    def test_run_no_initial_wave_completed_at_set(self, mock_audit):
+        """Steps sans step_id → completed_at renseigné après FAILED."""
         execution = Execution.objects.create(
-            action=self.wf, user=self.user, environment=TEST_ENV, status=ExecutionStatus.FAILED,
+            action=self.wf, user=self.user, environment=TEST_ENV, status=ExecutionStatus.SUBMITTED,
         )
         runtime = ContainerWorkflowRuntime(execution)
-
-        # On force _execute_workflow_steps à lancer une exception
-        with patch.object(runtime, '_execute_workflow_steps', side_effect=RuntimeError("already failed scenario")):
-            # Cette fois, l'execution est déjà en FAILED donc le bloc de cleanup ne la modifie pas
-            runtime._run_workflow_loop(execution.id)
+        runtime.run()
 
         execution.refresh_from_db()
-        # Le statut reste FAILED (pas de double update)
-        self.assertEqual(execution.status, ExecutionStatus.FAILED)
+        self.assertIsNotNone(execution.completed_at)
 
     @patch('executions.container_workflow_runtime.AuditService')
-    def test_run_workflow_loop_close_connections_called_on_exception(self, mock_audit):
-        """finally close_old_connections toujours appelé même après exception."""
+    def test_run_no_initial_wave_no_exception_propagated(self, mock_audit):
+        """Steps sans step_id → run() retourne sans lever d'exception."""
         execution = Execution.objects.create(
-            action=self.wf, user=self.user, environment=TEST_ENV, status=ExecutionStatus.RUNNING,
+            action=self.wf, user=self.user, environment=TEST_ENV, status=ExecutionStatus.SUBMITTED,
         )
         runtime = ContainerWorkflowRuntime(execution)
-
-        with patch('executions.container_workflow_runtime.close_old_connections') as mock_close:
-            with patch.object(runtime, '_execute_workflow_steps', side_effect=RuntimeError("error")):
-                runtime._run_workflow_loop(execution.id)
-
-        # close_old_connections doit être appelé (au moins une fois dans finally)
-        self.assertGreaterEqual(mock_close.call_count, 1)
+        # Doit retourner sans exception
+        runtime.run()
 
 
 # ─── Tests _execute_handler_step — exception, output_mapping, status ─────────
@@ -746,7 +753,11 @@ class TestExecuteHandlerStepCoverage(TestCase):
 
 @pytest.mark.django_db
 class TestExecuteStepUnknownStepType(TestCase):
-    """_execute_step — step_type inconnu → ValueError."""
+    """_execute_step — step_type inconnu → ValueError (séquentiel) ou FAILED (parallèle).
+
+    Story 84.1 (T5.2) : vérifie que le comportement du registre est identique
+    à l'ancien match step_type pour les cas non enregistrés (AC5).
+    """
 
     def setUp(self):
         self.user = UserFactory(username='unknown_step_user', profile='DBA')
@@ -761,7 +772,7 @@ class TestExecuteStepUnknownStepType(TestCase):
 
     @patch('executions.container_workflow_runtime.AuditService')
     def test_unknown_step_type_raises_value_error(self, mock_audit):
-        """step_type inconnu → ValueError."""
+        """step_type inconnu en contexte séquentiel → ValueError (AC5)."""
         execution = Execution.objects.create(
             action=self.wf, user=self.user, environment=TEST_ENV, status=ExecutionStatus.RUNNING,
         )
@@ -771,6 +782,21 @@ class TestExecuteStepUnknownStepType(TestCase):
         with self.assertRaises(ValueError) as cm:
             runtime._execute_step(step)
         self.assertIn('unknown_type_xyz', str(cm.exception))
+
+    @patch('executions.container_workflow_runtime.AuditService')
+    def test_unknown_step_type_in_parallel_context_returns_failed(self, mock_audit):
+        """step_type inconnu en contexte parallèle → ExecutionStatus.FAILED (AC5, Story 84.1)."""
+        from executions.container_workflow_runtime import ParallelContext
+        execution = Execution.objects.create(
+            action=self.wf, user=self.user, environment=TEST_ENV, status=ExecutionStatus.RUNNING,
+        )
+        runtime = ContainerWorkflowRuntime(execution)
+        step = self.wf.execution_steps[0]
+        parallel_ctx = ParallelContext(step_order=1)
+
+        result = runtime._execute_step(step, parallel_context=parallel_ctx)
+
+        self.assertEqual(result, ExecutionStatus.FAILED)
 
 
 # ─── Tests _execute_platform_step — output_mapping not dict ────────────────────
@@ -793,6 +819,11 @@ class TestPlatformStepOutputMappingNotDict(TestCase):
             }],
             created_by=self.user,
         )
+        # Story 77.3: mock trigger_platform_job pour que le child step soit COMPLETED
+        patcher = patch('executions.container_workflow_runtime.trigger_platform_job')
+        self.mock_trigger = patcher.start()
+        self.mock_trigger.apply_async.side_effect = _make_trigger_mock_completing()
+        self.addCleanup(patcher.stop)
 
     @patch('executions.container_workflow_runtime.logger')
     @patch('executions.container_workflow_runtime.AuditService')

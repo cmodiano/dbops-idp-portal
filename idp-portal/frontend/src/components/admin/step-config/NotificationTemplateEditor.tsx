@@ -25,7 +25,8 @@ export interface NotificationTemplateEditorProps {
   workflowId?: number;
   currentStepId: string;
   availableStepIds?: string[];
-  operation: 'send_email' | 'send_teams';
+  /** Story 83-10: widened to string for full declarative support via ui_hints.input_renderer */
+  operation: string;
 }
 
 // Templates prédéfinis par opération
@@ -77,8 +78,12 @@ export const NotificationTemplateEditor: FC<NotificationTemplateEditorProps> = (
 }) => {
   const current = value ?? {};
 
+  const recipientRef = useRef<InputRef>(null);
+  const ccRef = useRef<InputRef>(null);
   const subjectRef = useRef<InputRef>(null);
   const bodyRef = useRef<TextAreaRef>(null);
+  const attachmentsRef = useRef<InputRef>(null);
+  const webhookUrlRef = useRef<InputRef>(null);
   const titleRef = useRef<InputRef>(null);
   const messageRef = useRef<TextAreaRef>(null);
 
@@ -131,15 +136,48 @@ export const NotificationTemplateEditor: FC<NotificationTemplateEditorProps> = (
         </div>
 
         <div style={{ marginBottom: 8 }}>
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            Destinataire (recipient_email)
-          </Text>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 2 }}>
+            <Text type="secondary" style={{ fontSize: 12, flex: 1 }}>
+              Destinataire (recipient_email)
+            </Text>
+            <VariablePicker
+              workflowId={workflowId}
+              currentStepId={currentStepId}
+              availableStepIds={availableStepIds}
+              disabled={disabled}
+              onSelect={(expr) => insertAtCursor(recipientRef, 'recipient_email', expr)}
+            />
+          </div>
           <Input
+            ref={recipientRef}
             size="small"
             value={current.recipient_email ?? ''}
             disabled={disabled}
             onChange={(e) => handleChange('recipient_email', e.target.value)}
             placeholder="dba@company.com"
+          />
+        </div>
+
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 2 }}>
+            <Text type="secondary" style={{ fontSize: 12, flex: 1 }}>
+              CC (optionnel, séparé par virgule)
+            </Text>
+            <VariablePicker
+              workflowId={workflowId}
+              currentStepId={currentStepId}
+              availableStepIds={availableStepIds}
+              disabled={disabled}
+              onSelect={(expr) => insertAtCursor(ccRef, 'cc', expr)}
+            />
+          </div>
+          <Input
+            ref={ccRef}
+            size="small"
+            value={current.cc ?? ''}
+            disabled={disabled}
+            onChange={(e) => handleChange('cc', e.target.value)}
+            placeholder="admin@company.com,{{ steps.patch.output.contact_email }}"
           />
         </div>
 
@@ -188,6 +226,29 @@ export const NotificationTemplateEditor: FC<NotificationTemplateEditorProps> = (
             placeholder="Exécution {{ execution_id }} : {{ action_name }} terminé dans {{ environment }}."
           />
         </div>
+
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 2 }}>
+            <Text type="secondary" style={{ fontSize: 12, flex: 1 }}>
+              Pièce jointe (optionnel — chemin ou {'{{ steps.X.output.Y }}' })
+            </Text>
+            <VariablePicker
+              workflowId={workflowId}
+              currentStepId={currentStepId}
+              availableStepIds={availableStepIds}
+              disabled={disabled}
+              onSelect={(expr) => insertAtCursor(attachmentsRef, 'attachments', expr)}
+            />
+          </div>
+          <Input
+            ref={attachmentsRef}
+            size="small"
+            value={current.attachments ?? ''}
+            disabled={disabled}
+            onChange={(e) => handleChange('attachments', e.target.value)}
+            placeholder="{{ steps.patch.output.report_path }}"
+          />
+        </div>
       </div>
     );
   }
@@ -215,10 +276,20 @@ export const NotificationTemplateEditor: FC<NotificationTemplateEditorProps> = (
       </div>
 
       <div style={{ marginBottom: 8 }}>
-        <Text type="secondary" style={{ fontSize: 12 }}>
-          Webhook URL
-        </Text>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 2 }}>
+          <Text type="secondary" style={{ fontSize: 12, flex: 1 }}>
+            Webhook URL
+          </Text>
+          <VariablePicker
+            workflowId={workflowId}
+            currentStepId={currentStepId}
+            availableStepIds={availableStepIds}
+            disabled={disabled}
+            onSelect={(expr) => insertAtCursor(webhookUrlRef, 'webhook_url', expr)}
+          />
+        </div>
         <Input
+          ref={webhookUrlRef}
           size="small"
           value={current.webhook_url ?? ''}
           disabled={disabled}

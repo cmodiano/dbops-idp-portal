@@ -51,12 +51,14 @@ class TestCorrelationIDMiddlewareUnified:
 class TestCeleryCredentialsSecurity:
     """SEC-8: Celery tasks must not receive credentials as parameters."""
 
-    def test_retry_workflow_step_no_credential_params(self):
-        """retry_workflow_step task must not accept credential parameters."""
+    def test_resume_container_workflow_from_gate_no_credential_params(self):
+        """resume_container_workflow_from_gate task must not accept credential parameters.
+
+        Story 81: retry_workflow_step removed — test now targets resume_container_workflow_from_gate.
+        """
         import inspect
-        from executions.tasks import retry_workflow_step
-        # Get the wrapped function signature
-        sig = inspect.signature(retry_workflow_step)
+        from executions.tasks.gates import resume_container_workflow_from_gate
+        sig = inspect.signature(resume_container_workflow_from_gate)
         param_names = set(sig.parameters.keys())
         credential_params = {'password', 'token', 'secret', 'credential', 'api_key'}
         assert param_names.isdisjoint(credential_params), (

@@ -53,21 +53,19 @@ class ExecutionModelTest(TestCase):
         self.assertEqual(execution.get_parameters(), params)
 
     def test_execution_approval_fields(self):
-        """Test approval workflow fields."""
-        approver = User.objects.create(
-            username='approver',
-            profile='DBA'
-        )
+        """Story 78.15: approved_by/approval_comment removed from Execution model.
+
+        Source of truth is ExecutionStep.approved_by/approval_comment (ADR-007).
+        Execution no longer accepts these kwargs — verify basic create still works.
+        """
         execution = Execution.objects.create(
             action=self.action,
             user=self.user,
             environment='production',
-            status='PENDING_APPROVAL',
-            approved_by=approver,
-            approval_comment='Approved for production'
+            status='SUBMITTED',
         )
-        self.assertEqual(execution.approved_by, approver)
-        self.assertEqual(execution.approval_comment, 'Approved for production')
+        self.assertEqual(execution.status, 'SUBMITTED')
+        self.assertEqual(execution.environment, 'production')
 
 
 @pytest.mark.django_db
@@ -352,7 +350,8 @@ class ExecutionWithTargetsTest(TestCase):
 
     def setUp(self):
         """Set up test data."""
-        from profiles.models import Profile, ProfileActionPermission, ProfileTargetPermission
+        from profiles.models import Profile
+        from profiles.services import ProfileService
 
         self.user = User.objects.create(
             username='testuser',
@@ -378,15 +377,14 @@ class ExecutionWithTargetsTest(TestCase):
             is_auditor=False
         )
         # Add action permissions with dev environment
-        ProfileActionPermission.objects.create(
-            profile=self.profile,
-            permission_type='ALL',
-            environments_json='["developpement", "certification", "production"]'
+        ProfileService().set_action_permissions(
+            self.profile.id,
+            {'actions_type': 'all', 'environments': ['developpement', 'certification', 'production']},
         )
         # Add target permissions (all targets)
-        ProfileTargetPermission.objects.create(
-            profile=self.profile,
-            permission_type='ALL'
+        ProfileService().set_target_permissions(
+            self.profile.id,
+            {'targets_type': 'all'},
         )
 
     def test_execution_stores_targets_in_parameters(self):

@@ -1,0 +1,86 @@
+-- V132: Tables PROFILE_TARGET_ALLOWLIST, PROFILE_TARGET_PATTERNS, PROFILE_TARGET_ATTRIBUTE_FILTERS, PROFILE_TARGET_EXCLUSIONS
+-- Story 78.12 — Normalisation des permissions target de profil
+--
+-- Extraction des champs JSON CLOB (TARGET_NAMES_JSON, TARGET_PATTERNS_JSON,
+-- FILTER_BY_ATTRIBUTE_JSON, EXCLUSION_PATTERNS_JSON)
+-- de PROFILE_TARGET_PERMISSIONS vers des tables relationnelles pour requêtes SQL directes,
+-- indexes, contraintes DB et audit granulaire.
+
+-- ============================================================
+-- 1. PROFILE_TARGET_ALLOWLIST — une ligne par cible autorisée par profil
+-- ============================================================
+
+CREATE TABLE PROFILE_TARGET_ALLOWLIST (
+    ID              NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    PROFILE_ID      NUMBER NOT NULL,
+    TARGET_NAME     VARCHAR2(255) NOT NULL,
+    CONSTRAINT FK_PTA_PROFILE FOREIGN KEY (PROFILE_ID)
+        REFERENCES PROFILE_TARGET_PERMISSIONS(PROFILE_ID) ON DELETE CASCADE,
+    CONSTRAINT UK_PTA_PROFILE_TARGET UNIQUE (PROFILE_ID, TARGET_NAME)
+);
+
+COMMENT ON TABLE PROFILE_TARGET_ALLOWLIST IS 'Cibles autorisées par profil — une ligne par cible (normalisation de TARGET_NAMES_JSON).';
+COMMENT ON COLUMN PROFILE_TARGET_ALLOWLIST.PROFILE_ID IS 'FK vers PROFILE_TARGET_PERMISSIONS — profil propriétaire.';
+COMMENT ON COLUMN PROFILE_TARGET_ALLOWLIST.TARGET_NAME IS 'Nom de la cible autorisée.';
+
+-- ============================================================
+-- 2. PROFILE_TARGET_PATTERNS — une ligne par pattern de cible
+-- ============================================================
+
+CREATE TABLE PROFILE_TARGET_PATTERNS (
+    ID              NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    PROFILE_ID      NUMBER NOT NULL,
+    PATTERN         VARCHAR2(255) NOT NULL,
+    CONSTRAINT FK_PTP_PROFILE FOREIGN KEY (PROFILE_ID)
+        REFERENCES PROFILE_TARGET_PERMISSIONS(PROFILE_ID) ON DELETE CASCADE,
+    CONSTRAINT UK_PTP_PROFILE_PATTERN UNIQUE (PROFILE_ID, PATTERN)
+);
+
+COMMENT ON TABLE PROFILE_TARGET_PATTERNS IS 'Patterns de cibles autorisés par profil — une ligne par pattern (normalisation de TARGET_PATTERNS_JSON).';
+COMMENT ON COLUMN PROFILE_TARGET_PATTERNS.PROFILE_ID IS 'FK vers PROFILE_TARGET_PERMISSIONS — profil propriétaire.';
+COMMENT ON COLUMN PROFILE_TARGET_PATTERNS.PATTERN IS 'Pattern fnmatch de cible autorisée (ex: prod-*, staging-*).';
+
+-- ============================================================
+-- 3. PROFILE_TARGET_ATTRIBUTE_FILTERS — une ligne par (attribute_key, attribute_value)
+-- ============================================================
+
+CREATE TABLE PROFILE_TARGET_ATTRIBUTE_FILTERS (
+    ID              NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    PROFILE_ID      NUMBER NOT NULL,
+    ATTRIBUTE_KEY   VARCHAR2(255) NOT NULL,
+    ATTRIBUTE_VALUE VARCHAR2(255) NOT NULL,
+    CONSTRAINT FK_PTAF_PROFILE FOREIGN KEY (PROFILE_ID)
+        REFERENCES PROFILE_TARGET_PERMISSIONS(PROFILE_ID) ON DELETE CASCADE,
+    CONSTRAINT UK_PTAF_PROFILE_KEY_VAL UNIQUE (PROFILE_ID, ATTRIBUTE_KEY, ATTRIBUTE_VALUE)
+);
+
+COMMENT ON TABLE PROFILE_TARGET_ATTRIBUTE_FILTERS IS 'Filtres par attribut par profil — une ligne par (clé, valeur) (normalisation de FILTER_BY_ATTRIBUTE_JSON).';
+COMMENT ON COLUMN PROFILE_TARGET_ATTRIBUTE_FILTERS.PROFILE_ID IS 'FK vers PROFILE_TARGET_PERMISSIONS — profil propriétaire.';
+COMMENT ON COLUMN PROFILE_TARGET_ATTRIBUTE_FILTERS.ATTRIBUTE_KEY IS 'Clé d''attribut inventaire (ex: engine_type, zone).';
+COMMENT ON COLUMN PROFILE_TARGET_ATTRIBUTE_FILTERS.ATTRIBUTE_VALUE IS 'Valeur d''attribut autorisée (ex: oracle, prod).';
+
+-- ============================================================
+-- 4. PROFILE_TARGET_EXCLUSIONS — une ligne par pattern d'exclusion
+-- ============================================================
+
+CREATE TABLE PROFILE_TARGET_EXCLUSIONS (
+    ID                  NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    PROFILE_ID          NUMBER NOT NULL,
+    EXCLUSION_PATTERN   VARCHAR2(255) NOT NULL,
+    CONSTRAINT FK_PTE_PROFILE FOREIGN KEY (PROFILE_ID)
+        REFERENCES PROFILE_TARGET_PERMISSIONS(PROFILE_ID) ON DELETE CASCADE,
+    CONSTRAINT UK_PTE_PROFILE_EXCLUSION UNIQUE (PROFILE_ID, EXCLUSION_PATTERN)
+);
+
+COMMENT ON TABLE PROFILE_TARGET_EXCLUSIONS IS 'Patterns d''exclusion par profil — une ligne par pattern (normalisation de EXCLUSION_PATTERNS_JSON).';
+COMMENT ON COLUMN PROFILE_TARGET_EXCLUSIONS.PROFILE_ID IS 'FK vers PROFILE_TARGET_PERMISSIONS — profil propriétaire.';
+COMMENT ON COLUMN PROFILE_TARGET_EXCLUSIONS.EXCLUSION_PATTERN IS 'Pattern d''exclusion (ex: PROD-CRITICAL-*, DR-*).';
+
+-- ============================================================
+-- 5. Indexes (FK lookup)
+-- ============================================================
+
+CREATE INDEX IDX_PTA_PROFILE_ID ON PROFILE_TARGET_ALLOWLIST(PROFILE_ID);
+CREATE INDEX IDX_PTP_PROFILE_ID ON PROFILE_TARGET_PATTERNS(PROFILE_ID);
+CREATE INDEX IDX_PTAF_PROFILE_ID ON PROFILE_TARGET_ATTRIBUTE_FILTERS(PROFILE_ID);
+CREATE INDEX IDX_PTE_PROFILE_ID ON PROFILE_TARGET_EXCLUSIONS(PROFILE_ID);

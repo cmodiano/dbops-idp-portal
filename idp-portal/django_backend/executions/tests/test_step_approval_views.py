@@ -61,41 +61,31 @@ class TestApproveStepView(TestCase):
         self.step = _make_approval_step(self.execution)
 
     @patch('executions.views.approval_views._check_approver_permission', return_value=True)
-    @patch('executions.views.approval_views.resume_container_workflow_from_gate')
-    def test_approve_step_success_with_successor(self, mock_resume, mock_perm):
-        """AC#1 : approve → COMPLETED + resume vers on_success_step_ids."""
-        with self.captureOnCommitCallbacks(execute=True):
-            response = self.client.post(
-                f"/api/v1/executions/{self.execution.id}/steps/{self.step.id}/approve/",
-                {"comment": "LGTM"},
-                format='json',
-            )
-        self.assertEqual(response.status_code, 200)
+    def test_approve_step_success_with_successor(self, mock_perm):
+        """AC#1 : approve → 202 accepted, commande écrite (story 78.5).
 
-        self.step.refresh_from_db()
-        self.assertEqual(self.step.status, ExecutionStepStatus.COMPLETED)
-        self.assertEqual(self.step.approval_comment, "LGTM")
-        self.assertIsNotNone(self.step.approved_by)
-        self.assertIsNotNone(self.step.approved_at)
+        Story 78.5: L'endpoint écrit une commande durable ; le step reste WAITING
+        jusqu'au traitement par le command processor.
+        """
+        response = self.client.post(
+            f"/api/v1/executions/{self.execution.id}/steps/{self.step.id}/approve/",
+            {"comment": "LGTM"},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 202)
 
         data = response.json()
         self.assertIn("data", data)
-        step_data = data["data"]
-        self.assertEqual(step_data["status"], ExecutionStepStatus.COMPLETED)
-        self.assertIn("approved_by_id", step_data)
-        self.assertIn("approved_at", step_data)
-        self.assertEqual(step_data["approval_comment"], "LGTM")
+        self.assertEqual(data["data"]["status"], "accepted")
+        self.assertIn("command_id", data["data"])
 
-        # Vérifie que la tâche Celery de resume est bien déclenchée (Story 67.4: liste)
-        mock_resume.apply_async.assert_called_once_with(
-            args=[self.execution.id, ["execute-action"]],
-            queue="default",
-        )
+        # Story 78.5: commande écrite, step non traité inline
+        self.step.refresh_from_db()
+        self.assertEqual(self.step.status, ExecutionStepStatus.WAITING)
 
     @patch('executions.views.approval_views._check_approver_permission', return_value=True)
-    @patch('executions.views.approval_views.resume_container_workflow_from_gate')
-    def test_approve_step_success_last_step_completes_execution(self, mock_resume, mock_perm):
-        """AC#1 : approve sans on_success_step_ids → execution COMPLETED, aucun resume."""
+    def test_approve_step_success_last_step_completes_execution(self, mock_perm):
+        """AC#1 : approve sans on_success_step_ids → 202 accepted, commande écrite (story 78.5)."""
         self.action.execution_steps = [{
             "step_id": "request-approval",
             "name": "request-approval",
@@ -110,12 +100,8 @@ class TestApproveStepView(TestCase):
             {"comment": "OK"},
             format='json',
         )
-        self.assertEqual(response.status_code, 200)
-
-        self.execution.refresh_from_db()
-        self.assertEqual(self.execution.status, ExecutionStatus.COMPLETED)
-        # Aucun resume ne doit être déclenché (dernier step)
-        mock_resume.apply_async.assert_not_called()
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.json()["data"]["status"], "accepted")
 
     def test_approve_step_not_waiting_returns_400(self):
         """AC#3 : step non WAITING → 400."""
@@ -195,36 +181,23 @@ class TestRejectStepView(TestCase):
         self.step = _make_approval_step(self.execution)
 
     @patch('executions.views.approval_views._check_approver_permission', return_value=True)
-    @patch('executions.views.approval_views.resume_container_workflow_from_gate')
-    def test_reject_step_success_with_error_path(self, mock_resume, mock_perm):
-        """AC#2 : reject avec on_error_step_ids → step FAILED, resume appelée."""
-        with self.captureOnCommitCallbacks(execute=True):
-            response = self.client.post(
-                f"/api/v1/executions/{self.execution.id}/steps/{self.step.id}/reject/",
-                {"comment": "Rejected"},
-                format='json',
-            )
-        self.assertEqual(response.status_code, 200)
-
-        self.step.refresh_from_db()
-        self.assertEqual(self.step.status, ExecutionStepStatus.FAILED)
-        self.assertEqual(self.step.approval_comment, "Rejected")
+    def test_reject_step_success_with_error_path(self, mock_perm):
+        """AC#2 : reject → 202 accepted, commande écrite (story 78.5)."""
+        response = self.client.post(
+            f"/api/v1/executions/{self.execution.id}/steps/{self.step.id}/reject/",
+            {"comment": "Rejected"},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 202)
 
         data = response.json()
         self.assertIn("data", data)
-        self.assertEqual(data["data"]["status"], ExecutionStepStatus.FAILED)
-        self.assertEqual(data["data"]["approval_comment"], "Rejected")
-
-        # Vérifie que la tâche Celery de resume est déclenchée avec le chemin d'erreur
-        mock_resume.apply_async.assert_called_once_with(
-            args=[self.execution.id, ["notify-rejected"]],
-            queue="default",
-        )
+        self.assertEqual(data["data"]["status"], "accepted")
+        self.assertIn("command_id", data["data"])
 
     @patch('executions.views.approval_views._check_approver_permission', return_value=True)
-    @patch('executions.views.approval_views.resume_container_workflow_from_gate')
-    def test_reject_step_no_error_path_fails_execution(self, mock_resume, mock_perm):
-        """AC#2 : reject sans on_error_step_ids → execution FAILED, aucun resume."""
+    def test_reject_step_no_error_path_fails_execution(self, mock_perm):
+        """AC#2 : reject sans on_error_step_ids → 202 accepted, commande écrite (story 78.5)."""
         self.action.execution_steps = [{
             "step_id": "request-approval",
             "name": "request-approval",
@@ -238,13 +211,8 @@ class TestRejectStepView(TestCase):
             f"/api/v1/executions/{self.execution.id}/steps/{self.step.id}/reject/",
             format='json',
         )
-        self.assertEqual(response.status_code, 200)
-
-        self.execution.refresh_from_db()
-        self.assertEqual(self.execution.status, ExecutionStatus.FAILED)
-        self.assertEqual(self.execution.error_message, 'Step approval rejected')
-        # Aucun resume ne doit être déclenché (pas de chemin d'erreur)
-        mock_resume.apply_async.assert_not_called()
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.json()["data"]["status"], "accepted")
 
     def test_reject_step_not_waiting_returns_400(self):
         """AC#3 : step non WAITING → 400."""
@@ -292,24 +260,21 @@ class TestApproveExecutionBackwardCompat(TestCase):
         self.assertEqual(response.status_code, 400)
 
     @patch('executions.views.approval_views._check_approver_permission', return_value=True)
-    @patch('executions.views.approval_views.resume_container_workflow_from_gate')
-    def test_backward_compat_finds_first_waiting_approval_step(self, mock_resume, mock_perm):
-        """AC#4 : exécution RUNNING avec step WAITING approval_granted → approuve le step."""
+    def test_backward_compat_finds_first_waiting_approval_step(self, mock_perm):
+        """AC#4 : exécution RUNNING avec step WAITING → 202 accepted, commande écrite (story 78.5)."""
         execution = ExecutionFactory(
             action=self.action,
             user=self.admin,
             status=ExecutionStatus.RUNNING,
         )
-        step = _make_approval_step(execution)
+        _make_approval_step(execution)
 
         response = self.client.post(
             f"/api/v1/executions/{execution.id}/approve/",
             format='json',
         )
-        self.assertEqual(response.status_code, 200)
-
-        step.refresh_from_db()
-        self.assertEqual(step.status, ExecutionStepStatus.COMPLETED)
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.json()["data"]["status"], "accepted")
 
     def test_backward_compat_no_waiting_step_raises_original_error(self):
         """AC#4 : exécution RUNNING sans step WAITING approval_granted → 400 original."""
@@ -398,44 +363,30 @@ class TestRejectExecutionBackwardCompat(TestCase):
         )
 
     @patch('executions.views.approval_views._check_approver_permission', return_value=True)
-    @patch('executions.views.approval_views.resume_container_workflow_from_gate')
-    def test_running_execution_with_waiting_step_reject_with_error_path(self, mock_resume, mock_perm):
-        """AC#1 : RUNNING + step WAITING + on_error_step_ids → step FAILED, resume appelée."""
+    def test_running_execution_with_waiting_step_reject_with_error_path(self, mock_perm):
+        """AC#1 : RUNNING + step WAITING → 202 accepted, commande écrite (story 78.5)."""
         execution = ExecutionFactory(
             action=self.action,
             user=self.admin,
             status=ExecutionStatus.RUNNING,
         )
-        step = _make_approval_step(execution)
+        _make_approval_step(execution)
 
-        with self.captureOnCommitCallbacks(execute=True):
-            response = self.client.post(
-                f"/api/v1/executions/{execution.id}/reject/",
-                {"rejection_reason": "Non conforme"},
-                format='json',
-            )
-        self.assertEqual(response.status_code, 200)
-
-        step.refresh_from_db()
-        self.assertEqual(step.status, ExecutionStepStatus.FAILED)
-        self.assertEqual(step.approval_comment, "Non conforme")
-        self.assertIsNotNone(step.completed_at)
+        response = self.client.post(
+            f"/api/v1/executions/{execution.id}/reject/",
+            {"rejection_reason": "Non conforme"},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 202)
 
         data = response.json()
         self.assertIn("data", data)
-        # Avec on_error_step_ids, l'exécution reste RUNNING (reprise vers le step d'erreur)
-        self.assertEqual(data["data"]["status"], ExecutionStatus.RUNNING)
-
-        # Vérifie que la tâche Celery de resume est déclenchée avec le chemin d'erreur
-        mock_resume.apply_async.assert_called_once_with(
-            args=[execution.id, ["notify-rejected"]],
-            queue="default",
-        )
+        self.assertEqual(data["data"]["status"], "accepted")
+        self.assertIn("command_id", data["data"])
 
     @patch('executions.views.approval_views._check_approver_permission', return_value=True)
-    @patch('executions.views.approval_views.resume_container_workflow_from_gate')
-    def test_running_execution_with_waiting_step_reject_no_error_path(self, mock_resume, mock_perm):
-        """AC#1 : RUNNING + step WAITING sans on_error_step_ids → step FAILED, execution FAILED."""
+    def test_running_execution_with_waiting_step_reject_no_error_path(self, mock_perm):
+        """AC#1 : RUNNING + step WAITING sans on_error_step_ids → 202 accepted (story 78.5)."""
         self.action.execution_steps = [{
             "step_id": "request-approval",
             "name": "request-approval",
@@ -450,21 +401,14 @@ class TestRejectExecutionBackwardCompat(TestCase):
             user=self.admin,
             status=ExecutionStatus.RUNNING,
         )
-        step = _make_approval_step(execution)
+        _make_approval_step(execution)
 
         response = self.client.post(
             f"/api/v1/executions/{execution.id}/reject/",
             format='json',
         )
-        self.assertEqual(response.status_code, 200)
-
-        step.refresh_from_db()
-        self.assertEqual(step.status, ExecutionStepStatus.FAILED)
-
-        execution.refresh_from_db()
-        self.assertEqual(execution.status, ExecutionStatus.FAILED)
-        self.assertEqual(execution.error_message, "Step approval rejected")
-        mock_resume.apply_async.assert_not_called()
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.json()["data"]["status"], "accepted")
 
     def test_running_execution_no_waiting_step_returns_400(self):
         """AC#4 : RUNNING sans step WAITING approval_granted -> 400 NO_PENDING_APPROVAL."""
@@ -483,26 +427,22 @@ class TestRejectExecutionBackwardCompat(TestCase):
         self.assertEqual(response.data.get("error", {}).get("code"), "NO_PENDING_APPROVAL")
 
     @patch('executions.views.approval_views._check_approver_permission', return_value=True)
-    @patch('executions.views.approval_views.resume_container_workflow_from_gate')
-    def test_rejection_reason_captured_in_approval_comment(self, mock_resume, mock_perm):
-        """AC#1 : rejection_reason est capturé dans approval_comment du step."""
+    def test_rejection_reason_captured_in_approval_comment(self, mock_perm):
+        """AC#1 : rejection avec rejection_reason → 202 accepted, commande écrite (story 78.5)."""
         execution = ExecutionFactory(
             action=self.action,
             user=self.admin,
             status=ExecutionStatus.RUNNING,
         )
-        step = _make_approval_step(execution)
+        _make_approval_step(execution)
 
-        with self.captureOnCommitCallbacks(execute=True):
-            response = self.client.post(
-                f"/api/v1/executions/{execution.id}/reject/",
-                {"rejection_reason": "Audit requis"},
-                format='json',
-            )
-        self.assertEqual(response.status_code, 200)
-
-        step.refresh_from_db()
-        self.assertEqual(step.approval_comment, "Audit requis")
+        response = self.client.post(
+            f"/api/v1/executions/{execution.id}/reject/",
+            {"rejection_reason": "Audit requis"},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.json()["data"]["status"], "accepted")
 
     def test_auto_approval_gate_non_admin_is_forbidden_reject(self):
         """ADR-007: auto-approval-gate + user non-admin -> 403 Forbidden (reject)."""

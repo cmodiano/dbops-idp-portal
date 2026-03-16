@@ -2,6 +2,7 @@
 """Seed development database with test data for frontend validation.
 
 Story 5.6 - Script de seed de données en base pour tests frontend
+Epic 80 (stories 80.1–80.4) - Reset + reseed dev : purge orchestration, garde-fous, trace, validation QA
 
 This script inserts a comprehensive test dataset covering:
 - Users (3): dbops1, dba1, user1
@@ -10,7 +11,7 @@ This script inserts a comprehensive test dataset covering:
 - Actions (8): Various with AAP/ServiceNow connectors
 - Integrations (2): AAP demo, ServiceNow demo
 - Favorites: User favorites on actions
-- Executions (15): Various statuses (SUBMITTED, RUNNING, COMPLETED, FAILED, CANCELLED)
+- Executions (15): Various statuses (SUBMITTED, RUNNING, COMPLETED, FAILED, CANCELLED, REJECTED)
 - Execution steps: Timeline data for some executions
 
 IMPORTANT: This script is for DEVELOPMENT ONLY.
@@ -24,8 +25,10 @@ Usage:
 """
 
 import argparse
+import getpass
 import json
 import os
+import socket
 import sys
 from datetime import datetime, timedelta
 
@@ -35,6 +38,7 @@ import oracledb
 # === Configuration ===
 
 ALLOWED_ENVIRONMENTS = ("development", "dev")
+BLOCKED_ENVIRONMENTS = ("staging", "production", "prod")
 
 
 def get_connection() -> oracledb.Connection:
@@ -52,13 +56,39 @@ def get_connection() -> oracledb.Connection:
 def check_environment(env_arg: str | None) -> None:
     """Verify we're running in development environment.
 
+    Rules:
+    - --env, if provided, must be a recognized value (allowed or blocked)
+    - APP_ENV must not be staging/prod/production
+    - --env must not be staging/prod/production
+    - At least one of APP_ENV or --env must be in ALLOWED_ENVIRONMENTS
+
     Raises:
-        SystemExit: If not in development environment
+        SystemExit: If not in development environment or staging/prod detected
     """
     app_env = os.environ.get("APP_ENV", "").lower()
-    env_check = env_arg.lower() if env_arg else app_env
+    env_flag = env_arg.lower() if env_arg else ""
 
-    if env_check not in ALLOWED_ENVIRONMENTS:
+    # Reject unrecognized --env values (must be explicitly allowed or blocked)
+    if env_flag and env_flag not in ALLOWED_ENVIRONMENTS and env_flag not in BLOCKED_ENVIRONMENTS:
+        print(
+            f"ERROR: Unrecognized --env value: '{env_flag}'.\n"
+            f"Accepted values: {', '.join(ALLOWED_ENVIRONMENTS)}\n"
+            f"Blocked values: {', '.join(BLOCKED_ENVIRONMENTS)}"
+        )
+        sys.exit(1)
+
+    # Explicit block: refuse staging/prod in either indicator
+    for value, source in [(app_env, "APP_ENV"), (env_flag, "--env")]:
+        if value and value in BLOCKED_ENVIRONMENTS:
+            print(
+                f"ERROR: Refused to run on {source}={value}.\n"
+                f"This script is NEVER allowed on staging or production environments.\n"
+                f"Detected: APP_ENV={app_env or '(not set)'}, --env={env_arg or '(not set)'}"
+            )
+            sys.exit(1)
+
+    # Require at least one dev indicator
+    if app_env not in ALLOWED_ENVIRONMENTS and env_flag not in ALLOWED_ENVIRONMENTS:
         print(
             f"ERROR: This script can only run in development environment.\n"
             f"Current: APP_ENV={app_env or '(not set)'}, --env={env_arg or '(not set)'}\n"
@@ -66,7 +96,22 @@ def check_environment(env_arg: str | None) -> None:
         )
         sys.exit(1)
 
+    env_check = env_flag if env_flag in ALLOWED_ENVIRONMENTS else app_env
     print(f"Environment check passed: {env_check}")
+
+
+def log_reset_start(env_arg: str | None) -> None:
+    """Log a structured trace at the start of a reset operation."""
+    app_env = os.environ.get("APP_ENV", "(not set)")
+    print(
+        f"\n{'='*60}\n"
+        f"RESET TRACE\n"
+        f"  User      : {getpass.getuser()}@{socket.gethostname()}\n"
+        f"  Timestamp : {datetime.now().isoformat(timespec='seconds')}\n"
+        f"  APP_ENV   : {app_env}\n"
+        f"  --env     : {env_arg or '(not set)'}\n"
+        f"{'='*60}\n"
+    )
 
 
 # === Seed Data Definitions ===
@@ -358,7 +403,7 @@ EXECUTION_STATUSES = [
     ("RUNNING", 2),
     ("SUBMITTED", 2),
     ("CANCELLED", 1),
-    ("PENDING_APPROVAL", 1),
+    ("REJECTED", 1),  # PENDING_APPROVAL deprecated (ADR-007, story 78.14) — removed from CHK_EXECUTION_STATUS
 ]
 
 
@@ -380,12 +425,23 @@ def reset_data(conn: oracledb.Connection) -> None:
     print("Resetting existing data...")
     cursor = conn.cursor()
     # Order: delete children first to satisfy FK constraints.
-    # RECURRING_PATTERNS → SCHEDULED_EXECUTIONS; EXECUTION_STEPS, EXECUTION_TARGETS → EXECUTIONS;
+    # RECURRING_PATTERNS → SCHEDULED_EXECUTIONS;
+    # Orchestration tables (FK → EXECUTIONS, RUNNABLE_STEPS also FK → EXECUTION_STEPS):
+    #   WORKFLOW_EVENT_COUNTER → EXECUTIONS (OneToOne CASCADE, migration 0015);
+    #   WORKFLOW_EVENTS, WORKFLOW_COMMANDS, EXECUTION_OUTBOX → EXECUTIONS;
+    #   RUNNABLE_STEPS → EXECUTION_STEPS (OneToOne) + EXECUTIONS (both CASCADE);
+    # EXECUTION_STEPS, EXECUTION_TARGETS → EXECUTIONS;
     # SCHEDULED_EXECUTIONS → EXECUTIONS, USERS, ACTIONS_CATALOG; EXECUTIONS → USERS, ACTIONS_CATALOG;
     # USER_FAVORITES → USERS, ACTIONS_CATALOG; ACTION_TAGS → ACTIONS_CATALOG, TAGS;
     # ACTIONS_CATALOG → INTEGRATIONS, USERS; PROFILE_* → PROFILES
     tables = [
         "RECURRING_PATTERNS",
+        # Orchestration tables — all FK → EXECUTIONS; RUNNABLE_STEPS also FK → EXECUTION_STEPS
+        "WORKFLOW_EVENT_COUNTER",  # OneToOne CASCADE → EXECUTIONS (migration 0015)
+        "WORKFLOW_EVENTS",
+        "RUNNABLE_STEPS",      # must precede both EXECUTION_STEPS and EXECUTIONS
+        "WORKFLOW_COMMANDS",
+        "EXECUTION_OUTBOX",
         "EXECUTION_STEPS",
         "EXECUTION_TARGETS",
         "SCHEDULED_EXECUTIONS",
@@ -797,6 +853,9 @@ def seed_execution_steps(conn: oracledb.Connection, execution_ids: list[int]) ->
                 step_status = "FAILED" if step_order == 3 else ("COMPLETED" if step_order < 3 else "SKIPPED")
             elif exec_status == "RUNNING":
                 step_status = "COMPLETED" if step_order < 3 else ("RUNNING" if step_order == 3 else "PENDING")
+            elif exec_status == "REJECTED":
+                # Rejected before execution: submission steps done, execution step and beyond skipped
+                step_status = "COMPLETED" if step_order < 3 else "SKIPPED"
             else:
                 step_status = default_status
 
@@ -895,6 +954,18 @@ def main() -> None:
     # Check environment
     check_environment(args.env)
 
+    # --reset requires BOTH APP_ENV and --env to be explicitly set (user story 80.2)
+    if args.reset:
+        app_env_valid = os.environ.get("APP_ENV", "").lower() in ALLOWED_ENVIRONMENTS
+        env_arg_valid = bool(args.env) and args.env.lower() in ALLOWED_ENVIRONMENTS
+        if not app_env_valid or not env_arg_valid:
+            print(
+                "ERROR: --reset requires BOTH APP_ENV and --env to be explicitly set to a dev value.\n"
+                f"Current: APP_ENV={os.environ.get('APP_ENV') or '(not set)'}, --env={args.env or '(not set)'}\n"
+                "Example: APP_ENV=development python3 seed_dev_data.py --env=dev --reset"
+            )
+            sys.exit(1)
+
     print("\nConnecting to Oracle database...")
     try:
         conn = get_connection()
@@ -916,6 +987,7 @@ def main() -> None:
     try:
         # Reset if requested
         if args.reset:
+            log_reset_start(args.env)
             reset_data(conn)
         else:
             if has_seed_data(conn):

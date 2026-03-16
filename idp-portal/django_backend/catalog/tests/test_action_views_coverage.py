@@ -468,11 +468,12 @@ class TestUpdate:
         assert response.status_code == 404
 
     def test_update_with_business_rule_policy_id(self):
+        """PATCH with only business_rule_policy_id clears the FK (partial update)."""
         user = _make_dbops_user()
         action_obj = ActionFactory(status='draft', created_by=user)
 
-        view = ActionViewSet.as_view({'put': 'update'})
-        request = factory.put(f'/admin/actions/{action_obj.id}/', {
+        view = ActionViewSet.as_view({'patch': 'partial_update'})
+        request = factory.patch(f'/admin/actions/{action_obj.id}/', {
             'business_rule_policy_id': None,
         }, format='json')
         force_authenticate(request, user=user)
@@ -482,11 +483,12 @@ class TestUpdate:
         assert 'data' in response.data
 
     def test_update_xor_validation_both_brp_fields(self):
+        """PATCH with both business_rule_policy_id and business_rule_policies raises XOR validation."""
         user = _make_dbops_user()
         action_obj = ActionFactory(status='draft', created_by=user)
 
-        view = ActionViewSet.as_view({'put': 'update'})
-        request = factory.put(f'/admin/actions/{action_obj.id}/', {
+        view = ActionViewSet.as_view({'patch': 'partial_update'})
+        request = factory.patch(f'/admin/actions/{action_obj.id}/', {
             'business_rule_policy_id': 1,
             'business_rule_policies': [{'rule': 'test'}],
         }, format='json')
@@ -499,6 +501,7 @@ class TestUpdate:
         assert 'business_rule_policies' in details
 
     def test_update_inline_brp_validation_error(self):
+        """PATCH with invalid business_rule_policies raises validation error."""
         user = _make_dbops_user()
         action_obj = ActionFactory(status='draft', created_by=user)
 
@@ -506,8 +509,8 @@ class TestUpdate:
                    side_effect=ValueError('bad policy'), create=True), \
              patch('catalog.validators.validate_business_rule_policies',
                    side_effect=ValueError('bad policy')):
-            view = ActionViewSet.as_view({'put': 'update'})
-            request = factory.put(f'/admin/actions/{action_obj.id}/', {
+            view = ActionViewSet.as_view({'patch': 'partial_update'})
+            request = factory.patch(f'/admin/actions/{action_obj.id}/', {
                 'business_rule_policies': [{'bad': 'data'}],
             }, format='json')
             force_authenticate(request, user=user)
@@ -1176,7 +1179,7 @@ class TestMutexRules:
         user = _make_dbops_user()
         action_a = ActionFactory(status='published', created_by=user)
         action_b = ActionFactory(status='published', created_by=user)
-        # Pre-create the symmetric rule
+        # Pre-create the symmetric rule (B→A)
         ActionMutex.objects.create(action=action_b, incompatible_with=action_a, same_target=True)
 
         view = ActionViewSet.as_view({'post': 'mutex_rules'})
@@ -1187,9 +1190,13 @@ class TestMutexRules:
         force_authenticate(request, user=user)
         response = view(request, pk=action_a.id)
 
-        assert response.status_code == 201
-        # Should NOT have created another symmetric rule (already exists)
-        assert ActionMutex.objects.count() == 2
+        # Reversed pair (A→B) is rejected when B→A already exists
+        assert response.status_code == 400
+        body = response.json() if hasattr(response, 'json') else response.data
+        raw = body.get('incompatible_with_id', body.get('detail', body))
+        detail = raw[0] if isinstance(raw, list) else str(raw)
+        assert 'mutex' in detail.lower() or 'existe' in detail.lower() or 'règle' in detail.lower()
+        assert ActionMutex.objects.count() == 1
 
     def test_mutex_rules_post_invalid_data_returns_400(self):
         user = _make_dbops_user()

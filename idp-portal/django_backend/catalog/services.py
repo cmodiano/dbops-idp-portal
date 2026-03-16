@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import structlog
 from typing import cast, Any
+from django.conf import settings
 from django.db import connection, transaction
 from django.core.paginator import Paginator
 from django.utils import timezone
@@ -244,6 +245,15 @@ class CatalogService:
             _validate_workflow_can_be_published(action)
 
         action.save()
+
+        # Story 78.10: Dual-write to normalized tables when feature flag is enabled
+        if (
+            getattr(settings, 'WORKFLOW_NORMALIZED_DEFINITIONS_ENABLED', False)
+            and action.item_type == ActionItemType.WORKFLOW
+            and action.execution_steps
+        ):
+            from catalog.workflow_definition_repository import sync_from_json
+            sync_from_json(action)
         
         # Add tags if provided
         if 'tags' in action_data and action_data['tags']:
@@ -384,6 +394,10 @@ class CatalogService:
             action.name = action_update_data['name']
         if 'description' in action_update_data:
             action.description = action_update_data.get('description')
+        if 'item_type' in action_update_data:
+            action.item_type = action_update_data['item_type']
+        if 'category' in action_update_data:
+            action.category = action_update_data.get('category')
         if 'engine' in action_update_data:
             action.engine = action_update_data['engine']
         if 'platform' in action_update_data:
@@ -871,6 +885,14 @@ class CatalogService:
             action.execution_steps = steps
 
         action.save()
+
+        # Story 78.10: Dual-write to normalized tables when feature flag is enabled
+        if (
+            getattr(settings, 'WORKFLOW_NORMALIZED_DEFINITIONS_ENABLED', False)
+            and action.item_type == ActionItemType.WORKFLOW
+        ):
+            from catalog.workflow_definition_repository import sync_from_json
+            sync_from_json(action)
 
         # Audit if user provided
         if user:

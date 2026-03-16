@@ -13,7 +13,7 @@ Tests:
 
 import pytest
 from unittest.mock import patch
-
+from django.utils import timezone
 from django.test import override_settings
 
 from executions.container_workflow_runtime import ContainerWorkflowRuntime
@@ -25,6 +25,24 @@ from tests.factories import UserFactory, ActionFactory
 
 
 TEST_ENVIRONMENT = 'developpement'
+
+
+@pytest.fixture(autouse=True)
+def mock_platform_dispatch():
+    """
+    Story 77.3: les steps platform 'action' passent désormais par trigger_platform_job.apply_async.
+    Ce fixture marque le child step COMPLETED pour que les tests de routing existants fonctionnent.
+    """
+    def _complete_child_step(kwargs, queue):
+        exec_step_id = kwargs['execution_step_id']
+        ExecutionStep.objects.filter(id=exec_step_id).update(
+            status=ExecutionStepStatus.COMPLETED,
+            completed_at=timezone.now(),
+        )
+
+    with patch('executions.container_workflow_runtime.trigger_platform_job') as mock_trigger:
+        mock_trigger.apply_async.side_effect = _complete_child_step
+        yield mock_trigger
 
 
 def _make_workflow_steps(referenced_actions):
@@ -188,6 +206,36 @@ class TestContainerWorkflowRuntimeBasic:
         execution.refresh_from_db()
         assert execution.status == ExecutionStatus.FAILED
         assert "no steps" in execution.error_message.lower()
+
+    @patch('executions.container_workflow_runtime.AuditService')
+    def test_failed_step_no_fallback(self, mock_audit):
+        """AC3 (81-4): run() marque FAILED si initial_wave is None (steps sans step_id).
+
+        Post-PR2 : le fallback legacy a été supprimé dans run() (chemin queue-based).
+        Les steps sans step_id ne peuvent pas être routés → FAILED immédiat.
+        Testé via run() car run_sync() utilise le chemin séquentiel.
+        """
+        workflow = ActionFactory(
+            name="Legacy Steps Workflow",
+            status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.WORKFLOW,
+            execution_steps=[
+                {"order": 1, "name": "Legacy Step", "referenced_action_id": self.action_a.id},
+                # Pas de step_id → _determine_initial_wave() retourne None
+            ],
+            created_by=self.user,
+        )
+        execution = self._create_execution(action=workflow)
+        runtime = ContainerWorkflowRuntime(execution)
+
+        # Appeler run() — le chemin production (queue-based) qui vérifie initial_wave
+        runtime.run()
+
+        execution.refresh_from_db()
+        assert execution.status == ExecutionStatus.FAILED
+        assert "Legacy fallback removed" in execution.error_message
+        # Confirme qu'aucun child execution n'a été créé (FAILED avant dispatch)
+        assert not Execution.objects.filter(parent_execution_id=execution.id).exists()
 
 
 @pytest.mark.django_db
@@ -608,9 +656,11 @@ class TestContainerWorkflowIntegration:
         parent_step = ExecutionStep.objects.get(execution=execution, step_order=1)
         output = parent_step.get_output()
         assert output is not None
-        assert output['child_execution_id'] == runtime.child_executions[0].id
-        assert output['referenced_action_id'] == action.id
-        assert output['referenced_action_name'] == action.name
+        # Story 77.1: output now uses standard format {raw_output, extracted_output, status_context}
+        raw = output.get('raw_output', output)
+        assert raw['child_execution_id'] == runtime.child_executions[0].id
+        assert raw['referenced_action_id'] == action.id
+        assert raw['referenced_action_name'] == action.name
 
     @patch('executions.container_workflow_runtime.AuditService')
     def test_invalid_execution_steps_format_fails(self, mock_audit):
@@ -732,19 +782,23 @@ class TestContainerWorkflowChildSteps:
 
         for i, parent_step in enumerate(parent_steps):
             output = parent_step.get_output()
-            assert output['child_execution_id'] == runtime.child_executions[i].id
-            assert output['child_status'] == ExecutionStatus.COMPLETED
+            # Story 77.1: output now uses standard format {raw_output, extracted_output, status_context}
+            raw = output.get('raw_output', output)
+            assert raw['child_execution_id'] == runtime.child_executions[i].id
+            assert raw['child_status'] == ExecutionStatus.COMPLETED
 
     @patch('executions.container_workflow_runtime.AuditService')
     def test_no_child_steps_without_simulation(self, mock_audit):
-        """AC4: Without simulation, child executions have no steps (non-regression)."""
+        """Story 77.3: Without simulation, child executions have exactly 1 Platform Job step."""
         execution = self._create_execution()
         runtime = ContainerWorkflowRuntime(execution)
         runtime.run_sync()
 
         for child in runtime.child_executions:
             child_steps = ExecutionStep.objects.filter(execution_id=child.id)
-            assert child_steps.count() == 0
+            # Story 77.3 creates a Platform Job ExecutionStep on the child for tracking
+            assert child_steps.count() == 1
+            assert child_steps.first().step_name == "Platform Job"
 
     @override_settings(
         SIMULATE_EXECUTION_DEV=True,

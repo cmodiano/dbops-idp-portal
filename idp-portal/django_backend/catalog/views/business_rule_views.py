@@ -17,7 +17,8 @@ from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiPara
 from django.db.models import QuerySet
 
 from catalog.models import BusinessRulePolicy
-from catalog.serializers import BusinessRulePolicySerializer, BusinessRulePolicyListSerializer, _PLATFORM_ALIAS
+from catalog.serializers import BusinessRulePolicySerializer, BusinessRulePolicyListSerializer
+from platforms.registry import platform_registry
 from core.pagination import CustomPageNumberPagination
 from core.permissions import AdminProfilePermission
 from core.middleware import get_correlation_id
@@ -66,7 +67,7 @@ class BusinessRulePolicyViewSet(viewsets.ModelViewSet):
         platform_param = self.request.query_params.get('platform')
         if platform_param and not step_type_filter:
             normalized = platform_param.lower().replace(' ', '_')
-            step_type_filter = _PLATFORM_ALIAS.get(normalized, normalized)
+            step_type_filter = platform_registry.resolve_alias(normalized)
         if step_type_filter:
             # Filter in Python since step_type is computed from JSON
             # HIGH-1: Potential N+1 queries — load all policies before filtering

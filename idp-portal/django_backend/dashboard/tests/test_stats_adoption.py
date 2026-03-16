@@ -385,10 +385,10 @@ class TestDashboardStatsAdoptionPeriodParams:
         response = self.client.get(URL, {'from_date': '2026-01-01', 'to_date': '2026-02-01'})
         assert response.status_code == 200
 
-    def test_from_date_without_to_date_returns_200(self):
-        """from_date sans to_date → 200 (fallback sur days)."""
+    def test_from_date_without_to_date_returns_400(self):
+        """from_date sans to_date → 400 (from_date et to_date doivent être fournis ensemble)."""
         response = self.client.get(URL, {'from_date': '2026-01-01'})
-        assert response.status_code == 200
+        assert response.status_code == 400
 
     def test_period_filter_excludes_out_of_range_executions(self):
         """Exécutions hors période ne doivent pas apparaître."""

@@ -32,80 +32,80 @@ class TestParseInt:
     """Tests pour _parse_int."""
 
     def test_none_returns_default(self):
-        from dashboard.views import _parse_int
-        assert _parse_int(None, 14, name="days") == 14
+        from dashboard.utils import parse_int
+        assert parse_int(None, 14, name="days") == 14
 
     def test_empty_string_returns_default(self):
-        from dashboard.views import _parse_int
-        assert _parse_int("", 14, name="days") == 14
+        from dashboard.utils import parse_int
+        assert parse_int("", 14, name="days") == 14
 
     def test_valid_value(self):
-        from dashboard.views import _parse_int
-        assert _parse_int("30", 14, name="days") == 30
+        from dashboard.utils import parse_int
+        assert parse_int("30", 14, name="days") == 30
 
     def test_invalid_value_raises_bad_request(self):
-        from dashboard.views import _parse_int
+        from dashboard.utils import parse_int
         from core.exceptions import BadRequestError
         with pytest.raises(BadRequestError):
-            _parse_int("abc", 14, name="days")
+            parse_int("abc", 14, name="days")
 
 
 class TestParseDate:
     """Tests pour _parse_date."""
 
     def test_none_returns_none(self):
-        from dashboard.views import _parse_date
-        assert _parse_date(None, name="from_date") is None
+        from dashboard.utils import parse_date
+        assert parse_date(None, name="from_date") is None
 
     def test_empty_string_returns_none(self):
-        from dashboard.views import _parse_date
-        assert _parse_date("", name="from_date") is None
+        from dashboard.utils import parse_date
+        assert parse_date("", name="from_date") is None
 
     def test_valid_date(self):
-        from dashboard.views import _parse_date
-        result = _parse_date("2026-01-15", name="from_date")
+        from dashboard.utils import parse_date
+        result = parse_date("2026-01-15", name="from_date")
         assert result == date(2026, 1, 15)
 
     def test_invalid_format_raises_bad_request(self):
-        from dashboard.views import _parse_date
+        from dashboard.utils import parse_date
         from core.exceptions import BadRequestError
         with pytest.raises(BadRequestError):
-            _parse_date("15-01-2026", name="from_date")
+            parse_date("15-01-2026", name="from_date")
 
     def test_invalid_date_raises_bad_request(self):
-        from dashboard.views import _parse_date
+        from dashboard.utils import parse_date
         from core.exceptions import BadRequestError
         with pytest.raises(BadRequestError):
-            _parse_date("2026-13-99", name="from_date")
+            parse_date("2026-13-99", name="from_date")
 
 
 class TestDeltaPct:
     """Tests pour _delta_pct."""
 
     def test_v1_none_returns_none(self):
-        from dashboard.views import _delta_pct
-        assert _delta_pct(None, 100) is None
+        from dashboard.utils import delta_pct
+        assert delta_pct(None, 100) is None
 
     def test_v2_none_returns_none(self):
-        from dashboard.views import _delta_pct
-        assert _delta_pct(100, None) is None
+        from dashboard.utils import delta_pct
+        assert delta_pct(100, None) is None
 
     def test_both_none_returns_none(self):
-        from dashboard.views import _delta_pct
-        assert _delta_pct(None, None) is None
+        from dashboard.utils import delta_pct
+        assert delta_pct(None, None) is None
 
     def test_v1_zero_returns_none(self):
-        from dashboard.views import _delta_pct
-        assert _delta_pct(0, 100) is None
+        from dashboard.utils import delta_pct
+        assert delta_pct(0, 100) is None
 
     def test_normal_values(self):
-        from dashboard.views import _delta_pct
-        result = _delta_pct(100, 150)
+        from dashboard.utils import delta_pct
+        result = delta_pct(100, 150)
         assert result == 50.0
 
     def test_decrease(self):
-        from dashboard.views import _delta_pct
-        result = _delta_pct(200, 100)
+        from dashboard.utils import delta_pct
+        result = delta_pct(200, 100)
         assert result == -50.0
 
 
@@ -113,43 +113,43 @@ class TestGetPeriodBounds:
     """Tests pour _get_period_bounds."""
 
     def test_default_days_14(self):
-        from dashboard.views import _get_period_bounds
+        from dashboard.utils import get_period_bounds
         request = MagicMock()
         request.query_params = {}
-        start, end = _get_period_bounds(request)
+        start, end = get_period_bounds(request)
         delta = end - start
         # ~14 days (tolerance ±1 second)
         assert abs(delta.days - 14) <= 1
 
     def test_custom_days(self):
-        from dashboard.views import _get_period_bounds
+        from dashboard.utils import get_period_bounds
         request = MagicMock()
         request.query_params = {"days": "7"}
-        start, end = _get_period_bounds(request)
+        start, end = get_period_bounds(request)
         delta = end - start
         assert abs(delta.days - 7) <= 1
 
     def test_days_zero_raises_bad_request(self):
-        from dashboard.views import _get_period_bounds
+        from dashboard.utils import get_period_bounds
         from core.exceptions import BadRequestError
         request = MagicMock()
         request.query_params = {"days": "0"}
         with pytest.raises(BadRequestError):
-            _get_period_bounds(request)
+            get_period_bounds(request)
 
     def test_days_negative_raises_bad_request(self):
-        from dashboard.views import _get_period_bounds
+        from dashboard.utils import get_period_bounds
         from core.exceptions import BadRequestError
         request = MagicMock()
         request.query_params = {"days": "-5"}
         with pytest.raises(BadRequestError):
-            _get_period_bounds(request)
+            get_period_bounds(request)
 
     def test_from_date_to_date(self):
-        from dashboard.views import _get_period_bounds
+        from dashboard.utils import get_period_bounds
         request = MagicMock()
         request.query_params = {"from_date": "2026-01-01", "to_date": "2026-01-31"}
-        start, end = _get_period_bounds(request)
+        start, end = get_period_bounds(request)
         assert start.date() == date(2026, 1, 1)
         # end_exclusive = to_date + 1 day
         assert end.date() == date(2026, 2, 1)
@@ -170,7 +170,7 @@ class TestFilterQuerysetByOwnership:
 
     def test_dba_user_sees_all(self):
         """Utilisateur DBOPS (admin) → pas de filtre par user_id."""
-        from dashboard.views import _filter_queryset_by_ownership
+        from dashboard.utils import filter_queryset_by_ownership
         from executions.models import Execution
 
         dbops_user = UserFactory.create(profile='DBOPS')
@@ -182,13 +182,13 @@ class TestFilterQuerysetByOwnership:
         request.user = dbops_user
 
         qs = Execution.objects.all()
-        result = _filter_queryset_by_ownership(qs, request)
+        result = filter_queryset_by_ownership(qs, request)
         # DBOPS (admin) sees all executions
         assert result.count() >= 2
 
     def test_non_dba_sees_only_own(self):
         """Utilisateur non-DBA → filtre sur user_id."""
-        from dashboard.views import _filter_queryset_by_ownership
+        from dashboard.utils import filter_queryset_by_ownership
         from executions.models import Execution
 
         action = ActionFactory.create(integration=self.integration)
@@ -199,7 +199,7 @@ class TestFilterQuerysetByOwnership:
         request.user = self.biz_user
 
         qs = Execution.objects.all()
-        result = _filter_queryset_by_ownership(qs, request)
+        result = filter_queryset_by_ownership(qs, request)
         ids = list(result.values_list('id', flat=True))
         assert biz_exec.id in ids
         # Doit être filtré sur l'utilisateur
@@ -217,7 +217,7 @@ class TestApplyCommonFilters:
 
     def test_no_filters(self):
         """Sans filtres → retourne le qs inchangé."""
-        from dashboard.views import _apply_common_filters
+        from dashboard.utils import apply_common_filters
         from executions.models import Execution
 
         action = ActionFactory.create(integration=self.integration, engine='Oracle')
@@ -229,12 +229,12 @@ class TestApplyCommonFilters:
         request.query_params.getlist = lambda k: []
 
         qs = Execution.objects.all()
-        result = _apply_common_filters(qs, request=request, include_status=False)
+        result = apply_common_filters(qs, request=request, include_status=False)
         assert result.count() >= 1
 
     def test_engine_filter(self):
         """Filtre engine → seulement les exécutions avec cet engine."""
-        from dashboard.views import _apply_common_filters
+        from dashboard.utils import apply_common_filters
         from executions.models import Execution
 
         oracle_action = ActionFactory.create(integration=self.integration, engine='Oracle')
@@ -248,13 +248,13 @@ class TestApplyCommonFilters:
         request.query_params.getlist = lambda k: []
 
         qs = Execution.objects.select_related('action')
-        result = _apply_common_filters(qs, request=request, include_status=False)
+        result = apply_common_filters(qs, request=request, include_status=False)
         for exec_obj in result:
             assert exec_obj.action.engine == 'Oracle'
 
     def test_environment_filter(self):
         """Filtre environment → seulement les exécutions prod."""
-        from dashboard.views import _apply_common_filters
+        from dashboard.utils import apply_common_filters
         from executions.models import Execution
 
         action = ActionFactory.create(integration=self.integration)
@@ -267,13 +267,13 @@ class TestApplyCommonFilters:
         request.query_params.getlist = lambda k: []
 
         qs = Execution.objects.all()
-        result = _apply_common_filters(qs, request=request, include_status=False)
+        result = apply_common_filters(qs, request=request, include_status=False)
         for exec_obj in result:
             assert exec_obj.environment == 'prod'
 
     def test_tags_filter(self):
         """Filtre tags → seulement les exécutions avec actions ayant ce tag."""
-        from dashboard.views import _apply_common_filters
+        from dashboard.utils import apply_common_filters
         from executions.models import Execution
         from catalog.models import Tag, ActionTag
 
@@ -291,13 +291,13 @@ class TestApplyCommonFilters:
         request.query_params.getlist = lambda k: ['db-tag-test'] if k == 'tags' else []
 
         qs = Execution.objects.all()
-        result = _apply_common_filters(qs, request=request, include_status=False)
+        result = apply_common_filters(qs, request=request, include_status=False)
         ids = list(result.values_list('id', flat=True))
         assert exec_with_tag.id in ids
 
     def test_empty_tags_list(self):
         """Tags vide → pas de filtre."""
-        from dashboard.views import _apply_common_filters
+        from dashboard.utils import apply_common_filters
         from executions.models import Execution
 
         action = ActionFactory.create(integration=self.integration)
@@ -310,12 +310,12 @@ class TestApplyCommonFilters:
 
         qs = Execution.objects.all()
         original_count = qs.count()
-        result = _apply_common_filters(qs, request=request, include_status=False)
+        result = apply_common_filters(qs, request=request, include_status=False)
         assert result.count() == original_count
 
     def test_status_filter_included(self):
         """include_status=True avec status param → filtre par status."""
-        from dashboard.views import _apply_common_filters
+        from dashboard.utils import apply_common_filters
         from executions.models import Execution
 
         action = ActionFactory.create(integration=self.integration)
@@ -332,7 +332,7 @@ class TestApplyCommonFilters:
         request.query_params.getlist = lambda k: []
 
         qs = Execution.objects.all()
-        result = _apply_common_filters(qs, request=request, include_status=True)
+        result = apply_common_filters(qs, request=request, include_status=True)
         ids = list(result.values_list('id', flat=True))
         assert completed_exec.id in ids
         for exec_id in ids:
@@ -340,7 +340,7 @@ class TestApplyCommonFilters:
 
     def test_status_filter_excluded(self):
         """include_status=False → status param ignoré."""
-        from dashboard.views import _apply_common_filters
+        from dashboard.utils import apply_common_filters
         from executions.models import Execution
 
         action = ActionFactory.create(integration=self.integration)
@@ -353,14 +353,14 @@ class TestApplyCommonFilters:
         request.query_params.getlist = lambda k: []
 
         qs = Execution.objects.all()
-        result = _apply_common_filters(qs, request=request, include_status=False)
+        result = apply_common_filters(qs, request=request, include_status=False)
         # Both statuses should be present
         statuses = set(result.values_list('status', flat=True))
         assert ExecutionStatus.FAILED in statuses or ExecutionStatus.COMPLETED in statuses
 
     def test_status_filter_none_value(self):
         """include_status=True mais status=None → pas de filtre status."""
-        from dashboard.views import _apply_common_filters
+        from dashboard.utils import apply_common_filters
         from executions.models import Execution
 
         action = ActionFactory.create(integration=self.integration)
@@ -373,7 +373,7 @@ class TestApplyCommonFilters:
         request.query_params.getlist = lambda k: []
 
         qs = Execution.objects.all()
-        result = _apply_common_filters(qs, request=request, include_status=True)
+        result = apply_common_filters(qs, request=request, include_status=True)
         statuses = set(result.values_list('status', flat=True))
         assert ExecutionStatus.COMPLETED in statuses
         assert ExecutionStatus.FAILED in statuses
@@ -692,7 +692,7 @@ class TestStatsForQueryset:
 
     def test_basic_stats(self):
         """Exécutions présentes → stats calculées."""
-        from dashboard.views import _stats_for_queryset
+        from dashboard.utils import stats_for_queryset
         from executions.models import Execution
 
         action = ActionFactory.create(integration=self.integration)
@@ -700,7 +700,7 @@ class TestStatsForQueryset:
         ExecutionFactory.create(action=action, user=self.user, status=ExecutionStatus.FAILED)
 
         qs = Execution.objects.all()
-        stats = _stats_for_queryset(qs)
+        stats = stats_for_queryset(qs)
 
         assert stats['execution_count'] >= 2
         assert 'success_rate' in stats
@@ -709,11 +709,11 @@ class TestStatsForQueryset:
 
     def test_no_executions(self):
         """Aucune exécution → success_rate=None, avg_time=None, counts=0."""
-        from dashboard.views import _stats_for_queryset
+        from dashboard.utils import stats_for_queryset
         from executions.models import Execution
 
         qs = Execution.objects.none()
-        stats = _stats_for_queryset(qs)
+        stats = stats_for_queryset(qs)
 
         assert stats['success_rate'] is None
         assert stats['avg_time'] is None
@@ -722,7 +722,7 @@ class TestStatsForQueryset:
 
     def test_avg_time_none_when_no_completed_with_timestamps(self):
         """Aucune durée valide → avg_time = None."""
-        from dashboard.views import _stats_for_queryset
+        from dashboard.utils import stats_for_queryset
         from executions.models import Execution
 
         action = ActionFactory.create(integration=self.integration)
@@ -733,13 +733,13 @@ class TestStatsForQueryset:
         )
 
         qs = Execution.objects.all()
-        stats = _stats_for_queryset(qs)
+        stats = stats_for_queryset(qs)
 
         assert stats['avg_time'] is None
 
     def test_negative_duration_ignored(self):
         """Durée négative (completed_at < started_at) → ignorée, avg_time = None si seule durée."""
-        from dashboard.views import _stats_for_queryset
+        from dashboard.utils import stats_for_queryset
         from executions.models import Execution
 
         action = ActionFactory.create(integration=self.integration)
@@ -750,7 +750,7 @@ class TestStatsForQueryset:
         )
 
         qs = Execution.objects.filter(pk=exec1.pk)
-        stats = _stats_for_queryset(qs)
+        stats = stats_for_queryset(qs)
 
         # La durée négative est ignorée → durations vide → avg_time = None
         assert stats['avg_time'] is None
@@ -758,7 +758,7 @@ class TestStatsForQueryset:
 
     def test_valid_duration_avg_time_computed(self):
         """Durée positive valide → avg_time calculé."""
-        from dashboard.views import _stats_for_queryset
+        from dashboard.utils import stats_for_queryset
         from executions.models import Execution
 
         action = ActionFactory.create(integration=self.integration)
@@ -769,7 +769,7 @@ class TestStatsForQueryset:
         )
 
         qs = Execution.objects.all()
-        stats = _stats_for_queryset(qs)
+        stats = stats_for_queryset(qs)
 
         # Durée valide → avg_time non None et ≈ 60s
         assert stats['avg_time'] is not None
@@ -790,15 +790,15 @@ class TestComputeAvgDurationS:
 
     def test_returns_none_when_queryset_is_empty(self):
         """Queryset vide → None."""
-        from dashboard.views import _compute_avg_duration_s
+        from dashboard.utils import compute_avg_duration_s
         from executions.models import Execution
 
         qs = Execution.objects.none()
-        assert _compute_avg_duration_s(qs) is None
+        assert compute_avg_duration_s(qs) is None
 
     def test_returns_none_when_no_completed_executions(self):
         """Aucune exécution COMPLETED → None."""
-        from dashboard.views import _compute_avg_duration_s
+        from dashboard.utils import compute_avg_duration_s
         from executions.models import Execution
 
         action = ActionFactory.create(integration=self.integration)
@@ -808,11 +808,11 @@ class TestComputeAvgDurationS:
             started_at=now - timedelta(seconds=30), completed_at=now,
         )
         qs = Execution.objects.all()
-        assert _compute_avg_duration_s(qs) is None
+        assert compute_avg_duration_s(qs) is None
 
     def test_returns_none_when_timestamps_missing(self):
         """COMPLETED sans timestamps → None."""
-        from dashboard.views import _compute_avg_duration_s
+        from dashboard.utils import compute_avg_duration_s
         from executions.models import Execution
 
         action = ActionFactory.create(integration=self.integration)
@@ -821,11 +821,11 @@ class TestComputeAvgDurationS:
             started_at=None, completed_at=None,
         )
         qs = Execution.objects.all()
-        assert _compute_avg_duration_s(qs) is None
+        assert compute_avg_duration_s(qs) is None
 
     def test_computes_average_for_single_execution(self):
         """Un COMPLETED avec timestamps valides → durée calculée."""
-        from dashboard.views import _compute_avg_duration_s
+        from dashboard.utils import compute_avg_duration_s
         from executions.models import Execution
 
         action = ActionFactory.create(integration=self.integration)
@@ -835,13 +835,13 @@ class TestComputeAvgDurationS:
             started_at=now - timedelta(seconds=100), completed_at=now,
         )
         qs = Execution.objects.all()
-        result = _compute_avg_duration_s(qs)
+        result = compute_avg_duration_s(qs)
         assert result is not None
         assert 99 <= result <= 101  # ≈ 100s
 
     def test_ignores_negative_duration(self):
         """completed_at < started_at → durée ignorée → None si seule durée."""
-        from dashboard.views import _compute_avg_duration_s
+        from dashboard.utils import compute_avg_duration_s
         from executions.models import Execution
 
         action = ActionFactory.create(integration=self.integration)
@@ -851,11 +851,11 @@ class TestComputeAvgDurationS:
             started_at=now, completed_at=now - timedelta(seconds=10),
         )
         qs = Execution.objects.all()
-        assert _compute_avg_duration_s(qs) is None
+        assert compute_avg_duration_s(qs) is None
 
     def test_averages_multiple_executions(self):
         """Deux COMPLETED avec durées 60s et 40s → moyenne = 50s."""
-        from dashboard.views import _compute_avg_duration_s
+        from dashboard.utils import compute_avg_duration_s
         from executions.models import Execution
 
         action = ActionFactory.create(integration=self.integration)
@@ -869,7 +869,7 @@ class TestComputeAvgDurationS:
             started_at=now - timedelta(seconds=40), completed_at=now,
         )
         qs = Execution.objects.all()
-        result = _compute_avg_duration_s(qs)
+        result = compute_avg_duration_s(qs)
         assert result == 50.0
 
 

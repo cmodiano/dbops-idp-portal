@@ -104,9 +104,12 @@ class TestIntegrationApproverProfileIds(TestCase):
             f"/api/v1/executions/{execution.id}/steps/{step.id}/approve/",
             format='json',
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
         step.refresh_from_db()
-        self.assertEqual(step.status, ExecutionStepStatus.COMPLETED)
+        # Story 78.5: ApproveStepView écrit une commande durable (202) — le step reste
+        # WAITING jusqu'au traitement par le command processor. Le test vérifie uniquement
+        # que la commande a été acceptée (permission OK + 202).
+        self.assertEqual(step.status, ExecutionStepStatus.WAITING)
 
     def test_user_without_allowed_profile_cannot_approve(self):
         """User avec profil hors approver_profile_ids → 403 Forbidden."""
@@ -140,9 +143,11 @@ class TestIntegrationApproverProfileIds(TestCase):
             {"comment": "Refusé"},
             format='json',
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
         step.refresh_from_db()
-        self.assertEqual(step.status, ExecutionStepStatus.FAILED)
+        # Story 78.5: RejectStepView écrit une commande durable (202) — le step reste
+        # WAITING jusqu'au traitement par le command processor.
+        self.assertEqual(step.status, ExecutionStepStatus.WAITING)
 
     def test_user_without_allowed_profile_cannot_reject(self):
         """User avec profil hors approver_profile_ids → 403 Forbidden (reject)."""

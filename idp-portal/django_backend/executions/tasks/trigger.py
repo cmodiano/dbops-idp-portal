@@ -107,19 +107,11 @@ def trigger_platform_job(
         # Construire les headers d'auth (gère Vault, OAuth2, token, basic, etc.)
         auth_headers = build_auth_headers(integration, correlation_id)
 
-        # Extraire platform_kwargs depuis la config de l'integration
-        # Même logique que workflow_step_executor.py lignes 404–412
-        platform_type = integration.type
-        platform_kwargs: dict[str, Any] = {}
-        config = integration.get_config() if hasattr(integration, "get_config") else {}
-        if config:
-            for key in ("owner", "repo", "organization", "namespace"):
-                if key in config:
-                    platform_kwargs[key] = config[key]
-            if "ssl_verify" in config:
-                platform_kwargs["ssl_verify"] = config["ssl_verify"]
-            if config.get("ca_bundle_path"):
-                platform_kwargs["ca_bundle_path"] = config["ca_bundle_path"]
+        # Story 82.2: kwargs runtime extraits via PlatformRegistry (remplace le bloc manuel)
+        from adapters.runtime_config import build_platform_runtime_config
+        from platforms.registry import platform_registry
+        platform_type = platform_registry.resolve_alias(integration.type)
+        platform_kwargs = build_platform_runtime_config(integration)
 
         # Créer l'adapter et appeler trigger()
         adapter = get_platform_adapter(

@@ -15,9 +15,11 @@ import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Badge, Divider, Tag, Tooltip, theme } from 'antd';
 import { CheckCircleOutlined, CloseCircleOutlined, HourglassOutlined, LoadingOutlined, MinusCircleOutlined } from '@ant-design/icons';
 import type { WorkflowStepType, ScheduleStepConfig } from '../../types/api';
+import { useCapabilities } from '../../hooks/useCapabilities';
 
-// Story 57.13: Color codes and labels per step type
-const STEP_TYPE_COLORS: Record<WorkflowStepType, string> = {
+// Story 57.13: Color codes per step type (UI concern, non dérivable du backend)
+// Story 84.3 (AC4/T6.4): type adapté en Partial<Record<string, string>> pour AC7
+const STEP_TYPE_COLORS: Partial<Record<string, string>> = {
   platform:           '#1677ff',  // bleu Ant Design Primary
   service_call:       '#fa8c16',  // orange
   evaluation:         '#722ed1',  // violet
@@ -27,33 +29,9 @@ const STEP_TYPE_COLORS: Record<WorkflowStepType, string> = {
   parallel_group:     '#52c41a',  // vert (deprecated, rétro-compat)
 };
 
-const STEP_TYPE_LABELS: Record<WorkflowStepType, string> = {
-  platform:           'Exécuter',
-  service_call:       'Service',
-  evaluation:         'Évaluer',
-  gate:               'Attendre',
-  http_request:       'HTTP',
-  schedule_execution: 'Planifier', // Story 57.16
-  parallel_group:     'Parallèle', // deprecated, rétro-compat
-};
+// Story 84.3 (AC4/W2): STEP_TYPE_LABELS supprimé — labels dérivés de capabilities.stepTypes via useCapabilities()
+// Le badge label est calculé dans stepTypeBadgeLabel (useMemo) ci-dessous.
 
-const INTEGRATION_LABELS: Record<string, string> = {
-  servicenow: 'ServiceNow',
-  vault: 'HashiCorp Vault',
-  jira: 'Jira',
-};
-
-const OPERATION_LABELS: Record<string, string> = {
-  create_change: 'Créer un change',
-  update_change: 'Mettre à jour le change',
-  close_change: 'Fermer le change',
-  get_change_status: 'Statut du change',
-  cancel_change: 'Annuler le change',
-  get_secret: 'Lire un secret', // pragma: allowlist secret
-  create_issue: 'Créer un ticket',
-  update_issue: 'Mettre à jour le ticket',
-  get_issue: 'Lire le ticket',
-};
 
 export interface WorkflowStepNodeData {
   action_id?: number | null;
@@ -91,7 +69,7 @@ export interface WorkflowStepNodeData {
   operation?: string | null;
   policy_id?: number | null;
   policy_name?: string | null;
-  gate_type?: 'maintenance_window' | 'approval' | null;
+  gate_type?: string | null; // Story 83-9, AC4: extensible — plus d'union littérale figée
   on_timeout?: 'FAIL' | 'SKIP' | null;
   context_from?: string[] | null;
   approver_profile_ids?: number[] | null;
@@ -123,6 +101,7 @@ export interface WorkflowStepNodeData {
 const WorkflowStepNode: FC<NodeProps> = ({ data, selected }) => {
   const { token } = theme.useToken();
   const nodeData = data as unknown as WorkflowStepNodeData;
+  const { capabilities } = useCapabilities();
 
   const stepType: WorkflowStepType = nodeData.step_type ?? 'platform';
 
@@ -132,21 +111,22 @@ const WorkflowStepNode: FC<NodeProps> = ({ data, selected }) => {
       return nodeData.name ?? nodeData.action_name ?? '';
     }
     if (stepType === 'service_call') {
+      const serviceCap = capabilities?.services?.find((s) => s.code === nodeData.integration_type);
       const integration = nodeData.integration_type
-        ? (INTEGRATION_LABELS[nodeData.integration_type] ?? nodeData.integration_type)
+        ? (serviceCap?.display_name ?? nodeData.integration_type)
         : '?';
-      const op = nodeData.operation
-        ? (OPERATION_LABELS[nodeData.operation] ?? nodeData.operation)
+      const opLabel = nodeData.operation
+        ? (serviceCap?.operations.find((o) => o.code === nodeData.operation)?.label ?? nodeData.operation)
         : '?';
-      return nodeData.name ?? `${integration} — ${op}`;
+      return nodeData.name ?? `${integration} — ${opLabel}`;
     }
     if (stepType === 'evaluation') {
       return nodeData.name ?? (nodeData.policy_name ? nodeData.policy_name : `Politique #${nodeData.policy_id ?? '?'}`);
     }
     if (stepType === 'gate') {
-      if (nodeData.gate_type === 'maintenance_window') return nodeData.name ?? 'Fenêtre maintenance';
-      if (nodeData.gate_type === 'approval') return nodeData.name ?? 'Approbation';
-      return nodeData.name ?? 'Gate';
+      const gateStepCap = capabilities?.stepTypes?.find((s) => s.code === 'gate');
+      const gateVariant = gateStepCap?.variants?.find((v) => v.code === nodeData.gate_type);
+      return nodeData.name ?? gateVariant?.label ?? 'Gate';
     }
     if (stepType === 'http_request') {
       const url = nodeData.url ? nodeData.url.substring(0, 30) : '?';
@@ -156,7 +136,19 @@ const WorkflowStepNode: FC<NodeProps> = ({ data, selected }) => {
       return nodeData.name ?? nodeData.action_name ?? 'Planifier une exécution';
     }
     return nodeData.name ?? '';
-  }, [stepType, nodeData]);
+  }, [stepType, nodeData, capabilities]);
+
+  // Story 84.3 (AC4/W2) + Story 83-11: Badge label dérivé des capabilities backend.
+  // Pour gate : variant label > step label > fallback code brut.
+  // Pour les autres types : capabilities.stepTypes label ou fallback code brut.
+  const stepTypeBadgeLabel = useMemo(() => {
+    if (stepType === 'gate') {
+      const gateStepCap = capabilities?.stepTypes?.find((s) => s.code === 'gate');
+      const gateVariant = gateStepCap?.variants?.find((v) => v.code === nodeData.gate_type);
+      return gateVariant?.label ?? (capabilities?.stepTypes?.find((s) => s.code === stepType)?.label ?? stepType);
+    }
+    return capabilities?.stepTypes?.find((s) => s.code === stepType)?.label ?? stepType;
+  }, [stepType, capabilities, nodeData.gate_type]);
 
   // Execution status colors — subtle, professional palette
   const executionBorderColors: Record<string, string> = {
@@ -270,12 +262,12 @@ const WorkflowStepNode: FC<NodeProps> = ({ data, selected }) => {
           aria-label="Entrée"
         />
 
-        {/* Story 57.13: Step type badge */}
+        {/* Story 57.13: Step type badge — Story 83-11: badge label dérivé du variant de gate */}
         <Tag
-          color={STEP_TYPE_COLORS[stepType]}
+          color={STEP_TYPE_COLORS[stepType] ?? '#8c8c8c'}
           style={{ fontSize: 10, padding: '0 4px', marginBottom: 4, display: 'inline-block', lineHeight: '16px' }}
         >
-          {STEP_TYPE_LABELS[stepType]}
+          {stepTypeBadgeLabel}
         </Tag>
 
         <div style={{ fontWeight: 600, marginBottom: 4, fontSize: 13, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

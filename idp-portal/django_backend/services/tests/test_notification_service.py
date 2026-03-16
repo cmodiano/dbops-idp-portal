@@ -17,21 +17,346 @@ class TestSendEmail:
     def setup_method(self) -> None:
         self.service = NotificationService()
 
-    @patch("services.notification_service.send_mail")
-    def test_send_email_ok(self, mock_send_mail: MagicMock) -> None:
-        """send_email appelle django send_mail avec les bons arguments."""
+    @patch("services.notification_service.settings")
+    @patch("services.notification_service.EmailMessage")
+    def test_send_email_ok(self, mock_email_class: MagicMock, mock_settings: MagicMock) -> None:
+        """send_email appelle EmailMessage avec les bons arguments."""
+        mock_settings.DEFAULT_FROM_EMAIL = "noreply@idp.test"
+        mock_instance = mock_email_class.return_value
+        mock_instance.send.return_value = None
         self.service.send_email("test@example.com", "Sujet", "Corps")
-        mock_send_mail.assert_called_once()
-        call_kwargs = mock_send_mail.call_args
-        assert call_kwargs.kwargs["subject"] == "Sujet"
-        assert call_kwargs.kwargs["recipient_list"] == ["test@example.com"]
+        mock_email_class.assert_called_once_with(
+            subject="Sujet",
+            body="Corps",
+            from_email="noreply@idp.test",
+            to=["test@example.com"],
+            cc=[],
+        )
+        mock_instance.send.assert_called_once()
 
-    @patch("services.notification_service.send_mail")
-    def test_send_email_failure_non_blocking(self, mock_send_mail: MagicMock) -> None:
+    @patch("services.notification_service.EmailMessage")
+    def test_send_email_failure_non_blocking(self, mock_email_class: MagicMock) -> None:
         """Une exception dans send_email ne doit pas se propager."""
-        mock_send_mail.side_effect = Exception("SMTP error")
+        mock_instance = mock_email_class.return_value
+        mock_instance.send.side_effect = Exception("SMTP error")
         # Ne lève pas d'exception
         self.service.send_email("test@example.com", "Sujet", "Corps")
+
+    @patch("services.notification_service.settings")
+    @patch("services.notification_service.EmailMessage")
+    def test_send_email_with_cc(self, mock_email_class: MagicMock, mock_settings: MagicMock) -> None:
+        """AC4 (story 79.2) : send_email avec cc → EmailMessage appelé avec cc=[...] correctement parsé."""
+        mock_settings.DEFAULT_FROM_EMAIL = "noreply@idp.test"
+        mock_instance = mock_email_class.return_value
+        mock_instance.send.return_value = None
+        self.service.send_email(
+            recipient_email="dba@company.com",
+            subject="Patch Oracle terminé",
+            body="L'exécution s'est terminée avec succès.",
+            cc="admin@company.com,team@company.com",
+        )
+        mock_email_class.assert_called_once_with(
+            subject="Patch Oracle terminé",
+            body="L'exécution s'est terminée avec succès.",
+            from_email="noreply@idp.test",
+            to=["dba@company.com"],
+            cc=["admin@company.com", "team@company.com"],
+        )
+        mock_instance.send.assert_called_once()
+
+    @patch("services.notification_service.settings")
+    @patch("services.notification_service.EmailMessage")
+    def test_send_email_with_cc_spaces_trimmed(self, mock_email_class: MagicMock, mock_settings: MagicMock) -> None:
+        """CC avec espaces autour des adresses → parsé et trimmé correctement."""
+        mock_settings.DEFAULT_FROM_EMAIL = "noreply@idp.test"
+        mock_instance = mock_email_class.return_value
+        mock_instance.send.return_value = None
+        self.service.send_email(
+            recipient_email="dba@company.com",
+            subject="Test",
+            body="Body",
+            cc=" admin@company.com , team@company.com ",
+        )
+        _, kwargs = mock_email_class.call_args
+        assert kwargs["cc"] == ["admin@company.com", "team@company.com"]
+
+    @patch("services.notification_service.settings")
+    @patch("services.notification_service.EmailMessage")
+    def test_send_email_without_cc_unchanged(self, mock_email_class: MagicMock, mock_settings: MagicMock) -> None:
+        """AC4 (story 79.2) : send_email sans cc → comportement inchangé (rétrocompatibilité)."""
+        mock_settings.DEFAULT_FROM_EMAIL = "noreply@idp.test"
+        mock_instance = mock_email_class.return_value
+        mock_instance.send.return_value = None
+        self.service.send_email(
+            recipient_email="dba@company.com",
+            subject="Sujet",
+            body="Corps",
+        )
+        _, kwargs = mock_email_class.call_args
+        assert kwargs["to"] == ["dba@company.com"]
+        assert kwargs["cc"] == []
+        mock_instance.send.assert_called_once()
+
+    @patch("services.notification_service.settings")
+    @patch("services.notification_service.EmailMessage")
+    def test_send_email_with_cc_none_treated_as_no_cc(self, mock_email_class: MagicMock, mock_settings: MagicMock) -> None:
+        """cc=None explicite → cc_list=[] (équivalent à pas de cc)."""
+        mock_settings.DEFAULT_FROM_EMAIL = "noreply@idp.test"
+        mock_instance = mock_email_class.return_value
+        mock_instance.send.return_value = None
+        self.service.send_email("dba@company.com", "Sujet", "Corps", cc=None)
+        _, kwargs = mock_email_class.call_args
+        assert kwargs["cc"] == []
+
+    @patch("services.notification_service.settings")
+    @patch("services.notification_service.EmailMessage")
+    def test_send_email_with_cc_empty_string_treated_as_no_cc(self, mock_email_class: MagicMock, mock_settings: MagicMock) -> None:
+        """cc='' (chaîne vide) → cc_list=[] (comportement identique à None)."""
+        mock_settings.DEFAULT_FROM_EMAIL = "noreply@idp.test"
+        mock_instance = mock_email_class.return_value
+        mock_instance.send.return_value = None
+        self.service.send_email("dba@company.com", "Sujet", "Corps", cc="")
+        _, kwargs = mock_email_class.call_args
+        assert kwargs["cc"] == []
+
+    @patch("services.notification_service.settings")
+    @patch("services.notification_service.EmailMessage")
+    def test_send_email_with_cc_single_address(self, mock_email_class: MagicMock, mock_settings: MagicMock) -> None:
+        """cc avec une seule adresse (sans virgule) → liste d'un élément."""
+        mock_settings.DEFAULT_FROM_EMAIL = "noreply@idp.test"
+        mock_instance = mock_email_class.return_value
+        mock_instance.send.return_value = None
+        self.service.send_email("dba@company.com", "Sujet", "Corps", cc="admin@company.com")
+        _, kwargs = mock_email_class.call_args
+        assert kwargs["cc"] == ["admin@company.com"]
+
+    @patch("services.notification_service.settings")
+    @patch("services.notification_service.EmailMessage")
+    def test_send_email_with_cc_whitespace_only_treated_as_no_cc(self, mock_email_class: MagicMock, mock_settings: MagicMock) -> None:
+        """cc=' ' (espaces seuls) → cc_list=[] (cas limite : truthy mais vide après strip)."""
+        mock_settings.DEFAULT_FROM_EMAIL = "noreply@idp.test"
+        mock_instance = mock_email_class.return_value
+        mock_instance.send.return_value = None
+        self.service.send_email("dba@company.com", "Sujet", "Corps", cc="   ")
+        _, kwargs = mock_email_class.call_args
+        assert kwargs["cc"] == []
+
+    @patch("services.notification_service.settings")
+    @patch("services.notification_service.EmailMessage")
+    def test_send_email_with_cc_only_separators_treated_as_no_cc(self, mock_email_class: MagicMock, mock_settings: MagicMock) -> None:
+        """cc=',,' (séparateurs seuls) → cc_list=[] (filtre les segments vides après strip)."""
+        mock_settings.DEFAULT_FROM_EMAIL = "noreply@idp.test"
+        mock_instance = mock_email_class.return_value
+        mock_instance.send.return_value = None
+        self.service.send_email("dba@company.com", "Sujet", "Corps", cc=",,")
+        _, kwargs = mock_email_class.call_args
+        assert kwargs["cc"] == []
+
+
+class TestSendEmailAttachments:
+    """Tests pour send_email() avec pièces jointes (Story 79.3 AC1, AC4, AC6)."""
+
+    def setup_method(self) -> None:
+        self.service = NotificationService()
+
+    @patch("services.notification_service.settings")
+    @patch("services.notification_service.os")
+    @patch("services.notification_service.EmailMessage")
+    def test_send_email_with_attachment(
+        self, mock_email_class: MagicMock, mock_os: MagicMock, mock_settings: MagicMock
+    ) -> None:
+        """AC6 : send_email avec chemin valide → attach_file appelé avec le bon chemin."""
+        mock_settings.DEFAULT_FROM_EMAIL = "noreply@idp.test"
+        mock_settings.EMAIL_ATTACHMENT_MAX_SIZE_BYTES = 10 * 1024 * 1024
+        mock_os.path.exists.return_value = True
+        mock_os.path.getsize.return_value = 1024  # 1 KB
+        mock_instance = mock_email_class.return_value
+        mock_instance.send.return_value = None
+
+        self.service.send_email(
+            recipient_email="user@company.com",
+            subject="Rapport",
+            body="Voici le rapport.",
+            attachments="/data/report.txt",
+        )
+
+        mock_email_class.assert_called_once_with(
+            subject="Rapport",
+            body="Voici le rapport.",
+            from_email="noreply@idp.test",
+            to=["user@company.com"],
+            cc=[],
+        )
+        mock_instance.attach_file.assert_called_once_with("/data/report.txt")
+        mock_instance.send.assert_called_once()
+
+    @patch("services.notification_service.settings")
+    @patch("services.notification_service.os")
+    @patch("services.notification_service.EmailMessage")
+    def test_send_email_with_multiple_attachments(
+        self, mock_email_class: MagicMock, mock_os: MagicMock, mock_settings: MagicMock
+    ) -> None:
+        """AC6 : send_email avec deux chemins → attach_file appelé deux fois."""
+        mock_settings.DEFAULT_FROM_EMAIL = "noreply@idp.test"
+        mock_settings.EMAIL_ATTACHMENT_MAX_SIZE_BYTES = 10 * 1024 * 1024
+        mock_os.path.exists.return_value = True
+        mock_os.path.getsize.return_value = 512
+        mock_instance = mock_email_class.return_value
+        mock_instance.send.return_value = None
+
+        self.service.send_email(
+            recipient_email="user@company.com",
+            subject="Rapports",
+            body="Deux pièces jointes.",
+            attachments=["/data/report1.txt", "/data/report2.pdf"],
+        )
+
+        assert mock_instance.attach_file.call_count == 2
+        mock_instance.attach_file.assert_any_call("/data/report1.txt")
+        mock_instance.attach_file.assert_any_call("/data/report2.pdf")
+        mock_instance.send.assert_called_once()
+
+    @patch("services.notification_service.settings")
+    @patch("services.notification_service.os")
+    @patch("services.notification_service.EmailMessage")
+    def test_send_email_attachment_too_large_skipped(
+        self, mock_email_class: MagicMock, mock_os: MagicMock, mock_settings: MagicMock
+    ) -> None:
+        """AC4 : fichier dépassant la limite → skip + log warning, email envoyé quand même."""
+        mock_settings.DEFAULT_FROM_EMAIL = "noreply@idp.test"
+        mock_settings.EMAIL_ATTACHMENT_MAX_SIZE_BYTES = 1024
+        mock_os.path.exists.return_value = True
+        mock_os.path.getsize.return_value = 2048  # Dépasse 1024 bytes
+        mock_instance = mock_email_class.return_value
+        mock_instance.send.return_value = None
+
+        with patch("services.notification_service.logger") as mock_logger:
+            self.service.send_email(
+                recipient_email="user@company.com",
+                subject="Rapport",
+                body="Corps.",
+                attachments="/data/big_file.pdf",
+            )
+            mock_logger.warning.assert_any_call(
+                "attachment_size_exceeded",
+                path="/data/big_file.pdf",
+                size_bytes=2048,
+                max_bytes=1024,
+                correlation_id=None,
+            )
+
+        mock_instance.attach_file.assert_not_called()  # Attachement skippé
+        mock_instance.send.assert_called_once()          # Email envoyé quand même
+
+    @patch("services.notification_service.settings")
+    @patch("services.notification_service.os")
+    @patch("services.notification_service.EmailMessage")
+    def test_send_email_attachment_not_found_skipped(
+        self, mock_email_class: MagicMock, mock_os: MagicMock, mock_settings: MagicMock
+    ) -> None:
+        """AC4/AC6 : fichier inexistant → skip + log warning, email envoyé quand même."""
+        mock_settings.DEFAULT_FROM_EMAIL = "noreply@idp.test"
+        mock_settings.EMAIL_ATTACHMENT_MAX_SIZE_BYTES = 10 * 1024 * 1024
+        mock_os.path.exists.return_value = False
+        mock_instance = mock_email_class.return_value
+        mock_instance.send.return_value = None
+
+        with patch("services.notification_service.logger") as mock_logger:
+            self.service.send_email(
+                recipient_email="user@company.com",
+                subject="Rapport",
+                body="Corps.",
+                attachments="/data/nonexistent.txt",
+            )
+            mock_logger.warning.assert_any_call(
+                "attachment_not_found",
+                path="/data/nonexistent.txt",
+                correlation_id=None,
+            )
+
+        mock_instance.attach_file.assert_not_called()
+        mock_instance.send.assert_called_once()
+
+    @patch("services.notification_service.settings")
+    @patch("services.notification_service.os")
+    @patch("services.notification_service.EmailMessage")
+    def test_send_email_with_attachment_logs_has_attachments_true(
+        self, mock_email_class: MagicMock, mock_os: MagicMock, mock_settings: MagicMock
+    ) -> None:
+        """Task 1.7 : log notification_sent contient has_attachments=True si pièce jointe valide."""
+        mock_settings.DEFAULT_FROM_EMAIL = "noreply@idp.test"
+        mock_settings.EMAIL_ATTACHMENT_MAX_SIZE_BYTES = 10 * 1024 * 1024
+        mock_os.path.exists.return_value = True
+        mock_os.path.getsize.return_value = 512
+        mock_instance = mock_email_class.return_value
+        mock_instance.send.return_value = None
+
+        with patch("services.notification_service.logger") as mock_logger:
+            self.service.send_email(
+                recipient_email="user@company.com",
+                subject="Rapport",
+                body="Corps.",
+                attachments="/data/report.txt",
+            )
+            mock_logger.info.assert_called_once_with(
+                "notification_sent",
+                destination_type="email",
+                recipient_domain="company.com",
+                has_cc=False,
+                has_attachments=True,
+                correlation_id=None,
+            )
+
+    @patch("services.notification_service.settings")
+    @patch("services.notification_service.EmailMessage")
+    def test_send_email_without_attachments_logs_has_attachments_false(
+        self, mock_email_class: MagicMock, mock_settings: MagicMock
+    ) -> None:
+        """Task 1.7 : log notification_sent contient has_attachments=False sans pièce jointe."""
+        mock_settings.DEFAULT_FROM_EMAIL = "noreply@idp.test"
+        mock_instance = mock_email_class.return_value
+        mock_instance.send.return_value = None
+
+        with patch("services.notification_service.logger") as mock_logger:
+            self.service.send_email(
+                recipient_email="user@company.com",
+                subject="Sujet",
+                body="Corps.",
+            )
+            mock_logger.info.assert_called_once_with(
+                "notification_sent",
+                destination_type="email",
+                recipient_domain="company.com",
+                has_cc=False,
+                has_attachments=False,
+                correlation_id=None,
+            )
+
+    @patch("services.notification_service.settings")
+    @patch("services.notification_service.EmailMessage")
+    def test_send_email_without_attachments_unchanged(
+        self, mock_email_class: MagicMock, mock_settings: MagicMock
+    ) -> None:
+        """AC1 : appel sans attachments → comportement inchangé (rétrocompatibilité totale)."""
+        mock_settings.DEFAULT_FROM_EMAIL = "noreply@idp.test"
+        mock_instance = mock_email_class.return_value
+        mock_instance.send.return_value = None
+
+        self.service.send_email(
+            recipient_email="user@company.com",
+            subject="Sujet",
+            body="Corps.",
+        )
+
+        mock_email_class.assert_called_once_with(
+            subject="Sujet",
+            body="Corps.",
+            from_email="noreply@idp.test",
+            to=["user@company.com"],
+            cc=[],
+        )
+        mock_instance.attach_file.assert_not_called()
+        mock_instance.send.assert_called_once()
 
 
 class TestSendTeams:
@@ -58,6 +383,31 @@ class TestSendTeams:
         """Une exception dans send_teams ne doit pas se propager."""
         mock_post.side_effect = Exception("Connection error")
         self.service.send_teams("http://webhook.example.com", "Test message")
+
+    @patch("services.notification_service.httpx.post")
+    def test_send_teams_different_webhooks_per_step(self, mock_post: MagicMock) -> None:
+        """AC4 : deux send_teams avec webhooks distincts → httpx.post appelé sur les bonnes URLs."""
+        mock_response = MagicMock(status_code=200)
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        # Step 1 — channel ops
+        self.service.send_teams(
+            webhook_url="https://teams.example.com/webhook/ops",
+            message="Déploiement terminé",
+            title="Ops Alert",
+        )
+        # Step 2 — channel sécurité
+        self.service.send_teams(
+            webhook_url="https://teams.example.com/webhook/security",
+            message="Audit de sécurité complété",
+            title="Sec Alert",
+        )
+
+        assert mock_post.call_count == 2
+        call_urls = [call.args[0] for call in mock_post.call_args_list]
+        assert "https://teams.example.com/webhook/ops" in call_urls
+        assert "https://teams.example.com/webhook/security" in call_urls
 
 
 class TestSendPageIndividual:
@@ -533,11 +883,13 @@ class TestNotify:
     def setup_method(self) -> None:
         self.service = NotificationService()
 
-    @patch("services.notification_service.send_mail")
-    def test_notify_dispatches_email(self, mock_send_mail: MagicMock) -> None:
+    @patch("services.notification_service.EmailMessage")
+    def test_notify_dispatches_email(self, mock_email_class: MagicMock) -> None:
         """notify('email', ...) dispatche vers send_email."""
+        mock_instance = mock_email_class.return_value
+        mock_instance.send.return_value = None
         self.service.notify("email", recipient_email="a@b.com", subject="S", body="B")
-        mock_send_mail.assert_called_once()
+        mock_instance.send.assert_called_once()
 
     def test_notify_unknown_type(self) -> None:
         """notify avec type inconnu ne lève pas d'exception."""

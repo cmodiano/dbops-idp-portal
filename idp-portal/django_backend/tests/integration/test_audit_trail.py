@@ -275,14 +275,16 @@ class TestAuditTrailExecution(TestCase):
         """Test audit trail for approval workflow."""
         approver = User.objects.create(username='approver', profile='DBOPS')
 
+        # DEPRECATED (78.14): PENDING_APPROVAL removed from DB CHECK (V135).
+        # ADR-007: prod executions use SUBMITTED + approval gate step, not PENDING_APPROVAL status.
         execution = Execution.objects.create(
             action=self.action,
             user=self.user,
             environment='prod',
-            status=ExecutionStatus.PENDING_APPROVAL
+            status=ExecutionStatus.SUBMITTED
         )
 
-        # PENDING_APPROVAL
+        # Audit entry still uses EXECUTION_PENDING_APPROVAL type for backward-compat mapping
         AuditService.create_entry(
             user_id=str(self.user.id),
             action_type=AuditActionType.EXECUTION_PENDING_APPROVAL,
@@ -293,8 +295,8 @@ class TestAuditTrailExecution(TestCase):
 
         # REJECTED
         execution.status = ExecutionStatus.REJECTED
-        execution.approved_by = approver
-        execution.approval_comment = 'Missing change window'
+        # DEPRECATED (78.14): approved_by/approval_comment removed from Execution writes.
+        # Source of truth is ExecutionStep. Audit entry captures rejection reason in details.
         execution.save()
 
         AuditService.create_entry(
