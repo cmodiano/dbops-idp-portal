@@ -346,25 +346,40 @@ describe('apiPostFormData', () => {
 });
 
 describe('calculateRetryDelay', () => {
-  it('returns Retry-After value in milliseconds when header is present', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('uses Retry-After header when provided', () => {
     expect(calculateRetryDelay(0, '2')).toBe(2000);
     expect(calculateRetryDelay(1, '5')).toBe(5000);
   });
 
-  it('uses exponential backoff when Retry-After is absent', () => {
-    expect(calculateRetryDelay(0, null)).toBe(1000);  // 2^0 * 1000
-    expect(calculateRetryDelay(1, null)).toBe(2000);  // 2^1 * 1000
-    expect(calculateRetryDelay(2, null)).toBe(4000);  // 2^2 * 1000
+  it('applies full jitter when no Retry-After header', () => {
+    // Mock Math.random pour résultat déterministe (valeur max = random=1.0)
+    vi.spyOn(Math, 'random').mockReturnValue(1.0);
+    expect(calculateRetryDelay(0, null)).toBe(1000);  // 1.0 * 2^0 * 1000
+    expect(calculateRetryDelay(1, null)).toBe(2000);  // 1.0 * 2^1 * 1000
+    expect(calculateRetryDelay(2, null)).toBe(4000);  // 1.0 * 2^2 * 1000
   });
 
-  it('uses exponential backoff when Retry-After is not a valid number', () => {
+  it('applies full jitter when Retry-After is invalid', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(1.0);
     expect(calculateRetryDelay(0, 'invalid')).toBe(1000);
     expect(calculateRetryDelay(1, '')).toBe(2000);
   });
 
-  it('uses exponential backoff when Retry-After is zero or negative', () => {
+  it('applies full jitter when Retry-After is zero or negative', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(1.0);
     expect(calculateRetryDelay(0, '0')).toBe(1000);
     expect(calculateRetryDelay(0, '-1')).toBe(1000);
+  });
+
+  it('returns value in [0, 2^n * 1000] range', () => {
+    // Test with random=0.5 for mid-range check
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    expect(calculateRetryDelay(0, null)).toBe(500);   // 0.5 * 1000
+    expect(calculateRetryDelay(1, null)).toBe(1000);  // 0.5 * 2000
   });
 });
 
@@ -407,8 +422,8 @@ describe('handleAuthenticatedFetch - 429 retry', () => {
 
     const promise = handleAuthenticatedFetch('/test', {}, {});
 
-    await vi.advanceTimersByTimeAsync(1000); // 1st retry delay
-    await vi.advanceTimersByTimeAsync(2000); // 2nd retry delay
+    await vi.advanceTimersByTimeAsync(1000); // advance past max possible delay for retry 1 (full jitter: [0, 2^0 * 1000ms])
+    await vi.advanceTimersByTimeAsync(2000); // advance past max possible delay for retry 2 (full jitter: [0, 2^1 * 1000ms])
 
     const response = await promise;
     expect(global.fetch).toHaveBeenCalledTimes(3);
@@ -480,7 +495,7 @@ describe('handleAuthenticatedFetch - 429 retry', () => {
         correlation_id: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/),
         attempt: 1,
         max_retries: 3,
-        delay_ms: 1000,
+        delay_ms: expect.any(Number),  // Story 86.11: full jitter — délai aléatoire dans [0, 1000ms]
         endpoint: '/test/path',
       }),
     );

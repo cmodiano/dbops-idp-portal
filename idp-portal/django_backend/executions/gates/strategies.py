@@ -9,7 +9,7 @@ Story 86-4: Retry tenacity sur get_next_maintenance_window (3 retries, backoff 2
 from collections.abc import Callable
 
 import structlog
-from tenacity import Retrying, RetryCallState, retry_if_exception_type, stop_after_attempt, wait_exponential
+from tenacity import Retrying, RetryCallState, retry_if_exception_type, stop_after_attempt, wait_random_exponential
 
 from core.middleware import get_correlation_id
 from executions.gates.definitions import GateEvaluationContext
@@ -27,7 +27,7 @@ class MaintenanceWindowEvaluationStrategy:
     patch.object(MaintenanceWindowEvaluationStrategy, '_retry_wait', wait_none()).
     """
 
-    _retry_wait = wait_exponential(multiplier=2, min=2, max=8)
+    _retry_wait = wait_random_exponential(multiplier=2, max=8)
 
     @staticmethod
     def _make_before_sleep_log(target_id: str, correlation_id: str | None) -> Callable[[RetryCallState], None]:

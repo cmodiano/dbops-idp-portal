@@ -14,7 +14,7 @@ import os
 from collections.abc import Callable, Mapping
 
 import structlog
-from tenacity import Retrying, RetryCallState, retry_if_exception, retry_if_exception_type, stop_after_attempt, wait_exponential
+from tenacity import Retrying, RetryCallState, retry_if_exception, retry_if_exception_type, stop_after_attempt, wait_random_exponential
 
 from adapters.utils import build_auth_headers
 from core.exceptions import ServiceUnavailableError, VaultUnavailableError
@@ -55,7 +55,7 @@ class ServiceCallHandler:
     patch.object(ServiceCallHandler, '_retry_wait', wait_none()).
     """
 
-    _retry_wait = wait_exponential(multiplier=1, min=1, max=10)
+    _retry_wait = wait_random_exponential(multiplier=1, max=10)
 
     @staticmethod
     def _make_before_sleep_log(

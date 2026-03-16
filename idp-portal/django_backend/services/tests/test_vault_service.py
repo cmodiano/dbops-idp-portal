@@ -152,8 +152,10 @@ class TestRetry:
         assert result == "abc"
         assert mock_session.get.call_count == 3
         assert mock_sleep.call_count == 2
-        mock_sleep.assert_any_call(1)  # 2^0
-        mock_sleep.assert_any_call(2)  # 2^1
+        # Story 86.11: délais sont maintenant des floats aléatoires dans [0, 2^n]
+        sleep_calls = [call.args[0] for call in mock_sleep.call_args_list]
+        assert 0 <= sleep_calls[0] <= 1   # random.uniform(0, 2^0)
+        assert 0 <= sleep_calls[1] <= 2   # random.uniform(0, 2^1)
 
     @patch("services.vault_service.time.sleep")
     @patch("services.vault_service.requests.Session")
@@ -224,6 +226,27 @@ class TestRetry:
         result = svc.get_secret("vault:secret/data/app#val")
 
         assert result == "x"
+
+    @patch("services.vault_service.time.sleep")
+    @patch("services.vault_service.requests.Session")
+    def test_unexpected_status_retry_with_jitter(self, mock_session_cls, mock_sleep):
+        """Story 86.11: unexpected HTTP status (ex: 418) retry applique le full jitter."""
+        mock_session = MagicMock()
+        mock_session_cls.return_value = mock_session
+        mock_session.get.side_effect = [
+            _vault_response(418),  # unexpected status — treated as transient
+            _vault_response(200, {"token": "ok"}),
+        ]
+
+        svc = VaultService(vault_addr="http://vault:8200", vault_token="t")
+        result = svc.get_secret("vault:secret/data/app#token")
+
+        assert result == "ok"
+        assert mock_session.get.call_count == 2
+        assert mock_sleep.call_count == 1
+        # Story 86.11: délai est un float aléatoire dans [0, 2^0] = [0, 1]
+        sleep_calls = [call.args[0] for call in mock_sleep.call_args_list]
+        assert 0 <= sleep_calls[0] <= 1
 
 
 # ---------------------------------------------------------------------------
