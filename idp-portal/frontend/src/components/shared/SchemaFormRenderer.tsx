@@ -41,13 +41,14 @@ export const SchemaFormRenderer: FC<SchemaFormRendererProps> = ({
   customRenderers,
 }) => {
   const properties = schema.properties as Record<string, Record<string, unknown>> | undefined;
+  const requiredFields = schema.required as string[] | undefined;
 
   if (!properties) return <div />;
 
   return (
     <div>
       {Object.entries(properties).map(([key, propSchema]) =>
-        renderProperty(key, propSchema, value, onChange, disabled, customRenderers)
+        renderProperty(key, propSchema, value, onChange, disabled, customRenderers, requiredFields)
       )}
     </div>
   );
@@ -64,11 +65,13 @@ function renderProperty(
   onChange?: (v: Record<string, unknown>) => void,
   disabled = false,
   customRenderers?: Record<string, (value: unknown, onChange: (v: unknown) => void, disabled: boolean) => ReactNode>,
+  required?: string[],
 ): ReactNode {
   const label = (propSchema.title as string) ?? key;
   const description = propSchema.description as string | undefined;
   const type = propSchema.type as string | undefined;
   const enumValues = propSchema.enum as unknown[] | undefined;
+  const isRequired = required?.includes(key) ?? false;
 
   const handleChange = (newFieldVal: unknown) => {
     onChange?.({ ...parentValue, [key]: newFieldVal });
@@ -81,6 +84,7 @@ function renderProperty(
       <div key={key} style={{ marginBottom: 12 }}>
         <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
           {label}
+          {isRequired && <Text type="danger" style={{ marginLeft: 2 }}>*</Text>}
         </Text>
         {customInput}
         {description && (
@@ -92,7 +96,7 @@ function renderProperty(
     );
   }
 
-  let input: React.ReactNode;
+  let input: ReactNode;
 
   // Enum prend priorité sur type
   if (enumValues) {
@@ -110,6 +114,7 @@ function renderProperty(
     input = (
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <Text>{label}</Text>
+        {isRequired && <Text type="danger" style={{ marginLeft: 2 }}>*</Text>}
         <Switch
           checked={!!(parentValue[key])}
           onChange={handleChange}
@@ -205,6 +210,7 @@ function renderProperty(
     <div key={key} style={{ marginBottom: 12 }}>
       <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
         {label}
+        {isRequired && <Text type="danger" style={{ marginLeft: 2 }}>*</Text>}
       </Text>
       {input}
       {description && (

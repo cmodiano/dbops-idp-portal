@@ -169,7 +169,7 @@ export const GateStepConfig: FC<GateStepConfigProps> = ({
       </div>
 
       {/* Champs config_schema — Story 84-5, AC2/AC3 : route via SchemaFormRenderer avec custom renderers */}
-      <SchemaFormRenderer
+      <SchemaFormRenderer // B.5 done (story 84-5)
         schema={configSchema as Record<string, unknown>}
         value={gateConfigValue}
         onChange={handleGateConfigChange}

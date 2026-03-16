@@ -1029,7 +1029,7 @@ development_status:
     84-6-reduire-exception-aap: done # P1 — AAP au strict minimum ou chemin déclaratif
     84-7-simplifier-action-platform-conversions-legacy: done # P2,P3 — Un seul code métier, PlatformDefinition
     84-8-completer-usage-schemas-plateformes: done # P4 — runtime_config_schema, health_check_policy
-    84-9-schema-form-renderer-usage-partout: backlog # B.5 — WizardStep2Automatisme et flux restants
+    84-9-schema-form-renderer-usage-partout: done # B.5 — WizardStep2Automatisme et flux restants
     epic-84-retrospective: optional
     # === Epic 85: Réorganisation structure packages orchestration (post Temporal-plan) ===
     # Réf: docs/architecture/temporal-plan-evaluation-2026-03-15.md § Remaining Gaps

@@ -219,7 +219,7 @@ export function WizardStep2Automatisme({
           {/* Story 84-6: Un seul bloc SchemaFormRenderer gère tous les connecteurs y compris AAP.
               aapCustomRenderers est undefined pour les connecteurs non-AAP → comportement identique. */}
           {hasSchema && (
-            <SchemaFormRenderer
+            <SchemaFormRenderer // B.5 done (story 84-6)
               schema={platformCap!.action_config_schema as Record<string, unknown>}
               value={actionConfig}
               onChange={setActionConfig}

@@ -501,6 +501,108 @@ describe('SchemaFormRenderer — empty schema', () => {
 });
 
 // ---------------------------------------------------------------------------
+// AC6 — required field markers
+// ---------------------------------------------------------------------------
+describe('SchemaFormRenderer — required markers', () => {
+  it('required_field_shows_asterisk', () => {
+    render(
+      <SchemaFormRenderer
+        schema={{
+          properties: { name: { type: 'string', title: 'Nom' } },
+          required: ['name'],
+        }}
+        value={{ name: '' }}
+        onChange={vi.fn()}
+      />
+    );
+    expect(screen.getByText('*')).toBeInTheDocument();
+  });
+
+  it('non_required_field_no_asterisk', () => {
+    render(
+      <SchemaFormRenderer
+        schema={{
+          properties: {
+            name: { type: 'string', title: 'Nom' },
+            other: { type: 'string', title: 'Autre' },
+          },
+          required: ['name'],
+        }}
+        value={{}}
+        onChange={vi.fn()}
+      />
+    );
+    // Only 1 asterisk (for 'name'), not for 'other'
+    expect(screen.getAllByText('*')).toHaveLength(1);
+  });
+
+  it('required_with_custom_renderer_shows_asterisk', () => {
+    render(
+      <SchemaFormRenderer
+        schema={{
+          properties: { field_a: { type: 'string', title: 'Champ A' } },
+          required: ['field_a'],
+        }}
+        value={{ field_a: '' }}
+        onChange={vi.fn()}
+        customRenderers={{
+          field_a: () => <span data-testid="custom-widget">widget</span>,
+        }}
+      />
+    );
+    expect(screen.getByText('*')).toBeInTheDocument();
+    expect(screen.getByTestId('custom-widget')).toBeInTheDocument();
+  });
+
+  it('schema_without_required_no_asterisk', () => {
+    render(
+      <SchemaFormRenderer
+        schema={{
+          properties: { name: { type: 'string', title: 'Nom' } },
+        }}
+        value={{ name: '' }}
+        onChange={vi.fn()}
+      />
+    );
+    expect(screen.queryByText('*')).toBeNull();
+  });
+
+  it('multiple_required_fields', () => {
+    render(
+      <SchemaFormRenderer
+        schema={{
+          properties: {
+            a: { type: 'string', title: 'Champ A' },
+            b: { type: 'string', title: 'Champ B' },
+            c: { type: 'string', title: 'Champ C' },
+          },
+          required: ['a', 'b'],
+        }}
+        value={{}}
+        onChange={vi.fn()}
+      />
+    );
+    // 'a' and 'b' have asterisk, 'c' does not
+    expect(screen.getAllByText('*')).toHaveLength(2);
+  });
+
+  it('required_boolean_field_shows_asterisk', () => {
+    render(
+      <SchemaFormRenderer
+        schema={{
+          properties: { active: { type: 'boolean', title: 'Actif' } },
+          required: ['active'],
+        }}
+        value={{ active: false }}
+        onChange={vi.fn()}
+      />
+    );
+    // Boolean renders label inline — asterisk still expected (AC1 coverage for boolean type)
+    expect(screen.getByText('*')).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // disabled propagation
 // ---------------------------------------------------------------------------
 describe('SchemaFormRenderer — disabled', () => {

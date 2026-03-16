@@ -159,6 +159,9 @@ export const ServiceCallStepConfig: FC<ServiceCallStepConfigProps> = ({
             <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
               Paramètres d'entrée <MappingHelpPopover type="input" availableSteps={filteredStepOptions} />
             </Text>
+            {/* SchemaInputMappingEditor (et non SchemaFormRenderer) : les valeurs input_mapping sont
+                des template strings ({{ steps.X.output.Y }}), pas des valeurs typées.
+                Renderer spécialisé justifié — B.5 conforme. Story 84-4. */}
             <SchemaInputMappingEditor
               schema={currentOperation.input_schema}
               value={data.input_mapping as Record<string, string> | null}
