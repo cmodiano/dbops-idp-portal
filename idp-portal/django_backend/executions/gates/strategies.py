@@ -1,10 +1,15 @@
 """
-Story 83-2: Stratégies d'évaluation des gates — logique déplacée depuis GateEvaluator.
+Stories 83-2 / 86-4: Stratégies d'évaluation des gates — logique déplacée depuis GateEvaluator.
 
 Chaque stratégie encapsule la logique d'évaluation d'un type de gate auto-évalué.
 GateEvaluator devient un simple orchestrateur qui délègue à ces stratégies.
+
+Story 86-4: Retry tenacity sur get_next_maintenance_window (3 retries, backoff 2s/4s/8s).
 """
+from collections.abc import Callable
+
 import structlog
+from tenacity import Retrying, RetryCallState, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from core.middleware import get_correlation_id
 from executions.gates.definitions import GateEvaluationContext
@@ -17,7 +22,27 @@ class MaintenanceWindowEvaluationStrategy:
     """Évalue si tous les targets d'exécution sont dans leur fenêtre de maintenance.
 
     Logique extraite de GateEvaluator._check_maintenance_window() (Story 83-2).
+
+    Attribut de classe _retry_wait : permet de surcharger le wait en tests via
+    patch.object(MaintenanceWindowEvaluationStrategy, '_retry_wait', wait_none()).
     """
+
+    _retry_wait = wait_exponential(multiplier=2, min=2, max=8)
+
+    @staticmethod
+    def _make_before_sleep_log(target_id: str, correlation_id: str | None) -> Callable[[RetryCallState], None]:
+        """Callback before_sleep pour structlog WARNING à chaque retry tenacity (Story 86-4)."""
+        def _log(retry_state: RetryCallState) -> None:
+            exc = retry_state.outcome.exception() if retry_state.outcome is not None else None
+            logger.warning(
+                "inventory_retry_maintenance_window",
+                target_id=target_id,
+                attempt=retry_state.attempt_number + 1,
+                wait_seconds=getattr(retry_state.next_action, 'sleep', 0.0),
+                error=str(exc),
+                correlation_id=correlation_id,
+            )
+        return _log
 
     def evaluate(self, ctx: GateEvaluationContext) -> tuple[bool, dict]:
         """Évalue la condition maintenance_window.
@@ -50,7 +75,15 @@ class MaintenanceWindowEvaluationStrategy:
 
         for target in targets:
             try:
-                window = ctx.inventory_service.get_next_maintenance_window(target.target_id)
+                for attempt in Retrying(
+                    retry=retry_if_exception_type(InventoryServiceError),
+                    stop=stop_after_attempt(4),
+                    wait=self._retry_wait,
+                    reraise=True,
+                    before_sleep=self._make_before_sleep_log(target.target_id, correlation_id),
+                ):
+                    with attempt:
+                        window = ctx.inventory_service.get_next_maintenance_window(target.target_id)
 
                 if window is None:
                     # Pas de fenêtre configurée → BLOQUE par défaut (fail-safe).

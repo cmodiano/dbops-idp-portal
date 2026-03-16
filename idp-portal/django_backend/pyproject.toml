@@ -51,6 +51,7 @@ dependencies = [
     "django-jazzmin>=3.0.0,<4.0.0",
     "ldap3>=2.9.0",
     "jinja2>=3.1.0",
+    "tenacity>=8.2.0",
 ]
 
 [project.optional-dependencies]
