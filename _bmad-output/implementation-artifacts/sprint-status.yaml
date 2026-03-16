@@ -1046,7 +1046,7 @@ development_status:
     epic-86: in-progress
     # --- Critical (HIGH) ---
     86-1-timeout-adapter-calls: done # AdapterTimeoutError(ServiceUnavailableError) dans core/exceptions.py, 5 settings XXX_SOCKET_TIMEOUT validés (ImproperlyConfigured), 5 adapters mis à jour, catch dans trigger.py + polling.py avec audit trail, 346 tests ok
-    86-2-servicenow-update-change-get-status: backlog # services/servicenow_service.py — implémenter update_change() et get_change_status() (Table API PATCH/GET), mapping états, tests unitaires + @integration
+    86-2-servicenow-update-change-get-status: done # services/servicenow_service.py — implémenter update_change() et get_change_status() (Table API PATCH/GET), mapping états, tests unitaires + @integration
     # --- Medium ---
     86-3-gate-polling-backoff: backlog # gate_evaluator.py — backoff exponentiel par gate (BASE/MAX_POLL_INTERVAL, POLL_BACKOFF_FACTOR), persister poll_attempt dans step.output ou cache
     86-4-retry-inventory-service-maintenance-window: backlog # gates/strategies.py — tenacity retry sur get_next_maintenance_window (3 tentatives, backoff 2s/4s/8s), log WARNING par retry

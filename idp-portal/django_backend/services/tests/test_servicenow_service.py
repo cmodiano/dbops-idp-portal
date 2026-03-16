@@ -1,6 +1,7 @@
 """
 Story 31.6: Tests for ServiceNowService.create_change() (AC#9, AC#10).
 Story 57.9: Tests for ServiceNowService.close_change() and cancel_change() (ADR-007 Phase 3).
+Story 86.2: Tests for ServiceNowService.update_change() and get_change_status() (AC#6, AC#7).
 
 Tests:
 - 5.1: create_change success — returns change number CHG0001234
@@ -521,3 +522,287 @@ class TestServiceNowCreateChangeExtraFields:
         payload = mock_client.post.call_args[1]["json"]
         assert payload["cmdb_ci"] == "CI001"
         assert payload["u_patch_number"] == "PSU-24"
+
+
+class TestServiceNowUpdateChange:
+    """Test ServiceNowService.update_change() (Story 86.2, AC#1, #2, #6)."""
+
+    def setup_method(self):
+        self.service = ServiceNowService(
+            base_url="https://snow.example.com",
+            auth_headers={"Authorization": "Bearer test-token"},
+        )
+
+    def _make_mock_client(self, mock_client_class, response_json=None):
+        return _make_patch_mock_client(mock_client_class, response_json)
+
+    @patch("services.servicenow_service.httpx.Client")
+    def test_update_change_success(self, mock_client_class):
+        """AC#1 : update_change retourne {updated: True, sys_id}, URL et payload corrects."""
+        mock_client = self._make_mock_client(
+            mock_client_class,
+            {"result": {"sys_id": "abc123", "number": "CHG001"}},
+        )
+
+        result = self.service.update_change(change_id="CHG001", work_notes="test note")
+
+        assert result == {"updated": True, "sys_id": "abc123"}
+        mock_client.patch.assert_called_once()
+        call_url = mock_client.patch.call_args[0][0]
+        assert call_url == "https://snow.example.com/api/now/table/change_request/CHG001"
+
+    @patch("services.servicenow_service.httpx.Client")
+    def test_update_change_http_error(self, mock_client_class):
+        """AC#6 : HTTP 500 → ServiceUnavailableError avec '500' dans le message."""
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "Server Error", request=MagicMock(), response=mock_response,
+        )
+        mock_client = MagicMock()
+        mock_client.patch.return_value = mock_response
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client_class.return_value = mock_client
+
+        with pytest.raises(ServiceUnavailableError) as exc_info:
+            self.service.update_change(change_id="CHG001")
+
+        assert "500" in exc_info.value.message
+
+    @patch("services.servicenow_service.httpx.Client")
+    def test_update_change_timeout(self, mock_client_class):
+        """AC#6 : TimeoutException → ServiceUnavailableError(code='SERVICENOW_TIMEOUT')."""
+        mock_client = MagicMock()
+        mock_client.patch.side_effect = httpx.TimeoutException("Timeout")
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client_class.return_value = mock_client
+
+        with pytest.raises(ServiceUnavailableError) as exc_info:
+            self.service.update_change(change_id="CHG001")
+
+        assert exc_info.value.code == "SERVICENOW_TIMEOUT"
+
+    @patch("services.servicenow_service.httpx.Client")
+    def test_update_change_kwargs_in_payload(self, mock_client_class):
+        """AC#6 : kwargs dynamiques inclus dans le payload PATCH."""
+        mock_client = self._make_mock_client(
+            mock_client_class,
+            {"result": {"sys_id": "abc123"}},
+        )
+
+        self.service.update_change(change_id="CHG001", work_notes="test", priority=2)
+
+        payload = mock_client.patch.call_args[1]["json"]
+        assert payload["work_notes"] == "test"
+        assert payload["priority"] == "2"
+
+    @patch("services.servicenow_service.httpx.Client")
+    def test_update_change_empty_sys_id_raises(self, mock_client_class):
+        """AC#6 : 2xx sans sys_id → ServiceUnavailableError SERVICENOW_INVALID_RESPONSE."""
+        self._make_mock_client(mock_client_class, {"result": {}})
+
+        with pytest.raises(ServiceUnavailableError) as exc_info:
+            self.service.update_change(change_id="CHG001")
+
+        assert exc_info.value.code == "SERVICENOW_INVALID_RESPONSE"
+        assert "sys_id" in exc_info.value.message.lower()
+
+    @patch("services.servicenow_service.httpx.Client")
+    def test_update_change_request_error(self, mock_client_class):
+        """AC#2 : RequestError → ServiceUnavailableError SERVICENOW_UNAVAILABLE (même pattern que close/cancel)."""
+        mock_client = MagicMock()
+        mock_client.patch.side_effect = httpx.RequestError("Connection refused")
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client_class.return_value = mock_client
+
+        with pytest.raises(ServiceUnavailableError) as exc_info:
+            self.service.update_change(change_id="CHG001")
+
+        assert exc_info.value.code == "SERVICENOW_UNAVAILABLE"
+        assert "indisponible" in exc_info.value.message.lower()
+
+    @patch("services.servicenow_service.httpx.Client")
+    def test_update_change_no_kwargs_empty_payload(self, mock_client_class):
+        """Edge case : update_change sans kwargs → payload vide envoyé, retourne {updated: True, sys_id}."""
+        mock_client = self._make_mock_client(
+            mock_client_class,
+            {"result": {"sys_id": "abc123"}},
+        )
+
+        result = self.service.update_change(change_id="CHG001")
+
+        assert result == {"updated": True, "sys_id": "abc123"}
+        payload = mock_client.patch.call_args[1]["json"]
+        assert payload == {}
+
+
+def _make_get_mock_client(mock_client_class, response_json=None):
+    """Helper pour mocker httpx.Client avec GET (get_change_status)."""
+    if response_json is None:
+        response_json = {
+            "result": {"sys_id": "abc123", "number": "CHG001", "state": "3", "priority": "2"}
+        }
+    mock_response = MagicMock()
+    mock_response.json.return_value = response_json
+    mock_response.raise_for_status = MagicMock()
+    mock_client = MagicMock()
+    mock_client.get.return_value = mock_response
+    mock_client.__enter__ = MagicMock(return_value=mock_client)
+    mock_client.__exit__ = MagicMock(return_value=False)
+    mock_client_class.return_value = mock_client
+    return mock_client
+
+
+class TestServiceNowGetChangeStatus:
+    """Test ServiceNowService.get_change_status() (Story 86.2, AC#3, #4, #5, #7)."""
+
+    def setup_method(self):
+        self.service = ServiceNowService(
+            base_url="https://snow.example.com",
+            auth_headers={"Authorization": "Bearer test-token"},
+        )
+
+    @patch("services.servicenow_service.httpx.Client")
+    def test_get_change_status_success_mapped_state(self, mock_client_class):
+        """AC#3 : succès avec mapping état '3' → 'closed', change_id et number corrects."""
+        _make_get_mock_client(
+            mock_client_class,
+            {"result": {"sys_id": "abc123", "number": "CHG001", "state": "3", "priority": "2"}},
+        )
+
+        result = self.service.get_change_status(change_id="CHG001")
+
+        assert result["state"] == "closed"
+        assert result["change_id"] == "CHG001"
+        assert result["number"] == "CHG001"
+        assert result["priority"] == 2
+
+    @pytest.mark.parametrize("raw_state,expected", [
+        ("-5", "pending"),
+        ("1", "open"),
+        ("2", "work_in_progress"),
+        ("3", "closed"),
+        ("4", "cancelled"),
+        ("99", "99"),
+    ])
+    @patch("services.servicenow_service.httpx.Client")
+    def test_get_change_status_all_state_mappings(self, mock_client_class, raw_state, expected):
+        """AC#4 : mapping complet des états ServiceNow."""
+        _make_get_mock_client(
+            mock_client_class,
+            {"result": {"sys_id": "abc123", "number": "CHG001", "state": raw_state, "priority": "1"}},
+        )
+
+        result = self.service.get_change_status(change_id="CHG001")
+
+        assert result["state"] == expected
+
+    @patch("services.servicenow_service.httpx.Client")
+    def test_get_change_status_unknown_state_returned_raw(self, mock_client_class):
+        """AC#4 : état inconnu '99' retourné tel quel (pas d'erreur)."""
+        _make_get_mock_client(
+            mock_client_class,
+            {"result": {"sys_id": "abc123", "number": "CHG001", "state": "99", "priority": "1"}},
+        )
+
+        result = self.service.get_change_status(change_id="CHG001")
+
+        assert result["state"] == "99"
+
+    @patch("services.servicenow_service.httpx.Client")
+    def test_get_change_status_http_error(self, mock_client_class):
+        """AC#5 : HTTP 404 → ServiceUnavailableError."""
+        mock_response = MagicMock()
+        mock_response.status_code = 404
+        mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "Not Found", request=MagicMock(), response=mock_response,
+        )
+        mock_client = MagicMock()
+        mock_client.get.return_value = mock_response
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client_class.return_value = mock_client
+
+        with pytest.raises(ServiceUnavailableError) as exc_info:
+            self.service.get_change_status(change_id="CHG001")
+
+        assert exc_info.value.code == "SERVICENOW_HTTP_ERROR"
+        assert "404" in exc_info.value.message
+
+    @patch("services.servicenow_service.httpx.Client")
+    def test_get_change_status_timeout(self, mock_client_class):
+        """AC#5 : TimeoutException → ServiceUnavailableError(code='SERVICENOW_TIMEOUT')."""
+        mock_client = MagicMock()
+        mock_client.get.side_effect = httpx.TimeoutException("Timeout")
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client_class.return_value = mock_client
+
+        with pytest.raises(ServiceUnavailableError) as exc_info:
+            self.service.get_change_status(change_id="CHG001")
+
+        assert exc_info.value.code == "SERVICENOW_TIMEOUT"
+
+    @patch("services.servicenow_service.httpx.Client")
+    @override_settings(DEBUG=False, SERVICENOW_VERIFY_TLS=False)
+    def test_get_change_status_tls_forced_production(self, mock_client_class):
+        """AC#7 : DEBUG=False → verify=True même si SERVICENOW_VERIFY_TLS=False."""
+        _make_get_mock_client(mock_client_class)
+
+        self.service.get_change_status(change_id="CHG001")
+
+        call_kwargs = mock_client_class.call_args[1]
+        assert call_kwargs["verify"] is True
+
+    @patch("services.servicenow_service.httpx.Client")
+    def test_get_change_status_sysparm_fields_in_url(self, mock_client_class):
+        """AC#3 : l'URL contient sysparm_fields=number,sys_id,state,priority,sys_updated_on."""
+        mock_client = _make_get_mock_client(mock_client_class)
+
+        self.service.get_change_status(change_id="CHG001")
+
+        call_kwargs = mock_client.get.call_args[1]
+        assert "sysparm_fields" in call_kwargs["params"]
+        assert "number,sys_id,state,priority,sys_updated_on" in call_kwargs["params"]["sysparm_fields"]
+
+    @patch("services.servicenow_service.httpx.Client")
+    def test_get_change_status_empty_sys_id_raises(self, mock_client_class):
+        """AC#5 : 2xx sans sys_id → ServiceUnavailableError SERVICENOW_INVALID_RESPONSE."""
+        _make_get_mock_client(mock_client_class, {"result": {"number": "CHG001"}})
+
+        with pytest.raises(ServiceUnavailableError) as exc_info:
+            self.service.get_change_status(change_id="CHG001")
+
+        assert exc_info.value.code == "SERVICENOW_INVALID_RESPONSE"
+        assert "sys_id" in exc_info.value.message.lower()
+
+    @patch("services.servicenow_service.httpx.Client")
+    def test_get_change_status_request_error(self, mock_client_class):
+        """AC#5 : RequestError → ServiceUnavailableError SERVICENOW_UNAVAILABLE (même pattern que autres méthodes)."""
+        mock_client = MagicMock()
+        mock_client.get.side_effect = httpx.RequestError("Connection refused")
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client_class.return_value = mock_client
+
+        with pytest.raises(ServiceUnavailableError) as exc_info:
+            self.service.get_change_status(change_id="CHG001")
+
+        assert exc_info.value.code == "SERVICENOW_UNAVAILABLE"
+        assert "indisponible" in exc_info.value.message.lower()
+
+    @patch("services.servicenow_service.httpx.Client")
+    def test_get_change_status_priority_non_numeric_defaults_zero(self, mock_client_class):
+        """M1 : priority non-numérique (ex: dict display value) → priority == 0 sans exception."""
+        _make_get_mock_client(
+            mock_client_class,
+            {"result": {"sys_id": "abc123", "number": "CHG001", "state": "1",
+                        "priority": {"value": "2", "display_value": "2 - High"}}},
+        )
+
+        result = self.service.get_change_status(change_id="CHG001")
+
+        assert result["priority"] == 0

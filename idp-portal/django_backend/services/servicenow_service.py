@@ -6,6 +6,7 @@ change management), not a Platform adapter (does not execute jobs).
 
 Story 31.6: create_change() implemented — creates a change request via REST API.
 Story 57.9: close_change() and cancel_change() implemented (ADR-007 Phase 3).
+Story 86.2: update_change() and get_change_status() implemented (Table API PATCH/GET).
 """
 from __future__ import annotations
 
@@ -40,6 +41,14 @@ class ServiceNowService(IHealthCheckable):
         method is async to satisfy the ``IHealthCheckable`` interface used by the
         async health dashboard endpoint. This is intentional and expected.
     """
+
+    _STATE_LABELS: dict[str, str] = {
+        "-5": "pending",
+        "1": "open",
+        "2": "work_in_progress",
+        "3": "closed",     # close_change envoie state="3"
+        "4": "cancelled",  # cancel_change envoie state="4"
+    }
 
     def __init__(
         self,
@@ -172,56 +181,128 @@ class ServiceNowService(IHealthCheckable):
                 details={"base_url": self.base_url},
             ) from exc
 
-    def update_change(self, change_id: str, **kwargs: object) -> None:
-        """Update a ServiceNow change request.
+    def update_change(self, change_id: str, **kwargs: object) -> dict:
+        """Update a ServiceNow change request via PATCH (Story 86.2, AC#1, #2).
 
-        .. note::
-            **Not implemented — v1 scope exclusion.**
-
-        This method is an intentional stub deferred from the v1 scope.
-        Implementing PATCH update semantics (partial field updates) requires
-        additional field-mapping work aligned with the ServiceNow data model.
-
-        # TODO(story-future): Implement update_change for ServiceNow PATCH endpoint.
-        # Deferred from v1 scope — see ADR-007 (change management v1 scope definition).
-        # Expected signature: change_id, **field_updates -> dict with 'sys_id'.
+        Réutilise ``_patch_change_request()`` (DRY — même pattern que close_change/cancel_change).
 
         Args:
             change_id: sys_id or change number of the change request.
-            **kwargs: Fields to update.
+            **kwargs: Fields to update (e.g. work_notes, state). None values are ignored.
+
+        Returns:
+            dict with keys ``updated`` (True) and ``sys_id`` (str).
 
         Raises:
-            NotImplementedError: Always — method not yet implemented.
+            ServiceUnavailableError: If the API is unavailable or returns an error.
         """
-        raise NotImplementedError(
-            "ServiceNowService.update_change() is not yet implemented. "
-            "See integration-type-catalogue.md for specification."
+        payload: dict[str, str] = {}
+        for k, v in kwargs.items():
+            if v is None:
+                continue
+            payload[k] = str(v) if not isinstance(v, str) else v
+        return self._patch_change_request(
+            change_id, payload, "update_change", "updated", True
         )
 
-    def get_change_status(self, change_id: str) -> None:
-        """Query ServiceNow change request status.
+    def get_change_status(self, change_id: str) -> dict:
+        """Query ServiceNow change request status via GET (Story 86.2, AC#3, #4, #5).
 
-        .. note::
-            **Not implemented — v1 scope exclusion.**
+        Performs a GET on ``/api/now/table/change_request/{change_id}`` with
+        ``sysparm_fields=number,sys_id,state,priority,sys_updated_on``.
 
-        This method is an intentional stub deferred from the v1 scope.
-        A read-only GET endpoint with proper status mapping (e.g., open, review,
-        implement, closed, cancelled) is required before this can be implemented.
-
-        # TODO(story-future): Implement get_change_status for ServiceNow GET endpoint.
-        # Deferred from v1 scope — see ADR-007 (change management v1 scope definition).
-        # Expected return: dict with 'number', 'state', 'sys_id'.
+        Maps numeric ServiceNow state codes to readable labels via ``_STATE_LABELS``.
+        Unknown codes are returned as-is (no error).
 
         Args:
             change_id: sys_id or change number of the change request.
 
+        Returns:
+            dict with keys ``change_id`` (str), ``number`` (str), ``state`` (str),
+            ``priority`` (int).
+
         Raises:
-            NotImplementedError: Always — method not yet implemented.
+            ServiceUnavailableError: If the API is unavailable or returns an error.
         """
-        raise NotImplementedError(
-            "ServiceNowService.get_change_status() is not yet implemented. "
-            "See integration-type-catalogue.md for specification."
-        )
+        url = f"{self.base_url}/api/now/table/change_request/{change_id}"
+        params = {"sysparm_fields": "number,sys_id,state,priority,sys_updated_on"}
+        verify_tls = self._get_verify_tls()
+        correlation_id = get_correlation_id()
+        try:
+            with httpx.Client(headers=self.auth_headers, timeout=self.timeout, verify=verify_tls) as client:
+                resp = client.get(url, params=params)
+                resp.raise_for_status()
+                try:
+                    json_body = resp.json()
+                except (json.JSONDecodeError, ValueError):
+                    json_body = {}
+                result = json_body.get('result', {}) if isinstance(json_body, dict) else {}
+                sys_id = result.get('sys_id', '')
+                if not sys_id:
+                    raise ServiceUnavailableError(
+                        code="SERVICENOW_INVALID_RESPONSE",
+                        message="ServiceNow get_change_status returned 2xx but no sys_id in result",
+                        details={"change_id": change_id, "base_url": self.base_url},
+                    )
+                raw_state = str(result.get('state', ''))
+                mapped_state = self._STATE_LABELS.get(raw_state, raw_state)
+                priority_raw = result.get('priority')
+                try:
+                    priority = int(str(priority_raw)) if priority_raw not in (None, '') else 0
+                except (TypeError, ValueError):
+                    priority = 0
+                logger.info(
+                    "servicenow_get_change_status_success",
+                    change_id=change_id,
+                    state=mapped_state,
+                    base_url=self.base_url,
+                    correlation_id=correlation_id,
+                )
+                return {
+                    "change_id": change_id,
+                    "number": str(result.get('number', '')),
+                    "state": mapped_state,
+                    "priority": priority,
+                }
+        except httpx.TimeoutException as exc:
+            logger.error(
+                "servicenow_get_change_status_timeout",
+                change_id=change_id,
+                base_url=self.base_url,
+                error=str(exc),
+                correlation_id=correlation_id,
+            )
+            raise ServiceUnavailableError(
+                code="SERVICENOW_TIMEOUT",
+                message="ServiceNow get_change_status timeout",
+                details={"change_id": change_id, "base_url": self.base_url},
+            ) from exc
+        except httpx.HTTPStatusError as exc:
+            logger.error(
+                "servicenow_get_change_status_http_error",
+                change_id=change_id,
+                status=exc.response.status_code,
+                error=str(exc),
+                correlation_id=correlation_id,
+            )
+            raise ServiceUnavailableError(
+                code="SERVICENOW_HTTP_ERROR",
+                message=f"ServiceNow get_change_status erreur {exc.response.status_code}",
+                details={"change_id": change_id, "base_url": self.base_url, "status_code": str(exc.response.status_code)},
+            ) from exc
+        except httpx.RequestError as exc:
+            logger.error(
+                "servicenow_get_change_status_request_error",
+                change_id=change_id,
+                base_url=self.base_url,
+                error=str(exc),
+                correlation_id=correlation_id,
+            )
+            raise ServiceUnavailableError(
+                code="SERVICENOW_UNAVAILABLE",
+                message=f"ServiceNow indisponible: {exc}",
+                details={"change_id": change_id, "base_url": self.base_url},
+            ) from exc
 
     def _patch_change_request(
         self,
@@ -232,8 +313,8 @@ class ServiceNowService(IHealthCheckable):
         success_value: bool,
     ) -> dict:
         """
-        Helper for PATCH change_request operations (close_change, cancel_change).
-        Story 57.9 — DRY extraction to reduce duplication.
+        Helper for PATCH change_request operations (close_change, cancel_change, update_change).
+        Story 57.9 — DRY extraction to reduce duplication. Story 86.2 — reused by update_change.
         """
         url = f"{self.base_url}/api/now/table/change_request/{change_id}"
         verify_tls = self._get_verify_tls()

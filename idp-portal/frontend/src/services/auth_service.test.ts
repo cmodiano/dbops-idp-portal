@@ -1,5 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { refreshAccessToken, fetchCurrentUser, logoutApi } from './auth_service';
+import { refreshAccessToken, fetchCurrentUser, logoutApi, portalLogin } from './auth_service';
+import * as apiClient from './api_client';
+
+vi.mock('./api_client', async (importOriginal) => {
+  const actual = await importOriginal<typeof apiClient>();
+  return {
+    ...actual,
+    parseErrorResponse: vi.fn(),
+  };
+});
 
 describe('auth_service', () => {
   beforeEach(() => {
@@ -65,5 +74,96 @@ describe('auth_service', () => {
       '/api/v1/auth/logout/',
       expect.objectContaining({ method: 'POST', credentials: 'include' }),
     );
+  });
+
+  it('refreshAccessToken returns null when data.access_token missing', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: {} }),
+    });
+    const result = await refreshAccessToken();
+    expect(result).toBeNull();
+  });
+
+  it('refreshAccessToken returns null on network error', async () => {
+    global.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
+    const result = await refreshAccessToken();
+    expect(result).toBeNull();
+  });
+
+  it('fetchCurrentUser returns null on network error', async () => {
+    global.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
+    const result = await fetchCurrentUser('token');
+    expect(result).toBeNull();
+  });
+
+  it('logoutApi does not throw on network error', async () => {
+    global.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
+    await expect(logoutApi()).resolves.toBeUndefined();
+  });
+});
+
+describe('auth_service portalLogin', () => {
+  it('returns access_token on success', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: { access_token: 'token', token_type: 'Bearer', expires_in: 3600 },
+      }),
+    });
+
+    const result = await portalLogin('user', 'pass');
+
+    expect(result).toEqual({
+      access_token: 'token',
+      token_type: 'Bearer',
+      expires_in: 3600,
+    });
+    expect(global.fetch).toHaveBeenCalledWith(
+      '/api/v1/auth/portal-login/',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ username: 'user', password: 'pass' }),
+      }),
+    );
+  });
+
+  it('throws with RATE_LIMIT_EXCEEDED code on 429', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      headers: { get: () => 'application/json' },
+      json: async () => ({ error: { message: 'Too many requests' } }),
+    });
+
+    vi.mocked(apiClient.parseErrorResponse).mockResolvedValue({
+      message: 'Too many requests',
+      body: {},
+    } as any);
+
+    await expect(portalLogin('user', 'pass')).rejects.toMatchObject({
+      message: 'Too many requests',
+      code: 'RATE_LIMIT_EXCEEDED',
+      status: 429,
+    });
+  });
+
+  it('throws with error code from body on 400', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      headers: { get: () => 'application/json' },
+      json: async () => ({ error: { code: 'INVALID_CREDENTIALS', message: 'Bad credentials' } }),
+    });
+
+    vi.mocked(apiClient.parseErrorResponse).mockResolvedValue({
+      message: 'Bad credentials',
+      body: { error: { code: 'INVALID_CREDENTIALS' } },
+    } as any);
+
+    await expect(portalLogin('user', 'wrong')).rejects.toMatchObject({
+      message: 'Bad credentials',
+      code: 'INVALID_CREDENTIALS',
+    });
   });
 });

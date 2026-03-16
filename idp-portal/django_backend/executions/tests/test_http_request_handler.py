@@ -67,6 +67,31 @@ class TestIsPrivateIpLiteral:
             mock_getaddr.return_value = [(None, None, None, None, ('8.8.8.8', 0))]
             assert _is_private_ip_literal('inventory.corp') is False
 
+    def test_hostname_resolves_to_private_ip(self):
+        """Hostname resolving to private IP → True (blocked)."""
+        with patch('executions.app.handlers.http_request_handler.socket.getaddrinfo') as mock_getaddr:
+            mock_getaddr.return_value = [(None, None, None, None, ('10.0.0.1', 0))]
+            assert _is_private_ip_literal('internal.corp') is True
+
+    def test_hostname_resolves_to_ipv4_mapped_private(self):
+        """Hostname resolving to IPv4-mapped IPv6 in private range → True."""
+        with patch('executions.app.handlers.http_request_handler.socket.getaddrinfo') as mock_getaddr:
+            mock_getaddr.return_value = [(None, None, None, None, ('::ffff:10.0.0.1', 0))]
+            assert _is_private_ip_literal('internal6.corp') is True
+
+    def test_hostname_resolves_skip_invalid_sockaddr(self):
+        """Resolved addrinfo with invalid addr → skip, continue to next."""
+        with patch('executions.app.handlers.http_request_handler.socket.getaddrinfo') as mock_getaddr:
+            mock_getaddr.return_value = [
+                (None, None, None, None, ('not-an-ip', 0)),
+                (None, None, None, None, ('8.8.8.8', 0)),
+            ]
+            assert _is_private_ip_literal('mixed.corp') is False
+
+    def test_ipv4_mapped_private(self):
+        """IPv4-mapped IPv6 in private range → True."""
+        assert _is_private_ip_literal('::ffff:10.0.0.1') is True
+
     def test_hostname_unresolved_raises(self):
         """Hostname DNS failure → ValueError (fail-closed)."""
         import socket as socket_module
