@@ -20,6 +20,7 @@ from celery import shared_task  # type: ignore[import-untyped]
 from django.db import transaction
 from django.utils import timezone
 
+from executions.infra.repositories import ExecutionRepository
 from executions.models import (
     Execution,
     ExecutionStatus,
@@ -54,10 +55,7 @@ def _build_runtime_for_step(execution: Execution, exec_step: ExecutionStep) -> t
         if isinstance(s, dict) and s.get('step_id')
     }
 
-    completed_steps = ExecutionStep.objects.filter(
-        execution=execution,
-        status=ExecutionStepStatus.COMPLETED,
-    ).order_by('step_order')
+    completed_steps = ExecutionRepository.get_completed_steps(execution.id)
 
     _build_step_outputs_from_completed(
         completed_steps=completed_steps,
@@ -67,10 +65,7 @@ def _build_runtime_for_step(execution: Execution, exec_step: ExecutionStep) -> t
     )
 
     # Resume _step_order_counter from max existing step_order
-    from django.db.models import Max  # noqa: PLC0415
-    max_order = ExecutionStep.objects.filter(execution=execution).aggregate(
-        Max('step_order')
-    )['step_order__max']
+    max_order = ExecutionRepository.get_max_step_order(execution.id)
     runtime._step_order_counter = max_order if max_order is not None else 0
 
     return runtime, step_config_by_id
@@ -94,45 +89,92 @@ def _enqueue_next_steps(
             )
             continue
 
-        # Idempotency: check if an ExecutionStep for this config_step_id already exists
-        # and is not in a terminal state (prevents duplicate creation on re-execution)
-        existing = ExecutionStep.objects.filter(
-            execution=execution,
-            config_step_id=next_id,
-            status__in=[
-                ExecutionStepStatus.PENDING,
-                ExecutionStepStatus.RUNNING,
-                ExecutionStepStatus.COMPLETED,
-            ],
-        ).exists()
-        if existing:
-            logger.info(
-                "worker_next_step_already_exists",
-                execution_id=execution.id,
-                step_id=next_id,
+        with transaction.atomic():
+            # Lock execution to prevent concurrent duplicate creation
+            Execution.objects.select_for_update().get(id=execution.id)
+
+            # Re-check existence inside transaction (racy otherwise)
+            existing = ExecutionRepository.step_exists_active(execution.id, next_id)
+            if existing:
+                logger.info(
+                    "worker_next_step_already_exists",
+                    execution_id=execution.id,
+                    step_id=next_id,
+                )
+                continue
+
+            step_type_str = step_config.get('step_type', 'platform')
+            from executions.container_workflow_runtime import ContainerWorkflowRuntime  # noqa: PLC0415
+            db_step_type = ContainerWorkflowRuntime._STEP_TYPE_TO_DB_TYPE.get(
+                step_type_str, ExecutionStepType.PLATFORM
             )
-            continue
+            step_name = step_config.get('name') or f"Étape {step_config.get('order', 0)}"
 
-        step_type_str = step_config.get('step_type', 'platform')
-        from executions.container_workflow_runtime import ContainerWorkflowRuntime  # noqa: PLC0415
-        db_step_type = ContainerWorkflowRuntime._STEP_TYPE_TO_DB_TYPE.get(
-            step_type_str, ExecutionStepType.PLATFORM
-        )
-        step_name = step_config.get('name') or f"Étape {step_config.get('order', 0)}"
-
-        runtime._step_order_counter += 1
-        exec_step = ExecutionStep.objects.create(
-            execution=execution,
-            step_order=runtime._step_order_counter,
-            step_name=step_name,
-            config_step_id=next_id,
-            step_type=db_step_type,
-            status=ExecutionStepStatus.PENDING,
-        )
-        WorkQueue.enqueue(exec_step)
-        enqueued += 1
+            runtime._step_order_counter += 1
+            exec_step = ExecutionStep.objects.create(
+                execution=execution,
+                step_order=runtime._step_order_counter,
+                step_name=step_name,
+                config_step_id=next_id,
+                step_type=db_step_type,
+                status=ExecutionStepStatus.PENDING,
+            )
+            WorkQueue.enqueue(exec_step)
+            enqueued += 1
 
     return enqueued
+
+
+def _force_finalize_execution(
+    execution: Execution,
+    status: ExecutionStatus,
+    error_message: str | None = None,
+) -> None:
+    """Force-finalize execution (e.g. reject/timeout) with broadcast and audit.
+
+    Use when aborting an execution regardless of remaining steps.
+    Guards execution.status == RUNNING before updating.
+    """
+    if execution.status != ExecutionStatus.RUNNING:
+        return
+    with transaction.atomic():
+        updated = Execution.objects.filter(
+            id=execution.id,
+            status=ExecutionStatus.RUNNING,
+        ).update(
+            status=status,
+            completed_at=timezone.now(),
+            error_message=error_message or "",
+        )
+    if updated > 0:
+        logger.info(
+            "execution_force_finalized",
+            execution_id=execution.id,
+            status=status,
+        )
+        try:
+            execution.refresh_from_db()
+            from executions.container_workflow_runtime import _broadcast_terminal  # noqa: PLC0415
+            _broadcast_terminal(execution)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            from core.services import AuditService  # noqa: PLC0415
+            from core.models import AuditActionType, AuditEntityType  # noqa: PLC0415
+            audit_action = {
+                ExecutionStatus.FAILED: AuditActionType.EXECUTION_FAILED,
+                ExecutionStatus.CANCELLED: AuditActionType.EXECUTION_CANCELLED,
+            }.get(status, AuditActionType.EXECUTION_FAILED)
+            AuditService.create_entry(
+                user_id=str(execution.user_id),
+                action_type=audit_action,
+                entity_type=AuditEntityType.EXECUTION,
+                entity_id=execution.id,
+                details={"finalized_by": "workflow_command"},
+                correlation_id=execution.correlation_id,
+            )
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def _finalize_execution_if_done(execution: Execution, outcome: ExecutionStatus) -> None:
@@ -274,7 +316,7 @@ def process_runnable_steps(self: Any, batch_size: int = 5) -> dict:
         execution = exec_step.execution
 
         # Story 78.5 T2: Heartbeat — update execution.updated_at for staleness detection
-        Execution.objects.filter(id=execution.id).update(updated_at=timezone.now())
+        ExecutionRepository.touch_heartbeat(execution.id)
 
         # Idempotency guard: skip already processed steps
         if exec_step.status in (ExecutionStepStatus.COMPLETED, ExecutionStepStatus.FAILED, ExecutionStepStatus.SKIPPED):
@@ -356,7 +398,9 @@ def process_runnable_steps(self: Any, batch_size: int = 5) -> dict:
 
         # Enqueue next steps (if not WAITING / no next)
         if next_step_ids:
-            _enqueue_next_steps(runtime, execution, next_step_ids, step_config_by_id)
+            enqueued = _enqueue_next_steps(runtime, execution, next_step_ids, step_config_by_id)
+            if enqueued == 0:
+                _finalize_execution_if_done(execution, outcome)
         else:
             # No next steps — check if execution is done
             _finalize_execution_if_done(execution, outcome)

@@ -225,8 +225,8 @@ def _enqueue_recovery_steps(execution: Any, correlation_id: str = "") -> str:
     from executions.models import ExecutionStep, ExecutionStepStatus, ExecutionStatus  # noqa: PLC0415
     from executions.container_routing import get_next_step_ids  # noqa: PLC0415
     from executions.container_parallel import apply_join_policy  # noqa: PLC0415
+    from executions.infra.repositories import ExecutionRepository  # noqa: PLC0415
     from executions.tasks.orchestration_worker import _enqueue_next_steps, _finalize_execution_if_done  # noqa: PLC0415
-    from django.db.models import Max  # noqa: PLC0415
 
     all_steps = execution.action.execution_steps or []
     _step_config_by_id: dict[str, dict] = {
@@ -306,9 +306,7 @@ def _enqueue_recovery_steps(execution: Any, correlation_id: str = "") -> str:
         _step_order_counter: int = 0
 
     runtime = _MinimalRuntime()
-    max_order = ExecutionStep.objects.filter(execution=execution).aggregate(
-        Max("step_order")
-    )["step_order__max"]
+    max_order = ExecutionRepository.get_max_step_order(execution.id)
     runtime._step_order_counter = max_order if max_order is not None else 0
 
     enqueued = _enqueue_next_steps(runtime, execution, next_wave, _step_config_by_id)
@@ -468,7 +466,8 @@ def _reconcile_schedule_step(execution: Any, step: Any) -> bool:
                 })
                 step.save(update_fields=["status", "completed_at", "output"])
                 # Touch execution.updated_at to avoid immediate re-stale (Story 76.3 heartbeat)
-                Execution.objects.filter(id=execution_id).update(updated_at=timezone.now())
+                from executions.infra.repositories import ExecutionRepository  # noqa: PLC0415
+                ExecutionRepository.touch_heartbeat(execution_id)
             logger.info(
                 "reconcile_schedule_step_child_completed",
                 execution_id=execution_id,

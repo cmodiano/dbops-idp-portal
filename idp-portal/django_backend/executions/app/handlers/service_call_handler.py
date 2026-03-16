@@ -10,6 +10,8 @@ Utiliser step_config pour toutes les opérations.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import structlog
 
 from adapters.utils import build_auth_headers
@@ -157,6 +159,12 @@ class ServiceCallHandler:
             )
 
         # Appel de l'opération
+        if not isinstance(resolved_params, Mapping):
+            raise ValueError(
+                "resolved_params must be a mapping (dict-like), got "
+                f"{type(resolved_params).__name__}"
+            )
+
         try:
             if integration_type == "notification" and operation == "notify_execution_event":
                 # Injection des objets contextuels (non mappables depuis input_mapping).

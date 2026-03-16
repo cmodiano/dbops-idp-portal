@@ -14,6 +14,7 @@ Usage:
 from __future__ import annotations
 
 import structlog
+from django.db import transaction
 
 from executions.models import ExecutionOutbox
 
@@ -51,6 +52,10 @@ class OutboxService:
         Returns:
             Tuple of (entry, created) — caller knows if it's a duplicate.
         """
+        if not transaction.get_connection().in_atomic_block:
+            raise RuntimeError(
+                "OutboxService.write_entry must be called inside transaction.atomic()"
+            )
         entry, created = ExecutionOutbox.objects.get_or_create(
             idempotency_key=idempotency_key,
             defaults={

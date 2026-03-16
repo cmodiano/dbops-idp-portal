@@ -98,7 +98,7 @@ class TestEvaluationHandler:
         step_config = self._make_step_config(policy_id=42)
         self.handler.execute(
             step_config=step_config,
-            resolved_params={},
+            resolved_params={'artifact': {}},
             execution=self._make_execution(),
             step=step_config,
             correlation_id=None,
@@ -143,7 +143,7 @@ class TestEvaluationHandler:
         )
         result = self.handler.execute(
             step_config=step_config,
-            resolved_params={},
+            resolved_params={'artifact': {}},
             execution=self._make_execution(),
             step=step_config,
             correlation_id=None,
@@ -161,33 +161,36 @@ class TestEvaluationHandler:
         with pytest.raises(mock_brp_class.DoesNotExist):
             self.handler.execute(
                 step_config=step_config,
-                resolved_params={},
+                resolved_params={'artifact': {}},
                 execution=self._make_execution(),
                 step=step_config,
                 correlation_id=None,
             )
 
-    @patch('executions.app.handlers.evaluation_handler.RuleEngine')
-    @patch('executions.app.handlers.evaluation_handler.BusinessRulePolicy')
-    def test_missing_artifact_key_passes_none(self, mock_brp_class, mock_engine_class):
-        """AC#7 : resolved_params sans 'artifact' → None passé à RuleEngine (pas d'exception)."""
-        mock_brp_class.objects.get.return_value = MagicMock()
-        mock_engine = mock_engine_class.return_value
-        mock_engine.evaluate.return_value = PolicyDecision(
-            require_approval=False, decision_reason="no artifact"
-        )
-
+    def test_missing_artifact_type_raises_value_error(self):
+        """artifact_type manquant dans step_config → ValueError rapide."""
         step_config = self._make_step_config()
-        result = self.handler.execute(
-            step_config=step_config,
-            resolved_params={},  # pas de 'artifact'
-            execution=self._make_execution(),
-            step=step_config,
-            correlation_id=None,
-        )
-        call_args = mock_engine.evaluate.call_args
-        assert call_args[0][2] is None  # artifact=None
-        assert result['status'] == ExecutionStatus.COMPLETED
+        del step_config['artifact_type']
+        with pytest.raises(ValueError, match="requires 'artifact_type'"):
+            self.handler.execute(
+                step_config=step_config,
+                resolved_params={'artifact': {}},
+                execution=self._make_execution(),
+                step=step_config,
+                correlation_id=None,
+            )
+
+    def test_missing_artifact_raises_value_error(self):
+        """AC#7 : resolved_params sans 'artifact' → ValueError rapide (fail-fast)."""
+        step_config = self._make_step_config()
+        with pytest.raises(ValueError, match="requires 'artifact' in resolved_params"):
+            self.handler.execute(
+                step_config=step_config,
+                resolved_params={},  # pas de 'artifact'
+                execution=self._make_execution(),
+                step=step_config,
+                correlation_id=None,
+            )
 
     @patch('executions.app.handlers.evaluation_handler.RuleEngine')
     @patch('executions.app.handlers.evaluation_handler.BusinessRulePolicy')
@@ -276,7 +279,7 @@ class TestEvaluationHandler:
         with pytest.raises(RuntimeError):
             self.handler.execute(
                 step_config=step_config,
-                resolved_params={},
+                resolved_params={'artifact': {}},
                 execution=execution,
                 step=step_config,
                 correlation_id='corr-err',
@@ -304,7 +307,7 @@ class TestEvaluationHandler:
         with pytest.raises(mock_brp_class.DoesNotExist):
             self.handler.execute(
                 step_config=step_config,
-                resolved_params={},
+                resolved_params={'artifact': {}},
                 execution=execution,
                 step=step_config,
                 correlation_id='corr-db',

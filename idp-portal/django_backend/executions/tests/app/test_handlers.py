@@ -8,8 +8,7 @@ from unittest.mock import MagicMock
 
 def test_import_from_app_handlers_registry():
     """Vérifier que app.handlers.registry est accessible et les 4 handlers enregistrés."""
-    from executions.app.handlers.registry import StepHandlerRegistry, step_handler_registry
-    assert StepHandlerRegistry is not None
+    from executions.app.handlers.registry import step_handler_registry
     assert step_handler_registry.is_registered('service_call')
     assert step_handler_registry.is_registered('http_request')
     assert step_handler_registry.is_registered('evaluation')
@@ -20,7 +19,6 @@ def test_import_from_app_handlers_registry():
 def test_import_from_app_handlers_condition_evaluator():
     """Vérifier que StepConditionEvaluator est accessible depuis app.handlers."""
     from executions.app.handlers.condition_evaluator import StepConditionEvaluator
-    assert StepConditionEvaluator is not None
     evaluator = StepConditionEvaluator()
     mock_execution = MagicMock()
     mock_execution.environment = 'production'
@@ -34,46 +32,21 @@ def test_import_from_app_handlers_condition_evaluator():
     assert evaluator.should_execute(step_matching, mock_execution) is True
 
 
-def test_shim_step_handlers_registry_still_works():
-    """Vérifier que le shim step_handlers.registry fonctionne (rétrocompatibilité)."""
-    from executions.step_handlers.registry import step_handler_registry
-    from executions.app.handlers.registry import step_handler_registry as app_registry
-    # Le shim doit exposer le même objet singleton
-    assert step_handler_registry is app_registry
-
-
-def test_shim_condition_evaluator_still_works():
-    """Vérifier que le shim step_handlers.condition_evaluator fonctionne."""
-    from executions.step_handlers.condition_evaluator import StepConditionEvaluator
-    from executions.app.handlers.condition_evaluator import StepConditionEvaluator as AppStepConditionEvaluator
-    assert StepConditionEvaluator is AppStepConditionEvaluator
-
-
-def test_shim_evaluation_handler_still_works():
-    """Vérifier que le shim step_handlers.evaluation_handler fonctionne."""
-    from executions.step_handlers.evaluation_handler import EvaluationHandler
-    from executions.app.handlers.evaluation_handler import EvaluationHandler as AppEvaluationHandler
-    assert EvaluationHandler is AppEvaluationHandler
-
-
-def test_shim_gate_handler_still_works():
-    """Vérifier que le shim step_handlers.gate_handler fonctionne."""
-    from executions.step_handlers.gate_handler import GateHandler
-    from executions.app.handlers.gate_handler import GateHandler as AppGateHandler
-    assert GateHandler is AppGateHandler
-
-
-def test_shim_service_call_handler_still_works():
-    """Vérifier que le shim step_handlers.service_call_handler fonctionne."""
-    from executions.step_handlers.service_call_handler import ServiceCallHandler
-    from executions.app.handlers.service_call_handler import ServiceCallHandler as AppServiceCallHandler
-    assert ServiceCallHandler is AppServiceCallHandler
-
-
-def test_shim_http_request_handler_still_works():
-    """Vérifier que le shim step_handlers.http_request_handler fonctionne (incl. _is_private_ip_literal)."""
-    from executions.step_handlers.http_request_handler import HttpRequestHandler, _is_private_ip_literal
-    from executions.app.handlers.http_request_handler import HttpRequestHandler as AppHttpRequestHandler
-    from executions.app.handlers.http_request_handler import _is_private_ip_literal as app_fn
-    assert HttpRequestHandler is AppHttpRequestHandler
-    assert _is_private_ip_literal is app_fn
+def test_shim_handlers_identity():
+    """Vérifier que les shims step_handlers.* exposent les mêmes objets que app.handlers.*."""
+    shim_targets = [
+        ("executions.step_handlers.registry", "step_handler_registry", "executions.app.handlers.registry", "step_handler_registry"),
+        ("executions.step_handlers.condition_evaluator", "StepConditionEvaluator", "executions.app.handlers.condition_evaluator", "StepConditionEvaluator"),
+        ("executions.step_handlers.evaluation_handler", "EvaluationHandler", "executions.app.handlers.evaluation_handler", "EvaluationHandler"),
+        ("executions.step_handlers.gate_handler", "GateHandler", "executions.app.handlers.gate_handler", "GateHandler"),
+        ("executions.step_handlers.service_call_handler", "ServiceCallHandler", "executions.app.handlers.service_call_handler", "ServiceCallHandler"),
+        ("executions.step_handlers.http_request_handler", "HttpRequestHandler", "executions.app.handlers.http_request_handler", "HttpRequestHandler"),
+        ("executions.step_handlers.http_request_handler", "_is_private_ip_literal", "executions.app.handlers.http_request_handler", "_is_private_ip_literal"),
+    ]
+    import importlib
+    for shim_mod, shim_sym, app_mod, app_sym in shim_targets:
+        shim_m = importlib.import_module(shim_mod)
+        app_m = importlib.import_module(app_mod)
+        shim_obj = getattr(shim_m, shim_sym)
+        app_obj = getattr(app_m, app_sym)
+        assert shim_obj is app_obj, f"{shim_mod}.{shim_sym} is not {app_mod}.{app_sym}"

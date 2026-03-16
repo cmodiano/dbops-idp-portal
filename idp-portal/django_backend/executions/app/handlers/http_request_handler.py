@@ -8,7 +8,8 @@ Validation SSRF : allowlist ALLOWED_HTTP_REQUEST_HOSTS + blocklist IPs privées.
 from __future__ import annotations
 
 import ipaddress
-from urllib.parse import urlparse
+import socket
+from urllib.parse import urlparse, urlunparse
 
 import httpx
 import structlog
@@ -30,13 +31,54 @@ _PRIVATE_NETWORKS = (
 )
 
 
+def _sanitize_url_for_logging(url: str) -> str:
+    """Remove query string from URL before logging to avoid leaking secrets."""
+    parsed = urlparse(url)
+    sanitized = urlunparse((
+        parsed.scheme,
+        parsed.netloc,
+        parsed.path,
+        parsed.params,
+        '',  # no query
+        parsed.fragment,
+    ))
+    return sanitized
+
+
 def _is_private_ip_literal(hostname: str) -> bool:
-    """Returns True if hostname is an IP literal in a private range."""
+    """Returns True if hostname resolves to a private/loopback/link-local IP."""
+    # Direct IP literal check
     try:
         ip = ipaddress.ip_address(hostname)
+        if ip.is_private or ip.is_loopback or ip.is_link_local:
+            return True
+        if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+            if any(ip.ipv4_mapped in net for net in _PRIVATE_NETWORKS):
+                return True
         return any(ip in net for net in _PRIVATE_NETWORKS)
     except ValueError:
-        return False  # Not an IP literal — hostname, skip IP check
+        pass  # Not an IP literal — resolve hostname
+
+    # Resolve hostname via DNS
+    try:
+        addrinfos = socket.getaddrinfo(hostname, None, family=socket.AF_UNSPEC, type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        return False  # Unresolved — treat as non-literal, let other validation handle
+
+    for (_family, _type, _proto, _canonname, sockaddr) in addrinfos:
+        addr_str = sockaddr[0] if isinstance(sockaddr, (list, tuple)) else sockaddr
+        try:
+            ip = ipaddress.ip_address(addr_str)
+        except ValueError:
+            continue
+        if ip.is_private or ip.is_loopback or ip.is_link_local:
+            return True
+        if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+            if any(ip.ipv4_mapped in net for net in _PRIVATE_NETWORKS):
+                return True
+        if any(ip in net for net in _PRIVATE_NETWORKS):
+            return True
+    return False
 
 
 class HttpRequestHandler:
@@ -66,9 +108,10 @@ class HttpRequestHandler:
         params = config.get('params', {})
         timeout = config.get('timeout', 30)
 
+        sanitized_url = _sanitize_url_for_logging(url)
         logger.info(
             "http_request_handler_start",
-            url=url,
+            url=sanitized_url,
             method=method,
             execution_id=execution.id,
             correlation_id=correlation_id,
@@ -80,7 +123,7 @@ class HttpRequestHandler:
         except ValueError:
             logger.warning(
                 "http_request_handler_validation_blocked",
-                url=url,
+                url=sanitized_url,
                 method=method,
                 execution_id=execution.id,
                 correlation_id=correlation_id,
@@ -112,7 +155,7 @@ class HttpRequestHandler:
         except (httpx.HTTPStatusError, httpx.RequestError):
             logger.error(
                 "http_request_handler_error",
-                url=url,
+                url=sanitized_url,
                 method=method,
                 execution_id=execution.id,
                 correlation_id=correlation_id,
@@ -124,7 +167,7 @@ class HttpRequestHandler:
 
         logger.info(
             "http_request_handler_success",
-            url=url,
+            url=sanitized_url,
             method=method,
             execution_id=execution.id,
             correlation_id=correlation_id,

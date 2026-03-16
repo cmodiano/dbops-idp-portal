@@ -100,6 +100,17 @@ def test_step_exists_active_true_for_completed():
 
 
 @pytest.mark.django_db
+def test_step_exists_active_true_for_waiting():
+    """True si un step WAITING existe avec ce config_step_id."""
+    step = ExecutionStepFactory(status=ExecutionStepStatus.WAITING)
+    result = ExecutionRepository.step_exists_active(
+        execution_id=step.execution_id,
+        config_step_id=step.config_step_id,
+    )
+    assert result is True
+
+
+@pytest.mark.django_db
 def test_step_exists_active_false_for_failed():
     """False si le step est en statut FAILED (non actif)."""
     step = ExecutionStepFactory(status=ExecutionStepStatus.FAILED)

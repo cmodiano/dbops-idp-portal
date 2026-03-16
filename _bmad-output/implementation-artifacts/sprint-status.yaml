@@ -1034,7 +1034,7 @@ development_status:
     # === Epic 85: Réorganisation structure packages orchestration (post Temporal-plan) ===
     # Réf: docs/architecture/temporal-plan-evaluation-2026-03-15.md § Remaining Gaps
     # Plan fonctionnel 85–90% livré. Reste: aligner layout domain/infra/app du temporal-advantages-without-temporal-implementation-plan.md
-    epic-85: in-progress
+    epic-85: done
     85-1-domain-workflow-graph-commands: done # Créer domain/workflow_graph.py, domain/commands.py — extraire logique existante si pertinent
     85-2-infra-repositories-outbox: done # Créer infra/repositories.py ; relocaliser services/outbox.py → infra/outbox.py
     85-3-app-orchestrator-command-processor: done # Relocaliser tasks/orchestration_worker.py → app/orchestrator.py ; services/workflow_commands.py → app/command_processor.py
@@ -1043,9 +1043,9 @@ development_status:
     # === Epic 86: Robustesse — correction des gaps identifiés ===
     # Réf: docs/robustness-issues.md
     # Timeouts adapters, ServiceNow, backoff gates, validation gate_type, cache annulation Redis, retries services, health check, Splunk, transitions, jitter
-    epic-86: backlog
+    epic-86: in-progress
     # --- Critical (HIGH) ---
-    86-1-timeout-adapter-calls: backlog # adapters/base_adapter.py — timeout_seconds sur trigger/get_status, AdapterTimeoutError, env vars par adapter (AAP_SOCKET_TIMEOUT, etc.), catch dans container_workflow_runtime
+    86-1-timeout-adapter-calls: in-progress # adapters/base_adapter.py — timeout_seconds sur trigger/get_status, AdapterTimeoutError, env vars par adapter (AAP_SOCKET_TIMEOUT, etc.), catch dans container_workflow_runtime
     86-2-servicenow-update-change-get-status: backlog # services/servicenow_service.py — implémenter update_change() et get_change_status() (Table API PATCH/GET), mapping états, tests unitaires + @integration
     # --- Medium ---
     86-3-gate-polling-backoff: backlog # gate_evaluator.py — backoff exponentiel par gate (BASE/MAX_POLL_INTERVAL, POLL_BACKOFF_FACTOR), persister poll_attempt dans step.output ou cache

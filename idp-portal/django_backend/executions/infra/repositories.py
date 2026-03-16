@@ -49,7 +49,7 @@ class ExecutionRepository:
 
     @staticmethod
     def step_exists_active(execution_id: int, config_step_id: str) -> bool:
-        """True si un step avec ce config_step_id est en état actif (PENDING/RUNNING/COMPLETED)."""
+        """True si un step avec ce config_step_id est en état actif (PENDING/RUNNING/COMPLETED/WAITING)."""
         return ExecutionStep.objects.filter(
             execution_id=execution_id,
             config_step_id=config_step_id,
@@ -57,6 +57,7 @@ class ExecutionRepository:
                 ExecutionStepStatus.PENDING,
                 ExecutionStepStatus.RUNNING,
                 ExecutionStepStatus.COMPLETED,
+                ExecutionStepStatus.WAITING,
             ],
         ).exists()
 

@@ -23,6 +23,7 @@ from django.utils import timezone
 from catalog.workflow_definition_repository import get_steps as get_workflow_steps
 from executions.domain.commands import CommandType, VALID_COMMAND_TYPES
 from executions.domain.workflow_graph import find_step_config, get_linear_next_step_ids
+from executions.infra.repositories import ExecutionRepository
 from executions.models import (
     Execution,
     ExecutionStatus,
@@ -298,15 +299,13 @@ class WorkflowCommandService:
         if on_error:
             cls._enqueue_resume_steps(execution, on_error, all_steps)
         else:
-            # No error path — fail the execution
-            if execution.status == ExecutionStatus.RUNNING:
-                Execution.objects.filter(
-                    id=execution.id, status=ExecutionStatus.RUNNING,
-                ).update(
-                    status=ExecutionStatus.FAILED,
-                    completed_at=timezone.now(),
-                    error_message="Step approval rejected",
-                )
+            # No error path — fail the execution via centralized finalizer
+            from executions.app.orchestrator import _force_finalize_execution  # noqa: PLC0415
+            _force_finalize_execution(
+                execution,
+                status=ExecutionStatus.FAILED,
+                error_message="Step approval rejected",
+            )
 
         logger.info(
             "command_reject_handled",
@@ -428,14 +427,12 @@ class WorkflowCommandService:
         if on_error:
             cls._enqueue_resume_steps(execution, on_error, all_steps)
         else:
-            if execution.status == ExecutionStatus.RUNNING:
-                Execution.objects.filter(
-                    id=execution.id, status=ExecutionStatus.RUNNING,
-                ).update(
-                    status=ExecutionStatus.FAILED,
-                    completed_at=timezone.now(),
-                    error_message="Step timed out",
-                )
+            from executions.app.orchestrator import _force_finalize_execution  # noqa: PLC0415
+            _force_finalize_execution(
+                execution,
+                status=ExecutionStatus.FAILED,
+                error_message="Step timed out",
+            )
 
         logger.info(
             "command_timeout_handled",
@@ -482,11 +479,6 @@ class WorkflowCommandService:
         """Create PENDING ExecutionSteps for the given step_ids and enqueue them."""
         from executions.infra.work_queue import WorkQueue  # noqa: PLC0415
         from executions.container_workflow_runtime import ContainerWorkflowRuntime  # noqa: PLC0415
-        from django.db.models import Max  # noqa: PLC0415
-
-        max_order = ExecutionStep.objects.filter(
-            execution=execution,
-        ).aggregate(Max('step_order'))['step_order__max'] or 0
 
         step_config_by_id = {
             s.get('step_id'): s
@@ -498,40 +490,37 @@ class WorkflowCommandService:
             if not isinstance(sid, str) or not sid:
                 continue
 
-            # Idempotency: skip if step already exists and is active
-            existing = ExecutionStep.objects.filter(
-                execution=execution,
-                config_step_id=sid,
-                status__in=[
-                    ExecutionStepStatus.PENDING,
-                    ExecutionStepStatus.RUNNING,
-                    ExecutionStepStatus.COMPLETED,
-                ],
-            ).exists()
-            if existing:
-                continue
-
             step_config = step_config_by_id.get(sid)
             if not step_config:
                 continue
 
-            step_type_str = step_config.get('step_type', 'platform')
-            from executions.models import ExecutionStepType  # noqa: PLC0415
-            db_step_type = ContainerWorkflowRuntime._STEP_TYPE_TO_DB_TYPE.get(
-                step_type_str, ExecutionStepType.PLATFORM,
-            )
-            step_name = step_config.get('name') or f"Étape {step_config.get('order', 0)}"
+            with transaction.atomic():
+                # Lock execution to prevent concurrent duplicate creation
+                Execution.objects.select_for_update().get(id=execution.id)
 
-            max_order += 1
-            exec_step = ExecutionStep.objects.create(
-                execution=execution,
-                step_order=max_order,
-                step_name=step_name,
-                config_step_id=sid,
-                step_type=db_step_type,
-                status=ExecutionStepStatus.PENDING,
-            )
-            WorkQueue.enqueue(exec_step)
+                # Re-check existence inside transaction (racy otherwise)
+                existing = ExecutionRepository.step_exists_active(execution.id, sid)
+                if existing:
+                    continue
+
+                max_order = ExecutionRepository.get_max_step_order(execution.id) or 0
+
+                step_type_str = step_config.get('step_type', 'platform')
+                from executions.models import ExecutionStepType  # noqa: PLC0415
+                db_step_type = ContainerWorkflowRuntime._STEP_TYPE_TO_DB_TYPE.get(
+                    step_type_str, ExecutionStepType.PLATFORM,
+                )
+                step_name = step_config.get('name') or f"Étape {step_config.get('order', 0)}"
+
+                exec_step = ExecutionStep.objects.create(
+                    execution=execution,
+                    step_order=max_order + 1,
+                    step_name=step_name,
+                    config_step_id=sid,
+                    step_type=db_step_type,
+                    status=ExecutionStepStatus.PENDING,
+                )
+                WorkQueue.enqueue(exec_step)
 
     @staticmethod
     def _finalize_if_done(execution: Execution) -> None:
