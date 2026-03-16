@@ -178,8 +178,11 @@ class ActionViewSet(viewsets.ModelViewSet):
             response_serializer = ActionSerializer(instance)
             return Response({"data": response_serializer.data})
 
-        # Story 28.4: Handle business_rule_policy_id in PATCH requests only
-        if partial and ('business_rule_policy_id' in request.data or 'business_rule_policies' in request.data):
+        # Story 28.4: Handle business_rule_policy_id/business_rule_policies in PATCH requests
+        # ONLY when they are the sole fields being updated (like output_schema_id above).
+        # Otherwise, fall through to the main update path which handles all fields together.
+        brp_keys = {'business_rule_policy_id', 'business_rule_policies'}
+        if partial and brp_keys & set(request.data.keys()) and set(request.data.keys()) <= brp_keys:
             brp_id = request.data.get('business_rule_policy_id')
             brp_inline = request.data.get('business_rule_policies')
 

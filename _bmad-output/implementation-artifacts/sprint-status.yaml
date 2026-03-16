@@ -1077,8 +1077,8 @@ development_status:
     # === Epic 88: Correction des findings de la revue de code (Audit #8) ===
     # Réf: idp-portal/CODEBASE-REVIEW.md §27, docs/backend/epic-88-fix-code-review-findings.md
     # 27 findings ouverts post-refactoring Stories 83–87 — quick wins, bugs, sécurité, refactoring, performance, qualité
-    epic-88: backlog
-    88-1-quick-fixes-backend-bugs-securite: backlog # BUG-BE-01, ERR-BE-01, CELERY-BE-01, SEC-BE-01, TEST-BE-01
+    epic-88: in-progress
+    88-1-quick-fixes-backend-bugs-securite: done # BUG-BE-01, ERR-BE-01, CELERY-BE-01, SEC-BE-01, TEST-BE-01
     88-2-quick-fixes-frontend-bugs-erreurs: backlog # BUG-FE-01, ERR-FE-01
     88-3-bugs-erreurs-restants: backlog # BUG-BE-02/03, BUG-FE-02/03, ERR-FE-02/03
     88-4-securite-restante-low: backlog # SEC-BE-02/03, SEC-FE-01

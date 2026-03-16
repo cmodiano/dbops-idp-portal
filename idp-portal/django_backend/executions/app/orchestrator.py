@@ -137,6 +137,7 @@ def _force_finalize_execution(
     """
     if execution.status != ExecutionStatus.RUNNING:
         return
+    updated = 0
     with transaction.atomic():
         updated = Execution.objects.filter(
             id=execution.id,
@@ -156,8 +157,8 @@ def _force_finalize_execution(
             execution.refresh_from_db()
             from executions.container_workflow_runtime import _broadcast_terminal  # noqa: PLC0415
             _broadcast_terminal(execution)
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception:
+            logger.debug("broadcast_terminal_best_effort_failed", execution_id=execution.id, correlation_id=execution.correlation_id, exc_info=True)
         try:
             from core.services import AuditService  # noqa: PLC0415
             from core.models import AuditActionType, AuditEntityType  # noqa: PLC0415
@@ -173,8 +174,8 @@ def _force_finalize_execution(
                 details={"finalized_by": "workflow_command"},
                 correlation_id=execution.correlation_id,
             )
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception:
+            logger.debug("audit_trail_best_effort_failed", execution_id=execution.id, correlation_id=execution.correlation_id, exc_info=True)
 
 
 def _finalize_execution_if_done(execution: Execution, outcome: ExecutionStatus) -> None:
@@ -183,6 +184,8 @@ def _finalize_execution_if_done(execution: Execution, outcome: ExecutionStatus) 
     Uses transaction.atomic to ensure the check+update is race-free when
     multiple workers/commands finalize concurrently (e.g. fan-out last steps).
     """
+    updated = 0
+    final_status = None
     with transaction.atomic():
         # Check if there are any remaining PENDING or RUNNING steps
         has_active_steps = ExecutionStep.objects.filter(
@@ -246,8 +249,8 @@ def _finalize_execution_if_done(execution: Execution, outcome: ExecutionStatus) 
             execution.refresh_from_db()
             from executions.container_workflow_runtime import _broadcast_terminal  # noqa: PLC0415
             _broadcast_terminal(execution)
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception:
+            logger.debug("broadcast_terminal_best_effort_failed", execution_id=execution.id, correlation_id=execution.correlation_id, exc_info=True)
 
         # Audit trail
         try:
@@ -266,8 +269,8 @@ def _finalize_execution_if_done(execution: Execution, outcome: ExecutionStatus) 
                 details={"finalized_by": "orchestration_worker"},
                 correlation_id=execution.correlation_id,
             )
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception:
+            logger.debug("audit_trail_best_effort_failed", execution_id=execution.id, correlation_id=execution.correlation_id, exc_info=True)
 
 
 @shared_task(

@@ -10,14 +10,20 @@ import logging
 
 import structlog
 from celery import Task, shared_task  # type: ignore[import-untyped]
+from celery.exceptions import SoftTimeLimitExceeded  # type: ignore[import-untyped]
+from django.conf import settings
 
 logger = structlog.get_logger(__name__)
+
+_FLUSH_LIMITS = settings.CELERY_TASK_TIME_LIMITS["flush_splunk_logging_handler"]
 
 
 @shared_task(
     name="core.tasks.flush_splunk_logging_handler",
     bind=True,
     max_retries=0,
+    soft_time_limit=_FLUSH_LIMITS["soft"],
+    time_limit=_FLUSH_LIMITS["hard"],
 )
 def flush_splunk_logging_handler(self: Task) -> dict:
     """Flush all SplunkLoggingHandler instances in this process.
@@ -57,12 +63,19 @@ def flush_splunk_logging_handler(self: Task) -> dict:
                     handlers_flushed += 1
                     total_buffer += h._buffer.qsize()
                     total_dropped += h.dropped_count
+                except SoftTimeLimitExceeded:
+                    raise
                 except Exception as exc:  # noqa: BLE001
                     logger.warning(
                         "splunk_flush_task_handler_error",
                         error=str(exc),
                     )
 
+    except SoftTimeLimitExceeded:
+        logger.warning(
+            "splunk_flush_task_soft_time_limit",
+            handlers_flushed=handlers_flushed,
+        )
     except Exception as exc:  # noqa: BLE001
         logger.error(
             "splunk_flush_task_error",

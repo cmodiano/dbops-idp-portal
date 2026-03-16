@@ -130,8 +130,6 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
         impact_rules: listToImpactRules(impactRulesList),
         default_impact_level: defaultImpactLevel,
         documentation_md: values.documentation_md || null,
-        notification_config: null,
-        business_rule_policy_id: null,
       };
 
       const result = await onSubmit(action);
