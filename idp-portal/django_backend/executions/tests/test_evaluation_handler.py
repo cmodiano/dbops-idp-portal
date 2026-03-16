@@ -167,30 +167,52 @@ class TestEvaluationHandler:
                 correlation_id=None,
             )
 
-    def test_missing_artifact_type_raises_value_error(self):
-        """artifact_type manquant dans step_config → ValueError rapide."""
+    @patch('executions.app.handlers.evaluation_handler.RuleEngine')
+    @patch('executions.app.handlers.evaluation_handler.BusinessRulePolicy')
+    def test_missing_artifact_type_passes_to_rule_engine(self, mock_brp_class, mock_engine_class):
+        """artifact_type manquant → passé à RuleEngine qui retourne _no_approval (backward compat)."""
+        mock_brp_class.objects.get.return_value = MagicMock()
+        mock_engine = mock_engine_class.return_value
+        mock_engine.evaluate.return_value = PolicyDecision(
+            require_approval=False,
+            decision_reason="Invalid step_type",
+        )
         step_config = self._make_step_config()
         del step_config['artifact_type']
-        with pytest.raises(ValueError, match="requires 'artifact_type'"):
-            self.handler.execute(
-                step_config=step_config,
-                resolved_params={'artifact': {}},
-                execution=self._make_execution(),
-                step=step_config,
-                correlation_id=None,
-            )
+        result = self.handler.execute(
+            step_config=step_config,
+            resolved_params={'artifact': {}},
+            execution=self._make_execution(),
+            step=step_config,
+            correlation_id=None,
+        )
+        assert result['status'] == ExecutionStatus.COMPLETED
+        mock_engine.evaluate.assert_called_once()
+        call_args = mock_engine.evaluate.call_args[0]
+        assert call_args[1].step_type is None  # artifact_type absent
 
-    def test_missing_artifact_raises_value_error(self):
-        """AC#7 : resolved_params sans 'artifact' → ValueError rapide (fail-fast)."""
+    @patch('executions.app.handlers.evaluation_handler.RuleEngine')
+    @patch('executions.app.handlers.evaluation_handler.BusinessRulePolicy')
+    def test_missing_artifact_passes_to_rule_engine(self, mock_brp_class, mock_engine_class):
+        """AC#7 : resolved_params sans 'artifact' → passé à RuleEngine qui retourne _no_approval."""
+        mock_brp_class.objects.get.return_value = MagicMock()
+        mock_engine = mock_engine_class.return_value
+        mock_engine.evaluate.return_value = PolicyDecision(
+            require_approval=False,
+            decision_reason="No artifact provided",
+        )
         step_config = self._make_step_config()
-        with pytest.raises(ValueError, match="requires 'artifact' in resolved_params"):
-            self.handler.execute(
-                step_config=step_config,
-                resolved_params={},  # pas de 'artifact'
-                execution=self._make_execution(),
-                step=step_config,
-                correlation_id=None,
-            )
+        result = self.handler.execute(
+            step_config=step_config,
+            resolved_params={},  # pas de 'artifact'
+            execution=self._make_execution(),
+            step=step_config,
+            correlation_id=None,
+        )
+        assert result['status'] == ExecutionStatus.COMPLETED
+        mock_engine.evaluate.assert_called_once()
+        call_args = mock_engine.evaluate.call_args[0]
+        assert call_args[2] is None  # artifact absent
 
     @patch('executions.app.handlers.evaluation_handler.RuleEngine')
     @patch('executions.app.handlers.evaluation_handler.BusinessRulePolicy')

@@ -498,8 +498,10 @@ class WorkflowCommandService:
                 # Lock execution to prevent concurrent duplicate creation
                 Execution.objects.select_for_update().get(id=execution.id)
 
-                # Re-check existence inside transaction (racy otherwise)
-                existing = ExecutionRepository.step_exists_active(execution.id, sid)
+                # Re-check existence inside transaction (racy otherwise).
+                # Use step_exists_for_resume (excludes WAITING) so resume can re-enqueue
+                # after a gate timed out or was rejected.
+                existing = ExecutionRepository.step_exists_for_resume(execution.id, sid)
                 if existing:
                     continue
 

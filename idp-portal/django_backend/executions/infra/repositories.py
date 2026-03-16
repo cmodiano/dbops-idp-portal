@@ -62,6 +62,23 @@ class ExecutionRepository:
         ).exists()
 
     @staticmethod
+    def step_exists_for_resume(execution_id: int, config_step_id: str) -> bool:
+        """True si un step avec ce config_step_id est PENDING/RUNNING/COMPLETED (exclut WAITING).
+
+        Utilisé pour le resume : permet de re-enqueuer un step après timeout ou
+        rejet d'un gate WAITING, sans être bloqué par un step encore WAITING.
+        """
+        return ExecutionStep.objects.filter(
+            execution_id=execution_id,
+            config_step_id=config_step_id,
+            status__in=[
+                ExecutionStepStatus.PENDING,
+                ExecutionStepStatus.RUNNING,
+                ExecutionStepStatus.COMPLETED,
+            ],
+        ).exists()
+
+    @staticmethod
     def touch_heartbeat(execution_id: int) -> None:
         """Met à jour Execution.updated_at — heartbeat pour détection de stagnation.
 

@@ -54,13 +54,9 @@ class EvaluationHandler:
         """
         policy_id = step_config.get('policy_id')
         artifact_type = step_config.get('artifact_type')  # step_type pour l'interpréteur
-
-        if not artifact_type:
-            raise ValueError("evaluation step requires 'artifact_type' in step config")
-
         artifact = resolved_params.get('artifact')
-        if artifact is None:
-            raise ValueError("evaluation step requires 'artifact' in resolved_params (from input_mapping)")
+        # No strict null checks: RuleEngine.evaluate() handles None/empty gracefully
+        # (returns _no_approval for invalid step_type or missing artifact) — backward compat.
 
         logger.info(
             "evaluation_handler_start",

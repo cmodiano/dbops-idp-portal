@@ -122,6 +122,46 @@ def test_step_exists_active_false_for_failed():
 
 
 @pytest.mark.django_db
+def test_step_exists_for_resume_true_for_pending():
+    """step_exists_for_resume True si PENDING."""
+    step = ExecutionStepFactory(status=ExecutionStepStatus.PENDING)
+    assert ExecutionRepository.step_exists_for_resume(
+        execution_id=step.execution_id,
+        config_step_id=step.config_step_id,
+    ) is True
+
+
+@pytest.mark.django_db
+def test_step_exists_for_resume_true_for_completed():
+    """step_exists_for_resume True si COMPLETED."""
+    step = ExecutionStepFactory(status=ExecutionStepStatus.COMPLETED)
+    assert ExecutionRepository.step_exists_for_resume(
+        execution_id=step.execution_id,
+        config_step_id=step.config_step_id,
+    ) is True
+
+
+@pytest.mark.django_db
+def test_step_exists_for_resume_false_for_waiting():
+    """step_exists_for_resume False si WAITING — permet re-enqueue après timeout/rejet."""
+    step = ExecutionStepFactory(status=ExecutionStepStatus.WAITING)
+    assert ExecutionRepository.step_exists_for_resume(
+        execution_id=step.execution_id,
+        config_step_id=step.config_step_id,
+    ) is False
+
+
+@pytest.mark.django_db
+def test_step_exists_for_resume_false_for_failed():
+    """step_exists_for_resume False si FAILED."""
+    step = ExecutionStepFactory(status=ExecutionStepStatus.FAILED)
+    assert ExecutionRepository.step_exists_for_resume(
+        execution_id=step.execution_id,
+        config_step_id=step.config_step_id,
+    ) is False
+
+
+@pytest.mark.django_db
 def test_touch_heartbeat_updates_updated_at():
     """updated_at est modifié après touch_heartbeat (uniquement si status=RUNNING)."""
     from django.utils import timezone
