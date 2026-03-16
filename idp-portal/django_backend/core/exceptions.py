@@ -112,6 +112,25 @@ class VaultAccessDeniedError(VaultError):
         super().__init__(code="VAULT_ACCESS_DENIED", message=message, details=details)
 
 
+# Story 86.1: Adapter timeout exception
+class AdapterTimeoutError(ServiceUnavailableError):
+    """Timeout lors d'un appel adapter vers une plateforme externe (trigger/get_status)."""
+
+    def __init__(
+        self,
+        adapter_type: str,
+        message: str = "Adapter call timed out",
+        platform_job_id: str | None = None,
+        details: dict | None = None,
+    ) -> None:
+        extra: dict = {"adapter_type": adapter_type}
+        if platform_job_id:
+            extra["platform_job_id"] = platform_job_id
+        if details:
+            extra.update(details)
+        super().__init__(code="ADAPTER_TIMEOUT", message=message, details=extra)
+
+
 # Keys whose values must not be exposed in HTTP responses (can leak token URLs, internal hostnames, etc.)
 _SENSITIVE_DETAIL_KEYS = frozenset({
     "token_url", "base_url", "vault_addr", "secret_service_id",

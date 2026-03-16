@@ -32,15 +32,27 @@ _PRIVATE_NETWORKS = (
 
 
 def _sanitize_url_for_logging(url: str) -> str:
-    """Remove query string from URL before logging to avoid leaking secrets."""
+    """Remove query string, credentials, and fragment from URL before logging to avoid leaking secrets."""
     parsed = urlparse(url)
+    # Build netloc from hostname and port only (omit username/password)
+    host = parsed.hostname or ''
+    port = parsed.port
+    # IPv6 hostnames contain ':' — wrap in brackets for netloc format
+    if host and ':' in host:
+        host_part = f"[{host}]"
+    else:
+        host_part = host
+    if port is not None:
+        sanitized_netloc = f"{host_part}:{port}" if host_part else f":{port}"
+    else:
+        sanitized_netloc = host_part
     sanitized = urlunparse((
         parsed.scheme,
-        parsed.netloc,
+        sanitized_netloc,
         parsed.path,
         parsed.params,
         '',  # no query
-        parsed.fragment,
+        '',  # no fragment
     ))
     return sanitized
 
@@ -59,11 +71,15 @@ def _is_private_ip_literal(hostname: str) -> bool:
     except ValueError:
         pass  # Not an IP literal — resolve hostname
 
-    # Resolve hostname via DNS
+    # Resolve hostname via DNS (fail-closed: unresolved hostnames are disallowed)
     try:
         addrinfos = socket.getaddrinfo(hostname, None, family=socket.AF_UNSPEC, type=socket.SOCK_STREAM)
-    except socket.gaierror:
-        return False  # Unresolved — treat as non-literal, let other validation handle
+    except socket.gaierror as e:
+        logger.warning("ssrf_validation_hostname_unresolved", hostname=hostname, error=str(e))
+        raise ValueError(
+            f"Hostname {hostname!r} could not be resolved: {e}. "
+            "Unresolved hostnames are not allowed for SSRF safety."
+        ) from e
 
     for (_family, _type, _proto, _canonname, sockaddr) in addrinfos:
         addr_str = sockaddr[0] if isinstance(sockaddr, (list, tuple)) else sockaddr

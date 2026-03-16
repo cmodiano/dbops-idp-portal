@@ -21,13 +21,15 @@ from datetime import datetime, timezone
 import httpx
 import structlog
 
+from django.conf import settings
+
 from adapters.base_adapter import BaseAdapter
 from adapters.status_mappers import (
     TERRAFORM_CLOUD_STATUS_MAP as TERRAFORM_CLOUD_STATUS_MAP,
     TERRAFORM_CLOUD_TERMINAL_STATUSES as TERRAFORM_CLOUD_TERMINAL_STATUSES,
     map_terraform_cloud_status as map_terraform_cloud_status,
 )
-from core.exceptions import ServiceUnavailableError
+from core.exceptions import AdapterTimeoutError, ServiceUnavailableError
 from integrations.health_check import HealthCheckResult, HealthCheckStatus, IHealthCheckable
 
 logger = structlog.get_logger(__name__)
@@ -54,7 +56,7 @@ class TerraformCloudAdapter(BaseAdapter, IHealthCheckable):
         base_url: str,
         auth_headers: dict[str, str],
         organization: str = "",
-        timeout: float = TERRAFORM_CLOUD_DEFAULT_TIMEOUT,
+        timeout: float | None = None,
         verify_ssl: bool = True,
     ) -> None:
         if not organization:
@@ -65,7 +67,8 @@ class TerraformCloudAdapter(BaseAdapter, IHealthCheckable):
             "Content-Type": TERRAFORM_CLOUD_CONTENT_TYPE,
         }
         self.organization = organization
-        self.timeout = timeout
+        default_timeout = getattr(settings, 'TERRAFORM_CLOUD_SOCKET_TIMEOUT', TERRAFORM_CLOUD_DEFAULT_TIMEOUT)
+        self.timeout = timeout if timeout is not None else default_timeout
         self.verify_ssl = verify_ssl
 
     # ------------------------------------------------------------------
@@ -100,7 +103,8 @@ class TerraformCloudAdapter(BaseAdapter, IHealthCheckable):
             Dict with 'platform_job_id', 'status', 'url'.
 
         Raises:
-            ServiceUnavailableError: If Terraform Cloud is unreachable or returns error.
+            AdapterTimeoutError: If Terraform Cloud does not respond within the configured timeout.
+            ServiceUnavailableError: If Terraform Cloud returns an HTTP error or connection fails.
         """
         if not workspace_id:
             raise ServiceUnavailableError(
@@ -163,10 +167,9 @@ class TerraformCloudAdapter(BaseAdapter, IHealthCheckable):
                 correlation_id=correlation_id,
                 error=str(exc),
             )
-            raise ServiceUnavailableError(
-                code="TERRAFORM_TIMEOUT",
+            raise AdapterTimeoutError(
+                adapter_type="terraform_cloud",
                 message="Terraform Cloud did not respond in time",
-                details={"url": url},
             ) from exc
         except httpx.HTTPStatusError as exc:
             status_code = exc.response.status_code
@@ -238,7 +241,8 @@ class TerraformCloudAdapter(BaseAdapter, IHealthCheckable):
             'created_at', 'updated_at'.
 
         Raises:
-            ServiceUnavailableError: If Terraform Cloud is unreachable.
+            AdapterTimeoutError: If Terraform Cloud does not respond within the configured timeout.
+            ServiceUnavailableError: If Terraform Cloud returns an HTTP error or connection fails.
         """
         url = f"{self.base_url}/runs/{platform_job_id}"
 
@@ -264,10 +268,10 @@ class TerraformCloudAdapter(BaseAdapter, IHealthCheckable):
                 correlation_id=correlation_id,
                 error=str(exc),
             )
-            raise ServiceUnavailableError(
-                code="TERRAFORM_TIMEOUT",
+            raise AdapterTimeoutError(
+                adapter_type="terraform_cloud",
                 message="Terraform Cloud status check timed out",
-                details={"platform_job_id": platform_job_id},
+                platform_job_id=platform_job_id,
             ) from exc
         except httpx.HTTPStatusError as exc:
             status_code = exc.response.status_code

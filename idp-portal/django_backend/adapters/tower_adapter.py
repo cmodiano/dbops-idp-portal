@@ -14,9 +14,11 @@ from datetime import datetime, timezone
 import httpx
 import structlog
 
+from django.conf import settings
+
 from adapters.base_adapter import BaseAdapter
 from adapters.status_mappers import AAP_TOWER_TERMINAL_STATUSES, TOWER_STATUS_MAP  # noqa: F401 — re-exported for backward compat
-from core.exceptions import ServiceUnavailableError
+from core.exceptions import AdapterTimeoutError, ServiceUnavailableError
 from integrations.health_check import HealthCheckResult, HealthCheckStatus, IHealthCheckable
 
 logger = structlog.get_logger(__name__)
@@ -37,12 +39,13 @@ class TowerAdapter(BaseAdapter, IHealthCheckable):
         self,
         base_url: str,
         auth_headers: dict[str, str],
-        timeout: float = TOWER_DEFAULT_TIMEOUT,
+        timeout: float | None = None,
         ssl_verify: bool = False,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.auth_headers = auth_headers
-        self.timeout = timeout
+        default_timeout = getattr(settings, 'TOWER_SOCKET_TIMEOUT', TOWER_DEFAULT_TIMEOUT)
+        self.timeout = timeout if timeout is not None else default_timeout
         self._verify = ssl_verify  # ADP-MED-01: configurable SSL (default False for Tower/AWX on-prem)
 
     # ------------------------------------------------------------------
@@ -71,7 +74,8 @@ class TowerAdapter(BaseAdapter, IHealthCheckable):
             Dict with 'platform_job_id', 'status', 'url'.
 
         Raises:
-            ServiceUnavailableError: If Tower is unreachable or returns error.
+            AdapterTimeoutError: If Tower does not respond within the configured timeout.
+            ServiceUnavailableError: If Tower returns an HTTP error or connection fails.
         """
         if resource_type == "workflow_job":
             url = f"{self.base_url}/api/v2/workflow_job_templates/{template_id}/launch/"
@@ -108,10 +112,9 @@ class TowerAdapter(BaseAdapter, IHealthCheckable):
                 correlation_id=correlation_id,
                 error=str(exc),
             )
-            raise ServiceUnavailableError(
-                code="TOWER_TIMEOUT",
+            raise AdapterTimeoutError(
+                adapter_type="tower",
                 message="Tower did not respond in time",
-                details={"url": url},
             ) from exc
         except httpx.HTTPStatusError as exc:
             logger.error(
@@ -179,7 +182,8 @@ class TowerAdapter(BaseAdapter, IHealthCheckable):
             Dict with 'status' (IDP mapping), 'tower_status', 'started', 'finished'.
 
         Raises:
-            ServiceUnavailableError: If Tower is unreachable.
+            AdapterTimeoutError: If Tower does not respond within the configured timeout.
+            ServiceUnavailableError: If Tower returns an HTTP error or connection fails.
         """
         if resource_type == "workflow_job":
             url = f"{self.base_url}/api/v2/workflow_jobs/{platform_job_id}/"
@@ -204,7 +208,7 @@ class TowerAdapter(BaseAdapter, IHealthCheckable):
                 data = response.json()
         except httpx.TimeoutException as exc:
             logger.error("tower_get_status_timeout", platform_job_id=platform_job_id, correlation_id=correlation_id, error=str(exc))
-            raise ServiceUnavailableError(code="TOWER_TIMEOUT", message="Tower status check timed out", details={"platform_job_id": platform_job_id}) from exc
+            raise AdapterTimeoutError(adapter_type="tower", message="Tower status check timed out", platform_job_id=platform_job_id) from exc
         except httpx.HTTPStatusError as exc:
             logger.error("tower_get_status_http_error", platform_job_id=platform_job_id, status_code=exc.response.status_code, correlation_id=correlation_id, error=str(exc))
             raise ServiceUnavailableError(code="TOWER_HTTP_ERROR", message=f"Tower returned HTTP {exc.response.status_code}", details={"platform_job_id": platform_job_id, "status_code": exc.response.status_code}) from exc

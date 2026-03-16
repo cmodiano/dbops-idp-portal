@@ -1431,9 +1431,8 @@ class ContainerWorkflowRuntime:
 
     def _touch_heartbeat(self) -> None:
         """Story 76.3: Update updated_at only when execution is RUNNING (avoid unconditional writes)."""
-        if self.execution.status == ExecutionStatus.RUNNING:
-            from executions.infra.repositories import ExecutionRepository  # noqa: PLC0415
-            ExecutionRepository.touch_heartbeat(self.execution.id)
+        from executions.infra.repositories import ExecutionRepository  # noqa: PLC0415
+        ExecutionRepository.touch_heartbeat(self.execution.id)
 
     def execute_single_step(
         self, exec_step: ExecutionStep, step_config: dict,

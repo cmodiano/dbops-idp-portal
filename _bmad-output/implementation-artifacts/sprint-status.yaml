@@ -1034,7 +1034,7 @@ development_status:
     # === Epic 85: Réorganisation structure packages orchestration (post Temporal-plan) ===
     # Réf: docs/architecture/temporal-plan-evaluation-2026-03-15.md § Remaining Gaps
     # Plan fonctionnel 85–90% livré. Reste: aligner layout domain/infra/app du temporal-advantages-without-temporal-implementation-plan.md
-    epic-85: done
+    epic-85: in-progress
     85-1-domain-workflow-graph-commands: done # Créer domain/workflow_graph.py, domain/commands.py — extraire logique existante si pertinent
     85-2-infra-repositories-outbox: done # Créer infra/repositories.py ; relocaliser services/outbox.py → infra/outbox.py
     85-3-app-orchestrator-command-processor: done # Relocaliser tasks/orchestration_worker.py → app/orchestrator.py ; services/workflow_commands.py → app/command_processor.py
@@ -1045,7 +1045,7 @@ development_status:
     # Timeouts adapters, ServiceNow, backoff gates, validation gate_type, cache annulation Redis, retries services, health check, Splunk, transitions, jitter
     epic-86: in-progress
     # --- Critical (HIGH) ---
-    86-1-timeout-adapter-calls: in-progress # adapters/base_adapter.py — timeout_seconds sur trigger/get_status, AdapterTimeoutError, env vars par adapter (AAP_SOCKET_TIMEOUT, etc.), catch dans container_workflow_runtime
+    86-1-timeout-adapter-calls: done # AdapterTimeoutError(ServiceUnavailableError) dans core/exceptions.py, 5 settings XXX_SOCKET_TIMEOUT validés (ImproperlyConfigured), 5 adapters mis à jour, catch dans trigger.py + polling.py avec audit trail, 346 tests ok
     86-2-servicenow-update-change-get-status: backlog # services/servicenow_service.py — implémenter update_change() et get_change_status() (Table API PATCH/GET), mapping états, tests unitaires + @integration
     # --- Medium ---
     86-3-gate-polling-backoff: backlog # gate_evaluator.py — backoff exponentiel par gate (BASE/MAX_POLL_INTERVAL, POLL_BACKOFF_FACTOR), persister poll_attempt dans step.output ou cache
@@ -1059,3 +1059,18 @@ development_status:
     86-10-warning-max-step-transitions: backlog # container_workflow_runtime.py — WARNING à 80% limite, ERROR au plafond, settings.MAX_STEP_TRANSITIONS configurable
     86-11-retry-backoff-jitter: backlog # services.py + api_client.ts — full jitter sur backoff (random.uniform / Math.random) pour éviter thundering herd
     epic-86-retrospective: optional
+    # === Epic 87: Documentation complète de la solution ===
+    # Réf: docs/backend/epic-87-documentation-complete.md
+    # Objectif: Revoir toute la documentation MkDocs en français — workflows détaillés, frontend, Docker, dev/extensibilité, schéma BD
+    epic-87: backlog
+    87-1-documentation-architecture-workflows-detaillee: backlog # Flow complet workflows: queue jobs, trigger, poll, gates, opérations BD, patterns (Outbox, RUNNABLE_STEPS)
+    87-2-documentation-structure-frontend-consommation-backend: backlog # Structure frontend, api_client, services, JSON Schemas (parameters_schema, useDynamicForm)
+    87-3-documentation-architecture-conteneurs-docker: backlog # Rôle de chaque conteneur (redis, oracle, backend, celery-worker, celery-beat, frontend), flux réseau
+    87-4-documentation-developpement-extensibilite: backlog # Registries (Adapter, Platform, Service, Gate, StepHandler), comment ajouter gates/adapters/services
+    87-5-documentation-schema-base-donnees: backlog # Toutes les tables, colonnes, descriptions, diagramme ER à jour
+    87-6-reference-variables-environnement: backlog # Référence exhaustive env vars (backend, celery, beat, frontend, docker) — docs/operations/environment-variables-reference.md
+    87-7-guide-onboarding-developpement-local: backlog # Prérequis, premier run, tests, migrations, conventions, problèmes courants — docs/reference/onboarding-guide.md
+    87-8-documentation-rbac-et-inventaire: backlog # RBAC détaillé, cumul permissions, inventaire, EXECUTION_TARGETS, règles métier
+    87-9-documentation-integrations-externes: backlog # Flow métier AAP, ServiceNow, Vault, Terraform, GitHub, Azure — docs/integrations/flows-by-platform.md
+    87-10-documentation-observabilite-runbooks: backlog # Structlog, Splunk, audit, health checks, runbooks dépannage, checklist pré-déploiement
+    epic-87-retrospective: optional

@@ -212,9 +212,16 @@ def _finalize_execution_if_done(execution: Execution, outcome: ExecutionStatus) 
             final_status = ExecutionStatus.CANCELLED
 
         # Validate transition legality before CAS (state_machine guards validity, CAS guards concurrency)
-        assert_execution_transition(ExecutionStatus.RUNNING, final_status)
+        execution.refresh_from_db(fields=['status'])
+        if execution.status in (
+            ExecutionStatus.COMPLETED,
+            ExecutionStatus.FAILED,
+            ExecutionStatus.CANCELLED,
+        ):
+            return  # Another worker already finalized — lost race
+        assert_execution_transition(execution.status, final_status)
 
-        # CAS: only update if still RUNNING
+        # CAS: only update if still non-terminal
         update_fields: dict = {
             'status': final_status,
             'completed_at': timezone.now(),

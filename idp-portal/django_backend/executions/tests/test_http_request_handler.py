@@ -17,7 +17,27 @@ from unittest.mock import patch, MagicMock
 
 import httpx
 
-from executions.step_handlers.http_request_handler import HttpRequestHandler, _is_private_ip_literal
+from executions.step_handlers.http_request_handler import (
+    HttpRequestHandler,
+    _is_private_ip_literal,
+)
+from executions.app.handlers.http_request_handler import _sanitize_url_for_logging
+
+
+def test_sanitize_url_removes_credentials_and_fragment():
+    """_sanitize_url_for_logging ne doit pas exposer user:pass ni fragment."""
+    url = "https://user:secret@host.example.com:443/path?q=1#secret-fragment"
+    sanitized = _sanitize_url_for_logging(url)
+    assert "user" not in sanitized
+    assert "secret" not in sanitized
+    assert "#" not in sanitized or sanitized.endswith("#")
+    assert "host.example.com:443" in sanitized
+
+
+def test_sanitize_url_preserves_ipv6():
+    """_sanitize_url_for_logging préserve le format IPv6 avec brackets."""
+    assert "[::1]" in _sanitize_url_for_logging("https://[::1]:8080/path")
+    assert "[::1]" in _sanitize_url_for_logging("https://[::1]/path")
 
 
 class TestIsPrivateIpLiteral:
@@ -41,8 +61,19 @@ class TestIsPrivateIpLiteral:
     def test_public_ip(self):
         assert _is_private_ip_literal('8.8.8.8') is False
 
-    def test_hostname_not_ip(self):
-        assert _is_private_ip_literal('inventory.corp') is False
+    def test_hostname_resolves_to_public_ip(self):
+        """Hostname resolving to public IP → False (allowed)."""
+        with patch('executions.app.handlers.http_request_handler.socket.getaddrinfo') as mock_getaddr:
+            mock_getaddr.return_value = [(None, None, None, None, ('8.8.8.8', 0))]
+            assert _is_private_ip_literal('inventory.corp') is False
+
+    def test_hostname_unresolved_raises(self):
+        """Hostname DNS failure → ValueError (fail-closed)."""
+        import socket as socket_module
+        with patch('executions.app.handlers.http_request_handler.socket.getaddrinfo') as mock_getaddr:
+            mock_getaddr.side_effect = socket_module.gaierror(-2, 'Name or service not known')
+            with pytest.raises(ValueError, match="could not be resolved"):
+                _is_private_ip_literal('unresolvable.invalid')
 
     def test_public_ip_8_8_4_4(self):
         assert _is_private_ip_literal('8.8.4.4') is False
@@ -79,7 +110,7 @@ class TestHttpRequestHandler:
     def test_get_success_returns_json_dict(self, mock_client_class, mock_settings):
         """AC#1 : GET HTTP → dict retourné."""
         mock_settings.DEBUG = True
-        mock_settings.ALLOWED_HTTP_REQUEST_HOSTS = []
+        mock_settings.ALLOWED_HTTP_REQUEST_HOSTS = ['api.corp']
 
         mock_resp = MagicMock()
         mock_resp.json.return_value = {'databases': ['db1', 'db2']}
@@ -202,7 +233,7 @@ class TestHttpRequestHandler:
     def test_http_status_error_propagates(self, mock_client_class, mock_settings):
         """AC#5 : erreur HTTP 4xx propagée → _execute_handler_step marque step FAILED."""
         mock_settings.DEBUG = True
-        mock_settings.ALLOWED_HTTP_REQUEST_HOSTS = []
+        mock_settings.ALLOWED_HTTP_REQUEST_HOSTS = ['api.corp']
 
         mock_resp = MagicMock()
         mock_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
@@ -241,7 +272,7 @@ class TestHttpRequestHandler:
     def test_non_dict_response_normalized(self, mock_client_class, mock_settings):
         """Réponse non-dict normalisée en {'result': value}."""
         mock_settings.DEBUG = True
-        mock_settings.ALLOWED_HTTP_REQUEST_HOSTS = []
+        mock_settings.ALLOWED_HTTP_REQUEST_HOSTS = ['api.corp']
 
         mock_resp = MagicMock()
         mock_resp.json.return_value = ['item1', 'item2']
@@ -264,7 +295,7 @@ class TestHttpRequestHandler:
     def test_network_error_propagates(self, mock_client_class, mock_settings):
         """Erreur réseau (RequestError) propagée."""
         mock_settings.DEBUG = True
-        mock_settings.ALLOWED_HTTP_REQUEST_HOSTS = []
+        mock_settings.ALLOWED_HTTP_REQUEST_HOSTS = ['api.corp']
 
         mock_client = mock_client_class.return_value.__enter__.return_value
         mock_client.get.side_effect = httpx.ConnectError("Connection refused")
@@ -284,7 +315,7 @@ class TestHttpRequestHandler:
     def test_https_allowed_in_production(self, mock_client_class, mock_settings):
         """AC#4 : HTTPS en production (DEBUG=False) → autorisé."""
         mock_settings.DEBUG = False
-        mock_settings.ALLOWED_HTTP_REQUEST_HOSTS = []
+        mock_settings.ALLOWED_HTTP_REQUEST_HOSTS = ['api.corp']
 
         mock_resp = MagicMock()
         mock_resp.json.return_value = {'ok': True}
@@ -412,7 +443,7 @@ class TestHttpRequestHandler:
     def test_non_json_text_response_returns_body_dict(self, mock_client_class, mock_settings):
         """Réponse texte non-JSON → {'body': text, 'status_code': code}."""
         mock_settings.DEBUG = True
-        mock_settings.ALLOWED_HTTP_REQUEST_HOSTS = []
+        mock_settings.ALLOWED_HTTP_REQUEST_HOSTS = ['api.corp']
 
         mock_resp = MagicMock()
         mock_resp.json.side_effect = ValueError("No JSON")

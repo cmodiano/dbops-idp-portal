@@ -1,7 +1,9 @@
 """Tests pour executions.infra.outbox — Story 85.2."""
 import uuid
+from unittest.mock import MagicMock, patch
 
 import pytest
+from django.db import transaction
 
 from executions.infra.outbox import (
     APPROVAL_GRANTED,
@@ -56,3 +58,21 @@ def test_build_idempotency_key_format():
     """Vérifier le format {exec_id}:{event_type}:{discriminator}."""
     key = OutboxService.build_idempotency_key(42, "approval_granted", "step_15")
     assert key == "42:approval_granted:step_15"
+
+
+@pytest.mark.django_db
+def test_write_entry_raises_outside_atomic_block():
+    """write_entry() raises RuntimeError when called outside transaction.atomic()."""
+    execution = ExecutionFactory()
+    key = OutboxService.build_idempotency_key(execution.id, APPROVAL_GRANTED, "step_1")
+
+    mock_conn = MagicMock()
+    mock_conn.in_atomic_block = False
+    with patch.object(transaction, "get_connection", return_value=mock_conn):
+        with pytest.raises(RuntimeError, match="must be called inside transaction.atomic"):
+            OutboxService.write_entry(
+                execution_id=execution.id,
+                event_type=APPROVAL_GRANTED,
+                payload={},
+                idempotency_key=key,
+            )

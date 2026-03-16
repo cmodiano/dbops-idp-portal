@@ -123,12 +123,29 @@ def test_step_exists_active_false_for_failed():
 
 @pytest.mark.django_db
 def test_touch_heartbeat_updates_updated_at():
-    """updated_at est modifié après touch_heartbeat."""
+    """updated_at est modifié après touch_heartbeat (uniquement si status=RUNNING)."""
     from django.utils import timezone
-    execution = ExecutionFactory()
-    assert execution.updated_at is None  # not yet touched
+
+    from executions.models import ExecutionStatus
+
+    execution = ExecutionFactory(status=ExecutionStatus.RUNNING)
+    initial = execution.updated_at
     before = timezone.now()
     ExecutionRepository.touch_heartbeat(execution.id)
     execution.refresh_from_db()
     assert execution.updated_at is not None
     assert execution.updated_at >= before
+    if initial is not None:
+        assert execution.updated_at >= initial
+
+
+@pytest.mark.django_db
+def test_touch_heartbeat_no_update_when_not_running():
+    """touch_heartbeat ne modifie pas updated_at si status != RUNNING."""
+    from executions.models import ExecutionStatus
+
+    execution = ExecutionFactory(status=ExecutionStatus.SUBMITTED)
+    initial = execution.updated_at
+    ExecutionRepository.touch_heartbeat(execution.id)
+    execution.refresh_from_db()
+    assert execution.updated_at == initial

@@ -7,9 +7,17 @@ asynchronously by a Celery Beat worker with retry and traceability.
 Story 85.2: Relocalisation depuis executions.services.outbox vers executions.infra.outbox.
 L'outbox est un pattern infrastructure (table DB, écriture transactionnelle).
 
+Contract: write_entry() MUST be called inside transaction.atomic() so the outbox
+row is committed or rolled back with the business mutation. Callers outside an
+atomic block will receive RuntimeError.
+
 Usage:
+    from django.db import transaction
     from executions.infra.outbox import OutboxService
-    OutboxService.write_entry(execution_id, event_type, payload, idempotency_key)
+
+    with transaction.atomic():
+        # ... business mutation ...
+        OutboxService.write_entry(execution_id, event_type, payload, idempotency_key)
 """
 from __future__ import annotations
 
@@ -51,6 +59,11 @@ class OutboxService:
 
         Returns:
             Tuple of (entry, created) — caller knows if it's a duplicate.
+
+        Raises:
+            RuntimeError: If called outside transaction.atomic(). The outbox pattern
+                requires the write to be in the same transaction as the business
+                mutation; otherwise rollback semantics are broken.
         """
         if not transaction.get_connection().in_atomic_block:
             raise RuntimeError(

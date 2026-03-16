@@ -60,6 +60,7 @@ def trigger_platform_job(
     )
     from executions.models import ExecutionStepStatus  # noqa: PLC0415
     from django.utils import timezone as tz  # noqa: PLC0415
+    from core.exceptions import AdapterTimeoutError  # noqa: PLC0415
 
     # Préférer le correlation_id passé depuis le contexte HTTP (execute()) car
     # _tasks.get_correlation_id() retourne None dans le worker Celery (pas de middleware HTTP).
@@ -189,6 +190,57 @@ def trigger_platform_job(
                 exc_info=True,
             )
         raise
+
+    except AdapterTimeoutError as exc:
+        logger.error(
+            "trigger_platform_job_adapter_timeout",
+            adapter_type=exc.details.get("adapter_type"),
+            execution_step_id=execution_step_id,
+            execution_id=execution_id,
+            correlation_id=correlation_id,
+        )
+        execution_step.status = ExecutionStepStatus.FAILED
+        execution_step.completed_at = tz.now()
+        execution_step.error_message = f"Adapter timeout: {exc.message}"
+        execution_step.save()
+        try:
+            from executions.models import Execution, ExecutionStatus  # noqa: PLC0415
+            from core.services import AuditService  # noqa: PLC0415
+            from core.models import AuditActionType, AuditEntityType  # noqa: PLC0415
+            from core.utils import sanitize_audit_changes  # noqa: PLC0415
+            execution = Execution.objects.get(id=execution_id)
+            old_status = execution.status
+            if execution.status not in (
+                ExecutionStatus.COMPLETED,
+                ExecutionStatus.FAILED,
+                ExecutionStatus.CANCELLED,
+                ExecutionStatus.REJECTED,
+            ):
+                execution.status = ExecutionStatus.INTEGRATION_ERROR
+                execution.save(update_fields=["status"])
+            changes = sanitize_audit_changes({'status': {'old': old_status, 'new': ExecutionStatus.INTEGRATION_ERROR}})
+            AuditService.create_entry(
+                user_id=str(execution.user_id),
+                action_type=AuditActionType.EXECUTION_INTEGRATION_ERROR,
+                entity_type=AuditEntityType.EXECUTION,
+                entity_id=execution_id,
+                details={
+                    "error_type": "AdapterTimeoutError",
+                    "error": str(exc),
+                    "step_id": execution_step_id,
+                    "adapter": exc.details.get("adapter_type", "unknown"),
+                    "changes": changes,
+                },
+                correlation_id=correlation_id,
+            )
+        except Exception:  # noqa: BLE001 — best-effort: must not mask AdapterTimeoutError
+            logger.error(
+                "trigger_platform_job_adapter_timeout_execution_update_failed",
+                execution_id=execution_id,
+                correlation_id=correlation_id,
+                exc_info=True,
+            )
+        return {"outcome": "error", "error": str(exc)}
 
     except Exception as exc:  # noqa: BLE001 — broad-catch-fail-fast: all adapter errors mark execution INTEGRATION_ERROR with audit trail
         logger.critical(

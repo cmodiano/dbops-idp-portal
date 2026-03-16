@@ -225,10 +225,11 @@ class TestGetStatus:
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("adapters.tower_adapter.httpx.AsyncClient", return_value=mock_client):
-            with pytest.raises(ServiceUnavailableError) as exc_info:
+            from core.exceptions import AdapterTimeoutError
+            with pytest.raises(AdapterTimeoutError) as exc_info:
                 await adapter.get_status("123")
 
-        assert exc_info.value.code == "TOWER_TIMEOUT"
+        assert exc_info.value.code == "ADAPTER_TIMEOUT"
 
     @pytest.mark.asyncio
     async def test_get_status_http_error(self, adapter: TowerAdapter) -> None:
@@ -315,10 +316,11 @@ class TestTrigger:
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("adapters.tower_adapter.httpx.AsyncClient", return_value=mock_client):
-            with pytest.raises(ServiceUnavailableError) as exc_info:
+            from core.exceptions import AdapterTimeoutError
+            with pytest.raises(AdapterTimeoutError) as exc_info:
                 await adapter.trigger("42")
 
-        assert exc_info.value.code == "TOWER_TIMEOUT"
+        assert exc_info.value.code == "ADAPTER_TIMEOUT"
 
     @pytest.mark.asyncio
     async def test_trigger_connection_error(self, adapter: TowerAdapter) -> None:

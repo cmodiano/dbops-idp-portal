@@ -10,7 +10,7 @@ from __future__ import annotations
 from django.db.models import Max, QuerySet
 from django.utils import timezone
 
-from executions.models import Execution, ExecutionStep, ExecutionStepStatus
+from executions.models import Execution, ExecutionStatus, ExecutionStep, ExecutionStepStatus
 
 
 class ExecutionRepository:
@@ -63,5 +63,12 @@ class ExecutionRepository:
 
     @staticmethod
     def touch_heartbeat(execution_id: int) -> None:
-        """Met à jour Execution.updated_at — heartbeat pour détection de stagnation."""
-        Execution.objects.filter(id=execution_id).update(updated_at=timezone.now())
+        """Met à jour Execution.updated_at — heartbeat pour détection de stagnation.
+
+        Ne met à jour que si l'exécution est RUNNING. Les callers n'ont pas besoin
+        de vérifier le statut avant d'appeler.
+        """
+        Execution.objects.filter(
+            id=execution_id,
+            status=ExecutionStatus.RUNNING,
+        ).update(updated_at=timezone.now())

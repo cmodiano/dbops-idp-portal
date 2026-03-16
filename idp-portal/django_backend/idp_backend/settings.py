@@ -846,3 +846,24 @@ PARALLEL_GROUP_MAX_WORKERS = int(os.environ.get('PARALLEL_GROUP_MAX_WORKERS', '5
 # Évite un hang silencieux si un thread fils accroche alors que SoftTimeLimitExceeded est reçu
 # dans le thread principal — doit être inférieur au soft_time_limit Celery de la tâche (600s).
 PARALLEL_GROUP_STEP_TIMEOUT_S = int(os.environ.get('PARALLEL_GROUP_STEP_TIMEOUT_S', '300'))
+
+# Story 86.1 — Adapter socket timeouts (configurable per adapter via env vars)
+def _parse_adapter_timeout(name: str, default: str) -> float:
+    raw = os.environ.get(name, default)
+    try:
+        val = float(raw)
+        if val <= 0:
+            raise ValueError("must be positive")
+        return val
+    except (ValueError, TypeError):
+        raise ImproperlyConfigured(
+            f"{name} must be a valid positive number (seconds). "
+            f"Current value: {raw!r}"
+        )
+
+
+AAP_SOCKET_TIMEOUT: float = _parse_adapter_timeout('AAP_SOCKET_TIMEOUT', '30')
+TOWER_SOCKET_TIMEOUT: float = _parse_adapter_timeout('TOWER_SOCKET_TIMEOUT', '30')
+GITHUB_ACTIONS_SOCKET_TIMEOUT: float = _parse_adapter_timeout('GITHUB_ACTIONS_SOCKET_TIMEOUT', '30')
+AZURE_DEVOPS_SOCKET_TIMEOUT: float = _parse_adapter_timeout('AZURE_DEVOPS_SOCKET_TIMEOUT', '30')
+TERRAFORM_CLOUD_SOCKET_TIMEOUT: float = _parse_adapter_timeout('TERRAFORM_CLOUD_SOCKET_TIMEOUT', '30')

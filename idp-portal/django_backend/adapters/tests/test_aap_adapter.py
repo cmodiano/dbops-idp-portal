@@ -331,16 +331,18 @@ class TestGetStatus:
 
     @pytest.mark.asyncio
     async def test_get_status_timeout(self, adapter: AAPAdapter) -> None:
+        from core.exceptions import AdapterTimeoutError
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(side_effect=httpx.TimeoutException("timeout"))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("adapters.aap_adapter.httpx.AsyncClient", return_value=mock_client):
-            with pytest.raises(ServiceUnavailableError) as exc_info:
+            with pytest.raises(AdapterTimeoutError) as exc_info:
                 await adapter.get_status("123")
 
-        assert exc_info.value.code == "AAP_TIMEOUT"
+        assert exc_info.value.code == "ADAPTER_TIMEOUT"
+        assert exc_info.value.details.get("adapter_type") == "aap"
 
 
 # ---------------------------------------------------------------------------
@@ -582,3 +584,48 @@ class TestStatusMapping:
     )
     def test_status_map(self, aap_status: str, expected: str) -> None:
         assert AAP_STATUS_MAP[aap_status] == expected
+
+
+# ---------------------------------------------------------------------------
+# Story 86.1: AdapterTimeoutError + settings tests
+# ---------------------------------------------------------------------------
+
+class TestAAPAdapterTimeout:
+    """Story 86.1 — Tests timeout settings + AdapterTimeoutError."""
+
+    @pytest.mark.asyncio
+    async def test_trigger_raises_adapter_timeout_error(self, adapter: AAPAdapter) -> None:
+        """5.2: mock httpx.TimeoutException in trigger() → AdapterTimeoutError with adapter_type='aap'."""
+        from core.exceptions import AdapterTimeoutError
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(side_effect=httpx.TimeoutException("timeout"))
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("adapters.aap_adapter.httpx.AsyncClient", return_value=mock_client):
+            with pytest.raises(AdapterTimeoutError) as exc_info:
+                await adapter.trigger("42")
+
+        assert exc_info.value.code == "ADAPTER_TIMEOUT"
+        assert exc_info.value.details.get("adapter_type") == "aap"
+
+    def test_init_uses_settings_timeout(self) -> None:
+        """5.3: override_settings(AAP_SOCKET_TIMEOUT=5) → AAPAdapter.__init__ uses timeout=5."""
+        from django.test import override_settings
+        with override_settings(AAP_SOCKET_TIMEOUT=5.0):
+            a = AAPAdapter(
+                base_url="https://aap.example.com",
+                auth_headers={"Authorization": "Bearer token"},
+            )
+        assert a.timeout == 5.0
+
+    def test_init_explicit_timeout_overrides_settings(self) -> None:
+        """Explicit timeout param takes precedence over settings."""
+        from django.test import override_settings
+        with override_settings(AAP_SOCKET_TIMEOUT=99.0):
+            a = AAPAdapter(
+                base_url="https://aap.example.com",
+                auth_headers={"Authorization": "Bearer token"},
+                timeout=10.0,
+            )
+        assert a.timeout == 10.0

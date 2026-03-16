@@ -475,18 +475,29 @@ def poll_platform_job_status(
         raise
 
     except Exception as e:  # noqa: BLE001 — resilience-boundary: adapter error logged, polling returns error outcome
-        logger.error(
-            "poll_platform_job_status_adapter_error",
-            execution_id=execution_id,
-            platform_job_id=platform_job_id,
-            platform_type=platform_type,
-            error=str(e),
-            error_type=type(e).__name__,
-            retry_count=retry_count,
-            max_retries=MAX_POLLING_RETRIES,
-            correlation_id=correlation_id,
-            exc_info=True,
-        )
+        from core.exceptions import AdapterTimeoutError  # noqa: PLC0415
+        if isinstance(e, AdapterTimeoutError):
+            logger.error(
+                "poll_platform_job_adapter_timeout",
+                adapter_type=e.details.get("adapter_type"),
+                execution_id=execution_id,
+                platform_job_id=platform_job_id,
+                retry_count=retry_count,
+                correlation_id=correlation_id,
+            )
+        else:
+            logger.error(
+                "poll_platform_job_status_adapter_error",
+                execution_id=execution_id,
+                platform_job_id=platform_job_id,
+                platform_type=platform_type,
+                error=str(e),
+                error_type=type(e).__name__,
+                retry_count=retry_count,
+                max_retries=MAX_POLLING_RETRIES,
+                correlation_id=correlation_id,
+                exc_info=True,
+            )
         # Story 30.7 (RACE-1): Check max retries before re-scheduling
         if retry_count >= MAX_POLLING_RETRIES:
             _tasks._mark_execution_polling_exhausted(

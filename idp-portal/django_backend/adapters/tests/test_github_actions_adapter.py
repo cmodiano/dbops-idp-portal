@@ -159,16 +159,18 @@ class TestTrigger:
 
     @pytest.mark.asyncio
     async def test_trigger_timeout(self, adapter: GitHubActionsAdapter) -> None:
-        """Timeout raises ServiceUnavailableError."""
+        """Timeout raises AdapterTimeoutError (Story 86.1)."""
+        from core.exceptions import AdapterTimeoutError
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(side_effect=httpx.TimeoutException("timeout"))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("adapters.github_actions_adapter.httpx.AsyncClient", return_value=mock_client):
-            with pytest.raises(ServiceUnavailableError) as exc_info:
+            with pytest.raises(AdapterTimeoutError) as exc_info:
                 await adapter.trigger(workflow_id="deploy.yaml")
-            assert exc_info.value.code == "GITHUB_ACTIONS_TIMEOUT"
+            assert exc_info.value.code == "ADAPTER_TIMEOUT"
+            assert exc_info.value.details.get("adapter_type") == "github_actions"
 
     @pytest.mark.asyncio
     async def test_trigger_http_error(self, adapter: GitHubActionsAdapter) -> None:
@@ -425,9 +427,11 @@ class TestGetStatus:
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("adapters.github_actions_adapter.httpx.AsyncClient", return_value=mock_client):
-            with pytest.raises(ServiceUnavailableError) as exc_info:
+            from core.exceptions import AdapterTimeoutError
+            with pytest.raises(AdapterTimeoutError) as exc_info:
                 await adapter.get_status("12345")
-            assert exc_info.value.code == "GITHUB_ACTIONS_TIMEOUT"
+            assert exc_info.value.code == "ADAPTER_TIMEOUT"
+            assert exc_info.value.details["adapter_type"] == "github_actions"
 
     @pytest.mark.asyncio
     async def test_get_status_connection_error(self, adapter: GitHubActionsAdapter) -> None:
@@ -1106,3 +1110,24 @@ class TestGetStatusOutputsArtifacts:
 
         assert result["artifacts"] == []
         assert result["status"] == "COMPLETED"
+
+
+# ---------------------------------------------------------------------------
+# Story 86.1 — GitHubActionsAdapter timeout tests
+# ---------------------------------------------------------------------------
+
+class TestGitHubActionsAdapterTimeout:
+    """Story 86.1 — Tests timeout settings."""
+
+    def test_init_uses_settings_timeout(self) -> None:
+        """override_settings(GITHUB_ACTIONS_SOCKET_TIMEOUT=10) → adapter uses timeout=10."""
+        from django.test import override_settings
+        from adapters.github_actions_adapter import GitHubActionsAdapter
+        with override_settings(GITHUB_ACTIONS_SOCKET_TIMEOUT=10.0):
+            a = GitHubActionsAdapter(
+                base_url="https://api.github.com",
+                auth_headers={"Authorization": "Bearer token"},
+                owner="myorg",
+                repo="myrepo",
+            )
+        assert a.timeout == 10.0

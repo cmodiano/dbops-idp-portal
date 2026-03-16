@@ -24,12 +24,14 @@ from datetime import datetime, timezone
 import httpx
 import structlog
 
+from django.conf import settings
+
 from adapters.base_adapter import BaseAdapter
 from adapters.status_mappers import (
     GITHUB_ACTIONS_TERMINAL_CONCLUSIONS as GITHUB_ACTIONS_TERMINAL_CONCLUSIONS,
     map_github_actions_status,
 )
-from core.exceptions import ServiceUnavailableError
+from core.exceptions import AdapterTimeoutError, ServiceUnavailableError
 from integrations.health_check import HealthCheckResult, HealthCheckStatus, IHealthCheckable
 
 logger = structlog.get_logger(__name__)
@@ -65,7 +67,7 @@ class GitHubActionsAdapter(BaseAdapter, IHealthCheckable):
         auth_headers: dict[str, str],
         owner: str = "",
         repo: str = "",
-        timeout: float = GITHUB_ACTIONS_DEFAULT_TIMEOUT,
+        timeout: float | None = None,
         verify_ssl: bool = True,
     ) -> None:
         if not owner or not repo:
@@ -78,7 +80,8 @@ class GitHubActionsAdapter(BaseAdapter, IHealthCheckable):
         }
         self.owner = owner
         self.repo = repo
-        self.timeout = timeout
+        default_timeout = getattr(settings, 'GITHUB_ACTIONS_SOCKET_TIMEOUT', GITHUB_ACTIONS_DEFAULT_TIMEOUT)
+        self.timeout = timeout if timeout is not None else default_timeout
         self.verify_ssl = verify_ssl
 
     def _repos_url(self) -> str:
@@ -112,7 +115,8 @@ class GitHubActionsAdapter(BaseAdapter, IHealthCheckable):
             Dict with 'platform_job_id', 'status', 'url'.
 
         Raises:
-            ServiceUnavailableError: If GitHub is unreachable or returns error.
+            AdapterTimeoutError: If GitHub Actions does not respond within the configured timeout.
+            ServiceUnavailableError: If GitHub returns an HTTP error or connection fails.
         """
         dispatch_url = (
             f"{self._repos_url()}/actions/workflows/{workflow_id}/dispatches"
@@ -158,10 +162,9 @@ class GitHubActionsAdapter(BaseAdapter, IHealthCheckable):
                 correlation_id=correlation_id,
                 error=str(exc),
             )
-            raise ServiceUnavailableError(
-                code="GITHUB_ACTIONS_TIMEOUT",
+            raise AdapterTimeoutError(
+                adapter_type="github_actions",
                 message="GitHub Actions did not respond in time",
-                details={"url": dispatch_url},
             ) from exc
         except httpx.HTTPStatusError as exc:
             logger.error(
@@ -305,7 +308,8 @@ class GitHubActionsAdapter(BaseAdapter, IHealthCheckable):
             'artifacts' (list of artifact dicts, populated only when completed).
 
         Raises:
-            ServiceUnavailableError: If GitHub is unreachable.
+            AdapterTimeoutError: If GitHub Actions does not respond within the configured timeout.
+            ServiceUnavailableError: If GitHub returns an HTTP error or connection fails.
         """
         url = f"{self._repos_url()}/actions/runs/{platform_job_id}"
 
@@ -331,10 +335,10 @@ class GitHubActionsAdapter(BaseAdapter, IHealthCheckable):
                 correlation_id=correlation_id,
                 error=str(exc),
             )
-            raise ServiceUnavailableError(
-                code="GITHUB_ACTIONS_TIMEOUT",
+            raise AdapterTimeoutError(
+                adapter_type="github_actions",
                 message="GitHub Actions status check timed out",
-                details={"platform_job_id": platform_job_id},
+                platform_job_id=platform_job_id,
             ) from exc
         except httpx.HTTPStatusError as exc:
             status_code = exc.response.status_code

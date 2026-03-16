@@ -136,10 +136,11 @@ class TestTrigger:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
+        from core.exceptions import AdapterTimeoutError
         with patch("adapters.azure_devops_adapter.httpx.AsyncClient", return_value=mock_client):
-            with pytest.raises(ServiceUnavailableError) as exc_info:
+            with pytest.raises(AdapterTimeoutError) as exc_info:
                 await adapter.trigger("1")
-            assert exc_info.value.code == "AZURE_DEVOPS_TIMEOUT"
+            assert exc_info.value.code == "ADAPTER_TIMEOUT"
 
     @pytest.mark.asyncio
     async def test_trigger_http_error(self, adapter: AzureDevOpsAdapter) -> None:
@@ -309,10 +310,11 @@ class TestGetStatus:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
+        from core.exceptions import AdapterTimeoutError
         with patch("adapters.azure_devops_adapter.httpx.AsyncClient", return_value=mock_client):
-            with pytest.raises(ServiceUnavailableError) as exc_info:
+            with pytest.raises(AdapterTimeoutError) as exc_info:
                 await adapter.get_status("42", pipeline_id="1")
-            assert exc_info.value.code == "AZURE_DEVOPS_TIMEOUT"
+            assert exc_info.value.code == "ADAPTER_TIMEOUT"
 
     @pytest.mark.asyncio
     async def test_get_status_connection_error(self, adapter: AzureDevOpsAdapter) -> None:
