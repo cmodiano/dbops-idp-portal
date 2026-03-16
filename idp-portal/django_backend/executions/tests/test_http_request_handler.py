@@ -74,8 +74,8 @@ class TestHttpRequestHandler:
             },
         }
 
-    @patch('executions.step_handlers.http_request_handler.settings')
-    @patch('executions.step_handlers.http_request_handler.httpx.Client')
+    @patch('executions.app.handlers.http_request_handler.settings')
+    @patch('executions.app.handlers.http_request_handler.httpx.Client')
     def test_get_success_returns_json_dict(self, mock_client_class, mock_settings):
         """AC#1 : GET HTTP → dict retourné."""
         mock_settings.DEBUG = True
@@ -97,8 +97,8 @@ class TestHttpRequestHandler:
 
         assert result == {'databases': ['db1', 'db2']}
 
-    @patch('executions.step_handlers.http_request_handler.settings')
-    @patch('executions.step_handlers.http_request_handler.httpx.Client')
+    @patch('executions.app.handlers.http_request_handler.settings')
+    @patch('executions.app.handlers.http_request_handler.httpx.Client')
     def test_post_uses_resolved_params_as_body(self, mock_client_class, mock_settings):
         """AC#6 : POST → resolved_params comme body JSON."""
         mock_settings.DEBUG = True
@@ -127,7 +127,7 @@ class TestHttpRequestHandler:
             json=resolved_params,
         )
 
-    @patch('executions.step_handlers.http_request_handler.settings')
+    @patch('executions.app.handlers.http_request_handler.settings')
     def test_host_not_in_allowlist_raises_value_error(self, mock_settings):
         """AC#2 : hôte non dans ALLOWED_HTTP_REQUEST_HOSTS → ValueError."""
         mock_settings.DEBUG = True
@@ -143,7 +143,7 @@ class TestHttpRequestHandler:
                 correlation_id=None,
             )
 
-    @patch('executions.step_handlers.http_request_handler.settings')
+    @patch('executions.app.handlers.http_request_handler.settings')
     def test_private_ip_blocked_by_default(self, mock_settings):
         """AC#3 : IP privée → ValueError si pas dans allowlist."""
         mock_settings.DEBUG = True
@@ -159,8 +159,8 @@ class TestHttpRequestHandler:
                 correlation_id=None,
             )
 
-    @patch('executions.step_handlers.http_request_handler.settings')
-    @patch('executions.step_handlers.http_request_handler.httpx.Client')
+    @patch('executions.app.handlers.http_request_handler.settings')
+    @patch('executions.app.handlers.http_request_handler.httpx.Client')
     def test_private_ip_allowed_via_allowlist(self, mock_client_class, mock_settings):
         """AC#3 : IP privée dans allowlist → autorisée."""
         mock_settings.DEBUG = True
@@ -181,7 +181,7 @@ class TestHttpRequestHandler:
         )
         assert result == {'status': 'ok'}
 
-    @patch('executions.step_handlers.http_request_handler.settings')
+    @patch('executions.app.handlers.http_request_handler.settings')
     def test_http_rejected_in_production(self, mock_settings):
         """AC#4 : HTTP en production (DEBUG=False) → ValueError."""
         mock_settings.DEBUG = False
@@ -197,8 +197,8 @@ class TestHttpRequestHandler:
                 correlation_id=None,
             )
 
-    @patch('executions.step_handlers.http_request_handler.settings')
-    @patch('executions.step_handlers.http_request_handler.httpx.Client')
+    @patch('executions.app.handlers.http_request_handler.settings')
+    @patch('executions.app.handlers.http_request_handler.httpx.Client')
     def test_http_status_error_propagates(self, mock_client_class, mock_settings):
         """AC#5 : erreur HTTP 4xx propagée → _execute_handler_step marque step FAILED."""
         mock_settings.DEBUG = True
@@ -220,7 +220,7 @@ class TestHttpRequestHandler:
                 correlation_id=None,
             )
 
-    @patch('executions.step_handlers.http_request_handler.settings')
+    @patch('executions.app.handlers.http_request_handler.settings')
     def test_missing_url_raises_value_error(self, mock_settings):
         """URL manquante dans config → ValueError."""
         mock_settings.DEBUG = True
@@ -236,8 +236,8 @@ class TestHttpRequestHandler:
                 correlation_id=None,
             )
 
-    @patch('executions.step_handlers.http_request_handler.settings')
-    @patch('executions.step_handlers.http_request_handler.httpx.Client')
+    @patch('executions.app.handlers.http_request_handler.settings')
+    @patch('executions.app.handlers.http_request_handler.httpx.Client')
     def test_non_dict_response_normalized(self, mock_client_class, mock_settings):
         """Réponse non-dict normalisée en {'result': value}."""
         mock_settings.DEBUG = True
@@ -259,8 +259,8 @@ class TestHttpRequestHandler:
 
         assert result == {'result': ['item1', 'item2']}
 
-    @patch('executions.step_handlers.http_request_handler.settings')
-    @patch('executions.step_handlers.http_request_handler.httpx.Client')
+    @patch('executions.app.handlers.http_request_handler.settings')
+    @patch('executions.app.handlers.http_request_handler.httpx.Client')
     def test_network_error_propagates(self, mock_client_class, mock_settings):
         """Erreur réseau (RequestError) propagée."""
         mock_settings.DEBUG = True
@@ -279,8 +279,8 @@ class TestHttpRequestHandler:
                 correlation_id=None,
             )
 
-    @patch('executions.step_handlers.http_request_handler.settings')
-    @patch('executions.step_handlers.http_request_handler.httpx.Client')
+    @patch('executions.app.handlers.http_request_handler.settings')
+    @patch('executions.app.handlers.http_request_handler.httpx.Client')
     def test_https_allowed_in_production(self, mock_client_class, mock_settings):
         """AC#4 : HTTPS en production (DEBUG=False) → autorisé."""
         mock_settings.DEBUG = False
@@ -302,7 +302,7 @@ class TestHttpRequestHandler:
 
         assert result == {'ok': True}
 
-    @patch('executions.step_handlers.http_request_handler.settings')
+    @patch('executions.app.handlers.http_request_handler.settings')
     def test_invalid_url_no_hostname(self, mock_settings):
         """URL sans hostname → ValueError."""
         mock_settings.DEBUG = True
@@ -318,8 +318,8 @@ class TestHttpRequestHandler:
                 correlation_id=None,
             )
 
-    @patch('executions.step_handlers.http_request_handler.settings')
-    @patch('executions.step_handlers.http_request_handler.httpx.Client')
+    @patch('executions.app.handlers.http_request_handler.settings')
+    @patch('executions.app.handlers.http_request_handler.httpx.Client')
     def test_put_uses_resolved_params_as_body(self, mock_client_class, mock_settings):
         """PUT → resolved_params comme body JSON."""
         mock_settings.DEBUG = True
@@ -348,8 +348,8 @@ class TestHttpRequestHandler:
             json=resolved_params,
         )
 
-    @patch('executions.step_handlers.http_request_handler.settings')
-    @patch('executions.step_handlers.http_request_handler.httpx.Client')
+    @patch('executions.app.handlers.http_request_handler.settings')
+    @patch('executions.app.handlers.http_request_handler.httpx.Client')
     def test_patch_uses_resolved_params_as_body(self, mock_client_class, mock_settings):
         """PATCH → resolved_params comme body JSON."""
         mock_settings.DEBUG = True
@@ -378,8 +378,8 @@ class TestHttpRequestHandler:
             json=resolved_params,
         )
 
-    @patch('executions.step_handlers.http_request_handler.settings')
-    @patch('executions.step_handlers.http_request_handler.httpx.Client')
+    @patch('executions.app.handlers.http_request_handler.settings')
+    @patch('executions.app.handlers.http_request_handler.httpx.Client')
     def test_delete_success(self, mock_client_class, mock_settings):
         """DELETE → requête exécutée sans body."""
         mock_settings.DEBUG = True
@@ -407,8 +407,8 @@ class TestHttpRequestHandler:
         )
         assert result == {'deleted': True}
 
-    @patch('executions.step_handlers.http_request_handler.settings')
-    @patch('executions.step_handlers.http_request_handler.httpx.Client')
+    @patch('executions.app.handlers.http_request_handler.settings')
+    @patch('executions.app.handlers.http_request_handler.httpx.Client')
     def test_non_json_text_response_returns_body_dict(self, mock_client_class, mock_settings):
         """Réponse texte non-JSON → {'body': text, 'status_code': code}."""
         mock_settings.DEBUG = True
@@ -432,8 +432,8 @@ class TestHttpRequestHandler:
 
         assert result == {'body': 'OK', 'status_code': 200}
 
-    @patch('executions.step_handlers.http_request_handler.settings')
-    @patch('executions.step_handlers.http_request_handler.httpx.Client')
+    @patch('executions.app.handlers.http_request_handler.settings')
+    @patch('executions.app.handlers.http_request_handler.httpx.Client')
     def test_post_empty_resolved_params_falls_back_to_config_params(
         self, mock_client_class, mock_settings
     ):
@@ -469,7 +469,7 @@ class TestHttpRequestHandler:
             json={'action': 'restart'},
         )
 
-    @patch('executions.step_handlers.http_request_handler.settings')
+    @patch('executions.app.handlers.http_request_handler.settings')
     def test_ipv6_loopback_blocked_by_default(self, mock_settings):
         """AC#3 : IPv6 loopback (::1) → ValueError si pas dans allowlist."""
         mock_settings.DEBUG = True
@@ -485,7 +485,7 @@ class TestHttpRequestHandler:
                 correlation_id=None,
             )
 
-    @patch('executions.step_handlers.http_request_handler.settings')
+    @patch('executions.app.handlers.http_request_handler.settings')
     def test_unsupported_http_method_raises(self, mock_settings):
         """Méthode HTTP non supportée (ex. HEAD) → ValueError."""
         mock_settings.DEBUG = True
@@ -501,11 +501,10 @@ class TestHttpRequestHandler:
                 correlation_id=None,
             )
 
-    @patch('executions.step_handlers.http_request_handler.settings')
-    def test_allowlist_case_insensitive(self, mock_settings):
-        """Allowlist insensible à la casse : 'API.CORP' dans env → match 'api.corp' dans URL."""
+    @patch('executions.app.handlers.http_request_handler.settings')
+    def test_allowlist_blocks_non_matching_host(self, mock_settings):
+        """Allowlist configurée : hôte non listé → rejeté (même si allowlist a 'API.CORP')."""
         mock_settings.DEBUG = True
-        # Simule une allowlist avec majuscules (valeur non encore normalisée en settings)
         mock_settings.ALLOWED_HTTP_REQUEST_HOSTS = ['API.CORP']
 
         step_config = self._make_step_config(url='https://evil.attacker.com/data')
@@ -517,3 +516,25 @@ class TestHttpRequestHandler:
                 step=step_config,
                 correlation_id=None,
             )
+
+    @patch('executions.app.handlers.http_request_handler.settings')
+    @patch('executions.app.handlers.http_request_handler.httpx.Client')
+    def test_allowlist_case_insensitive_positive(self, mock_client_class, mock_settings):
+        """Allowlist insensible à la casse : 'API.CORP' dans allowlist → match 'api.corp' dans URL."""
+        mock_settings.DEBUG = True
+        mock_settings.ALLOWED_HTTP_REQUEST_HOSTS = ['API.CORP']
+
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {'ok': True}
+        mock_resp.raise_for_status.return_value = None
+        mock_client_class.return_value.__enter__.return_value.get.return_value = mock_resp
+
+        step_config = self._make_step_config(url='https://api.corp/data')
+        result = self.handler.execute(
+            step_config=step_config,
+            resolved_params={},
+            execution=self._make_execution(),
+            step=step_config,
+            correlation_id=None,
+        )
+        assert result == {'ok': True}

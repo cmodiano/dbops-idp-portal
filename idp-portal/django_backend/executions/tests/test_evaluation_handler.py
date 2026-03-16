@@ -36,8 +36,8 @@ class TestEvaluationHandler:
             cfg['policy'] = policy
         return cfg
 
-    @patch('executions.step_handlers.evaluation_handler.RuleEngine')
-    @patch('executions.step_handlers.evaluation_handler.BusinessRulePolicy')
+    @patch('executions.app.handlers.evaluation_handler.RuleEngine')
+    @patch('executions.app.handlers.evaluation_handler.BusinessRulePolicy')
     def test_auto_approved_returns_completed(self, mock_brp_class, mock_engine_class):
         """AC#3 : decision auto_approved → ExecutionStatus.COMPLETED."""
         mock_brp_class.objects.get.return_value = MagicMock(policy_json={})
@@ -60,8 +60,8 @@ class TestEvaluationHandler:
         assert result['status'] == ExecutionStatus.COMPLETED
         assert result['decision_reason'] == "Auto-approved: no review criteria matched"
 
-    @patch('executions.step_handlers.evaluation_handler.RuleEngine')
-    @patch('executions.step_handlers.evaluation_handler.BusinessRulePolicy')
+    @patch('executions.app.handlers.evaluation_handler.RuleEngine')
+    @patch('executions.app.handlers.evaluation_handler.BusinessRulePolicy')
     def test_requires_approval_returns_failed(self, mock_brp_class, mock_engine_class):
         """AC#2 : decision requires_approval → ExecutionStatus.FAILED."""
         mock_brp_class.objects.get.return_value = MagicMock(policy_json={})
@@ -85,8 +85,8 @@ class TestEvaluationHandler:
         assert result['status'] == ExecutionStatus.FAILED
         assert result['matched_criteria'] == [{'criteria_index': 0, 'description': 'resource_type=aws_iam_role'}]
 
-    @patch('executions.step_handlers.evaluation_handler.RuleEngine')
-    @patch('executions.step_handlers.evaluation_handler.BusinessRulePolicy')
+    @patch('executions.app.handlers.evaluation_handler.RuleEngine')
+    @patch('executions.app.handlers.evaluation_handler.BusinessRulePolicy')
     def test_policy_id_loaded_from_db(self, mock_brp_class, mock_engine_class):
         """AC#1 : policy_id → BusinessRulePolicy.objects.get(id=policy_id) appelé."""
         mock_policy_obj = MagicMock(policy_json={'on_step_output': []})
@@ -106,8 +106,8 @@ class TestEvaluationHandler:
 
         mock_brp_class.objects.get.assert_called_once_with(id=42)
 
-    @patch('executions.step_handlers.evaluation_handler.RuleEngine')
-    @patch('executions.step_handlers.evaluation_handler.BusinessRulePolicy')
+    @patch('executions.app.handlers.evaluation_handler.RuleEngine')
+    @patch('executions.app.handlers.evaluation_handler.BusinessRulePolicy')
     def test_artifact_passed_to_rule_engine(self, mock_brp_class, mock_engine_class):
         """AC#1 : resolved_params['artifact'] passé comme step_output à RuleEngine."""
         mock_brp_class.objects.get.return_value = MagicMock()
@@ -129,8 +129,8 @@ class TestEvaluationHandler:
         call_args = mock_engine.evaluate.call_args
         assert call_args[0][2] == artifact  # 3ème argument positionnel
 
-    @patch('executions.step_handlers.evaluation_handler.RuleEngine')
-    @patch('executions.step_handlers.evaluation_handler.BusinessRulePolicy')
+    @patch('executions.app.handlers.evaluation_handler.RuleEngine')
+    @patch('executions.app.handlers.evaluation_handler.BusinessRulePolicy')
     def test_inline_policy_no_policy_id(self, mock_brp_class, mock_engine_class):
         """AC#5 : pas de policy_id → policy inline utilisée (pas d'accès DB)."""
         mock_engine_class.return_value.evaluate.return_value = PolicyDecision(
@@ -151,7 +151,7 @@ class TestEvaluationHandler:
         assert result['decision'] == 'auto_approved'
         mock_brp_class.objects.get.assert_not_called()
 
-    @patch('executions.step_handlers.evaluation_handler.BusinessRulePolicy')
+    @patch('executions.app.handlers.evaluation_handler.BusinessRulePolicy')
     def test_policy_not_found_propagates(self, mock_brp_class):
         """AC#6 : policy_id inexistant → DoesNotExist propagée (et loggée via evaluation_handler_error)."""
         mock_brp_class.DoesNotExist = type('DoesNotExist', (Exception,), {})
@@ -167,8 +167,8 @@ class TestEvaluationHandler:
                 correlation_id=None,
             )
 
-    @patch('executions.step_handlers.evaluation_handler.RuleEngine')
-    @patch('executions.step_handlers.evaluation_handler.BusinessRulePolicy')
+    @patch('executions.app.handlers.evaluation_handler.RuleEngine')
+    @patch('executions.app.handlers.evaluation_handler.BusinessRulePolicy')
     def test_missing_artifact_key_passes_none(self, mock_brp_class, mock_engine_class):
         """AC#7 : resolved_params sans 'artifact' → None passé à RuleEngine (pas d'exception)."""
         mock_brp_class.objects.get.return_value = MagicMock()
@@ -189,8 +189,8 @@ class TestEvaluationHandler:
         assert call_args[0][2] is None  # artifact=None
         assert result['status'] == ExecutionStatus.COMPLETED
 
-    @patch('executions.step_handlers.evaluation_handler.RuleEngine')
-    @patch('executions.step_handlers.evaluation_handler.BusinessRulePolicy')
+    @patch('executions.app.handlers.evaluation_handler.RuleEngine')
+    @patch('executions.app.handlers.evaluation_handler.BusinessRulePolicy')
     def test_policy_evaluation_error_propagates(self, mock_brp_class, mock_engine_class):
         """PolicyEvaluationError propagée depuis RuleEngine → step FAILED par runtime."""
         mock_brp_class.objects.get.return_value = MagicMock()
@@ -208,8 +208,8 @@ class TestEvaluationHandler:
                 correlation_id=None,
             )
 
-    @patch('executions.step_handlers.evaluation_handler.RuleEngine')
-    @patch('executions.step_handlers.evaluation_handler.BusinessRulePolicy')
+    @patch('executions.app.handlers.evaluation_handler.RuleEngine')
+    @patch('executions.app.handlers.evaluation_handler.BusinessRulePolicy')
     def test_rule_engine_generic_exception_logged_and_propagates(self, mock_brp_class, mock_engine_class):
         """RuleEngine.evaluate raises generic Exception → logger.error called, exception propagated."""
         mock_brp_class.objects.get.return_value = MagicMock()
@@ -227,9 +227,9 @@ class TestEvaluationHandler:
 
     # ── Structlog tests ──────────────────────────────────────────────────────
 
-    @patch('executions.step_handlers.evaluation_handler.logger')
-    @patch('executions.step_handlers.evaluation_handler.RuleEngine')
-    @patch('executions.step_handlers.evaluation_handler.BusinessRulePolicy')
+    @patch('executions.app.handlers.evaluation_handler.logger')
+    @patch('executions.app.handlers.evaluation_handler.RuleEngine')
+    @patch('executions.app.handlers.evaluation_handler.BusinessRulePolicy')
     def test_logs_start_and_decision_events(self, mock_brp_class, mock_engine_class, mock_logger):
         """Task 2 : evaluation_handler_start et evaluation_handler_decision loggués lors d'un succès."""
         mock_brp_class.objects.get.return_value = MagicMock()
@@ -263,9 +263,9 @@ class TestEvaluationHandler:
             correlation_id='corr-log',
         )
 
-    @patch('executions.step_handlers.evaluation_handler.logger')
-    @patch('executions.step_handlers.evaluation_handler.RuleEngine')
-    @patch('executions.step_handlers.evaluation_handler.BusinessRulePolicy')
+    @patch('executions.app.handlers.evaluation_handler.logger')
+    @patch('executions.app.handlers.evaluation_handler.RuleEngine')
+    @patch('executions.app.handlers.evaluation_handler.BusinessRulePolicy')
     def test_logs_error_event_on_rule_engine_failure(self, mock_brp_class, mock_engine_class, mock_logger):
         """Task 2 : evaluation_handler_error loggué quand RuleEngine lève une exception."""
         mock_brp_class.objects.get.return_value = MagicMock()
@@ -292,8 +292,8 @@ class TestEvaluationHandler:
             exc_info=True,
         )
 
-    @patch('executions.step_handlers.evaluation_handler.logger')
-    @patch('executions.step_handlers.evaluation_handler.BusinessRulePolicy')
+    @patch('executions.app.handlers.evaluation_handler.logger')
+    @patch('executions.app.handlers.evaluation_handler.BusinessRulePolicy')
     def test_logs_error_event_on_db_failure(self, mock_brp_class, mock_logger):
         """evaluation_handler_error loggué quand BusinessRulePolicy.objects.get() échoue."""
         mock_brp_class.DoesNotExist = type('DoesNotExist', (Exception,), {})

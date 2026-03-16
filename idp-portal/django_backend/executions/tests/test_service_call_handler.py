@@ -26,9 +26,9 @@ class TestServiceCallHandler:
         m.base_url = base_url
         return m
 
-    @patch("executions.step_handlers.service_call_handler.get_service_client")
-    @patch("executions.step_handlers.service_call_handler.build_auth_headers")
-    @patch("executions.step_handlers.service_call_handler.IntegrationService")
+    @patch("executions.app.handlers.service_call_handler.get_service_client")
+    @patch("executions.app.handlers.service_call_handler.build_auth_headers")
+    @patch("executions.app.handlers.service_call_handler.IntegrationService")
     def test_create_change_success(self, mock_is_class, mock_bah, mock_gsc):
         """AC#1 : ServiceNowService.create_change() appelé avec resolved_params."""
         integration = self._make_integration()
@@ -68,9 +68,9 @@ class TestServiceCallHandler:
                 correlation_id=None,
             )
 
-    @patch("executions.step_handlers.service_call_handler.get_service_client")
-    @patch("executions.step_handlers.service_call_handler.build_auth_headers")
-    @patch("executions.step_handlers.service_call_handler.IntegrationService")
+    @patch("executions.app.handlers.service_call_handler.get_service_client")
+    @patch("executions.app.handlers.service_call_handler.build_auth_headers")
+    @patch("executions.app.handlers.service_call_handler.IntegrationService")
     def test_unknown_integration_type_raises(self, mock_is_class, mock_bah, mock_gsc):
         """AC#5 : integration_type non enregistrée → ValueError via get_service_client."""
         integration = self._make_integration(integration_type="pagerduty")
@@ -92,7 +92,7 @@ class TestServiceCallHandler:
         mock_bah.assert_not_called()
         mock_gsc.assert_not_called()
 
-    @patch("executions.step_handlers.service_call_handler.IntegrationService")
+    @patch("executions.app.handlers.service_call_handler.IntegrationService")
     def test_no_integration_found_raises_service_unavailable(self, mock_is_class):
         """AC#6 : aucune intégration disponible → ServiceUnavailableError."""
         mock_is_class.return_value.get_by_id.return_value = None
@@ -110,10 +110,10 @@ class TestServiceCallHandler:
             )
         assert exc_info.value.code == "SERVICE_INTEGRATION_MISSING"
 
-    @patch("executions.step_handlers.service_call_handler.service_definition_registry")
-    @patch("executions.step_handlers.service_call_handler.get_service_client")
-    @patch("executions.step_handlers.service_call_handler.build_auth_headers")
-    @patch("executions.step_handlers.service_call_handler.IntegrationService")
+    @patch("executions.app.handlers.service_call_handler.service_definition_registry")
+    @patch("executions.app.handlers.service_call_handler.get_service_client")
+    @patch("executions.app.handlers.service_call_handler.build_auth_headers")
+    @patch("executions.app.handlers.service_call_handler.IntegrationService")
     def test_nonexistent_operation_raises_value_error(self, mock_is_class, mock_bah, mock_gsc, mock_registry):
         """AC#3 : opération inexistante sur le service → ValueError (allowlist OK, hasattr False).
 
@@ -145,9 +145,9 @@ class TestServiceCallHandler:
                 correlation_id=None,
             )
 
-    @patch("executions.step_handlers.service_call_handler.get_service_client")
-    @patch("executions.step_handlers.service_call_handler.build_auth_headers")
-    @patch("executions.step_handlers.service_call_handler.IntegrationService")
+    @patch("executions.app.handlers.service_call_handler.get_service_client")
+    @patch("executions.app.handlers.service_call_handler.build_auth_headers")
+    @patch("executions.app.handlers.service_call_handler.IntegrationService")
     def test_operation_not_callable_raises_value_error(self, mock_is_class, mock_bah, mock_gsc):
         """Operation in allowlist but not callable on service → ValueError with public callables."""
         integration = self._make_integration()
@@ -169,9 +169,9 @@ class TestServiceCallHandler:
                 correlation_id=None,
             )
 
-    @patch("executions.step_handlers.service_call_handler.get_service_client")
-    @patch("executions.step_handlers.service_call_handler.build_auth_headers")
-    @patch("executions.step_handlers.service_call_handler.IntegrationService")
+    @patch("executions.app.handlers.service_call_handler.get_service_client")
+    @patch("executions.app.handlers.service_call_handler.build_auth_headers")
+    @patch("executions.app.handlers.service_call_handler.IntegrationService")
     def test_service_exception_propagates(self, mock_is_class, mock_bah, mock_gsc):
         """AC#7 : exception du service propagée vers _execute_handler_step."""
         from core.exceptions import ServiceUnavailableError
@@ -195,9 +195,9 @@ class TestServiceCallHandler:
                 correlation_id=None,
             )
 
-    @patch("executions.step_handlers.service_call_handler.get_service_client")
-    @patch("executions.step_handlers.service_call_handler.build_auth_headers")
-    @patch("executions.step_handlers.service_call_handler.IntegrationService")
+    @patch("executions.app.handlers.service_call_handler.get_service_client")
+    @patch("executions.app.handlers.service_call_handler.build_auth_headers")
+    @patch("executions.app.handlers.service_call_handler.IntegrationService")
     def test_scalar_result_normalized_to_dict(self, mock_is_class, mock_bah, mock_gsc):
         """Résultat scalaire normalisé en dict {'result': ...} pour output_mapping."""
         integration = self._make_integration()
@@ -218,9 +218,9 @@ class TestServiceCallHandler:
         )
         assert result == {"result": "my-password"}
 
-    @patch("executions.step_handlers.service_call_handler.get_service_client")
-    @patch("executions.step_handlers.service_call_handler.build_auth_headers")
-    @patch("executions.step_handlers.service_call_handler.IntegrationService")
+    @patch("executions.app.handlers.service_call_handler.get_service_client")
+    @patch("executions.app.handlers.service_call_handler.build_auth_headers")
+    @patch("executions.app.handlers.service_call_handler.IntegrationService")
     def test_integration_id_fallback_on_type_mismatch(self, mock_is_class, mock_bah, mock_gsc):
         """AC#6 : integration_id avec type mismatch → fallback sur get_by_type."""
         wrong_integration = self._make_integration(integration_type="jira")
@@ -275,10 +275,10 @@ class TestServiceCallHandler:
                 correlation_id=None,
             )
 
-    @patch("executions.step_handlers.service_call_handler.logger")
-    @patch("executions.step_handlers.service_call_handler.get_service_client")
-    @patch("executions.step_handlers.service_call_handler.build_auth_headers")
-    @patch("executions.step_handlers.service_call_handler.IntegrationService")
+    @patch("executions.app.handlers.service_call_handler.logger")
+    @patch("executions.app.handlers.service_call_handler.get_service_client")
+    @patch("executions.app.handlers.service_call_handler.build_auth_headers")
+    @patch("executions.app.handlers.service_call_handler.IntegrationService")
     def test_service_exception_logs_error(self, mock_is_class, mock_bah, mock_gsc, mock_logger):
         """H1 fix: service_call_handler_error est loggué quand le service lève une exception."""
         from core.exceptions import ServiceUnavailableError
@@ -323,7 +323,7 @@ class TestServiceCallHandler:
                 correlation_id=None,
             )
 
-    @patch("executions.step_handlers.service_call_handler.get_service_client")
+    @patch("executions.app.handlers.service_call_handler.get_service_client")
     def test_send_email_with_step_variable_input_mapping(self, mock_gsc):
         """AC1, AC4 (story 79.1) : send_email appelé avec les valeurs résolues depuis steps.*.output.*
 
@@ -364,7 +364,7 @@ class TestServiceCallHandler:
         )
         assert result == {"result": None}
 
-    @patch("executions.step_handlers.service_call_handler.get_service_client")
+    @patch("executions.app.handlers.service_call_handler.get_service_client")
     def test_send_email_exception_propagates(self, mock_gsc):
         """AC4 (story 79.1) : exception de send_email propagée + loguée (chemin d'échec)."""
         mock_notification_service = MagicMock()
@@ -390,7 +390,7 @@ class TestServiceCallHandler:
                 correlation_id="corr-fail",
             )
 
-    @patch("executions.step_handlers.service_call_handler.get_service_client")
+    @patch("executions.app.handlers.service_call_handler.get_service_client")
     def test_send_email_with_cc(self, mock_gsc):
         """AC1, AC4 (story 79.2) : send_email avec cc dans resolved_params → send_email appelé avec cc.
 
@@ -428,7 +428,7 @@ class TestServiceCallHandler:
         )
         assert result == {"result": None}
 
-    @patch("executions.step_handlers.service_call_handler.get_service_client")
+    @patch("executions.app.handlers.service_call_handler.get_service_client")
     def test_send_email_without_cc_unchanged(self, mock_gsc):
         """AC1 (story 79.2) : send_email sans cc dans resolved_params → comportement inchangé (rétrocompatibilité).
 
@@ -463,7 +463,7 @@ class TestServiceCallHandler:
         )
         assert result == {"result": None}
 
-    @patch("executions.step_handlers.service_call_handler.get_service_client")
+    @patch("executions.app.handlers.service_call_handler.get_service_client")
     def test_send_teams_with_step_variable_input_mapping(self, mock_gsc):
         """AC1, AC4 (story 79.1) : send_teams appelé avec les valeurs résolues depuis steps.*.output.*
 
