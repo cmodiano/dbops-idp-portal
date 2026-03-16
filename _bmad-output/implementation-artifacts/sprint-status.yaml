@@ -1050,7 +1050,7 @@ development_status:
     # --- Medium ---
     86-3-gate-polling-backoff: done # code-review 2026-03-16: 1 HIGH (backoff non persisté quand output_changed=False) + 2 MEDIUM + 1 LOW fixes, 20/20 tests pass
     86-4-retry-inventory-service-maintenance-window: done # code-review 2026-03-16: 1 HIGH (patch sleep inefficace → _retry_wait class attr + wait_none()) + 2 MEDIUM + 1 LOW fixes, 15/15 tests pass en 0.72s
-    86-5-gate-type-validation-definition-time: backlog # catalog/validation.py — valider gate_type via gate_registry à la sauvegarde workflow, ValidationError avec types valides
+    86-5-gate-type-validation-definition-time: done # code-review 2026-03-16: M1 whitespace gate_type + M2 coverage AC#4 (service_call/evaluation/http_request) + L3 import hors boucle + L4 assertions + L5 step_type extraction, 50/50 tests pass
     86-6-cancellation-cache-redis: backlog # cancellation_cache.py — remplacer dict in-memory par Redis (Django cache), clé cancellation:{execution_id}, TTL 24h, test multi-worker
     86-7-service-call-retry-transient: backlog # step_handlers/service_call_handler.py — tenacity retry sur Vault/ServiceNow (transient only: VaultUnavailableError, 429/503), VAULT_MAX_RETRIES, SERVICENOW_MAX_RETRIES
     # --- Low ---

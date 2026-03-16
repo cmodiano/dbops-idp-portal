@@ -537,3 +537,96 @@ class TestDetectWorkflowCycles:
         with pytest.raises(drf_serializers.ValidationError) as exc_info:
             _detect_workflow_cycles(steps)
         assert "Infinite loop detected" in str(exc_info.value)
+
+
+class TestGateTypeValidation(TestCase):
+    """
+    Story 86.5: Tests for gate_type validation in validate_workflow_steps.
+
+    Verifies that gate steps require a valid gate_type registered in gate_registry,
+    while non-gate steps are unaffected.
+    """
+
+    def _make_gate_step(self, gate_type=None, **kwargs):
+        """Helper to build a minimal gate step dict."""
+        step = {'step_type': 'gate', 'step_id': 'g1'}
+        if gate_type is not None:
+            step['gate_type'] = gate_type
+        step.update(kwargs)
+        return step
+
+    def test_gate_type_missing_raises_validation_error(self):
+        """AC#1: step gate sans gate_type → ValidationError 'gate_type est requis'."""
+        steps = [self._make_gate_step()]  # gate_type absent
+        with pytest.raises(drf_serializers.ValidationError) as exc_info:
+            validate_workflow_steps(steps)
+        assert "gate_type est requis" in str(exc_info.value)
+
+    def test_gate_type_empty_string_raises_validation_error(self):
+        """AC#1: gate_type='' (chaîne vide) → ValidationError 'gate_type est requis'."""
+        steps = [self._make_gate_step(gate_type='')]
+        with pytest.raises(drf_serializers.ValidationError) as exc_info:
+            validate_workflow_steps(steps)
+        assert "gate_type est requis" in str(exc_info.value)
+
+    def test_gate_type_unknown_raises_validation_error(self):
+        """AC#2: gate_type inconnu → ValidationError listant les types valides."""
+        steps = [self._make_gate_step(gate_type='nonexistent')]
+        with pytest.raises(drf_serializers.ValidationError) as exc_info:
+            validate_workflow_steps(steps)
+        error_str = str(exc_info.value)
+        assert "nonexistent" in error_str
+        assert "Types valides" in error_str
+        # Les types valides connus doivent apparaître dans le message
+        assert "maintenance_window" in error_str
+        assert "approval" in error_str
+
+    def test_gate_type_whitespace_only_raises_validation_error(self):
+        """Cas limite: gate_type='   ' (whitespace seul) → ValidationError 'gate_type est requis'."""
+        steps = [self._make_gate_step(gate_type='   ')]
+        with pytest.raises(drf_serializers.ValidationError) as exc_info:
+            validate_workflow_steps(steps)
+        assert "gate_type est requis" in str(exc_info.value)
+
+    def test_gate_type_valid_maintenance_window(self):
+        """AC#3: gate_type='maintenance_window' → pas d'erreur."""
+        steps = [self._make_gate_step(gate_type='maintenance_window')]
+        result = validate_workflow_steps(steps)
+        assert result == steps
+
+    def test_gate_type_valid_approval(self):
+        """AC#3: gate_type='approval' → pas d'erreur."""
+        steps = [self._make_gate_step(gate_type='approval')]
+        result = validate_workflow_steps(steps)
+        assert result == steps
+
+    def test_non_gate_step_not_affected(self):
+        """AC#4: step platform sans gate_type → pas d'erreur (gate_type non requis)."""
+        steps = [{'step_type': 'platform', 'step_id': 'p1', 'referenced_action_id': 1}]
+        result = validate_workflow_steps(steps)
+        assert result == steps
+
+    def test_service_call_step_not_affected(self):
+        """AC#4: step service_call sans gate_type → pas d'erreur."""
+        steps = [{'step_type': 'service_call', 'step_id': 's1'}]
+        result = validate_workflow_steps(steps)
+        assert result == steps
+
+    def test_evaluation_step_not_affected(self):
+        """AC#4: step evaluation sans gate_type → pas d'erreur."""
+        steps = [{'step_type': 'evaluation', 'step_id': 'e1'}]
+        result = validate_workflow_steps(steps)
+        assert result == steps
+
+    def test_http_request_step_not_affected(self):
+        """AC#4: step http_request sans gate_type → pas d'erreur."""
+        steps = [{'step_type': 'http_request', 'step_id': 'h1'}]
+        result = validate_workflow_steps(steps)
+        assert result == steps
+
+    def test_gate_type_case_sensitive(self):
+        """Cas limite: gate_type='MAINTENANCE_WINDOW' (mauvaise casse) → ValidationError."""
+        steps = [self._make_gate_step(gate_type='MAINTENANCE_WINDOW')]
+        with pytest.raises(drf_serializers.ValidationError) as exc_info:
+            validate_workflow_steps(steps)
+        assert "MAINTENANCE_WINDOW" in str(exc_info.value)
