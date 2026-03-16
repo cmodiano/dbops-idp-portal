@@ -2,9 +2,30 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone as dt_timezone
+from typing import Any
 
 from django.utils import timezone
+
+
+def parse_json_field(value: Any, fallback: Any = None) -> Any:
+    """Safely deserialize a JSON TextField that may already be a dict/list.
+
+    oracledb 3.x can return NCLOB columns containing valid JSON directly as a
+    Python dict or list (bypassing the string form) in certain query code paths.
+    Calling json.loads() on a dict raises TypeError, silently caught, returning
+    None.  This helper handles str, dict/list (already parsed), and LOB objects.
+    """
+    if value is None:
+        return fallback
+    if isinstance(value, (dict, list)):
+        return value
+    if not isinstance(value, str):
+        value = value.read() if hasattr(value, 'read') else str(value)
+    if not value:
+        return fallback
+    return json.loads(value)
 
 
 def ensure_utc_isoformat(dt: datetime | None) -> str | None:

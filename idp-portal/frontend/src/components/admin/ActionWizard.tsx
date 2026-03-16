@@ -131,6 +131,12 @@ export function ActionWizard({
   /** Story 63.9: ID du schéma d'output déclaré pour cette action (null = aucun). */
   const [outputSchemaId, setOutputSchemaId] = useState<number | null>(null);
 
+  // Story 88-2 BUG-FE-01: Capturer les tags initiaux pour comparaison à la sauvegarde
+  const initialTags = useMemo(
+    () => editAction?.tags ? [...editAction.tags].sort() : [],
+    [editAction],
+  );
+
   const isEditMode = !!editAction;
   // Read-only if editing a published action (draft and disabled actions can be edited)
   const isReadOnly = isEditMode && editAction?.status === 'published';
@@ -373,7 +379,9 @@ export function ActionWizard({
       const actionId = editAction?.id ?? (result as ActionDetail | ActionResponse | undefined)?.id;
       const done = (result as ActionDetail | ActionResponse) ?? editAction;
 
-      if (actionId && selectedTags.length >= 0) {
+      // Story 88-2 BUG-FE-01: Ne mettre à jour les tags que si modifiés
+      const tagsChanged = JSON.stringify([...selectedTags].sort()) !== JSON.stringify(initialTags);
+      if (actionId && tagsChanged) {
         try {
           await handleUpdateActionTags(actionId, selectedTags);
         } catch (tagErr) {

@@ -10,7 +10,7 @@ import { ServiceCallStepConfig } from './ServiceCallStepConfig';
 import * as useCapabilitiesModule from '../../../hooks/useCapabilities';
 
 vi.mock('../../../hooks/useOutputSchemas', () => ({
-  useOutputSchemas: () => ({ availableVariables: [], loading: false, error: null }),
+  useOutputSchemas: () => ({ availableVariables: [], loading: false, error: null, retryCount: 0 }),
 }));
 vi.mock('../../../hooks/useCapabilities');
 
@@ -96,7 +96,7 @@ const baseData = {
 describe('ServiceCallStepConfig — MappingHelpPopover integration (Story 57.20)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithServices, loading: false, error: null });
+    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithServices, loading: false, error: null, retryCount: 0 });
   });
 
   it('renders input mapping help icon', () => {
@@ -143,7 +143,7 @@ describe('ServiceCallStepConfig — MappingHelpPopover integration (Story 57.20)
 describe('ServiceCallStepConfig — validation warnings (Story 57.20, AC5)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithServices, loading: false, error: null });
+    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithServices, loading: false, error: null, retryCount: 0 });
   });
 
   // Note: Les warnings sont affichés dans KeyValueEditor uniquement.
@@ -201,7 +201,7 @@ describe('ServiceCallStepConfig — validation warnings (Story 57.20, AC5)', () 
 describe('ServiceCallStepConfig — notification integration_type (Story 16.9, AC6-7)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithServices, loading: false, error: null });
+    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithServices, loading: false, error: null, retryCount: 0 });
   });
 
   const notificationBase = {
@@ -255,7 +255,7 @@ const dataWithMapping = {
 describe('ServiceCallStepConfig — VariablePicker (Story 63.3)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithServices, loading: false, error: null });
+    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithServices, loading: false, error: null, retryCount: 0 });
   });
 
   it('passe workflowId au composant enfant via KeyValueEditor', () => {
@@ -288,7 +288,7 @@ describe('ServiceCallStepConfig — VariablePicker (Story 63.3)', () => {
 describe('ServiceCallStepConfig — NotificationTemplateEditor (Story 63.4, AC4)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithServices, loading: false, error: null });
+    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithServices, loading: false, error: null, retryCount: 0 });
   });
 
   it('rend NotificationTemplateEditor pour notification send_email', () => {
@@ -337,6 +337,7 @@ describe('ServiceCallStepConfig — useCapabilities integration (Story 82.6)', (
       capabilities: mockCapabilitiesWithServices,
       loading: false,
       error: null,
+      retryCount: 0,
     });
 
     render(<ServiceCallStepConfig data={baseData} onUpdate={vi.fn()} />);
@@ -350,6 +351,7 @@ describe('ServiceCallStepConfig — useCapabilities integration (Story 82.6)', (
       capabilities: null,
       loading: false,
       error: 'API down',
+      retryCount: 0,
     });
 
     render(<ServiceCallStepConfig data={baseData} onUpdate={vi.fn()} />);
@@ -365,6 +367,7 @@ describe('ServiceCallStepConfig — useCapabilities integration (Story 82.6)', (
       capabilities: null,
       loading: false,
       error: null,
+      retryCount: 0,
     });
 
     render(<ServiceCallStepConfig data={baseData} onUpdate={vi.fn()} />);
@@ -387,6 +390,7 @@ describe('ServiceCallStepConfig — useCapabilities integration (Story 82.6)', (
       },
       loading: false,
       error: null,
+      retryCount: 0,
     });
 
     render(<ServiceCallStepConfig data={baseData} onUpdate={vi.fn()} />);
@@ -404,7 +408,7 @@ describe('ServiceCallStepConfig — useCapabilities integration (Story 82.6)', (
 describe('ServiceCallStepConfig — operation labels depuis ServiceOperation (Story 82.7, T8.5)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithServices, loading: false, error: null });
+    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithServices, loading: false, error: null, retryCount: 0 });
   });
 
   it('label opération vient de {code, label} du hook — create_change → Créer un change', () => {
@@ -439,7 +443,7 @@ describe('ServiceCallStepConfig — operation labels depuis ServiceOperation (St
 describe('ServiceCallStepConfig — rendu déclaratif via ui_hints (Story 83-10)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithServices, loading: false, error: null });
+    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithServices, loading: false, error: null, retryCount: 0 });
   });
 
   it('renders_notification_editor_when_ui_hints_declares_notification_template', () => {
@@ -470,7 +474,7 @@ describe('ServiceCallStepConfig — rendu déclaratif via ui_hints (Story 83-10)
       ],
       stepTypes: [],
     };
-    mockUseCapabilities.mockReturnValue({ capabilities: capabilitiesWithSlack, loading: false, error: null });
+    mockUseCapabilities.mockReturnValue({ capabilities: capabilitiesWithSlack, loading: false, error: null, retryCount: 0 });
 
     const { container } = render(
       <ServiceCallStepConfig
@@ -522,7 +526,7 @@ describe('ServiceCallStepConfig — T8.2: nouveau service dans capabilities → 
       ],
       stepTypes: [],
     };
-    mockUseCapabilities.mockReturnValue({ capabilities: capabilitiesWithNewService, loading: false, error: null });
+    mockUseCapabilities.mockReturnValue({ capabilities: capabilitiesWithNewService, loading: false, error: null, retryCount: 0 });
 
     const data = { ...baseData, integration_type: 'my_new_service', operation: null };
     render(<ServiceCallStepConfig data={data} onUpdate={vi.fn()} />);
@@ -539,7 +543,7 @@ describe('ServiceCallStepConfig — T8.2: nouveau service dans capabilities → 
 describe('ServiceCallStepConfig — Story 84-4: schema-driven et filtre supports_service_call', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithServices, loading: false, error: null });
+    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithServices, loading: false, error: null, retryCount: 0 });
   });
 
   it('T10.3 — servicenow + create_change → SchemaInputMappingEditor rendu (data-testid présent)', () => {

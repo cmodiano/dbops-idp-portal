@@ -6,6 +6,7 @@ from django.db import models
 from django.utils import timezone
 from idp_auth.models import User
 from catalog.models import Action
+from core.utils import parse_json_field
 from executions.domain.commands import VALID_COMMAND_TYPES  # noqa: F401
 
 logger = structlog.get_logger(__name__)
@@ -178,9 +179,9 @@ class Execution(models.Model):
         """Deserialize JSON from CLOB."""
         if self.parameters:
             try:
-                return json.loads(self.parameters)  # type: ignore[no-any-return]
+                return parse_json_field(self.parameters)  # type: ignore[no-any-return]
             except (json.JSONDecodeError, TypeError) as e:
-                logger.warning(f"Failed to deserialize parameters for Execution {self.id}: {e}")
+                logger.warning("get_parameters_deserialize_failed", execution_id=self.id, error=str(e))
                 return None
         return None
 
@@ -255,9 +256,9 @@ class ExecutionTarget(models.Model):
         """Deserialize JSON from CLOB."""
         if self.target_metadata:
             try:
-                return cast("dict[Any, Any] | None", json.loads(self.target_metadata))
+                return cast("dict[Any, Any] | None", parse_json_field(self.target_metadata))
             except (json.JSONDecodeError, TypeError) as e:
-                logger.warning(f"Failed to deserialize target_metadata for ExecutionTarget {self.id}: {e}")
+                logger.warning("get_target_metadata_deserialize_failed", target_id=self.id, error=str(e))
                 return None
         return None
 
@@ -385,9 +386,9 @@ class ExecutionStep(models.Model):
         """Deserialize JSON from CLOB."""
         if self.output:
             try:
-                return json.loads(self.output)  # type: ignore[no-any-return]
+                return parse_json_field(self.output)  # type: ignore[no-any-return]
             except (json.JSONDecodeError, TypeError) as e:
-                logger.warning(f"Failed to deserialize output for ExecutionStep {self.id}: {e}")
+                logger.warning("get_output_deserialize_failed", step_id=self.id, error=str(e))
                 return None
         return None
 
@@ -488,9 +489,9 @@ class ScheduledExecution(models.Model):
         """Deserialize JSON from CLOB."""
         if self.parameters:
             try:
-                return json.loads(self.parameters)  # type: ignore[no-any-return]
+                return parse_json_field(self.parameters)  # type: ignore[no-any-return]
             except (json.JSONDecodeError, TypeError) as e:
-                logger.warning(f"Failed to deserialize parameters for ScheduledExecution {self.id}: {e}")
+                logger.warning("get_parameters_deserialize_failed", scheduled_execution_id=self.id, error=str(e))
                 return None
         return None
 
@@ -549,9 +550,9 @@ class RecurringPattern(models.Model):
         """Deserialize JSON from CLOB."""
         if self.pattern_config:
             try:
-                return json.loads(self.pattern_config)  # type: ignore[no-any-return]
+                return parse_json_field(self.pattern_config)  # type: ignore[no-any-return]
             except (json.JSONDecodeError, TypeError) as e:
-                logger.warning(f"Failed to deserialize pattern_config for RecurringPattern {self.id}: {e}")
+                logger.warning("get_pattern_config_deserialize_failed", pattern_id=self.id, error=str(e))
                 return None
         return None
 
@@ -632,9 +633,9 @@ class WorkflowEvent(models.Model):
         """Deserialize JSON from CLOB."""
         if self.payload:
             try:
-                return json.loads(self.payload)  # type: ignore[no-any-return]
+                return parse_json_field(self.payload)  # type: ignore[no-any-return]
             except (json.JSONDecodeError, TypeError) as e:
-                logger.warning(f"Failed to deserialize payload for WorkflowEvent {self.id}: {e}")
+                logger.warning("get_payload_deserialize_failed", event_id=self.id, error=str(e))
                 return None
         return None
 

@@ -56,7 +56,7 @@ const makeProps = (dataOverrides: Record<string, unknown> = {}, selected = false
 describe('WorkflowStepNode', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseCapabilities.mockReturnValue({ capabilities: null, loading: false, error: null });
+    mockUseCapabilities.mockReturnValue({ capabilities: null, loading: false, error: null, retryCount: 0 });
   });
 
   it('renders action name', () => {
@@ -394,7 +394,7 @@ describe('WorkflowStepNode', () => {
     };
 
     it('affiche_le_variant_label_maintenance_window_depuis_capabilities', () => {
-      mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithGates, loading: false, error: null });
+      mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithGates, loading: false, error: null, retryCount: 0 });
 
       render(
         <WorkflowStepNode
@@ -407,7 +407,7 @@ describe('WorkflowStepNode', () => {
     });
 
     it('affiche_le_variant_label_approval_depuis_capabilities', () => {
-      mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithGates, loading: false, error: null });
+      mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithGates, loading: false, error: null, retryCount: 0 });
 
       render(
         <WorkflowStepNode
@@ -420,7 +420,7 @@ describe('WorkflowStepNode', () => {
     });
 
     it('gate_type_inconnu_fallback_gate', () => {
-      mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithGates, loading: false, error: null });
+      mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithGates, loading: false, error: null, retryCount: 0 });
 
       render(
         <WorkflowStepNode
@@ -433,7 +433,7 @@ describe('WorkflowStepNode', () => {
     });
 
     it('capabilities_null_gate_fallback', () => {
-      mockUseCapabilities.mockReturnValue({ capabilities: null, loading: false, error: null });
+      mockUseCapabilities.mockReturnValue({ capabilities: null, loading: false, error: null, retryCount: 0 });
 
       render(
         <WorkflowStepNode
@@ -446,7 +446,7 @@ describe('WorkflowStepNode', () => {
     });
 
     it('gate_name_utilisateur_prioritaire_sur_variant', () => {
-      mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithGates, loading: false, error: null });
+      mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithGates, loading: false, error: null, retryCount: 0 });
 
       render(
         <WorkflowStepNode
@@ -459,7 +459,7 @@ describe('WorkflowStepNode', () => {
     });
 
     it('gate_type_null_fallback_gate', () => {
-      mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithGates, loading: false, error: null });
+      mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithGates, loading: false, error: null, retryCount: 0 });
 
       render(
         <WorkflowStepNode
@@ -502,7 +502,7 @@ describe('WorkflowStepNode', () => {
     };
 
     it('T6.4 — step service_call avec capabilities mock → label intégration = display_name depuis capabilities', () => {
-      mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilities, loading: false, error: null });
+      mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilities, loading: false, error: null, retryCount: 0 });
 
       render(
         <WorkflowStepNode
@@ -520,7 +520,7 @@ describe('WorkflowStepNode', () => {
     });
 
     it('T6.5 — step service_call avec capabilities mock → label opération depuis operations[]', () => {
-      mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilities, loading: false, error: null });
+      mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilities, loading: false, error: null, retryCount: 0 });
 
       render(
         <WorkflowStepNode
@@ -539,7 +539,7 @@ describe('WorkflowStepNode', () => {
     });
 
     it('T6.6 — capabilities null → label intégration = code brut (pas de fallback INTEGRATION_LABELS)', () => {
-      mockUseCapabilities.mockReturnValue({ capabilities: null, loading: false, error: null });
+      mockUseCapabilities.mockReturnValue({ capabilities: null, loading: false, error: null, retryCount: 0 });
 
       render(
         <WorkflowStepNode

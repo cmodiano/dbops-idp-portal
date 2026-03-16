@@ -63,7 +63,7 @@ describe('StepsEditor', () => {
     vi.clearAllMocks();
     mockUseEnvironments.mockReturnValue(defaultEnvMock);
     mockUseAAPTemplates.mockReturnValue(defaultAAPMock);
-    mockUseCapabilities.mockReturnValue({ capabilities: defaultCapabilitiesMock, loading: false, error: null });
+    mockUseCapabilities.mockReturnValue({ capabilities: defaultCapabilitiesMock, loading: false, error: null, retryCount: 0 });
   });
 
   it('renders connector dropdown (Story 2.7)', async () => {
@@ -424,7 +424,7 @@ describe('StepsEditor - Additional coverage 55.7', () => {
     vi.clearAllMocks();
     mockUseEnvironments.mockReturnValue(defaultEnvMock);
     mockUseAAPTemplates.mockReturnValue(defaultAAPMock);
-    mockUseCapabilities.mockReturnValue({ capabilities: defaultCapabilitiesMock, loading: false, error: null });
+    mockUseCapabilities.mockReturnValue({ capabilities: defaultCapabilitiesMock, loading: false, error: null, retryCount: 0 });
   });
 
   it('servicenow avec conditional_environments non vide — pas de message validation', () => {
@@ -628,7 +628,7 @@ describe('StepsEditor - Extended coverage 55.6', () => {
     vi.clearAllMocks();
     mockUseEnvironments.mockReturnValue(defaultEnvMock);
     mockUseAAPTemplates.mockReturnValue(defaultAAPMock);
-    mockUseCapabilities.mockReturnValue({ capabilities: defaultCapabilitiesMock, loading: false, error: null });
+    mockUseCapabilities.mockReturnValue({ capabilities: defaultCapabilitiesMock, loading: false, error: null, retryCount: 0 });
   });
 
   it('handleRemoveStep — supprime la première étape parmi plusieurs, réordonne correctement', async () => {
@@ -795,7 +795,7 @@ describe('StepsEditor - Story 82.8: connectorOptions depuis capabilities', () =>
 
   it('T6.1 — connecteurs chargés depuis capabilities mock → liste reflète platforms (display_name)', async () => {
     const user = userEvent.setup();
-    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithPlatforms, loading: false, error: null });
+    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithPlatforms, loading: false, error: null, retryCount: 0 });
 
     render(<StepsEditor value={steps} onChange={vi.fn()} />);
     const connectorSelect = screen.getByLabelText(/Connecteur etape 1/i);
@@ -810,7 +810,7 @@ describe('StepsEditor - Story 82.8: connectorOptions depuis capabilities', () =>
 
   it('T6.2 — capabilities null → connectorOptions = [{ value: "none", label: "Aucun" }] (pas de liste locale)', async () => {
     const user = userEvent.setup();
-    mockUseCapabilities.mockReturnValue({ capabilities: null, loading: false, error: null });
+    mockUseCapabilities.mockReturnValue({ capabilities: null, loading: false, error: null, retryCount: 0 });
 
     render(<StepsEditor value={steps} onChange={vi.fn()} />);
     const connectorSelect = screen.getByLabelText(/Connecteur etape 1/i);
@@ -849,7 +849,7 @@ describe('StepsEditor - Story 82.8: connectorOptions depuis capabilities', () =>
         },
       ],
     };
-    mockUseCapabilities.mockReturnValue({ capabilities: capabilitiesWithDuplicate, loading: false, error: null });
+    mockUseCapabilities.mockReturnValue({ capabilities: capabilitiesWithDuplicate, loading: false, error: null, retryCount: 0 });
 
     render(<StepsEditor value={steps} onChange={vi.fn()} />);
     const connectorSelect = screen.getByLabelText(/Connecteur etape 1/i);
@@ -880,7 +880,7 @@ describe('StepsEditor - Story 82.8: connectorOptions depuis capabilities', () =>
       services: [],
       stepTypes: [],
     };
-    mockUseCapabilities.mockReturnValue({ capabilities: capabilitiesWithNewPlatform, loading: false, error: null });
+    mockUseCapabilities.mockReturnValue({ capabilities: capabilitiesWithNewPlatform, loading: false, error: null, retryCount: 0 });
 
     const steps: ExecutionStep[] = [
       { order: 1, name: 'Step 1', type: 'execution', connector_type: 'none', connector_config: undefined, conditional_environments: null },

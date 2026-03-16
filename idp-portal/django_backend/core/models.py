@@ -5,6 +5,7 @@ import structlog
 from typing import Any
 from django.db import models
 from django.db import IntegrityError
+from core.utils import parse_json_field
 
 logger = structlog.get_logger(__name__)
 
@@ -292,9 +293,9 @@ class AuditLog(models.Model):
         """Deserialize JSON from CLOB."""
         if self.details:
             try:
-                return json.loads(self.details)  # type: ignore[no-any-return]
+                return parse_json_field(self.details)  # type: ignore[no-any-return]
             except (json.JSONDecodeError, TypeError) as e:
-                logger.warning(f"Failed to deserialize details for AuditLog {self.id}: {e}")
+                logger.warning("get_details_deserialize_failed", audit_id=self.id, error=str(e))
                 return None
         return None
 

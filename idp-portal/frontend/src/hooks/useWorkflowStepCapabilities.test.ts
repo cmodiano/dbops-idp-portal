@@ -40,6 +40,7 @@ describe('useWorkflowStepCapabilities', () => {
       capabilities: mockCapabilities,
       loading: false,
       error: null,
+      retryCount: 0,
     });
 
     const { result } = renderHook(() => useWorkflowStepCapabilities());
@@ -56,6 +57,7 @@ describe('useWorkflowStepCapabilities', () => {
       capabilities: null,
       loading: false,
       error: 'API down',
+      retryCount: 0,
     });
 
     const { result } = renderHook(() => useWorkflowStepCapabilities());
@@ -71,6 +73,7 @@ describe('useWorkflowStepCapabilities', () => {
       capabilities: null,
       loading: true,
       error: null,
+      retryCount: 0,
     });
 
     const { result } = renderHook(() => useWorkflowStepCapabilities());
@@ -88,6 +91,7 @@ describe('useWorkflowStepCapabilities', () => {
       },
       loading: false,
       error: null,
+      retryCount: 0,
     });
 
     const { result } = renderHook(() => useWorkflowStepCapabilities());
@@ -101,6 +105,7 @@ describe('useWorkflowStepCapabilities', () => {
       capabilities: mockCapabilities, // données périmées encore présentes
       loading: false,
       error: 'API error', // erreur simultanée (ex: refetch échoué avec stale data)
+      retryCount: 0,
     });
 
     const { result } = renderHook(() => useWorkflowStepCapabilities());
@@ -122,6 +127,7 @@ describe('useWorkflowStepCapabilities', () => {
       },
       loading: false,
       error: null,
+      retryCount: 0,
     });
 
     const { result } = renderHook(() => useWorkflowStepCapabilities());
