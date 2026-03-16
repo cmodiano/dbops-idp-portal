@@ -4,86 +4,90 @@
 
 L'IDP Portal est un portail interne de développeur (Internal Developer Platform) conçu pour orchestrer des opérations de bases de données à travers un système de workflows. Il permet aux équipes de déclencher, planifier, approuver et surveiller des actions automatisées sur l'infrastructure de bases de données.
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                          FRONTEND (React SPA)                           │
-│  ┌──────────┐ ┌───────────┐ ┌──────────┐ ┌──────────┐ ┌─────────────┐ │
-│  │ Catalogue │ │ Exécutions│ │Calendrier│ │Dashboard │ │Administration│ │
-│  │ Actions   │ │ & Logs    │ │Planifié  │ │Analytics │ │  & Audit    │ │
-│  └─────┬─────┘ └─────┬─────┘ └────┬─────┘ └────┬─────┘ └──────┬──────┘ │
-│        │              │            │             │              │        │
-│        └──────────────┴────────────┴─────────────┴──────────────┘        │
-│                                    │                                     │
-│                          API Client (Axios)                              │
-│                          WebSocket Client                                │
-└────────────────────────────────────┬─────────────────────────────────────┘
-                                     │ HTTPS / WSS
-┌────────────────────────────────────┼─────────────────────────────────────┐
-│                          BACKEND (Django/DRF)                            │
-│                                    │                                     │
-│  ┌─────────────────────────────────┴──────────────────────────────────┐  │
-│  │                        API REST (DRF)                              │  │
-│  │  /api/v1/catalog/  /api/v1/executions/  /api/v1/integrations/     │  │
-│  │  /api/v1/admin/    /api/v1/auth/        /api/v1/webhooks/         │  │
-│  └────────────┬───────────────────────────────────────────────────────┘  │
-│               │                                                          │
-│  ┌────────────┴────────────────────────────────────────────────────────┐ │
-│  │                     COUCHE SERVICES                                 │ │
-│  │  ┌───────────┐ ┌──────────────┐ ┌────────────┐ ┌───────────────┐  │ │
-│  │  │ Catalog   │ │  Execution   │ │Integration │ │   Profile     │  │ │
-│  │  │ Service   │ │  Service     │ │  Service   │ │   Service     │  │ │
-│  │  └───────────┘ └──────┬───────┘ └────────────┘ └───────────────┘  │ │
-│  │                       │                                            │ │
-│  │  ┌────────────────────┴──────────────────────────────────────────┐ │ │
-│  │  │            CONTAINER WORKFLOW RUNTIME                         │ │ │
-│  │  │                                                               │ │ │
-│  │  │  ┌─────────────┐  ┌──────────────┐  ┌─────────────────────┐  │ │ │
-│  │  │  │ Step        │  │ Gate         │  │ State Machine       │  │ │ │
-│  │  │  │ Handlers    │  │ Strategies   │  │ (transitions)       │  │ │ │
-│  │  │  ├─────────────┤  ├──────────────┤  └─────────────────────┘  │ │ │
-│  │  │  │ Platform    │  │ Approval     │                           │ │ │
-│  │  │  │ ServiceCall │  │ Condition    │  ┌─────────────────────┐  │ │ │
-│  │  │  │ HttpRequest │  │ Sensor       │  │ Template Resolver   │  │ │ │
-│  │  │  │ Evaluation  │  └──────────────┘  │ (Jinja2 mappings)   │  │ │ │
-│  │  │  │ Gate        │                    └─────────────────────┘  │ │ │
-│  │  │  │ SchedExec   │                                             │ │ │
-│  │  │  └─────────────┘                                             │ │ │
-│  │  └──────────────────────────────────────────────────────────────┘ │ │
-│  └──────────────────────────────────────────────────────────────────┘  │
-│                                                                        │
-│  ┌───────────────────────────────────────────────────────────────────┐  │
-│  │                     CELERY (Workers Async)                        │  │
-│  │  ┌────────────┐ ┌──────────────┐ ┌───────────┐ ┌──────────────┐ │  │
-│  │  │ trigger_   │ │ evaluate_    │ │ poll_     │ │ reconcile_   │ │  │
-│  │  │ action     │ │ waiting_     │ │ execution │ │ workflow     │ │  │
-│  │  │ execution  │ │ gates (60s)  │ │ _status   │ │              │ │  │
-│  │  └────────────┘ └──────────────┘ └───────────┘ └──────────────┘ │  │
-│  │  ┌────────────┐ ┌──────────────┐ ┌───────────────────────────┐  │  │
-│  │  │ process_   │ │ dispatch_    │ │ health_check_             │  │  │
-│  │  │ scheduled  │ │ outbox       │ │ all_integrations          │  │  │
-│  │  │ executions │ │ _events      │ │                           │  │  │
-│  │  └────────────┘ └──────────────┘ └───────────────────────────┘  │  │
-│  └───────────────────────────────────────────────────────────────────┘  │
-│                                                                        │
-│  ┌────────────────┐  ┌────────────────┐  ┌────────────────────────┐   │
-│  │ Django Channels │  │ SAML 2.0 / JWT │  │ Structured Logging     │   │
-│  │ (WebSocket)     │  │ Authentication │  │ (structlog → Splunk)   │   │
-│  └────────────────┘  └────────────────┘  └────────────────────────┘   │
-└────────────┬──────────────────┬──────────────────┬────────────────────┘
-             │                  │                  │
-┌────────────┴───┐  ┌──────────┴───┐  ┌───────────┴──────────────────┐
-│  Oracle 19c+   │  │    Redis     │  │  Plateformes Externes        │
-│                │  │              │  │  ┌─────┐ ┌──────────────────┐ │
-│ EXECUTIONS     │  │ Cache        │  │  │ AAP │ │ ServiceNow       │ │
-│ EXECUTION_STEPS│  │ Broker Celery│  │  └─────┘ └──────────────────┘ │
-│ WORKFLOW_*     │  │ WebSocket    │  │  ┌─────────────┐ ┌──────────┐ │
-│ AUDIT_LOG      │  │ Feature Flags│  │  │ Terraform   │ │ GitHub   │ │
-│ ACTIONS_CATALOG│  │ Sessions     │  │  │ Cloud       │ │ Actions  │ │
-│ INTEGRATIONS   │  │              │  │  └─────────────┘ └──────────┘ │
-│ PROFILES       │  │              │  │  ┌───────┐ ┌────────────────┐ │
-│ USERS          │  │              │  │  │ Vault │ │ Azure DevOps   │ │
-└────────────────┘  └──────────────┘  │  └───────┘ └────────────────┘ │
-                                      └──────────────────────────────┘
+### Architecture globale
+
+```mermaid
+graph TB
+    subgraph Frontend["Frontend (React SPA)"]
+        Catalog[Catalogue Actions]
+        Exec[Exécutions & Logs]
+        Cal[Calendrier Planifié]
+        Dash[Dashboard Analytics]
+        Admin[Administration & Audit]
+        WFViz[Workflow Visualizer]
+    end
+
+    subgraph API["API Client"]
+        Axios[Axios HTTP Client]
+        WS_Client[WebSocket Client]
+    end
+
+    Frontend --> API
+
+    subgraph Backend["Backend (Django / DRF)"]
+        subgraph REST["API REST /api/v1/"]
+            CatAPI["/catalog/"]
+            ExecAPI["/executions/"]
+            IntAPI["/integrations/"]
+            AdminAPI["/admin/"]
+            AuthAPI["/auth/"]
+            WebhookAPI["/webhooks/"]
+        end
+
+        subgraph Services["Couche Services"]
+            CatSvc[CatalogService]
+            ExecSvc[ExecutionService]
+            IntSvc[IntegrationService]
+            ProfSvc[ProfileService]
+            AuditSvc[AuditService]
+        end
+
+        subgraph Runtime["Container Workflow Runtime"]
+            StepH["Step Handlers\n─────────────\nPlatform\nServiceCall\nHttpRequest\nEvaluation\nGate\nScheduleExecution"]
+            GateS["Gate Strategies\n──────────────\nApproval\nCondition\nSensor"]
+            SM[State Machine]
+            TR["Template Resolver\n(Jinja2)"]
+        end
+
+        subgraph Celery["Celery (Workers Async)"]
+            T1[trigger_action_execution]
+            T2["evaluate_waiting_gates\n(60s)"]
+            T3[poll_execution_status]
+            T4[reconcile_workflow]
+            T5[process_scheduled_executions]
+            T6[dispatch_outbox_events]
+            T7[health_check_integrations]
+        end
+
+        Channels[Django Channels\nWebSocket]
+        Auth[SAML 2.0 / JWT\nAuthentication]
+        Logging["Structured Logging\nstructlog → Splunk"]
+    end
+
+    API -->|HTTPS / WSS| REST
+    REST --> Services
+    Services --> Runtime
+    Runtime --> Celery
+    WS_Client -.->|WSS| Channels
+
+    subgraph Infra["Infrastructure"]
+        Oracle[("Oracle 19c+\n──────────────\nEXECUTIONS\nEXECUTION_STEPS\nWORKFLOW_*\nAUDIT_LOG\nACTIONS_CATALOG\nINTEGRATIONS\nPROFILES\nUSERS")]
+        Redis[("Redis\n──────────\nCache\nBroker Celery\nWebSocket Layer\nFeature Flags\nSessions")]
+    end
+
+    subgraph Platforms["Plateformes Externes"]
+        AAP[AAP / Ansible Tower]
+        SNOW[ServiceNow]
+        TF[Terraform Cloud]
+        GH[GitHub Actions]
+        AZ[Azure DevOps]
+        Vault[HashiCorp Vault]
+    end
+
+    Backend --> Oracle
+    Backend --> Redis
+    Celery --> Redis
+    Runtime -->|API calls| Platforms
 ```
 
 ---
@@ -128,153 +132,205 @@ Migrations gérées par Flyway (V000 à V136). Tables partitionnées mensuelleme
 
 ### Tables principales et leurs relations
 
+```mermaid
+erDiagram
+    USERS {
+        number ID PK
+        varchar USERNAME
+        varchar EMAIL
+        varchar SAML_NAME_ID
+        number IS_ACTIVE
+        timestamp LAST_LOGIN
+    }
+
+    PROFILES {
+        number ID PK
+        varchar NAME
+        number IS_ADMIN
+        number IS_AUDITOR
+        number IS_APPROVER
+        json NAVIGATION_TABS
+    }
+
+    PROFILE_ACTION_PERMISSIONS {
+        number PROFILE_ID FK
+        number ACTION_ID FK
+        varchar PERMISSION "ALLOW | DENY"
+    }
+
+    PROFILE_TARGET_PERMISSIONS {
+        number PROFILE_ID FK
+        varchar TARGET_PATTERN
+        varchar PERMISSION "ALLOW | DENY"
+    }
+
+    ACTIONS_CATALOG {
+        number ID PK
+        varchar NAME
+        clob DESCRIPTION
+        varchar ITEM_TYPE
+        varchar STATUS "DRAFT | PUBLISHED"
+        number IS_CONTAINER
+        number INTEGRATION_ID FK
+        clob WORKFLOW_TEMPLATE
+        number CREATED_BY FK
+    }
+
+    INTEGRATIONS {
+        number ID PK
+        varchar NAME
+        varchar INTEGRATION_TYPE
+        varchar BASE_URL
+        blob CREDENTIALS "encrypted"
+        varchar HEALTH_STATUS
+        timestamp LAST_HEALTH_CHECK
+    }
+
+    WORKFLOW_DEFINITIONS {
+        number ID PK
+        number ACTION_ID FK "UNIQUE"
+        number VERSION
+        timestamp CREATED_AT
+        timestamp UPDATED_AT
+    }
+
+    WORKFLOW_STEPS {
+        number ID PK
+        number WORKFLOW_DEFINITION_ID FK
+        varchar STEP_ID "unique per wf"
+        number STEP_ORDER
+        varchar STEP_NAME
+        varchar STEP_TYPE "platform | service_call | http_request | evaluation | gate | schedule_execution"
+        number REFERENCED_ACTION_ID FK
+        varchar INTEGRATION_TYPE
+        varchar OPERATION
+        json INPUT_MAPPING
+        json OUTPUT_MAPPING
+        varchar CONDITION
+        number RETRY_ENABLED
+        number RETRY_MAX_ATTEMPTS
+        number RETRY_INTERVAL_SECONDS
+        number RETRY_BACKOFF_MULTIPLIER
+        varchar JOIN_POLICY
+    }
+
+    WORKFLOW_STEP_EDGES {
+        number ID PK
+        number FROM_STEP_ID FK
+        number TO_STEP_ID FK
+        varchar EDGE_TYPE "success | error"
+    }
+
+    EXECUTIONS {
+        number ID PK
+        number ACTION_ID FK
+        number USER_ID FK
+        varchar STATUS "SUBMITTED | RUNNING | COMPLETED | FAILED | CANCELLED | REJECTED | INTEGRATION_ERROR"
+        number PARENT_EXECUTION_ID FK
+        json PARAMETERS
+        varchar CORRELATION_ID
+        timestamp CREATED_AT
+        timestamp UPDATED_AT
+    }
+
+    EXECUTION_STEPS {
+        number ID PK
+        number EXECUTION_ID FK
+        varchar STEP_ID
+        varchar STEP_TYPE
+        varchar STATUS
+        timestamp STARTED_AT
+        timestamp COMPLETED_AT
+        json OUTPUT
+        varchar ERROR_MESSAGE
+        number ATTEMPT_NUMBER
+    }
+
+    WORKFLOW_EVENTS {
+        number ID PK
+        number EXECUTION_ID FK
+        varchar EVENT_TYPE
+        varchar STEP_ID
+        json PAYLOAD
+        number SEQ_NO
+        timestamp CREATED_AT
+    }
+
+    RUNNABLE_STEPS {
+        number ID PK
+        number EXECUTION_ID FK
+        varchar STEP_ID
+        timestamp CLAIMED_UNTIL
+        number ATTEMPT_NO
+        number MAX_ATTEMPTS
+        timestamp CREATED_AT
+    }
+
+    EXECUTION_OUTBOX {
+        number ID PK
+        number EXECUTION_ID FK
+        varchar EVENT_TYPE
+        json PAYLOAD
+        timestamp PROCESSED_AT
+        timestamp CREATED_AT
+    }
+
+    AUDIT_LOG {
+        number ID PK
+        number USER_ID
+        varchar ACTION_TYPE
+        varchar ENTITY_TYPE
+        number ENTITY_ID
+        json CHANGES
+        varchar CORRELATION_ID
+        timestamp TIMESTAMP
+    }
+
+    SCHEDULED_EXECUTIONS {
+        number ID PK
+        number ACTION_ID FK
+        number USER_ID FK
+        json PARAMETERS
+        timestamp SCHEDULED_AT
+        varchar STATUS
+        number RECURRING_PATTERN_ID FK
+    }
+
+    RECURRING_PATTERNS {
+        number ID PK
+        varchar CRON_EXPRESSION
+        varchar TIMEZONE
+        timestamp NEXT_RUN_AT
+        timestamp END_DATE
+    }
+
+    CORE_FEATURE_FLAGS {
+        varchar KEY PK
+        number IS_ENABLED
+        varchar DESCRIPTION
+    }
+
+    USERS ||--o{ EXECUTIONS : "déclenche"
+    USERS ||--o{ ACTIONS_CATALOG : "crée"
+    PROFILES ||--o{ PROFILE_ACTION_PERMISSIONS : "définit"
+    PROFILES ||--o{ PROFILE_TARGET_PERMISSIONS : "définit"
+    ACTIONS_CATALOG ||--o{ PROFILE_ACTION_PERMISSIONS : "soumise à"
+    ACTIONS_CATALOG ||--o| INTEGRATIONS : "utilise"
+    ACTIONS_CATALOG ||--o| WORKFLOW_DEFINITIONS : "a une"
+    WORKFLOW_DEFINITIONS ||--o{ WORKFLOW_STEPS : "contient"
+    WORKFLOW_STEPS ||--o{ WORKFLOW_STEP_EDGES : "from"
+    WORKFLOW_STEPS ||--o{ WORKFLOW_STEP_EDGES : "to"
+    ACTIONS_CATALOG ||--o{ EXECUTIONS : "exécutée via"
+    EXECUTIONS ||--o{ EXECUTION_STEPS : "contient"
+    EXECUTIONS ||--o{ WORKFLOW_EVENTS : "génère"
+    EXECUTIONS ||--o{ RUNNABLE_STEPS : "planifie"
+    EXECUTIONS ||--o{ EXECUTION_OUTBOX : "émet"
+    EXECUTIONS ||--o| EXECUTIONS : "parent/enfant"
+    SCHEDULED_EXECUTIONS ||--o| RECURRING_PATTERNS : "récurrence"
+    ACTIONS_CATALOG ||--o{ SCHEDULED_EXECUTIONS : "planifiée pour"
 ```
-┌──────────────────────┐       ┌──────────────────────────┐
-│       USERS          │       │       PROFILES            │
-│──────────────────────│       │──────────────────────────│
-│ ID (PK)              │◄──┐   │ ID (PK)                  │
-│ USERNAME             │   │   │ NAME                     │
-│ EMAIL                │   │   │ IS_ADMIN                 │
-│ SAML_NAME_ID         │   │   │ IS_AUDITOR               │
-│ IS_ACTIVE            │   │   │ IS_APPROVER              │
-│ LAST_LOGIN           │   │   │ NAVIGATION_TABS (JSON)   │
-└──────────────────────┘   │   └────────────┬─────────────┘
-                           │                │
-                           │   ┌────────────┴──────────────┐
-                           │   │PROFILE_ACTION_PERMISSIONS  │
-                           │   │───────────────────────────│
-                           │   │ PROFILE_ID (FK→PROFILES)  │
-                           │   │ ACTION_ID (FK→ACTIONS)    │
-                           │   │ PERMISSION (ALLOW/DENY)   │
-                           │   └───────────────────────────┘
-                           │
-                           │   ┌────────────────────────────┐
-                           │   │PROFILE_TARGET_PERMISSIONS   │
-                           │   │────────────────────────────│
-                           │   │ PROFILE_ID (FK→PROFILES)   │
-                           │   │ TARGET_PATTERN             │
-                           │   │ PERMISSION (ALLOW/DENY)    │
-                           │   └────────────────────────────┘
-                           │
-┌──────────────────────┐   │   ┌──────────────────────────┐
-│   ACTIONS_CATALOG    │   │   │   INTEGRATIONS           │
-│──────────────────────│   │   │──────────────────────────│
-│ ID (PK)              │   │   │ ID (PK)                  │
-│ NAME                 │   │   │ NAME                     │
-│ DESCRIPTION          │   │   │ INTEGRATION_TYPE         │
-│ ITEM_TYPE            │   │   │ BASE_URL                 │
-│ STATUS (DRAFT/PUB.)  │   │   │ CREDENTIALS (encrypted)  │
-│ IS_CONTAINER         │   │   │ HEALTH_STATUS            │
-│ INTEGRATION_ID (FK)──┼───┼──►│ LAST_HEALTH_CHECK        │
-│ WORKFLOW_TEMPLATE    │   │   └──────────────────────────┘
-│ CREATED_BY (FK)──────┼───┘
-└───────────┬──────────┘
-            │
-            │ 1:1
-┌───────────┴──────────────┐
-│  WORKFLOW_DEFINITIONS    │
-│──────────────────────────│
-│ ID (PK)                  │
-│ ACTION_ID (FK, UNIQUE)   │
-│ VERSION                  │
-│ CREATED_AT               │
-└───────────┬──────────────┘
-            │ 1:N
-┌───────────┴──────────────┐
-│    WORKFLOW_STEPS        │
-│──────────────────────────│
-│ ID (PK)                  │
-│ WORKFLOW_DEFINITION_ID   │
-│ STEP_ID (unique/wf)     │
-│ STEP_ORDER               │
-│ STEP_NAME                │
-│ STEP_TYPE                │──── platform | service_call | http_request
-│ REFERENCED_ACTION_ID     │     evaluation | gate | schedule_execution
-│ INTEGRATION_TYPE         │
-│ OPERATION                │
-│ INPUT_MAPPING (JSON)     │
-│ OUTPUT_MAPPING (JSON)    │
-│ CONDITION                │
-│ RETRY_ENABLED            │
-│ RETRY_MAX_ATTEMPTS       │
-│ RETRY_INTERVAL_SECONDS   │
-│ RETRY_BACKOFF_MULTIPLIER │
-│ JOIN_POLICY              │
-└───────────┬──────────────┘
-            │ N:M (via edges)
-┌───────────┴──────────────┐
-│  WORKFLOW_STEP_EDGES     │
-│──────────────────────────│
-│ ID (PK)                  │
-│ FROM_STEP_ID (FK)        │
-│ TO_STEP_ID (FK)          │
-│ EDGE_TYPE ───────────────┤── success | error
-└──────────────────────────┘
 
-┌──────────────────────────┐
-│      EXECUTIONS          │  ◄── Partitionné par CREATED_AT (mensuel)
-│──────────────────────────│
-│ ID (PK)                  │
-│ ACTION_ID (FK)           │
-│ USER_ID (FK)             │
-│ STATUS                   │──── SUBMITTED | RUNNING | COMPLETED
-│ PARENT_EXECUTION_ID      │     FAILED | CANCELLED | REJECTED
-│ PARAMETERS (JSON)        │     INTEGRATION_ERROR
-│ CORRELATION_ID           │
-│ CREATED_AT               │
-│ UPDATED_AT               │
-└───────────┬──────────────┘
-            │ 1:N
-┌───────────┴──────────────┐
-│   EXECUTION_STEPS        │  ◄── Ref-partitionné sur EXECUTIONS
-│──────────────────────────│
-│ ID (PK)                  │
-│ EXECUTION_ID (FK)        │
-│ STEP_ID                  │
-│ STEP_TYPE                │
-│ STATUS                   │
-│ STARTED_AT               │
-│ COMPLETED_AT             │
-│ OUTPUT (JSON)            │
-│ ERROR_MESSAGE            │
-│ ATTEMPT_NUMBER           │
-└──────────────────────────┘
-
-┌──────────────────────────┐    ┌──────────────────────────┐
-│   WORKFLOW_EVENTS        │    │     RUNNABLE_STEPS       │
-│──────────────────────────│    │──────────────────────────│
-│ ID (PK)                  │    │ ID (PK)                  │
-│ EXECUTION_ID (FK)        │    │ EXECUTION_ID (FK)        │
-│ EVENT_TYPE               │    │ STEP_ID                  │
-│ STEP_ID                  │    │ CLAIMED_UNTIL            │
-│ PAYLOAD (JSON)           │    │ ATTEMPT_NO               │
-│ SEQ_NO                   │    │ MAX_ATTEMPTS             │
-│ CREATED_AT               │    │ CREATED_AT               │
-└──────────────────────────┘    └──────────────────────────┘
-
-┌──────────────────────────┐    ┌──────────────────────────┐
-│   EXECUTION_OUTBOX       │    │      AUDIT_LOG           │
-│──────────────────────────│    │──────────────────────────│
-│ ID (PK)                  │    │ ID (PK)                  │  ◄── Partitionné
-│ EXECUTION_ID (FK)        │    │ USER_ID                  │      mensuel
-│ EVENT_TYPE               │    │ ACTION_TYPE              │
-│ PAYLOAD (JSON)           │    │ ENTITY_TYPE              │
-│ PROCESSED_AT             │    │ ENTITY_ID                │
-│ CREATED_AT               │    │ CHANGES (JSON)           │
-└──────────────────────────┘    │ CORRELATION_ID           │
-                                │ TIMESTAMP                │
-┌──────────────────────────┐    └──────────────────────────┘
-│ SCHEDULED_EXECUTIONS     │
-│──────────────────────────│    ┌──────────────────────────┐
-│ ID (PK)                  │    │   CORE_FEATURE_FLAGS     │
-│ ACTION_ID (FK)           │    │──────────────────────────│
-│ USER_ID (FK)             │    │ KEY (PK)                 │
-│ PARAMETERS (JSON)        │    │ IS_ENABLED               │
-│ SCHEDULED_AT             │    │ DESCRIPTION              │
-│ STATUS                   │    └──────────────────────────┘
-│ RECURRING_PATTERN_ID     │
-└──────────────────────────┘
-```
+> **Note** : Les tables `EXECUTIONS`, `EXECUTION_STEPS` et `AUDIT_LOG` sont partitionnées mensuellement dans Oracle pour les performances.
 
 ---
 
@@ -282,67 +338,86 @@ Migrations gérées par Flyway (V000 à V136). Tables partitionnées mensuelleme
 
 ### Processus complet : de la demande à la complétion
 
+```mermaid
+sequenceDiagram
+    actor User as Utilisateur
+    participant FE as Frontend (React)
+    participant API as Backend (DRF)
+    participant Val as Validation RBAC
+    participant DB as Oracle DB
+    participant CW as Celery Worker
+    participant RT as Workflow Runtime
+    participant PF as Plateforme (AAP/TF)
+    participant WS as WebSocket
+
+    User->>FE: 1. Sélectionne une action
+    FE->>API: 2. POST /api/v1/executions/
+    API->>Val: 3. Valider
+    Note over Val: Permissions RBAC<br/>Paramètres<br/>Mutex check<br/>Cibles valides
+    Val-->>API: OK
+    API->>DB: 4. Crée EXECUTION (SUBMITTED)
+    API->>CW: 5. Dispatch trigger_action_execution
+    API-->>FE: 202 Accepted
+
+    CW->>RT: 6. Résout le workflow DAG
+    RT->>RT: 7. Identifie les entry steps
+
+    loop Pour chaque étape
+        RT->>RT: Évalue condition
+        RT->>RT: Résout input_mapping (Jinja2)
+        RT->>PF: Soumet le job
+        PF-->>RT: Job ID
+
+        loop Poll toutes les 5s
+            RT->>PF: GET status
+            PF-->>RT: RUNNING
+        end
+        RT->>WS: Broadcast step_update
+        WS-->>FE: step_update (temps réel)
+        FE-->>User: Mise à jour UI
+
+        PF-->>RT: COMPLETED + output
+        RT->>RT: Résout output_mapping
+        RT->>RT: Suit les edges → next steps
+    end
+
+    Note over RT: Gate APPROVAL rencontrée
+    RT->>WS: Broadcast notification
+    WS-->>FE: Approbation requise
+    FE-->>User: Notification d'approbation
+
+    User->>FE: 8. Clique "Approuver"
+    FE->>API: POST /steps/{id}/approve/
+    API->>RT: Reprend le workflow
+
+    RT->>DB: 9. Marque COMPLETED
+    RT->>WS: Broadcast execution_complete
+    WS-->>FE: execution_complete
+    FE-->>User: Exécution terminée
 ```
-  Utilisateur                    Frontend                      Backend (API)
-      │                             │                              │
-      │  1. Sélectionne une action  │                              │
-      ├────────────────────────────►│                              │
-      │                             │  2. POST /executions/        │
-      │                             ├─────────────────────────────►│
-      │                             │                              │
-      │                             │         3. Validation        │
-      │                             │     ┌────────────────────┐   │
-      │                             │     │ • Permissions RBAC │   │
-      │                             │     │ • Paramètres       │   │
-      │                             │     │ • Mutex check      │   │
-      │                             │     │ • Cibles valides   │   │
-      │                             │     └────────────────────┘   │
-      │                             │                              │
-      │                             │  4. Crée EXECUTION           │
-      │                             │     (status=SUBMITTED)       │
-      │                             │                              │
-      │                             │  5. Dispatch Celery Task     │
-      │                             │     trigger_action_execution │
-      │                             │◄─────────────────────────────┤
-      │                             │                              │
-      │                             │                     ┌────────┴────────┐
-      │                             │                     │  Celery Worker  │
-      │                             │                     │                 │
-      │                             │                     │ 6. Résout le    │
-      │                             │                     │    workflow DAG │
-      │                             │                     │                 │
-      │                             │                     │ 7. Pour chaque  │
-      │                             │                     │    étape :      │
-      │                             │                     │                 │
-      │                             │                     │  ┌────────────┐ │
-      │                             │                     │  │ PLATFORM   │ │
-      │                             │                     │  │ Soumet job │ │
-      │                             │                     │  │ à AAP/TF   │ │
-      │                             │                     │  └────────────┘ │
-      │                             │                     │        │        │
-      │          WebSocket          │                     │  ┌─────┴──────┐ │
-      │◄─── step_update ───────────│◄── broadcast ───────│  │ Poll status│ │
-      │                             │                     │  │ toutes les │ │
-      │                             │                     │  │ 5 secondes │ │
-      │                             │                     │  └─────┬──────┘ │
-      │                             │                     │        │        │
-      │                             │                     │  ┌─────┴──────┐ │
-      │                             │                     │  │ GATE       │ │
-      │  8. Approbation requise     │                     │  │ En attente │ │
-      │◄─── notification ──────────│◄─────────────────────│  │ approbation│ │
-      │                             │                     │  └─────┬──────┘ │
-      │  9. Approuve                │                     │        │        │
-      ├────────────────────────────►│  POST /steps/{id}/  │        │        │
-      │                             │  approve/           │  ┌─────┴──────┐ │
-      │                             ├────────────────────►│  │ Continue   │ │
-      │                             │                     │  │ workflow   │ │
-      │                             │                     │  └─────┬──────┘ │
-      │                             │                     │        │        │
-      │                             │                     │  ┌─────┴──────┐ │
-      │          WebSocket          │                     │  │ COMPLETED  │ │
-      │◄─── execution_complete ────│◄── broadcast ───────│  │            │ │
-      │                             │                     │  └────────────┘ │
-      │                             │                     └────────────────┘
+
+---
+
+## Machine à états des exécutions
+
+```mermaid
+stateDiagram-v2
+    [*] --> SUBMITTED : POST /executions/
+
+    SUBMITTED --> RUNNING : Worker démarre l'exécution
+    SUBMITTED --> INTEGRATION_ERROR : Plateforme injoignable
+    SUBMITTED --> CANCELLED : Annulation utilisateur
+
+    RUNNING --> COMPLETED : Toutes les étapes réussies
+    RUNNING --> FAILED : Une étape échoue (après retries)
+    RUNNING --> CANCELLED : Annulation utilisateur
+    RUNNING --> REJECTED : Gate rejetée
+
+    INTEGRATION_ERROR --> [*]
+    COMPLETED --> [*]
+    FAILED --> [*]
+    CANCELLED --> [*]
+    REJECTED --> [*]
 ```
 
 ---
@@ -370,6 +445,26 @@ Les gates sont des points de contrôle dans un workflow qui pausent l'exécution
 | **CONDITION** | Évaluation automatique toutes les 60s | Attendre qu'un créneau de maintenance soit atteint |
 | **SENSOR** | Événement externe (webhook, poll) | Attendre un déploiement CI/CD terminé |
 
+```mermaid
+flowchart LR
+    subgraph Gate APPROVAL
+        A1[Step atteint la gate] --> A2[WAITING_FOR_APPROVAL]
+        A2 --> A3{Approver décide}
+        A3 -->|Approuve| A4[COMPLETED → suite du workflow]
+        A3 -->|Rejette| A5[REJECTED → cascade failure]
+    end
+```
+
+```mermaid
+flowchart LR
+    subgraph Gate CONDITION
+        C1[Step atteint la gate] --> C2[WAITING_FOR_CONDITION]
+        C2 --> C3{"Celery Beat (60s)\névalue condition"}
+        C3 -->|true| C4[COMPLETED → suite du workflow]
+        C3 -->|false| C2
+    end
+```
+
 Le Celery Beat évalue les gates en attente toutes les 60 secondes via la tâche `evaluate_waiting_gates`.
 
 ---
@@ -378,16 +473,20 @@ Le Celery Beat évalue les gates en attente toutes les 60 secondes via la tâche
 
 Chaque étape de workflow peut être configurée avec un mécanisme de retry :
 
-```
-Tentative 1 → Échec → Attente (interval × backoff^0) → Tentative 2
-                                                           │
-                                                        Échec
-                                                           │
-                                            Attente (interval × backoff^1)
-                                                           │
-                                                      Tentative 3
-                                                           │
-                                              Succès ou max_attempts atteint
+```mermaid
+flowchart TD
+    Start[Exécuter l'étape] --> Attempt1{Tentative 1}
+    Attempt1 -->|Succès| Done[Step COMPLETED]
+    Attempt1 -->|Échec| Wait1["Attente\n(interval × backoff⁰)"]
+    Wait1 --> Attempt2{Tentative 2}
+    Attempt2 -->|Succès| Done
+    Attempt2 -->|Échec| Wait2["Attente\n(interval × backoff¹)"]
+    Wait2 --> Attempt3{Tentative 3}
+    Attempt3 -->|Succès| Done
+    Attempt3 -->|Échec| MaxCheck{max_attempts atteint?}
+    MaxCheck -->|Oui| Failed[Step FAILED]
+    MaxCheck -->|Non| WaitN["Attente\n(interval × backoffⁿ)"]
+    WaitN --> Attempt3
 ```
 
 - **retry_max_attempts** : nombre maximum de tentatives
@@ -400,21 +499,21 @@ Tentative 1 → Échec → Attente (interval × backoff^0) → Tentative 2
 
 Les exécutions peuvent être planifiées pour un moment futur ou de façon récurrente :
 
-```
-┌─────────────────────┐         ┌─────────────────────┐
-│ SCHEDULED_EXECUTIONS│────────►│  RECURRING_PATTERNS  │
-│                     │  0..1   │                      │
-│ action_id           │         │ cron_expression      │
-│ scheduled_at        │         │ timezone             │
-│ parameters          │         │ next_run_at          │
-│ status              │         │ end_date             │
-└─────────────────────┘         └──────────────────────┘
+```mermaid
+flowchart TD
+    subgraph Tables
+        SE[SCHEDULED_EXECUTIONS\naction_id, scheduled_at\nparameters, status]
+        RP[RECURRING_PATTERNS\ncron_expression, timezone\nnext_run_at, end_date]
+        SE -.->|0..1| RP
+    end
 
-Celery Beat (60s) ──► process_pending_scheduled_executions
-                            │
-                            ├── Vérifie scheduled_at ≤ now
-                            ├── Crée une Execution
-                            └── Met à jour next_run_at pour récurrents
+    Beat["Celery Beat (60s)\nprocess_pending_scheduled_executions"] --> Check{scheduled_at ≤ now?}
+    Check -->|Oui| Create[Crée une Execution]
+    Check -->|Non| Beat
+    Create --> Update{Récurrent?}
+    Update -->|Oui| Next[Met à jour next_run_at]
+    Update -->|Non| Done[Marque PROCESSED]
+    Next --> Beat
 ```
 
 ---
@@ -432,6 +531,17 @@ La table `RUNNABLE_STEPS` sert de file d'attente distribuée avec un système de
 
 ### State Machine
 Les transitions d'état des exécutions et étapes sont validées par une machine à états stricte (`domain/state_machine.py`), empêchant les transitions invalides.
+
+```mermaid
+flowchart LR
+    subgraph Transactional Outbox Pattern
+        App[Runtime] -->|1. Transaction atomique| DB[(Oracle)]
+        DB -->|2. Écrit dans EXECUTION_OUTBOX| Outbox[EXECUTION_OUTBOX]
+        Dispatcher["dispatch_outbox_events\n(Celery)"] -->|3. Lit événements non traités| Outbox
+        Dispatcher -->|4. Publie| Redis[(Redis / Consumers)]
+        Dispatcher -->|5. Marque PROCESSED| Outbox
+    end
+```
 
 ---
 
@@ -454,21 +564,53 @@ Chaque intégration dispose d'un health check automatique toutes les 60 minutes.
 
 ### Flux d'authentification
 
-```
-Navigateur ──SAML SSO──► IdP Entreprise ──assertion──► IDP Portal ──JWT──► API
-                                                                          │
-Service Account ──API Key──► /auth/token ──JWT──► API ─────────────────────┘
+```mermaid
+sequenceDiagram
+    actor User as Utilisateur
+    participant Browser as Navigateur
+    participant IDP as IdP Entreprise (SAML)
+    participant Portal as IDP Portal
+    participant API as API REST
+
+    rect rgb(230, 240, 255)
+        Note over User,API: Flux SAML (utilisateurs navigateur)
+        User->>Browser: Accède au portail
+        Browser->>Portal: GET /login
+        Portal->>IDP: SAML AuthnRequest
+        IDP->>User: Page d'authentification
+        User->>IDP: Identifiants
+        IDP->>Portal: Assertion SAML
+        Portal->>Portal: Valide assertion, crée/màj utilisateur
+        Portal->>Browser: JWT (access + refresh)
+        Browser->>API: Authorization: Bearer {JWT}
+    end
+
+    rect rgb(255, 240, 230)
+        Note over User,API: Flux API Key (comptes de service)
+        User->>API: X-API-Key: {key}
+        API->>API: Valide clé, vérifie utilisateur
+        API->>User: JWT (access + refresh)
+        User->>API: Authorization: Bearer {JWT}
+    end
 ```
 
 ### Modèle RBAC
 
-```
-PROFILE ──── a des ────► ACTION_PERMISSIONS (ALLOW/DENY par action)
-    │                    TARGET_PERMISSIONS (ALLOW/DENY par cible)
-    │
-    ├── is_admin     → Accès complet
-    ├── is_auditor   → Lecture audit log
-    └── is_approver  → Peut approuver les gates
+```mermaid
+flowchart TD
+    Profile[PROFILE] -->|has| AP[ACTION_PERMISSIONS\nALLOW / DENY par action]
+    Profile -->|has| TP[TARGET_PERMISSIONS\nALLOW / DENY par cible]
+    Profile -->|flags| Admin[is_admin → Accès complet]
+    Profile -->|flags| Auditor[is_auditor → Lecture audit log]
+    Profile -->|flags| Approver[is_approver → Peut approuver les gates]
+
+    User[USERS] -->|appartient à| Profile
+
+    ExecReq[Demande d'exécution] --> Check1{Permission d'action?}
+    Check1 -->|ALLOW| Check2{Permission de cible?}
+    Check1 -->|DENY| Reject[Rejeté 403]
+    Check2 -->|ALLOW| Execute[Exécution autorisée]
+    Check2 -->|DENY| Reject
 ```
 
 ---
@@ -488,23 +630,32 @@ PROFILE ──── a des ────► ACTION_PERMISSIONS (ALLOW/DENY par ac
 
 ## Infrastructure
 
-```
-┌─────────────────────────────────────────────────────┐
-│                  Docker Compose                      │
-│                                                      │
-│  ┌──────────┐  ┌──────────┐  ┌───────────────────┐ │
-│  │ Frontend  │  │ Django   │  │ Celery Worker     │ │
-│  │ (Vite)   │  │ (Daphne  │  │ + Celery Beat     │ │
-│  │ :8080    │  │  ASGI)   │  │                   │ │
-│  │          │  │ :8000    │  │                   │ │
-│  └──────────┘  └──────────┘  └───────────────────┘ │
-│                                                      │
-│  ┌──────────┐  ┌──────────┐                         │
-│  │ Oracle   │  │  Redis   │                         │
-│  │ 19c      │  │          │                         │
-│  │ :1521    │  │ :6379    │                         │
-│  └──────────┘  └──────────┘                         │
-└─────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph Docker["Docker Compose"]
+        subgraph App["Application"]
+            FE["Frontend\n(Vite dev server)\n:8080"]
+            DJ["Django\n(Daphne ASGI)\n:8000"]
+            CW["Celery Worker\n+ Celery Beat"]
+        end
+
+        subgraph Data["Data Stores"]
+            ORA[("Oracle 19c\n:1521")]
+            RED[("Redis\n:6379")]
+        end
+    end
+
+    FE -->|HTTP/WS proxy| DJ
+    DJ --> ORA
+    DJ --> RED
+    CW --> ORA
+    CW --> RED
+
+    style FE fill:#61dafb,color:#000
+    style DJ fill:#092e20,color:#fff
+    style CW fill:#37814a,color:#fff
+    style ORA fill:#f80000,color:#fff
+    style RED fill:#dc382d,color:#fff
 ```
 
 - **Daphne** : Serveur ASGI pour HTTP et WebSocket

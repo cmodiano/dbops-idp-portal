@@ -92,6 +92,61 @@ idp-portal/
 
 ## Backend - Modules Django
 
+### Vue d'ensemble des modules et leurs interactions
+
+```mermaid
+graph TD
+    subgraph API["API Layer (DRF Views)"]
+        CatView[catalog/views/]
+        ExecView[executions/views/]
+        IntView[integrations/views/]
+        ProfView[profiles/views/]
+        AuthView[idp_auth/views/]
+        AuditView[core/views/]
+    end
+
+    subgraph Services["Service Layer"]
+        CatSvc[CatalogService]
+        ExecSvc[ExecutionService]
+        IntSvc[IntegrationService]
+        ProfSvc[ProfileService]
+        AuthSvc[AuthService]
+        AuditSvc[AuditService]
+    end
+
+    subgraph Core["Core / Transversal"]
+        RBAC[core/rbac.py]
+        DI[core/di.py]
+        MW[core/middleware.py]
+        FF[FeatureFlags]
+    end
+
+    subgraph Runtime["Workflow Runtime"]
+        CWR[ContainerWorkflowRuntime]
+        SH[Step Handlers]
+        Gates[Gate Strategies]
+        SM[State Machine]
+    end
+
+    CatView --> CatSvc
+    ExecView --> ExecSvc
+    IntView --> IntSvc
+    ProfView --> ProfSvc
+    AuthView --> AuthSvc
+
+    ExecSvc --> CWR
+    ExecSvc --> RBAC
+    CWR --> SH
+    CWR --> Gates
+    CWR --> SM
+    SH --> IntSvc
+    ExecSvc --> AuditSvc
+    CatSvc --> AuditSvc
+
+    MW -.->|Correlation ID| Services
+    DI -.->|Injection| Services
+```
+
 ### Catalogue (`catalog/`)
 
 **Responsabilité** : Gestion du cycle de vie des actions et de leurs définitions de workflow.
@@ -220,76 +275,28 @@ Le fichier `container_workflow_runtime.py` est le coeur du système. C'est lui q
 
 ### Fonctionnement
 
-```
-                    ┌─────────────────────┐
-                    │ trigger_action_      │
-                    │ execution (Celery)   │
-                    └──────────┬──────────┘
-                               │
-                    ┌──────────┴──────────┐
-                    │ Action.is_container? │
-                    └──────┬────────┬─────┘
-                       Non │        │ Oui
-                           │        │
-              ┌────────────┘   ┌────┴───────────────┐
-              │                │ ContainerWorkflow   │
-              │                │ Runtime.execute()   │
-              │                └────────┬────────────┘
-              │                         │
-         Job simple              ┌──────┴──────┐
-         (plateforme)            │ Résoudre    │
-                                 │ DAG (steps  │
-                                 │ + edges)    │
-                                 └──────┬──────┘
-                                        │
-                                 ┌──────┴──────┐
-                                 │ Identifier  │
-                                 │ entry steps │
-                                 │ (sans edge  │
-                                 │ entrante)   │
-                                 └──────┬──────┘
-                                        │
-                              ┌─────────┴─────────┐
-                              │ Pour chaque étape  │◄──────────┐
-                              │ prête à exécuter : │           │
-                              └─────────┬──────────┘           │
-                                        │                      │
-                              ┌─────────┴─────────┐           │
-                              │ 1. Évaluer         │           │
-                              │    condition        │           │
-                              │ 2. Résoudre         │           │
-                              │    input_mapping     │           │
-                              │    (Jinja2)          │           │
-                              │ 3. Dispatch au       │           │
-                              │    step_handler      │           │
-                              └─────────┬──────────┘           │
-                                        │                      │
-                              ┌─────────┴─────────┐           │
-                              │ Attendre résultat  │           │
-                              │ (poll ou callback) │           │
-                              └─────────┬──────────┘           │
-                                        │                      │
-                              ┌─────────┴─────────┐           │
-                              │ Résoudre           │           │
-                              │ output_mapping     │           │
-                              └─────────┬──────────┘           │
-                                        │                      │
-                              ┌─────────┴─────────┐           │
-                              │ Suivre les edges   │           │
-                              │ success/error      ├───────────┘
-                              │ vers next steps    │
-                              └─────────┬──────────┘
-                                        │
-                              ┌─────────┴─────────┐
-                              │ Toutes les étapes  │
-                              │ terminées?         │
-                              └─────────┬──────────┘
-                                        │
-                              ┌─────────┴─────────┐
-                              │ Marquer exécution  │
-                              │ COMPLETED/FAILED   │
-                              │ + broadcast WS     │
-                              └────────────────────┘
+```mermaid
+flowchart TD
+    Start["trigger_action_execution\n(Celery task)"] --> IsContainer{Action.is_container?}
+
+    IsContainer -->|Non| SimpleJob["Job simple\n(plateforme directe)"]
+    IsContainer -->|Oui| Execute["ContainerWorkflowRuntime\n.execute()"]
+
+    Execute --> ResolveDAG["Résoudre le DAG\n(steps + edges)"]
+    ResolveDAG --> FindEntry["Identifier les entry steps\n(sans edge entrante)"]
+
+    FindEntry --> Loop["Pour chaque étape\nprête à exécuter"]
+
+    Loop --> EvalCondition["1. Évaluer la condition\nde l'étape"]
+    EvalCondition --> ResolveInput["2. Résoudre input_mapping\n(Jinja2 templates)"]
+    ResolveInput --> Dispatch["3. Dispatch au\nstep_handler approprié"]
+    Dispatch --> WaitResult["4. Attendre résultat\n(poll ou callback)"]
+    WaitResult --> ResolveOutput["5. Résoudre\noutput_mapping"]
+    ResolveOutput --> FollowEdges["6. Suivre les edges\nsuccess/error"]
+    FollowEdges --> CheckDone{Toutes les étapes\nterminées?}
+
+    CheckDone -->|Non| Loop
+    CheckDone -->|Oui| Final["Marquer exécution\nCOMPLETED / FAILED\n+ broadcast WebSocket"]
 ```
 
 ### Concepts clés
@@ -304,37 +311,47 @@ Le fichier `container_workflow_runtime.py` est le coeur du système. C'est lui q
 
 **Loop Detection** : Le runtime détecte les boucles infinies pour éviter les exécutions récursives.
 
+### Exemple de workflow DAG
+
+```mermaid
+graph LR
+    S1["Step 1\n(platform)\nProvisioning"] -->|success| S2["Step 2\n(gate)\nApprobation DBA"]
+    S1 -->|error| E1["Step E1\n(http_request)\nNotifier échec"]
+
+    S2 -->|success| S3["Step 3\n(platform)\nMigration schema"]
+    S2 -->|error| E1
+
+    S3 -->|success| S4["Step 4\n(evaluation)\nVérifier résultats"]
+    S3 -->|error| S5["Step 5\n(platform)\nRollback"]
+
+    S4 -->|success| S6["Step 6\n(http_request)\nNotifier succès"]
+    S5 -->|success| E1
+
+    style S2 fill:#f9a825,color:#000
+    style E1 fill:#ef5350,color:#fff
+    style S6 fill:#66bb6a,color:#fff
+```
+
 ---
 
 ## Step Handlers
 
 Chaque type d'étape de workflow a un handler dédié, enregistré dans le registre `step_handler_registry`.
 
-### Platform Handler
-- Soumet un job à la plateforme externe (AAP, Terraform, etc.)
-- Utilise `IntegrationService` pour les appels API
-- Poll le statut du job toutes les 5 secondes (max 1h)
-- Extrait les outputs via `OutputExtractor`
+```mermaid
+graph TD
+    Runtime[Container Workflow Runtime] --> Registry[step_handler_registry]
 
-### Service Call Handler
-- Crée une exécution enfant via `ExecutionService.create_execution()`
-- Injecte les paramètres via `input_mapping` résolu en Jinja2
-- Attend la complétion de l'exécution enfant
-- Propage les outputs de l'enfant au parent
+    Registry --> PH["PlatformStepHandler\n─────────────────\n• Soumet job à AAP/TF\n• Poll status (5s, max 1h)\n• Extrait outputs"]
+    Registry --> SCH["ServiceCallHandler\n──────────────────\n• Crée exécution enfant\n• Injecte input_mapping\n• Attend complétion\n• Propage outputs"]
+    Registry --> HRH["HttpRequestHandler\n──────────────────\n• Appel HTTP configurable\n• Templates Jinja2\n• Timeout configurable"]
+    Registry --> EH["EvaluationHandler\n─────────────────\n• Évalue expression Jinja2\n• Accès contexte complet\n• Transforme données"]
+    Registry --> GH["GateHandler\n───────────\n• Délègue aux strategies\n• WAITING_FOR_APPROVAL\n• WAITING_FOR_CONDITION"]
+    Registry --> SEH["ScheduleExecutionHandler\n────────────────────────\n• Planifie exécution future\n• Cron récurrent"]
 
-### HTTP Request Handler
-- Effectue un appel HTTP configurable (méthode, headers, body)
-- Supporte les templates Jinja2 dans l'URL, headers et body
-- Timeout configurable
-
-### Evaluation Handler
-- Évalue une expression Jinja2
-- Accès au contexte complet du workflow (outputs des étapes précédentes)
-- Utile pour transformer des données ou calculer des conditions
-
-### Gate Handler
-- Délègue au système de gates (voir section suivante)
-- Crée un `ExecutionStep` en statut `WAITING_FOR_APPROVAL` ou `WAITING_FOR_CONDITION`
+    PH -->|API calls| Platforms["AAP / Terraform\nServiceNow / GitHub"]
+    SCH -->|child execution| Runtime
+```
 
 ---
 
@@ -349,31 +366,75 @@ gates/
 └── registry.py       # Mapping type → stratégie
 ```
 
-### Flux d'une gate APPROVAL
+### Flux des gates
 
-```
-1. Step handler crée le step en WAITING_FOR_APPROVAL
-2. WebSocket notifie le frontend
-3. L'utilisateur (is_approver) clique « Approuver » ou « Rejeter »
-4. POST /api/v1/executions/{id}/steps/{step_id}/approve/
-5. Le step passe en COMPLETED (ou REJECTED → cascade failure)
-6. Le runtime reprend l'exécution des étapes suivantes
-```
+```mermaid
+sequenceDiagram
+    participant RT as Workflow Runtime
+    participant GH as Gate Handler
+    participant DB as Oracle DB
+    participant Beat as Celery Beat
+    participant WS as WebSocket
+    participant User as Approver
 
-### Flux d'une gate CONDITION
+    Note over RT, User: Gate APPROVAL
+    RT->>GH: Exécute gate step
+    GH->>DB: Crée step WAITING_FOR_APPROVAL
+    GH->>WS: Broadcast notification
+    WS->>User: "Approbation requise"
+    User->>DB: POST /steps/{id}/approve/
+    DB->>RT: Step COMPLETED → reprend workflow
 
-```
-1. Step handler crée le step en WAITING_FOR_CONDITION
-2. Celery Beat (60s) → evaluate_waiting_gates
-3. Pour chaque gate en attente :
-   a. Évalue l'expression de condition
-   b. Si true → marque COMPLETED, reprend le workflow
-   c. Si false → reste en attente (réévaluée au prochain cycle)
+    Note over RT, User: Gate CONDITION
+    RT->>GH: Exécute gate step
+    GH->>DB: Crée step WAITING_FOR_CONDITION
+
+    loop Toutes les 60 secondes
+        Beat->>DB: Charge gates en attente
+        Beat->>Beat: Évalue condition
+        alt Condition = true
+            Beat->>DB: Marque COMPLETED
+            DB->>RT: Reprend workflow
+        else Condition = false
+            Beat->>Beat: Attend prochain cycle
+        end
+    end
 ```
 
 ---
 
 ## Tâches Celery
+
+### Vue d'ensemble
+
+```mermaid
+graph TD
+    subgraph OnDemand["Tâches à la demande"]
+        T1["trigger_action_execution\n(POST /executions/)"]
+        T2["trigger_platform_job\n(étape platform)"]
+        T3["poll_execution_status\n(après soumission)"]
+        T4["poll_platform_output\n(job terminé)"]
+        T5["dispatch_outbox_events\n(après écriture outbox)"]
+    end
+
+    subgraph Periodic["Tâches périodiques (Beat)"]
+        B1["evaluate_waiting_gates\n⏱ toutes les 60s"]
+        B2["process_pending_scheduled_executions\n⏱ toutes les 60s"]
+        B3["health_check_all_integrations\n⏱ toutes les 60min"]
+    end
+
+    subgraph Repair["Tâche de réparation"]
+        R1["reconcile_workflow\nDétecte workflows bloqués\n(lease expiré, worker crashé)"]
+    end
+
+    T1 --> T2
+    T2 --> T3
+    T3 --> T4
+
+    Redis[(Redis Broker)] --> OnDemand
+    Redis --> Periodic
+    Redis --> Repair
+```
 
 ### Tâches déclenchées à la demande
 
@@ -402,6 +463,59 @@ gates/
 ---
 
 ## Frontend - Architecture React
+
+### Architecture des composants
+
+```mermaid
+graph TD
+    subgraph App["App.tsx"]
+        Router[React Router]
+    end
+
+    subgraph Contexts["Providers"]
+        AuthCtx[AuthContext]
+        ThemeCtx[ThemeContext]
+        FFCtx[FeatureFlagContext]
+        DashCtx[DashboardContext]
+    end
+
+    subgraph Pages["Pages (lazy-loaded)"]
+        P1[CatalogPage /catalog]
+        P2[ExecutionsPage /executions]
+        P3[CalendarPage /calendar]
+        P4[DashboardPage /dashboard]
+        P5[AdminPage /admin]
+        P6[AuditPage /audit]
+        P7[ApiKeysPage /api-keys]
+        P8[LoginPage /login]
+    end
+
+    subgraph Hooks["Custom Hooks"]
+        H1[useAuth]
+        H2[useWebSocket]
+        H3[useExecutionPolling]
+        H4[useDebounce]
+        H5[useTheme]
+    end
+
+    subgraph Services["Services API"]
+        S1[api_client.ts]
+        S2[catalog_service.ts]
+        S3[execution_core.ts]
+        S4[admin_service.ts]
+        S5[integrations_service.ts]
+        S6[audit_service.ts]
+    end
+
+    App --> Contexts
+    Contexts --> Router
+    Router --> Pages
+    Pages --> Hooks
+    Pages --> Services
+    Services --> S1
+
+    S1 -->|Axios| Backend["Backend /api/v1/"]
+```
 
 ### Pages principales
 
@@ -455,24 +569,33 @@ Chaque module backend a un service frontend correspondant :
 
 ## Authentification et RBAC
 
-### Flux SAML 2.0 (utilisateurs navigateur)
+### Flux d'authentification
 
-```
-1. GET /login → redirige vers l'IdP entreprise (SAML AuthnRequest)
-2. L'utilisateur s'authentifie sur l'IdP
-3. L'IdP renvoie une assertion SAML → POST /api/v1/auth/login
-4. AuthService valide l'assertion, crée/met à jour l'utilisateur
-5. Émet un JWT (access + refresh token)
-6. Le frontend stocke le JWT et l'envoie dans le header Authorization
-```
+```mermaid
+sequenceDiagram
+    actor User as Utilisateur
+    participant FE as Frontend
+    participant IdP as IdP Entreprise
+    participant Auth as AuthService
+    participant DB as Oracle DB
 
-### Flux API Key (comptes de service)
+    rect rgb(230, 240, 255)
+        Note over User, DB: Flux SAML 2.0 (navigateur)
+        User->>FE: GET /login
+        FE->>IdP: SAML AuthnRequest (redirect)
+        IdP->>User: Page d'authentification
+        User->>IdP: Identifiants
+        IdP->>Auth: Assertion SAML (POST callback)
+        Auth->>DB: Crée/met à jour User
+        Auth->>FE: JWT access + refresh token
+    end
 
-```
-1. POST /api/v1/auth/token avec header X-API-Key
-2. AuthService valide la clé, vérifie l'utilisateur associé
-3. Émet un JWT
-4. Le service utilise le JWT pour les appels suivants
+    rect rgb(255, 240, 230)
+        Note over User, DB: Flux API Key (service account)
+        User->>Auth: POST /auth/token + X-API-Key
+        Auth->>DB: Valide clé, charge utilisateur
+        Auth->>User: JWT access + refresh token
+    end
 ```
 
 ### Vérification RBAC
@@ -520,16 +643,25 @@ Le champ `core.fields.OracleJSONField` gère la sérialisation/désérialisation
 
 ### Architecture
 
-```
-Frontend (WebSocket client)
-    │
-    │ wss://
-    │
-Django Channels (ASGI)
-    │
-Redis (channel layer)
-    │
-Backend (broadcast)
+```mermaid
+sequenceDiagram
+    participant FE as Frontend<br/>(useWebSocket)
+    participant Daphne as Daphne (ASGI)
+    participant Redis as Redis<br/>(channel layer)
+    participant RT as Workflow Runtime
+
+    FE->>Daphne: Connexion WSS
+    Daphne->>Redis: Subscribe channel
+
+    RT->>Redis: Publish step_update
+    Redis->>Daphne: Message
+    Daphne->>FE: step_update (JSON)
+
+    RT->>Redis: Publish execution_complete
+    Redis->>Daphne: Message
+    Daphne->>FE: execution_complete (JSON)
+
+    Note over FE: Fallback: useExecutionPolling()<br/>si WebSocket indisponible
 ```
 
 ### Événements diffusés
@@ -566,34 +698,35 @@ Pour le développement local sans plateformes réelles.
 
 ## Debugging et dépannage
 
-### Problèmes courants
+### Arbre de décision diagnostic
 
-#### Workflow bloqué (step en RUNNING indéfiniment)
+```mermaid
+flowchart TD
+    Problem["Problème détecté"] --> Type{Type de problème?}
 
-1. Vérifier le `CLAIMED_UNTIL` dans `RUNNABLE_STEPS` — le bail a-t-il expiré ?
-2. Vérifier les logs Celery pour le worker qui avait le bail
-3. La tâche `reconcile_workflow` devrait détecter et relancer automatiquement
-4. Si nécessaire, relancer manuellement via `trigger_platform_job`
+    Type -->|Workflow bloqué| WF["Step en RUNNING\nindéfiniment"]
+    Type -->|Gate bloquée| Gate["Gate en attente\nqui ne se résout pas"]
+    Type -->|Erreur intégration| Int["INTEGRATION_ERROR"]
+    Type -->|Ne démarre pas| Start["SUBMITTED\nne passe pas à RUNNING"]
 
-#### Gate en attente qui ne se résout pas
+    WF --> WF1["Vérifier CLAIMED_UNTIL\ndans RUNNABLE_STEPS"]
+    WF1 --> WF2["Bail expiré?"]
+    WF2 -->|Oui| WF3["reconcile_workflow\ndevrait relancer auto"]
+    WF2 -->|Non| WF4["Vérifier logs Celery\ndu worker actif"]
 
-1. Vérifier que Celery Beat tourne (`evaluate_waiting_gates` toutes les 60s)
-2. Pour une gate APPROVAL : vérifier qu'un utilisateur `is_approver` existe
-3. Pour une gate CONDITION : vérifier l'expression de condition dans les logs
-4. Consulter `AUDIT_LOG` pour les tentatives d'évaluation
+    Gate --> G1{Type de gate?}
+    G1 -->|APPROVAL| G2["Vérifier qu'un\nis_approver existe"]
+    G1 -->|CONDITION| G3["Vérifier que Celery Beat\ntourne (60s cycle)"]
+    G3 --> G4["Vérifier expression\nde condition dans logs"]
 
-#### Erreur d'intégration (INTEGRATION_ERROR)
+    Int --> I1["GET /integrations/{id}/\nhealth-check/"]
+    I1 --> I2["Vérifier credentials\net connectivité réseau"]
+    I2 --> I3["Consulter logs\navec correlation_id"]
 
-1. Vérifier le health check de l'intégration : `GET /api/v1/integrations/{id}/health-check/`
-2. Vérifier les credentials dans la table `INTEGRATIONS` (chiffrés)
-3. Vérifier la connectivité réseau vers la plateforme
-4. Consulter les logs structurés avec le `correlation_id`
-
-#### Exécution en SUBMITTED qui ne démarre pas
-
-1. Vérifier que les workers Celery sont actifs : `celery -A idp_backend inspect active`
-2. Vérifier la connexion Redis (broker) : `redis-cli ping`
-3. Vérifier les queues Celery : `celery -A idp_backend inspect reserved`
+    Start --> S1["Workers Celery actifs?\ncelery inspect active"]
+    S1 --> S2["Redis connecté?\nredis-cli ping"]
+    S2 --> S3["Queues Celery?\ncelery inspect reserved"]
+```
 
 ### Outils de diagnostic
 
@@ -610,11 +743,18 @@ Pour le développement local sans plateformes réelles.
 
 Chaque requête HTTP reçoit un UUID unique (`correlation_id`) qui est propagé à travers toute la chaîne :
 
-```
-HTTP Request → Django Middleware → Celery Task → Audit Log → Splunk
-     │              │                  │             │          │
-     └──────────────┴──────────────────┴─────────────┴──────────┘
-                        Même correlation_id
+```mermaid
+flowchart LR
+    HTTP["HTTP Request"] -->|génère UUID| MW["Django\nMiddleware"]
+    MW -->|propage| Celery["Celery\nTask"]
+    Celery -->|enregistre| Audit["Audit\nLog"]
+    Audit -->|indexé| Splunk["Splunk"]
+
+    style HTTP fill:#4fc3f7,color:#000
+    style MW fill:#4fc3f7,color:#000
+    style Celery fill:#4fc3f7,color:#000
+    style Audit fill:#4fc3f7,color:#000
+    style Splunk fill:#4fc3f7,color:#000
 ```
 
 Pour tracer un problème, récupérer le `correlation_id` depuis le header de réponse HTTP ou l'audit log, puis rechercher dans les logs Splunk.
