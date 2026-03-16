@@ -559,4 +559,125 @@ describe('AuthProvider', () => {
       expect(results).toHaveLength(3);
     });
   });
+
+  // SEC-FE-01: Tests for DEV_AUTH_ENABLED guard (Story 88-4)
+  describe('DEV_AUTH_ENABLED guard (SEC-FE-01)', () => {
+    beforeEach(() => {
+      // Reset module cache so each test re-evaluates module-level constants
+      vi.resetModules();
+    });
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('console.error appelé quand MODE=production avec VITE_DEV_AUTH=true', async () => {
+      vi.stubEnv('VITE_DEV_AUTH', 'true');
+      vi.stubEnv('MODE', 'production');
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      // Re-import module to re-evaluate module-level const
+      await import('./AuthContext');
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('[AuthContext] VITE_DEV_AUTH=true détecté hors mode développement'),
+        expect.stringContaining('production'),
+        expect.any(String),
+        expect.any(String),
+      );
+
+      errorSpy.mockRestore();
+    });
+
+    it('console.error appelé quand MODE=test avec VITE_DEV_AUTH=true (test ≠ development)', async () => {
+      vi.stubEnv('VITE_DEV_AUTH', 'true');
+      vi.stubEnv('MODE', 'test');
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      await import('./AuthContext');
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('[AuthContext] VITE_DEV_AUTH=true détecté hors mode développement'),
+        expect.stringContaining('test'),
+        expect.any(String),
+        expect.any(String),
+      );
+
+      errorSpy.mockRestore();
+    });
+
+    it('aucun console.error quand VITE_DEV_AUTH est false', async () => {
+      vi.stubEnv('VITE_DEV_AUTH', 'false');
+      vi.stubEnv('MODE', 'production');
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      await import('./AuthContext');
+
+      expect(errorSpy).not.toHaveBeenCalled();
+
+      errorSpy.mockRestore();
+    });
+
+    it('DEV_AUTH_ENABLED false en mode production — AuthProvider n\'utilise pas le mock user', async () => {
+      vi.stubEnv('VITE_DEV_AUTH', 'true');
+      vi.stubEnv('MODE', 'production');
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const { AuthProvider: TestAuthProvider, useAuth: testUseAuth } = await import('./AuthContext');
+
+      function TestAuthCheck() {
+        const { user, isLoading } = testUseAuth();
+        return (
+          <div>
+            <span data-testid="prod-loading">{String(isLoading)}</span>
+            <span data-testid="prod-username">{user?.username ?? 'none'}</span>
+          </div>
+        );
+      }
+
+      // Pas de session — le refresh échoue, user doit rester null
+      globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 401 });
+
+      render(<TestAuthProvider><TestAuthCheck /></TestAuthProvider>);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('prod-loading').textContent).toBe('false');
+      });
+
+      // DEV_AUTH_ENABLED est false en prod → aucun mock user injecté (AC: Task 3.3)
+      expect(screen.getByTestId('prod-username').textContent).toBe('none');
+    });
+
+    it('DEV_AUTH_ENABLED false en mode test — AuthProvider n\'utilise pas le mock user', async () => {
+      vi.stubEnv('VITE_DEV_AUTH', 'true');
+      vi.stubEnv('MODE', 'test');
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const { AuthProvider: TestAuthProvider2, useAuth: testUseAuth2 } = await import('./AuthContext');
+
+      function TestAuthCheck2() {
+        const { user, isLoading } = testUseAuth2();
+        return (
+          <div>
+            <span data-testid="test-loading">{String(isLoading)}</span>
+            <span data-testid="test-username">{user?.username ?? 'none'}</span>
+          </div>
+        );
+      }
+
+      globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 401 });
+
+      render(<TestAuthProvider2><TestAuthCheck2 /></TestAuthProvider2>);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('test-loading').textContent).toBe('false');
+      });
+
+      // DEV_AUTH_ENABLED est false en mode test → aucun mock user injecté (AC: Task 3.4)
+      expect(screen.getByTestId('test-username').textContent).toBe('none');
+    });
+  });
 });

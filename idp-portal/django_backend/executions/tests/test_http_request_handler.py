@@ -594,3 +594,109 @@ class TestHttpRequestHandler:
             correlation_id=None,
         )
         assert result == {'ok': True}
+
+    # --- SEC-BE-03: Tests pour le plafonnement timeout HTTP (Story 88-4) ---
+
+    @patch('executions.app.handlers.http_request_handler._MAX_HTTP_REQUEST_TIMEOUT', 300)
+    @patch('executions.app.handlers.http_request_handler.settings')
+    @patch('executions.app.handlers.http_request_handler.httpx.Client')
+    def test_timeout_999999_capped_to_300(self, mock_client_class, mock_settings):
+        """SEC-BE-03 : timeout=999999 → httpx.Client appelé avec timeout=300."""
+        mock_settings.DEBUG = True
+        mock_settings.ALLOWED_HTTP_REQUEST_HOSTS = ['api.corp']
+
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {'ok': True}
+        mock_resp.raise_for_status.return_value = None
+        mock_client_class.return_value.__enter__.return_value.get.return_value = mock_resp
+
+        step_config = self._make_step_config(timeout=999999)
+        self.handler.execute(
+            step_config=step_config,
+            resolved_params={},
+            execution=self._make_execution(),
+            step=step_config,
+            correlation_id='corr-001',
+        )
+
+        mock_client_class.assert_called_once_with(timeout=300)
+
+    @patch('executions.app.handlers.http_request_handler._MAX_HTTP_REQUEST_TIMEOUT', 300)
+    @patch('executions.app.handlers.http_request_handler.settings')
+    @patch('executions.app.handlers.http_request_handler.httpx.Client')
+    def test_timeout_30_not_capped(self, mock_client_class, mock_settings):
+        """SEC-BE-03 : timeout=30 → non plafonné, httpx.Client appelé avec timeout=30."""
+        mock_settings.DEBUG = True
+        mock_settings.ALLOWED_HTTP_REQUEST_HOSTS = ['api.corp']
+
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {'ok': True}
+        mock_resp.raise_for_status.return_value = None
+        mock_client_class.return_value.__enter__.return_value.get.return_value = mock_resp
+
+        step_config = self._make_step_config(timeout=30)
+        self.handler.execute(
+            step_config=step_config,
+            resolved_params={},
+            execution=self._make_execution(),
+            step=step_config,
+            correlation_id=None,
+        )
+
+        mock_client_class.assert_called_once_with(timeout=30)
+
+    @patch('executions.app.handlers.http_request_handler._MAX_HTTP_REQUEST_TIMEOUT', 300)
+    @patch('executions.app.handlers.http_request_handler.settings')
+    @patch('executions.app.handlers.http_request_handler.httpx.Client')
+    def test_timeout_299_not_capped(self, mock_client_class, mock_settings):
+        """SEC-BE-03 : timeout=299 → non plafonné, httpx.Client appelé avec timeout=299."""
+        mock_settings.DEBUG = True
+        mock_settings.ALLOWED_HTTP_REQUEST_HOSTS = ['api.corp']
+
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {'ok': True}
+        mock_resp.raise_for_status.return_value = None
+        mock_client_class.return_value.__enter__.return_value.get.return_value = mock_resp
+
+        step_config = self._make_step_config(timeout=299)
+        self.handler.execute(
+            step_config=step_config,
+            resolved_params={},
+            execution=self._make_execution(),
+            step=step_config,
+            correlation_id=None,
+        )
+
+        mock_client_class.assert_called_once_with(timeout=299)
+
+    @patch('executions.app.handlers.http_request_handler._MAX_HTTP_REQUEST_TIMEOUT', 300)
+    @patch('executions.app.handlers.http_request_handler.settings')
+    @patch('executions.app.handlers.http_request_handler.httpx.Client')
+    def test_timeout_301_capped_to_300_warning_logged(self, mock_client_class, mock_settings):
+        """SEC-BE-03 : timeout=301 → plafonné à 300, warning loggé."""
+        mock_settings.DEBUG = True
+        mock_settings.ALLOWED_HTTP_REQUEST_HOSTS = ['api.corp']
+
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {'ok': True}
+        mock_resp.raise_for_status.return_value = None
+        mock_client_class.return_value.__enter__.return_value.get.return_value = mock_resp
+
+        step_config = self._make_step_config(timeout=301)
+        with patch('executions.app.handlers.http_request_handler.logger') as mock_logger:
+            self.handler.execute(
+                step_config=step_config,
+                resolved_params={},
+                execution=self._make_execution(),
+                step=step_config,
+                correlation_id='corr-002',
+            )
+
+        mock_client_class.assert_called_once_with(timeout=300)
+        mock_logger.warning.assert_called_once_with(
+            "http_request_handler_timeout_capped",
+            requested_timeout=301,
+            capped_to=300,
+            execution_id=1,
+            correlation_id='corr-002',
+        )

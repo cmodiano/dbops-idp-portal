@@ -102,7 +102,9 @@ class RunnableStepService:
         lease_until = now + timedelta(seconds=LEASE_DURATION_SECONDS)
         try:
             with transaction.atomic():
-                qs = (
+                # Oracle does not support LIMIT/OFFSET with SELECT FOR UPDATE.
+                # Step 1: fetch candidate IDs with LIMIT (no lock).
+                base_qs = (
                     RunnableStep.objects
                     .filter(eligible_at__lte=now)
                     .filter(
@@ -110,13 +112,21 @@ class RunnableStepService:
                         Q(claimed_until__lt=now)
                     )
                     .exclude(attempt_no__gte=F('max_attempts'))
-                    .select_for_update(skip_locked=True)
                     .order_by('-priority', 'eligible_at')
                 )
                 if step_types:
-                    qs = qs.filter(step_type__in=step_types)
+                    base_qs = base_qs.filter(step_type__in=step_types)
 
-                batch = list(qs[:limit])
+                candidate_ids = list(base_qs.values_list('id', flat=True)[:limit])
+                if not candidate_ids:
+                    return []
+
+                # Step 2: lock the specific rows by PK (no LIMIT needed).
+                batch = list(
+                    RunnableStep.objects
+                    .filter(id__in=candidate_ids)
+                    .select_for_update(skip_locked=True)
+                )
                 if batch:
                     ids = [r.id for r in batch]
                     RunnableStep.objects.filter(id__in=ids).update(

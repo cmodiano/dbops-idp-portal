@@ -19,6 +19,9 @@ from executions.models import Execution
 
 logger = structlog.get_logger(__name__)
 
+# Plafond timeout HTTP — évite les abus de configuration (SEC-BE-03, Story 88-4)
+_MAX_HTTP_REQUEST_TIMEOUT = int(getattr(settings, 'MAX_HTTP_REQUEST_TIMEOUT', 300))
+
 # Réseaux privés bloqués par défaut (SSRF protection — ADR-007 §Sécurité)
 _PRIVATE_NETWORKS = (
     ipaddress.ip_network('10.0.0.0/8'),
@@ -122,7 +125,16 @@ class HttpRequestHandler:
         method = config.get('method', 'GET').upper()
         headers = config.get('headers', {})
         params = config.get('params', {})
-        timeout = config.get('timeout', 30)
+        raw_timeout = config.get('timeout', 30)
+        timeout = min(raw_timeout, _MAX_HTTP_REQUEST_TIMEOUT)
+        if raw_timeout != timeout:
+            logger.warning(
+                "http_request_handler_timeout_capped",
+                requested_timeout=raw_timeout,
+                capped_to=timeout,
+                execution_id=execution.id,
+                correlation_id=correlation_id,
+            )
 
         sanitized_url = _sanitize_url_for_logging(url)
         logger.info(

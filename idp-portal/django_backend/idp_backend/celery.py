@@ -4,6 +4,7 @@ Story 20.3: Asynchronous retry with Celery.
 Story 25.3: Celery Beat schedule for evaluate_waiting_gates.
 Story 42.1: Celery Beat schedule for process_pending_scheduled_executions.
 Story 51.3: Celery Beat schedule for health_check_all_integrations.
+Story 78.5: Celery Beat schedule for process_runnable_steps (WorkQueue consumer).
 """
 
 import os
@@ -327,4 +328,22 @@ if _splunk_flush_schedule > 0:
     app.conf.beat_schedule['flush-splunk-logging-handler'] = {
         'task': 'core.tasks.flush_splunk_logging_handler',
         'schedule': _splunk_flush_schedule,
+    }
+
+# Story 78.5: WorkQueue consumer — claim and execute PENDING runnable steps (gates, platform steps).
+# Default interval = 5s for low-latency gate processing. Override with CELERY_BEAT_RUNNABLE_STEPS_INTERVAL.
+try:
+    _runnable_steps_schedule = float(os.getenv('CELERY_BEAT_RUNNABLE_STEPS_INTERVAL', '5.0'))
+except ValueError as exc:
+    logger.warning(
+        "celery_beat_invalid_runnable_steps_interval: value=%r error=%s fallback=5.0",
+        os.getenv('CELERY_BEAT_RUNNABLE_STEPS_INTERVAL'),
+        exc,
+    )
+    _runnable_steps_schedule = 5.0
+
+if _runnable_steps_schedule > 0:
+    app.conf.beat_schedule['process-runnable-steps'] = {
+        'task': 'executions.tasks.process_runnable_steps',
+        'schedule': _runnable_steps_schedule,
     }

@@ -151,16 +151,21 @@ def health_check(request: Any) -> Response:
 
     checks: dict[str, Callable[[], str]] = {}
 
-    if vault_addr and vault_addr != 'http://localhost:8200':
+    vault_skip_hosts = getattr(settings, 'HEALTH_CHECK_VAULT_SKIP_HOSTS', ['localhost'])
+    sn_skip_domains = getattr(settings, 'HEALTH_CHECK_SERVICENOW_SKIP_DOMAINS', ['instance.service-now.com'])
+
+    if vault_addr and not any(skip_host in vault_addr for skip_host in vault_skip_hosts):
         checks["vault"] = lambda: _check_vault(correlation_id)
     else:
-        # Vault not configured - mark as reachable to not fail health check
+        vault_skip_reason = "not_configured" if not vault_addr else "skip_host_match"
+        logger.debug("health_check_vault_skipped", vault_addr=vault_addr, reason=vault_skip_reason)
         health_data["vault"] = "reachable"
 
-    if servicenow_url and 'instance.service-now.com' not in servicenow_url:
+    if servicenow_url and not any(skip_domain in servicenow_url for skip_domain in sn_skip_domains):
         checks["servicenow"] = lambda: _check_servicenow(correlation_id)
     else:
-        # ServiceNow not configured - mark as reachable to not fail health check
+        sn_skip_reason = "not_configured" if not servicenow_url else "skip_domain_match"
+        logger.debug("health_check_servicenow_skipped", servicenow_url=servicenow_url, reason=sn_skip_reason)
         health_data["servicenow"] = "reachable"
 
     # Execute external checks concurrently with global deadline

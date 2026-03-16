@@ -135,7 +135,7 @@ def _get_step_or_404(execution_id: int, step_id: int) -> ExecutionStep:
     """
     try:
         return (
-            ExecutionStep.objects.select_for_update()
+            ExecutionStep.objects
             .select_related("execution__action", "approved_by", "rejected_by")
             .get(id=step_id, execution_id=execution_id)
         )
@@ -220,7 +220,7 @@ def _find_first_waiting_approval_step(execution_id: int) -> ExecutionStep | None
     dans le chemin backward compat.
     """
     steps = (
-        ExecutionStep.objects.select_for_update()
+        ExecutionStep.objects
         .filter(execution_id=execution_id, status=ExecutionStepStatus.WAITING)
         .select_related("execution__action")
         .order_by("step_order")

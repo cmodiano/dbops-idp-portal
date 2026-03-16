@@ -365,3 +365,81 @@ class TestHealthCheckEndpoint(TestCase):
         assert data['vault'] == 'unreachable'
         assert data['servicenow'] == 'reachable'
         assert data['status'] == 'degraded'
+
+    # --- SEC-BE-02: Tests for configurable health check bypass (Story 88-4) ---
+
+    @patch('core.views._check_vault', return_value='reachable')
+    @patch('core.views.connection')
+    @override_settings(
+        VAULT_ADDR='http://localhost:8200',
+        HEALTH_CHECK_VAULT_SKIP_HOSTS=[],
+    )
+    def test_health_check_vault_bypass_disabled_when_skip_hosts_empty(self, mock_connection, mock_check_vault):
+        """SEC-BE-02: HEALTH_CHECK_VAULT_SKIP_HOSTS=[] force le vrai check même pour localhost."""
+        mock_cursor = MagicMock()
+        mock_connection.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
+        mock_connection.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        mock_connection.is_usable.return_value = True
+
+        response = self.client.get(self.url)
+
+        # Avec skip_hosts vide, _check_vault doit être appelé même pour localhost
+        mock_check_vault.assert_called_once()
+        data = response.json()['data']
+        assert data['vault'] == 'reachable'
+
+    @patch('core.views.connection')
+    @override_settings(
+        VAULT_ADDR='http://localhost:8200',
+        HEALTH_CHECK_VAULT_SKIP_HOSTS=['localhost'],
+    )
+    def test_health_check_vault_bypass_active_for_localhost(self, mock_connection):
+        """SEC-BE-02: HEALTH_CHECK_VAULT_SKIP_HOSTS=['localhost'] bypasse le check localhost (existant)."""
+        mock_cursor = MagicMock()
+        mock_connection.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
+        mock_connection.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        mock_connection.is_usable.return_value = True
+
+        response = self.client.get(self.url)
+
+        data = response.json()['data']
+        assert data['vault'] == 'reachable'
+
+    @patch('core.views._check_servicenow', return_value='reachable')
+    @patch('core.views.connection')
+    @override_settings(
+        SERVICENOW_INSTANCE_URL='https://instance.service-now.com',
+        HEALTH_CHECK_SERVICENOW_SKIP_DOMAINS=[],
+    )
+    def test_health_check_servicenow_bypass_disabled_when_skip_domains_empty(
+        self, mock_connection, mock_check_servicenow
+    ):
+        """SEC-BE-02: HEALTH_CHECK_SERVICENOW_SKIP_DOMAINS=[] force le vrai check même pour instance.service-now.com."""
+        mock_cursor = MagicMock()
+        mock_connection.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
+        mock_connection.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        mock_connection.is_usable.return_value = True
+
+        response = self.client.get(self.url)
+
+        # Avec skip_domains vide, _check_servicenow doit être appelé même pour instance.service-now.com
+        mock_check_servicenow.assert_called_once()
+        data = response.json()['data']
+        assert data['servicenow'] == 'reachable'
+
+    @patch('core.views.connection')
+    @override_settings(
+        SERVICENOW_INSTANCE_URL='https://instance.service-now.com',
+        HEALTH_CHECK_SERVICENOW_SKIP_DOMAINS=['instance.service-now.com'],
+    )
+    def test_health_check_servicenow_bypass_active_for_default_domain(self, mock_connection):
+        """SEC-BE-02: HEALTH_CHECK_SERVICENOW_SKIP_DOMAINS=['instance.service-now.com'] bypasse le check (existant)."""
+        mock_cursor = MagicMock()
+        mock_connection.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
+        mock_connection.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        mock_connection.is_usable.return_value = True
+
+        response = self.client.get(self.url)
+
+        data = response.json()['data']
+        assert data['servicenow'] == 'reachable'

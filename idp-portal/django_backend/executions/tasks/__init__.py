@@ -39,6 +39,7 @@ from executions.tasks.trigger import trigger_platform_job  # noqa: E402
 from executions.tasks.cleanup import purge_old_platform_logs, purge_old_workflow_events  # noqa: E402
 from executions.tasks.reconcile import reconcile_stale_executions  # noqa: E402
 from executions.tasks.outbox_dispatcher import process_outbox_entries  # noqa: E402
+from executions.tasks.orchestration_worker import process_runnable_steps  # noqa: E402
 
 __all__ = [
     # Public tasks
@@ -50,6 +51,8 @@ __all__ = [
     "MAX_POLLING_RETRIES",
     # Story 42.1: Celery Beat task for scheduled executions
     "process_pending_scheduled_executions",
+    # Story 78.5: WorkQueue consumer
+    "process_runnable_steps",
     # Internal helpers re-exported for test patchability
     "logger",
     "get_correlation_id",

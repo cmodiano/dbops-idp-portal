@@ -838,6 +838,23 @@ ALLOWED_HTTP_REQUEST_HOSTS: list[str] = [
 ]
 del _allowed_http_hosts_env
 
+# SEC-BE-02 — Bypass health check configurable (Story 88-4)
+# Hôtes Vault à bypasser dans le health check (comma-separated)
+_hc_vault_skip_env = os.getenv('HEALTH_CHECK_VAULT_SKIP_HOSTS', 'localhost')
+HEALTH_CHECK_VAULT_SKIP_HOSTS: list[str] = [
+    h.strip() for h in _hc_vault_skip_env.split(',') if h.strip()
+]
+del _hc_vault_skip_env
+# Domaines ServiceNow à bypasser dans le health check (comma-separated)
+_hc_sn_skip_env = os.getenv('HEALTH_CHECK_SERVICENOW_SKIP_DOMAINS', 'instance.service-now.com')
+HEALTH_CHECK_SERVICENOW_SKIP_DOMAINS: list[str] = [
+    d.strip() for d in _hc_sn_skip_env.split(',') if d.strip()
+]
+del _hc_sn_skip_env
+
+# SEC-BE-03 — Plafond timeout HTTP (Story 88-4)
+MAX_HTTP_REQUEST_TIMEOUT = int(os.getenv('MAX_HTTP_REQUEST_TIMEOUT', '300'))
+
 # Epic 56 — Décorrélation : schéma/synonyme Oracle fallback pour l'inventaire
 INVENTORY_FALLBACK_SCHEMA = os.getenv('INVENTORY_FALLBACK_SCHEMA', 'DBOPS_INVENTORY')
 
