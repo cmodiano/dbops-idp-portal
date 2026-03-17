@@ -1,8 +1,19 @@
 /**
- * useWorkflowGraph — Graph state and event handlers for WorkflowBuilderCanvas (Story 54.12).
+ * useWorkflowGraph — Hook central de gestion du graphe workflow (React Flow).
  *
- * Extracted from WorkflowBuilderCanvasInner.
- * Encapsulates: node/edge state, validation, event handlers, config panel state.
+ * Organisation interne (557 LOC — complexité inhérente à l'API React Flow) :
+ *
+ * 1. State & Sync         : nodesState, edgesState, syncToParent
+ * 2. Validation Highlights: applyValidation (styles visuels)
+ * 3. Connection Handlers  : onConnect, isValidConnection
+ * 4. Drag & Drop          : onDragOver, onDrop (création nœud depuis sidebar)
+ * 5. Node CRUD            : handleNodeUpdate, handleNodeDelete, handleAddSpecialStep,
+ *                           onNodesChange (guard dernier step), computed memos
+ * 6. Validation UI, Navigation & Import : handleValidate, clearValidation, goToNode, loadImportedWorkflow
+ *
+ * Note : L'extraction de sous-hooks est contrainte par React Flow (useNodesState,
+ * useEdgesState, useReactFlow doivent être dans le même contexte de composant).
+ * Ref : CODEBASE-REVIEW §27 SMELL-FE-02, Story 88-6.
  *
  * IMPORTANT: Must be called inside a ReactFlowProvider context (uses useReactFlow internally).
  */
@@ -92,6 +103,7 @@ export function useWorkflowGraph({
   onChange,
   disabled = false,
 }: UseWorkflowGraphProps): UseWorkflowGraphReturn {
+  // ─── 1. State & Sync ─────────────────────────────────────────────────────────
   const { notification } = App.useApp();
   const { screenToFlowPosition, fitView, getNode, setCenter } = useReactFlow();
   // Story 84.3 (T9): capabilities pour passer stepTypes à validateWorkflowGraph
@@ -128,6 +140,7 @@ export function useWorkflowGraph({
     return () => clearTimeout(timeoutId);
   }, [nodes, edges, syncToParent]);
 
+  // ─── 2. Validation Highlights ────────────────────────────────────────────────
   // Apply validation status to nodes
   const applyValidation = useCallback(
     (validationResult: ValidationResult) => {
@@ -151,6 +164,7 @@ export function useWorkflowGraph({
     [setNodes]
   );
 
+  // ─── 3. Connection Handlers ──────────────────────────────────────────────────
   // Handle connection between nodes
   const onConnect = useCallback(
     (params: Connection) => {
@@ -193,6 +207,7 @@ export function useWorkflowGraph({
     []
   );
 
+  // ─── 4. Drag & Drop ──────────────────────────────────────────────────────────
   // Handle drop from palette
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
@@ -294,6 +309,7 @@ export function useWorkflowGraph({
     [disabled, screenToFlowPosition, setNodes, setEdges]
   );
 
+  // ─── 5. Node CRUD & Computed Values ──────────────────────────────────────────
   // Node double-click → open config panel
   const onNodeDoubleClick = useCallback(
     (_event: React.MouseEvent, node: Node) => {
@@ -477,6 +493,7 @@ export function useWorkflowGraph({
   // Handle edges delete — edge state is auto-managed by useEdgesState; no action needed.
   const onEdgesDelete = useCallback((_deletedEdges: Edge[]) => { /* no-op */ }, []);
 
+  // ─── 6. Validation UI, Navigation & Import ───────────────────────────────────
   // Run validation and open report panel
   // Story 84.3 (T9): passe capabilities?.stepTypes pour la validation backend-driven
   const handleValidate = useCallback(() => {

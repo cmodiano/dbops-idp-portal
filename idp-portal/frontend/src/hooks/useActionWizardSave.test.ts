@@ -65,7 +65,28 @@ describe('useActionWizardSave', () => {
   });
 
   it('cas succès — onSubmit + handleUpdateActionSteps + onSuccess appelés', async () => {
-    const params = makeParams();
+    // State cohérent : pas d'integration (integration_id=undefined) → connector='none'
+    const mockForm = {
+      getFieldValue: vi.fn((field: string) => {
+        if (field === 'item_type') return 'action';
+        return undefined;
+      }),
+      getFieldsValue: vi.fn(() => ({
+        item_type: 'action',
+        name: 'Test Action',
+        engine: 'ansible',
+      })),
+      validateFields: vi.fn().mockResolvedValue({
+        name: 'Test Action',
+        description: 'Desc',
+        engine: 'ansible',
+        item_type: 'action',
+      }),
+      setFields: vi.fn(),
+    };
+    const params = makeParams({
+      form: mockForm as unknown as UseActionWizardSaveParams['form'],
+    });
     const { result } = renderHook(() => useActionWizardSave(params));
 
     await act(async () => {

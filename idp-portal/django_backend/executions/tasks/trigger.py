@@ -19,6 +19,85 @@ logger = structlog.get_logger(__name__)
 _LIMITS = settings.CELERY_TASK_TIME_LIMITS["trigger_platform_job"]
 
 
+def _handle_trigger_error(
+    exc: BaseException,
+    error_type: str,
+    error_message: str,
+    execution_step: Any,
+    execution_id: int,
+    correlation_id: "str | None",
+    *,
+    include_audit: bool = False,
+    step_id: "int | None" = None,
+    adapter: "str | None" = None,
+) -> None:
+    """Helper best-effort : mark step FAILED + mark execution INTEGRATION_ERROR + optional audit.
+
+    Ne raise pas — les erreurs internes sont loguées et ignorées (best-effort).
+    Le caller reste responsable du raise ou du return selon le type d'exception.
+
+    Story 88-6 SMELL-BE-02 : extrait de trigger_platform_job pour éliminer la duplication
+    des 3 blocs except quasi-identiques.
+    """
+    from django.utils import timezone as tz  # noqa: PLC0415
+    from executions.models import Execution, ExecutionStatus, ExecutionStepStatus  # noqa: PLC0415
+
+    _TERMINAL = {
+        ExecutionStatus.COMPLETED,
+        ExecutionStatus.FAILED,
+        ExecutionStatus.CANCELLED,
+        ExecutionStatus.REJECTED,
+    }
+
+    # 1. Mark step FAILED
+    execution_step.status = ExecutionStepStatus.FAILED
+    execution_step.completed_at = tz.now()
+    execution_step.error_message = error_message
+    execution_step.save()
+
+    # 2. Mark execution INTEGRATION_ERROR (best-effort) + optional audit
+    try:
+        execution = Execution.objects.get(id=execution_id)
+        old_status = execution.status
+        if execution.status not in _TERMINAL:
+            execution.status = ExecutionStatus.INTEGRATION_ERROR
+            execution.save(update_fields=["status"])
+
+        # 3. Audit (optional)
+        if include_audit and old_status not in _TERMINAL:
+            from core.services import AuditService  # noqa: PLC0415
+            from core.models import AuditActionType, AuditEntityType  # noqa: PLC0415
+            from core.utils import sanitize_audit_changes  # noqa: PLC0415
+
+            changes = sanitize_audit_changes(
+                {"status": {"old": old_status, "new": ExecutionStatus.INTEGRATION_ERROR}}
+            )
+            details: dict = {
+                "error_type": error_type,
+                "error": str(exc),
+                "changes": changes,
+            }
+            if step_id is not None:
+                details["step_id"] = step_id
+            if adapter is not None:
+                details["adapter"] = adapter
+            AuditService.create_entry(
+                user_id=str(execution.user_id),
+                action_type=AuditActionType.EXECUTION_INTEGRATION_ERROR,
+                entity_type=AuditEntityType.EXECUTION,
+                entity_id=execution_id,
+                details=details,
+                correlation_id=correlation_id,
+            )
+    except Exception:  # noqa: BLE001 — best-effort: must not mask original exception
+        logger.error(
+            "trigger_platform_job_error_handler_failed",
+            execution_id=execution_id,
+            correlation_id=correlation_id,
+            exc_info=True,
+        )
+
+
 @shared_task(
     bind=True,
     max_retries=0,
@@ -58,8 +137,6 @@ def trigger_platform_job(
     from executions.tasks.polling import (  # noqa: PLC0415
         poll_platform_job_status, get_platform_queue,
     )
-    from executions.models import ExecutionStepStatus  # noqa: PLC0415
-    from django.utils import timezone as tz  # noqa: PLC0415
     from core.exceptions import AdapterTimeoutError  # noqa: PLC0415
 
     # Préférer le correlation_id passé depuis le contexte HTTP (execute()) car
@@ -109,8 +186,8 @@ def trigger_platform_job(
         auth_headers = build_auth_headers(integration, correlation_id)
 
         # Story 82.2: kwargs runtime extraits via PlatformRegistry (remplace le bloc manuel)
-        from adapters.runtime_config import build_platform_runtime_config
-        from platforms.registry import platform_registry
+        from adapters.runtime_config import build_platform_runtime_config  # noqa: PLC0415
+        from platforms.registry import platform_registry  # noqa: PLC0415
         platform_type = platform_registry.resolve_alias(integration.type)
         platform_kwargs = build_platform_runtime_config(integration)
 
@@ -156,7 +233,7 @@ def trigger_platform_job(
 
         return {"outcome": "dispatched", "platform_job_id": platform_job_id}
 
-    except SoftTimeLimitExceeded:
+    except SoftTimeLimitExceeded as exc:
         logger.error(
             "trigger_platform_job_soft_timeout",
             execution_step_id=execution_step_id,
@@ -164,31 +241,15 @@ def trigger_platform_job(
             integration_id=integration_id,
             correlation_id=correlation_id,
         )
-        # Mark step FAILED with timeout message
-        execution_step.status = ExecutionStepStatus.FAILED
-        execution_step.completed_at = tz.now()
-        execution_step.error_message = "Soft time limit exceeded in trigger_platform_job"
-        execution_step.save()
-        # Mark execution INTEGRATION_ERROR to prevent orphaned RUNNING execution
-        # (no platform_job_id stored → no polling will correct status)
-        try:
-            from executions.models import Execution, ExecutionStatus  # noqa: PLC0415
-            execution = Execution.objects.get(id=execution_id)
-            if execution.status not in (
-                ExecutionStatus.COMPLETED,
-                ExecutionStatus.FAILED,
-                ExecutionStatus.CANCELLED,
-                ExecutionStatus.REJECTED,
-            ):
-                execution.status = ExecutionStatus.INTEGRATION_ERROR
-                execution.save(update_fields=["status"])
-        except Exception:  # noqa: BLE001 — best-effort: must not mask SoftTimeLimitExceeded
-            logger.error(
-                "trigger_platform_job_timeout_execution_update_failed",
-                execution_id=execution_id,
-                correlation_id=correlation_id,
-                exc_info=True,
-            )
+        _handle_trigger_error(
+            exc=exc,
+            error_type="SoftTimeLimitExceeded",
+            error_message="Soft time limit exceeded in trigger_platform_job",
+            execution_step=execution_step,
+            execution_id=execution_id,
+            correlation_id=correlation_id,
+            include_audit=False,
+        )
         raise
 
     except AdapterTimeoutError as exc:
@@ -199,47 +260,17 @@ def trigger_platform_job(
             execution_id=execution_id,
             correlation_id=correlation_id,
         )
-        execution_step.status = ExecutionStepStatus.FAILED
-        execution_step.completed_at = tz.now()
-        execution_step.error_message = f"Adapter timeout: {exc.message}"
-        execution_step.save()
-        try:
-            from executions.models import Execution, ExecutionStatus  # noqa: PLC0415
-            from core.services import AuditService  # noqa: PLC0415
-            from core.models import AuditActionType, AuditEntityType  # noqa: PLC0415
-            from core.utils import sanitize_audit_changes  # noqa: PLC0415
-            execution = Execution.objects.get(id=execution_id)
-            old_status = execution.status
-            if execution.status not in (
-                ExecutionStatus.COMPLETED,
-                ExecutionStatus.FAILED,
-                ExecutionStatus.CANCELLED,
-                ExecutionStatus.REJECTED,
-            ):
-                execution.status = ExecutionStatus.INTEGRATION_ERROR
-                execution.save(update_fields=["status"])
-            changes = sanitize_audit_changes({'status': {'old': old_status, 'new': ExecutionStatus.INTEGRATION_ERROR}})
-            AuditService.create_entry(
-                user_id=str(execution.user_id),
-                action_type=AuditActionType.EXECUTION_INTEGRATION_ERROR,
-                entity_type=AuditEntityType.EXECUTION,
-                entity_id=execution_id,
-                details={
-                    "error_type": "AdapterTimeoutError",
-                    "error": str(exc),
-                    "step_id": execution_step_id,
-                    "adapter": exc.details.get("adapter_type", "unknown"),
-                    "changes": changes,
-                },
-                correlation_id=correlation_id,
-            )
-        except Exception:  # noqa: BLE001 — best-effort: must not mask AdapterTimeoutError
-            logger.error(
-                "trigger_platform_job_adapter_timeout_execution_update_failed",
-                execution_id=execution_id,
-                correlation_id=correlation_id,
-                exc_info=True,
-            )
+        _handle_trigger_error(
+            exc=exc,
+            error_type="AdapterTimeoutError",
+            error_message=f"Adapter timeout: {exc.message}",
+            execution_step=execution_step,
+            execution_id=execution_id,
+            correlation_id=correlation_id,
+            include_audit=True,
+            step_id=execution_step_id,
+            adapter=exc.details.get("adapter_type", "unknown"),
+        )
         return {"outcome": "error", "error": str(exc)}
 
     except Exception as exc:  # noqa: BLE001 — broad-catch-fail-fast: all adapter errors mark execution INTEGRATION_ERROR with audit trail
@@ -252,50 +283,15 @@ def trigger_platform_job(
             correlation_id=correlation_id,
             exc_info=True,
         )
-        # Marquer l'étape FAILED (déjà en place depuis fix H2 Story 47.2)
-        execution_step.status = ExecutionStepStatus.FAILED
-        execution_step.completed_at = tz.now()
-        execution_step.error_message = f"{type(exc).__name__}: {str(exc)}"
-        execution_step.save()
-
-        # Story 47.3 : fail-fast complet — step FAILED + execution INTEGRATION_ERROR + audit
-        from executions.models import Execution, ExecutionStatus  # noqa: PLC0415
-        from core.services import AuditService  # noqa: PLC0415
-        from core.models import AuditActionType, AuditEntityType  # noqa: PLC0415
-        try:
-            from core.utils import sanitize_audit_changes  # noqa: PLC0415
-
-            execution = Execution.objects.get(id=execution_id)
-            old_status = execution.status
-            if execution.status not in (
-                ExecutionStatus.COMPLETED,
-                ExecutionStatus.FAILED,
-                ExecutionStatus.CANCELLED,
-                ExecutionStatus.REJECTED,
-            ):
-                execution.status = ExecutionStatus.INTEGRATION_ERROR
-                execution.save(update_fields=["status"])
-            changes = sanitize_audit_changes({'status': {'old': old_status, 'new': ExecutionStatus.INTEGRATION_ERROR}})
-            AuditService.create_entry(
-                user_id=str(execution.user_id),
-                action_type=AuditActionType.EXECUTION_INTEGRATION_ERROR,
-                entity_type=AuditEntityType.EXECUTION,
-                entity_id=execution_id,
-                details={
-                    "error_type": type(exc).__name__,
-                    "error": str(exc),
-                    "step_id": execution_step_id,
-                    "adapter": "trigger_platform_job",
-                    "changes": changes,
-                },
-                correlation_id=correlation_id,
-            )
-        except Exception as inner_exc:  # noqa: BLE001 — best-effort audit, ne doit pas masquer l'erreur principale
-            logger.error(
-                "trigger_platform_job_audit_failed",
-                execution_id=execution_id,
-                error=str(inner_exc),
-                correlation_id=correlation_id,
-            )
-
+        _handle_trigger_error(
+            exc=exc,
+            error_type=type(exc).__name__,
+            error_message=f"{type(exc).__name__}: {str(exc)}",
+            execution_step=execution_step,
+            execution_id=execution_id,
+            correlation_id=correlation_id,
+            include_audit=True,
+            step_id=execution_step_id,
+            adapter="trigger_platform_job",
+        )
         return {"outcome": "error", "error": str(exc)}
