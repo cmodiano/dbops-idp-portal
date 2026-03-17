@@ -297,29 +297,6 @@ class PlatformStepExecutor:
                 )
                 child_execution.refresh_from_db()
 
-    def _extract_and_store_output(
-        self, step_id: str, parent_step: ExecutionStep, output_mapping: Any,
-    ) -> None:
-        """
-        Extract output from a completed step and store in _step_outputs (thread-safe).
-
-        Story 71.6: Extracted from _execute_platform_step (subtask 9.4).
-        """
-        if not isinstance(output_mapping, dict):
-            _cwr_module.logger.warning(
-                "container_workflow_output_mapping_not_dict",
-                execution_id=self.execution.id,
-                step_id=step_id,
-                output_mapping_type=type(output_mapping).__name__,
-                correlation_id=self.correlation_id,
-            )
-            output_mapping = {}
-        extractor = _cwr_module.OutputExtractor()  # type: ignore[attr-defined]
-        raw_output = parent_step.get_output() or {}
-        extracted = extractor.extract(raw_output, output_mapping)
-        with self._step_outputs_lock:
-            self._step_outputs[step_id] = extracted
-
     def execute_platform_step(
         self,
         step: Dict[str, Any],
@@ -551,7 +528,8 @@ class PlatformStepExecutor:
             _broadcast_step(self.execution.id, exec_step)
 
             if step_id is not None:
-                self._step_outputs[step_id] = extracted
+                with self._step_outputs_lock:
+                    self._step_outputs[step_id] = extracted
 
             return cast(ExecutionStatus, child_execution.status)
         except Exception as exc:  # noqa: BLE001
