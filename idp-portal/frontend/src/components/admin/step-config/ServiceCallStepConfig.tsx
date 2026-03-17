@@ -154,6 +154,7 @@ export const ServiceCallStepConfig: FC<ServiceCallStepConfigProps> = ({
               workflowId={workflowId}
               currentStepId={data.step_id ?? ''}
               availableStepIds={availableStepIds}
+              localVariables={localStepVariables}
               operation={data.operation ?? ''}
             />
           </>
