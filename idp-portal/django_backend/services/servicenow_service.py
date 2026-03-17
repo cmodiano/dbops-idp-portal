@@ -60,7 +60,35 @@ class ServiceNowService(IHealthCheckable):
         self.base_url = base_url.rstrip("/")
         self.auth_headers = auth_headers
         self.timeout = getattr(settings, 'SERVICENOW_TIMEOUT', timeout)
+        self.__sync_client: httpx.Client | None = None  # PERF-BE-01: lazy init
         logger.info("servicenow_service_initialized", base_url=self.base_url)
+
+    @property
+    def _sync_client(self) -> httpx.Client:
+        """PERF-BE-01: Shared HTTP client — created once per instance, reused across sync calls.
+
+        Lazy initialization ensures the client is created during the first method call,
+        which allows test patches of httpx.Client to be active at creation time.
+        The async health_check() uses a separate httpx.AsyncClient (unchanged).
+        """
+        if self.__sync_client is None:
+            self.__sync_client = httpx.Client(
+                headers=self.auth_headers,
+                timeout=self.timeout,
+                verify=self._get_verify_tls(),
+            )
+        return self.__sync_client
+
+    def close(self) -> None:
+        """Close the shared sync HTTP client and release connection pool resources.
+
+        Call this when the ServiceNowService instance is no longer needed.
+        Idempotent: safe to call multiple times or when no client was created.
+        The async health_check() AsyncClient is not affected (created per call).
+        """
+        if self.__sync_client is not None:
+            self.__sync_client.close()
+            self.__sync_client = None
 
     def _get_verify_tls(self) -> bool:
         """SEC-13: Return TLS verification flag, forced True in production (DEBUG=False)."""
@@ -111,39 +139,38 @@ class ServiceNowService(IHealthCheckable):
                 continue
             payload[k] = str(v) if not isinstance(v, str) else v
 
-        verify_tls = self._get_verify_tls()
         correlation_id = get_correlation_id()
 
         try:
-            with httpx.Client(headers=self.auth_headers, timeout=self.timeout, verify=verify_tls) as client:
-                resp = client.post(url, json=payload)
-                resp.raise_for_status()
-                try:
-                    json_body = resp.json()
-                except (json.JSONDecodeError, ValueError):
-                    json_body = {}
-                result = json_body.get('result', {}) if isinstance(json_body, dict) else {}
-                change_number = result.get('number') or result.get('sys_id', '')
-                sys_id = result.get('sys_id', '')
-                if not change_number and not sys_id:
-                    logger.error(
-                        "servicenow_create_change_no_identifiers",
-                        status_code=resp.status_code,
-                        body_redacted="<non-json or empty result>",
-                        base_url=self.base_url,
-                    )
-                    raise ServiceUnavailableError(
-                        code="SERVICENOW_INVALID_RESPONSE",
-                        message="ServiceNow create_change returned 2xx but no number or sys_id in result",
-                        details={"base_url": self.base_url},
-                    )
-                logger.info(
-                    "servicenow_create_change_success",
-                    change_number=change_number,
+            client = self._sync_client
+            resp = client.post(url, json=payload)
+            resp.raise_for_status()
+            try:
+                json_body = resp.json()
+            except (json.JSONDecodeError, ValueError):
+                json_body = {}
+            result = json_body.get('result', {}) if isinstance(json_body, dict) else {}
+            change_number = result.get('number') or result.get('sys_id', '')
+            sys_id = result.get('sys_id', '')
+            if not change_number and not sys_id:
+                logger.error(
+                    "servicenow_create_change_no_identifiers",
+                    status_code=resp.status_code,
+                    body_redacted="<non-json or empty result>",
                     base_url=self.base_url,
-                    correlation_id=correlation_id,
                 )
-                return {"number": str(change_number), "sys_id": str(sys_id)}
+                raise ServiceUnavailableError(
+                    code="SERVICENOW_INVALID_RESPONSE",
+                    message="ServiceNow create_change returned 2xx but no number or sys_id in result",
+                    details={"base_url": self.base_url},
+                )
+            logger.info(
+                "servicenow_create_change_success",
+                change_number=change_number,
+                base_url=self.base_url,
+                correlation_id=correlation_id,
+            )
+            return {"number": str(change_number), "sys_id": str(sys_id)}
         except httpx.TimeoutException as exc:
             logger.error(
                 "servicenow_create_change_timeout",
@@ -226,44 +253,43 @@ class ServiceNowService(IHealthCheckable):
         """
         url = f"{self.base_url}/api/now/table/change_request/{change_id}"
         params = {"sysparm_fields": "number,sys_id,state,priority,sys_updated_on"}
-        verify_tls = self._get_verify_tls()
         correlation_id = get_correlation_id()
         try:
-            with httpx.Client(headers=self.auth_headers, timeout=self.timeout, verify=verify_tls) as client:
-                resp = client.get(url, params=params)
-                resp.raise_for_status()
-                try:
-                    json_body = resp.json()
-                except (json.JSONDecodeError, ValueError):
-                    json_body = {}
-                result = json_body.get('result', {}) if isinstance(json_body, dict) else {}
-                sys_id = result.get('sys_id', '')
-                if not sys_id:
-                    raise ServiceUnavailableError(
-                        code="SERVICENOW_INVALID_RESPONSE",
-                        message="ServiceNow get_change_status returned 2xx but no sys_id in result",
-                        details={"change_id": change_id, "base_url": self.base_url},
-                    )
-                raw_state = str(result.get('state', ''))
-                mapped_state = self._STATE_LABELS.get(raw_state, raw_state)
-                priority_raw = result.get('priority')
-                try:
-                    priority = int(str(priority_raw)) if priority_raw not in (None, '') else 0
-                except (TypeError, ValueError):
-                    priority = 0
-                logger.info(
-                    "servicenow_get_change_status_success",
-                    change_id=change_id,
-                    state=mapped_state,
-                    base_url=self.base_url,
-                    correlation_id=correlation_id,
+            client = self._sync_client
+            resp = client.get(url, params=params)
+            resp.raise_for_status()
+            try:
+                json_body = resp.json()
+            except (json.JSONDecodeError, ValueError):
+                json_body = {}
+            result = json_body.get('result', {}) if isinstance(json_body, dict) else {}
+            sys_id = result.get('sys_id', '')
+            if not sys_id:
+                raise ServiceUnavailableError(
+                    code="SERVICENOW_INVALID_RESPONSE",
+                    message="ServiceNow get_change_status returned 2xx but no sys_id in result",
+                    details={"change_id": change_id, "base_url": self.base_url},
                 )
-                return {
-                    "change_id": change_id,
-                    "number": str(result.get('number', '')),
-                    "state": mapped_state,
-                    "priority": priority,
-                }
+            raw_state = str(result.get('state', ''))
+            mapped_state = self._STATE_LABELS.get(raw_state, raw_state)
+            priority_raw = result.get('priority')
+            try:
+                priority = int(str(priority_raw)) if priority_raw not in (None, '') else 0
+            except (TypeError, ValueError):
+                priority = 0
+            logger.info(
+                "servicenow_get_change_status_success",
+                change_id=change_id,
+                state=mapped_state,
+                base_url=self.base_url,
+                correlation_id=correlation_id,
+            )
+            return {
+                "change_id": change_id,
+                "number": str(result.get('number', '')),
+                "state": mapped_state,
+                "priority": priority,
+            }
         except httpx.TimeoutException as exc:
             logger.error(
                 "servicenow_get_change_status_timeout",
@@ -317,43 +343,42 @@ class ServiceNowService(IHealthCheckable):
         Story 57.9 — DRY extraction to reduce duplication. Story 86.2 — reused by update_change.
         """
         url = f"{self.base_url}/api/now/table/change_request/{change_id}"
-        verify_tls = self._get_verify_tls()
         correlation_id = get_correlation_id()
         details: dict[str, str | int] = {"change_id": change_id, "base_url": self.base_url}
 
         try:
-            with httpx.Client(headers=self.auth_headers, timeout=self.timeout, verify=verify_tls) as client:
-                resp = client.patch(url, json=payload)
-                resp.raise_for_status()
-                try:
-                    json_body = resp.json()
-                except (json.JSONDecodeError, ValueError):
-                    json_body = {}
-                result = json_body.get('result', {}) if isinstance(json_body, dict) else {}
-                sys_id = result.get('sys_id', '')
-                if not sys_id:
-                    logger.error(
-                        "servicenow_patch_no_sys_id",
-                        operation=operation,
-                        change_id=change_id,
-                        status_code=resp.status_code,
-                        base_url=self.base_url,
-                        correlation_id=correlation_id,
-                    )
-                    raise ServiceUnavailableError(
-                        code="SERVICENOW_INVALID_RESPONSE",
-                        message=f"ServiceNow {operation} returned 2xx but no sys_id in result",
-                        details=details,
-                    )
-                logger.info(
-                    "servicenow_patch_success",
+            client = self._sync_client
+            resp = client.patch(url, json=payload)
+            resp.raise_for_status()
+            try:
+                json_body = resp.json()
+            except (json.JSONDecodeError, ValueError):
+                json_body = {}
+            result = json_body.get('result', {}) if isinstance(json_body, dict) else {}
+            sys_id = result.get('sys_id', '')
+            if not sys_id:
+                logger.error(
+                    "servicenow_patch_no_sys_id",
                     operation=operation,
                     change_id=change_id,
-                    sys_id=sys_id,
+                    status_code=resp.status_code,
                     base_url=self.base_url,
                     correlation_id=correlation_id,
                 )
-                return {success_key: success_value, "sys_id": str(sys_id)}
+                raise ServiceUnavailableError(
+                    code="SERVICENOW_INVALID_RESPONSE",
+                    message=f"ServiceNow {operation} returned 2xx but no sys_id in result",
+                    details=details,
+                )
+            logger.info(
+                "servicenow_patch_success",
+                operation=operation,
+                change_id=change_id,
+                sys_id=sys_id,
+                base_url=self.base_url,
+                correlation_id=correlation_id,
+            )
+            return {success_key: success_value, "sys_id": str(sys_id)}
         except httpx.TimeoutException as exc:
             logger.error(
                 "servicenow_patch_timeout",

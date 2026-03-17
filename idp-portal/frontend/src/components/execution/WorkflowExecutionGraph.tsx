@@ -19,6 +19,8 @@ import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import type { CSSProperties, MouseEvent } from 'react';
 import './WorkflowExecutionGraph.css';
 import { useExecutionSteps } from '../../hooks/useExecutionSteps';
+import { useCapabilities } from '../../hooks/useCapabilities';
+import { CapabilitiesContext } from '../../contexts/CapabilitiesContext';
 import {
   ReactFlow,
   Controls,
@@ -123,6 +125,8 @@ function WorkflowExecutionGraphInner({
   execution,
   onExecutionUpdate,
 }: WorkflowExecutionGraphProps) {
+  const { capabilities } = useCapabilities();
+
   // Story 19.3 AC1: Selected step state for drawer
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
 
@@ -365,115 +369,121 @@ function WorkflowExecutionGraphInner({
 
   if (isLoading && executionSteps.length === 0) {
     return (
-      <div style={{ textAlign: 'center', padding: '48px 0' }}>
-        <Spin size="large" />
-      </div>
+      <CapabilitiesContext.Provider value={capabilities}>
+        <div style={{ textAlign: 'center', padding: '48px 0' }}>
+          <Spin size="large" />
+        </div>
+      </CapabilitiesContext.Provider>
     );
   }
 
   if (!workflowSteps || workflowSteps.length === 0) {
     return (
-      <Alert
-        type="warning"
-        showIcon
-        title="Workflow vide"
-        description="Aucune étape définie dans ce workflow."
-      />
+      <CapabilitiesContext.Provider value={capabilities}>
+        <Alert
+          type="warning"
+          showIcon
+          title="Workflow vide"
+          description="Aucune étape définie dans ce workflow."
+        />
+      </CapabilitiesContext.Provider>
     );
   }
 
   return (
-    <div data-testid="workflow-execution-graph" style={{ height: 'calc(100vh - 160px)', minHeight: 500, position: 'relative' }}>
-      {stepsError && (
-        <Alert
-          type="error"
-          showIcon
-          closable
-          title="Erreur de chargement des étapes"
-          description={stepsError}
-          style={{ marginBottom: 8 }}
+    <CapabilitiesContext.Provider value={capabilities}>
+      <div data-testid="workflow-execution-graph" style={{ height: 'calc(100vh - 160px)', minHeight: 500, position: 'relative' }}>
+        {stepsError && (
+          <Alert
+            type="error"
+            showIcon
+            closable
+            title="Erreur de chargement des étapes"
+            description={stepsError}
+            style={{ marginBottom: 8 }}
+          />
+        )}
+        {/* AC10: Legend */}
+        <Card
+          size="small"
+          style={{
+            position: 'absolute',
+            top: 8,
+            right: 8,
+            zIndex: 10,
+            maxWidth: 220,
+          }}
+        >
+          <Text strong style={{ display: 'block', marginBottom: 8, fontSize: 13 }}>
+            Légende
+          </Text>
+          <Space orientation="vertical" size={4}>
+            <Space size={8}>
+              <Badge color={STATUS_COLORS.RUNNING} />
+              <Text type="secondary">En cours</Text>
+            </Space>
+            <Space size={8}>
+              <Badge color={STATUS_COLORS.COMPLETED} />
+              <Text type="secondary">Terminé (succès)</Text>
+            </Space>
+            <Space size={8}>
+              <Badge color={STATUS_COLORS.FAILED} />
+              <Text type="secondary">Échoué</Text>
+            </Space>
+            <Space size={8}>
+              <Badge color={STATUS_COLORS.PENDING} />
+              <Text type="secondary">À venir / Annulé</Text>
+            </Space>
+            <Space size={8}>
+              <Badge color={STATUS_COLORS.WAITING} />
+              <Text type="secondary">En attente d&apos;approbation</Text>
+            </Space>
+          </Space>
+        </Card>
+
+        {/* AC2: React Flow graph */}
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onNodeClick={handleNodeClick}
+          onInit={handleInit}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          fitView
+          fitViewOptions={{ padding: 0.3 }}
+          // AC6: Read-only mode
+          nodesDraggable={false}
+          nodesConnectable={false}
+          elementsSelectable={true}
+          panOnDrag={true}
+          zoomOnScroll={true}
+          zoomOnPinch={true}
+          zoomOnDoubleClick={false}
+          deleteKeyCode={null}
+          minZoom={0.3}
+          maxZoom={3}
+        >
+          <Background />
+          <Controls showInteractive={false} />
+          <MiniMap nodeStrokeWidth={3} zoomable pannable />
+        </ReactFlow>
+
+        {/* Story 19.3 AC1: Step detail drawer */}
+        <StepDetailDrawer
+          open={selectedStepId != null}
+          stepId={selectedStepId}
+          executionId={executionId}
+          executionSteps={executionSteps}
+          workflowSteps={workflowSteps}
+          onClose={() => setSelectedStepId(null)}
+          onApprovalAction={() => setSelectedStepId(null)}
         />
-      )}
-      {/* AC10: Legend */}
-      <Card
-        size="small"
-        style={{
-          position: 'absolute',
-          top: 8,
-          right: 8,
-          zIndex: 10,
-          maxWidth: 220,
-        }}
-      >
-        <Text strong style={{ display: 'block', marginBottom: 8, fontSize: 13 }}>
-          Légende
-        </Text>
-        <Space orientation="vertical" size={4}>
-          <Space size={8}>
-            <Badge color={STATUS_COLORS.RUNNING} />
-            <Text type="secondary">En cours</Text>
-          </Space>
-          <Space size={8}>
-            <Badge color={STATUS_COLORS.COMPLETED} />
-            <Text type="secondary">Terminé (succès)</Text>
-          </Space>
-          <Space size={8}>
-            <Badge color={STATUS_COLORS.FAILED} />
-            <Text type="secondary">Échoué</Text>
-          </Space>
-          <Space size={8}>
-            <Badge color={STATUS_COLORS.PENDING} />
-            <Text type="secondary">À venir / Annulé</Text>
-          </Space>
-          <Space size={8}>
-            <Badge color={STATUS_COLORS.WAITING} />
-            <Text type="secondary">En attente d&apos;approbation</Text>
-          </Space>
-        </Space>
-      </Card>
 
-      {/* AC2: React Flow graph */}
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onNodeClick={handleNodeClick}
-        onInit={handleInit}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        fitView
-        fitViewOptions={{ padding: 0.3 }}
-        // AC6: Read-only mode
-        nodesDraggable={false}
-        nodesConnectable={false}
-        elementsSelectable={true}
-        panOnDrag={true}
-        zoomOnScroll={true}
-        zoomOnPinch={true}
-        zoomOnDoubleClick={false}
-        deleteKeyCode={null}
-        minZoom={0.3}
-        maxZoom={3}
-      >
-        <Background />
-        <Controls showInteractive={false} />
-        <MiniMap nodeStrokeWidth={3} zoomable pannable />
-      </ReactFlow>
-
-      {/* Story 19.3 AC1: Step detail drawer */}
-      <StepDetailDrawer
-        open={selectedStepId != null}
-        stepId={selectedStepId}
-        executionId={executionId}
-        executionSteps={executionSteps}
-        workflowSteps={workflowSteps}
-        onClose={() => setSelectedStepId(null)}
-        onApprovalAction={() => setSelectedStepId(null)}
-      />
-
-      {/* AC3: Subtle pulse animation for active (RUNNING) step — defined in WorkflowExecutionGraph.css */}
-    </div>
+        {/* AC3: Subtle pulse animation for active (RUNNING) step — defined in WorkflowExecutionGraph.css */}
+      </div>
+    </CapabilitiesContext.Provider>
   );
 }
 

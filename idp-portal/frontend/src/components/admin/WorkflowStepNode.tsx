@@ -15,7 +15,7 @@ import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Badge, Divider, Tag, Tooltip, theme } from 'antd';
 import { CheckCircleOutlined, CloseCircleOutlined, HourglassOutlined, LoadingOutlined, MinusCircleOutlined } from '@ant-design/icons';
 import type { WorkflowStepType, ScheduleStepConfig } from '../../types/api';
-import { useCapabilities } from '../../hooks/useCapabilities';
+import { useCapabilitiesContext } from '../../contexts/CapabilitiesContext';
 
 // Story 57.13: Color codes per step type (UI concern, non dérivable du backend)
 // Story 84.3 (AC4/T6.4): type adapté en Partial<Record<string, string>> pour AC7
@@ -101,7 +101,7 @@ export interface WorkflowStepNodeData {
 const WorkflowStepNode: FC<NodeProps> = ({ data, selected }) => {
   const { token } = theme.useToken();
   const nodeData = data as unknown as WorkflowStepNodeData;
-  const { capabilities } = useCapabilities();
+  const capabilities = useCapabilitiesContext();
 
   const stepType: WorkflowStepType = nodeData.step_type ?? 'platform';
 

@@ -31,6 +31,8 @@ import '@xyflow/react/dist/style.css';
 import { theme } from 'antd';
 import type { WorkflowStep } from '../../types/api';
 import type { WorkflowMetadata } from '../../utils/workflowExport';
+import { useCapabilities } from '../../hooks/useCapabilities';
+import { CapabilitiesContext } from '../../contexts/CapabilitiesContext';
 import { useWorkflowGraph } from '../../hooks/useWorkflowGraph';
 import { useWorkflowExportImport } from '../../hooks/useWorkflowExportImport';
 import { WorkflowBuilderToolbar } from '../workflow/WorkflowBuilderToolbar';
@@ -79,6 +81,7 @@ function WorkflowBuilderCanvasInner({
 }: WorkflowBuilderCanvasProps) {
   const { token } = theme.useToken();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
+  const { capabilities } = useCapabilities();
 
   // Hook appelle useReactFlow() → doit être dans le provider
   const graph = useWorkflowGraph({ steps, onChange, disabled });
@@ -105,87 +108,89 @@ function WorkflowBuilderCanvasInner({
   });
 
   return (
-    <div style={{ display: 'flex', height: 700, border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, overflow: 'hidden' }}>
-      <ActionPalette disabled={disabled} onAddSpecialStep={graph.handleAddSpecialStep} />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <WorkflowBuilderToolbar
+    <CapabilitiesContext.Provider value={capabilities}>
+      <div style={{ display: 'flex', height: 700, border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, overflow: 'hidden' }}>
+        <ActionPalette disabled={disabled} onAddSpecialStep={graph.handleAddSpecialStep} />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+          <WorkflowBuilderToolbar
+            disabled={disabled}
+            exporting={exporting}
+            validation={graph.validation}
+            exportMenuItems={exportMenuItems}
+            onImportClick={() => fileInputRef.current?.click()}
+            onValidate={graph.handleValidate}
+            onShowReport={() => graph.setValidationReportOpen(true)}
+            onClearValidation={graph.clearValidation}
+          />
+
+          <WorkflowValidationAlert validation={graph.validation} />
+
+          {/* Canvas */}
+          <div ref={reactFlowWrapper} style={{ flex: 1 }}>
+            <ReactFlow
+              nodes={graph.nodes}
+              edges={graph.edges}
+              onNodesChange={disabled ? undefined : graph.onNodesChange}
+              onEdgesChange={disabled ? undefined : graph.onEdgesChange}
+              onConnect={graph.onConnect}
+              isValidConnection={disabled ? undefined : graph.isValidConnection}
+              onDrop={graph.onDrop}
+              onDragOver={graph.onDragOver}
+              onNodeDoubleClick={graph.onNodeDoubleClick}
+              onNodesDelete={graph.onNodesDelete}
+              onEdgesDelete={graph.onEdgesDelete}
+              nodeTypes={nodeTypes}
+              edgeTypes={edgeTypes}
+              fitView
+              nodesDraggable={!disabled}
+              nodesConnectable={!disabled}
+              elementsSelectable={!disabled}
+              connectionLineStyle={{ stroke: token.colorPrimary, strokeWidth: 2 }}
+              deleteKeyCode={disabled ? null : 'Delete'}
+            >
+              <Controls />
+              <MiniMap
+                nodeStrokeWidth={3}
+                pannable
+                zoomable
+              />
+              <Background gap={16} />
+            </ReactFlow>
+          </div>
+        </div>
+
+        <StepConfigPanel
+          node={graph.selectedNode}
+          open={graph.configPanelOpen}
+          onClose={() => graph.setConfigPanelOpen(false)}
+          onNodeUpdate={graph.handleNodeUpdate}
+          onNodeDelete={graph.handleNodeDelete}
           disabled={disabled}
-          exporting={exporting}
-          validation={graph.validation}
-          exportMenuItems={exportMenuItems}
-          onImportClick={() => fileInputRef.current?.click()}
-          onValidate={graph.handleValidate}
-          onShowReport={() => graph.setValidationReportOpen(true)}
-          onClearValidation={graph.clearValidation}
+          availableStepIds={graph.workflowStepIds}
+          availableStepOptions={graph.workflowStepOptions}
+          workflowId={workflowId}
+          localStepVariables={graph.localStepVariables}
+          incomingEdgeCount={selectedNodeIncomingEdgeCount}
         />
 
-        <WorkflowValidationAlert validation={graph.validation} />
+        <ValidationReportPanel
+          validation={graph.validation}
+          open={graph.validationReportOpen}
+          onClose={() => graph.setValidationReportOpen(false)}
+          onGoToNode={graph.goToNode}
+        />
 
-        {/* Canvas */}
-        <div ref={reactFlowWrapper} style={{ flex: 1 }}>
-          <ReactFlow
-            nodes={graph.nodes}
-            edges={graph.edges}
-            onNodesChange={disabled ? undefined : graph.onNodesChange}
-            onEdgesChange={disabled ? undefined : graph.onEdgesChange}
-            onConnect={graph.onConnect}
-            isValidConnection={disabled ? undefined : graph.isValidConnection}
-            onDrop={graph.onDrop}
-            onDragOver={graph.onDragOver}
-            onNodeDoubleClick={graph.onNodeDoubleClick}
-            onNodesDelete={graph.onNodesDelete}
-            onEdgesDelete={graph.onEdgesDelete}
-            nodeTypes={nodeTypes}
-            edgeTypes={edgeTypes}
-            fitView
-            nodesDraggable={!disabled}
-            nodesConnectable={!disabled}
-            elementsSelectable={!disabled}
-            connectionLineStyle={{ stroke: token.colorPrimary, strokeWidth: 2 }}
-            deleteKeyCode={disabled ? null : 'Delete'}
-          >
-            <Controls />
-            <MiniMap
-              nodeStrokeWidth={3}
-              pannable
-              zoomable
-            />
-            <Background gap={16} />
-          </ReactFlow>
-        </div>
+        {/* Story 16.8: Hidden file input for import */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json,.yaml,.yml"
+          onChange={handleImportFile}
+          style={{ display: 'none' }}
+          aria-label="Sélectionner un fichier workflow à importer"
+        />
       </div>
-
-      <StepConfigPanel
-        node={graph.selectedNode}
-        open={graph.configPanelOpen}
-        onClose={() => graph.setConfigPanelOpen(false)}
-        onNodeUpdate={graph.handleNodeUpdate}
-        onNodeDelete={graph.handleNodeDelete}
-        disabled={disabled}
-        availableStepIds={graph.workflowStepIds}
-        availableStepOptions={graph.workflowStepOptions}
-        workflowId={workflowId}
-        localStepVariables={graph.localStepVariables}
-        incomingEdgeCount={selectedNodeIncomingEdgeCount}
-      />
-
-      <ValidationReportPanel
-        validation={graph.validation}
-        open={graph.validationReportOpen}
-        onClose={() => graph.setValidationReportOpen(false)}
-        onGoToNode={graph.goToNode}
-      />
-
-      {/* Story 16.8: Hidden file input for import */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".json,.yaml,.yml"
-        onChange={handleImportFile}
-        style={{ display: 'none' }}
-        aria-label="Sélectionner un fichier workflow à importer"
-      />
-    </div>
+    </CapabilitiesContext.Provider>
   );
 }
 

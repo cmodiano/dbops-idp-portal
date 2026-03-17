@@ -38,8 +38,7 @@ class TestServiceNowCreateChange:
 
         mock_client = MagicMock()
         mock_client.post.return_value = mock_response
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
+
         mock_client_class.return_value = mock_client
 
         result = self.service.create_change(
@@ -72,8 +71,7 @@ class TestServiceNowCreateChange:
 
         mock_client = MagicMock()
         mock_client.post.return_value = mock_response
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
+
         mock_client_class.return_value = mock_client
 
         with pytest.raises(ServiceUnavailableError) as exc_info:
@@ -86,8 +84,7 @@ class TestServiceNowCreateChange:
         """5.3: Timeout raises ServiceUnavailableError."""
         mock_client = MagicMock()
         mock_client.post.side_effect = httpx.TimeoutException("Connection timed out")
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
+
         mock_client_class.return_value = mock_client
 
         with pytest.raises(ServiceUnavailableError) as exc_info:
@@ -104,8 +101,7 @@ class TestServiceNowCreateChange:
 
         mock_client = MagicMock()
         mock_client.post.return_value = mock_response
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
+
         mock_client_class.return_value = mock_client
 
         result = self.service.create_change()
@@ -120,14 +116,76 @@ class TestServiceNowCreateChange:
         """Request error (network) raises ServiceUnavailableError."""
         mock_client = MagicMock()
         mock_client.post.side_effect = httpx.RequestError("Connection refused")
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
+
         mock_client_class.return_value = mock_client
 
         with pytest.raises(ServiceUnavailableError) as exc_info:
             self.service.create_change(short_description="Network error")
 
         assert "indisponible" in exc_info.value.message.lower()
+
+
+class TestServiceNowSyncClientReuse:
+    """PERF-BE-01: httpx.Client instancié une seule fois par instance de service."""
+
+    def setup_method(self):
+        self.service = ServiceNowService(
+            base_url="https://snow.example.com",
+            auth_headers={"Authorization": "Bearer test-token"},
+        )
+
+    @patch("services.servicenow_service.httpx.Client")
+    def test_sync_client_created_once_across_multiple_calls(self, mock_client_class):
+        """PERF-BE-01 : httpx.Client() appelé une seule fois même si create_change et
+        close_change sont invoqués successivement sur la même instance."""
+        mock_response_post = MagicMock()
+        mock_response_post.json.return_value = {"result": {"number": "CHG001", "sys_id": "s1"}}
+        mock_response_post.raise_for_status = MagicMock()
+
+        mock_response_patch = MagicMock()
+        mock_response_patch.json.return_value = {"result": {"sys_id": "s1"}}
+        mock_response_patch.raise_for_status = MagicMock()
+
+        mock_client = MagicMock()
+        mock_client.post.return_value = mock_response_post
+        mock_client.patch.return_value = mock_response_patch
+        mock_client_class.return_value = mock_client
+
+        self.service.create_change(short_description="Test 1")
+        self.service.close_change(change_id="CHG001")
+
+        # httpx.Client() must be called exactly once regardless of how many methods were called
+        mock_client_class.assert_called_once()
+
+    @patch("services.servicenow_service.httpx.Client")
+    def test_sync_client_instance_is_reused(self, mock_client_class):
+        """PERF-BE-01 : le même objet client est retourné par _sync_client à chaque accès."""
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        client_first = self.service._sync_client
+        client_second = self.service._sync_client
+
+        assert client_first is client_second
+        mock_client_class.assert_called_once()
+
+    @patch("services.servicenow_service.httpx.Client")
+    def test_close_resets_client_for_reinitialization(self, mock_client_class):
+        """close() libère le client ; le prochain appel crée un nouveau client."""
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        _ = self.service._sync_client
+        self.service.close()
+        mock_client.close.assert_called_once()
+
+        # After close(), a new client should be created on next access
+        _ = self.service._sync_client
+        assert mock_client_class.call_count == 2
+
+    def test_close_is_idempotent_when_no_client_created(self):
+        """close() sans client lazily créé ne lève pas d'exception."""
+        self.service.close()  # Should not raise
 
 
 class TestServiceNowTLSEnforcement:
@@ -145,8 +203,7 @@ class TestServiceNowTLSEnforcement:
         mock_response.raise_for_status = MagicMock()
         mock_client = MagicMock()
         mock_client.post.return_value = mock_response
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
+
         mock_client_class.return_value = mock_client
         return mock_client
 
@@ -208,8 +265,7 @@ def _make_patch_mock_client(mock_client_class, response_json=None):
     mock_response.raise_for_status = MagicMock()
     mock_client = MagicMock()
     mock_client.patch.return_value = mock_response
-    mock_client.__enter__ = MagicMock(return_value=mock_client)
-    mock_client.__exit__ = MagicMock(return_value=False)
+
     mock_client_class.return_value = mock_client
     return mock_client
 
@@ -257,8 +313,7 @@ class TestServiceNowCloseChange:
         )
         mock_client = MagicMock()
         mock_client.patch.return_value = mock_response
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
+
         mock_client_class.return_value = mock_client
 
         with pytest.raises(ServiceUnavailableError) as exc_info:
@@ -271,8 +326,7 @@ class TestServiceNowCloseChange:
         """AC#5 : TimeoutException → ServiceUnavailableError SERVICENOW_TIMEOUT."""
         mock_client = MagicMock()
         mock_client.patch.side_effect = httpx.TimeoutException("Timeout")
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
+
         mock_client_class.return_value = mock_client
 
         with pytest.raises(ServiceUnavailableError) as exc_info:
@@ -286,8 +340,7 @@ class TestServiceNowCloseChange:
         """AC#6 : RequestError → ServiceUnavailableError SERVICENOW_UNAVAILABLE."""
         mock_client = MagicMock()
         mock_client.patch.side_effect = httpx.RequestError("Connection refused")
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
+
         mock_client_class.return_value = mock_client
 
         with pytest.raises(ServiceUnavailableError) as exc_info:
@@ -392,8 +445,7 @@ class TestServiceNowCancelChange:
         )
         mock_client = MagicMock()
         mock_client.patch.return_value = mock_response
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
+
         mock_client_class.return_value = mock_client
 
         with pytest.raises(ServiceUnavailableError) as exc_info:
@@ -406,8 +458,7 @@ class TestServiceNowCancelChange:
         """AC#5 : TimeoutException → ServiceUnavailableError SERVICENOW_TIMEOUT."""
         mock_client = MagicMock()
         mock_client.patch.side_effect = httpx.TimeoutException("Timeout")
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
+
         mock_client_class.return_value = mock_client
 
         with pytest.raises(ServiceUnavailableError) as exc_info:
@@ -425,8 +476,7 @@ class TestServiceNowCancelChange:
         mock_response.json.return_value = {"result": {"sys_id": "abc123"}}
         mock_response.raise_for_status = MagicMock()
         mock_client.patch.return_value = mock_response
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
+
         mock_client_class.return_value = mock_client
 
         self.service.cancel_change(change_id="CHG001")
@@ -480,8 +530,7 @@ class TestServiceNowCancelChange:
         """AC#6 : RequestError → ServiceUnavailableError SERVICENOW_UNAVAILABLE."""
         mock_client = MagicMock()
         mock_client.patch.side_effect = httpx.RequestError("Connection refused")
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
+
         mock_client_class.return_value = mock_client
 
         with pytest.raises(ServiceUnavailableError) as exc_info:
@@ -508,8 +557,7 @@ class TestServiceNowCreateChangeExtraFields:
         mock_response.raise_for_status = MagicMock()
         mock_client = MagicMock()
         mock_client.post.return_value = mock_response
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
+
         mock_client_class.return_value = mock_client
 
         result = self.service.create_change(
@@ -561,8 +609,7 @@ class TestServiceNowUpdateChange:
         )
         mock_client = MagicMock()
         mock_client.patch.return_value = mock_response
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
+
         mock_client_class.return_value = mock_client
 
         with pytest.raises(ServiceUnavailableError) as exc_info:
@@ -575,8 +622,7 @@ class TestServiceNowUpdateChange:
         """AC#6 : TimeoutException → ServiceUnavailableError(code='SERVICENOW_TIMEOUT')."""
         mock_client = MagicMock()
         mock_client.patch.side_effect = httpx.TimeoutException("Timeout")
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
+
         mock_client_class.return_value = mock_client
 
         with pytest.raises(ServiceUnavailableError) as exc_info:
@@ -614,8 +660,7 @@ class TestServiceNowUpdateChange:
         """AC#2 : RequestError → ServiceUnavailableError SERVICENOW_UNAVAILABLE (même pattern que close/cancel)."""
         mock_client = MagicMock()
         mock_client.patch.side_effect = httpx.RequestError("Connection refused")
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
+
         mock_client_class.return_value = mock_client
 
         with pytest.raises(ServiceUnavailableError) as exc_info:
@@ -650,8 +695,7 @@ def _make_get_mock_client(mock_client_class, response_json=None):
     mock_response.raise_for_status = MagicMock()
     mock_client = MagicMock()
     mock_client.get.return_value = mock_response
-    mock_client.__enter__ = MagicMock(return_value=mock_client)
-    mock_client.__exit__ = MagicMock(return_value=False)
+
     mock_client_class.return_value = mock_client
     return mock_client
 
@@ -722,8 +766,7 @@ class TestServiceNowGetChangeStatus:
         )
         mock_client = MagicMock()
         mock_client.get.return_value = mock_response
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
+
         mock_client_class.return_value = mock_client
 
         with pytest.raises(ServiceUnavailableError) as exc_info:
@@ -737,8 +780,7 @@ class TestServiceNowGetChangeStatus:
         """AC#5 : TimeoutException → ServiceUnavailableError(code='SERVICENOW_TIMEOUT')."""
         mock_client = MagicMock()
         mock_client.get.side_effect = httpx.TimeoutException("Timeout")
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
+
         mock_client_class.return_value = mock_client
 
         with pytest.raises(ServiceUnavailableError) as exc_info:
@@ -784,8 +826,7 @@ class TestServiceNowGetChangeStatus:
         """AC#5 : RequestError → ServiceUnavailableError SERVICENOW_UNAVAILABLE (même pattern que autres méthodes)."""
         mock_client = MagicMock()
         mock_client.get.side_effect = httpx.RequestError("Connection refused")
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
+
         mock_client_class.return_value = mock_client
 
         with pytest.raises(ServiceUnavailableError) as exc_info:
