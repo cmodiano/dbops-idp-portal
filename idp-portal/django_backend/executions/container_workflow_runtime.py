@@ -42,9 +42,9 @@ from executions.output_extractor import OutputExtractor
 from executions.template_resolver import StepTemplateResolver
 from catalog.workflow_definition_repository import get_steps as get_workflow_steps
 from executions.utils.workflow_parsing import get_workflow_entry_step_ids
-from executions.step_handlers.condition_evaluator import StepConditionEvaluator
-from executions.step_handlers.registry import step_handler_registry
-from executions.container_routing import (
+from executions.app.handlers.condition_evaluator import StepConditionEvaluator  # ARCH-BE-01: chemin canonique
+from executions.app.handlers.registry import step_handler_registry              # ARCH-BE-01: chemin canonique
+from executions.domain.workflow_graph import (                                  # ARCH-BE-02: chemin canonique
     get_linear_next_step_ids as _routing_get_linear_next_step_ids,
     get_next_step_ids as _routing_get_next_step_ids,
 )
@@ -469,11 +469,11 @@ class ContainerWorkflowRuntime:
         return self._execute_handler_step(step, resolved_params, step_name, step_id, step_type, handler, parallel_context)
 
     def _get_next_step_ids(self, step: dict, outcome: ExecutionStatus) -> list[str]:
-        """Retourne les step_id cibles selon l'outcome (delegates to container_routing)."""
+        """Retourne les step_id cibles selon l'outcome (delegates to domain.workflow_graph)."""
         return _routing_get_next_step_ids(step, outcome, self.workflow_steps)
 
     def _get_linear_next_step_ids(self, step: dict) -> list[str]:
-        """Retourne le step suivant par ordre (delegates to container_routing)."""
+        """Retourne le step suivant par ordre (delegates to domain.workflow_graph)."""
         return _routing_get_linear_next_step_ids(step, self.workflow_steps)
 
     def _apply_join_policy(
@@ -1108,6 +1108,21 @@ class ContainerWorkflowRuntime:
         # Heartbeat
         self._touch_heartbeat()
 
+        # Évaluer la condition avant PENDING→RUNNING (RUNNING→SKIPPED est une transition invalide)
+        condition_evaluator = StepConditionEvaluator()
+        if not condition_evaluator.should_execute(step_config, self.execution):
+            now = timezone.now()
+            assert_step_transition(exec_step.status, ExecutionStepStatus.SKIPPED)
+            exec_step.status = ExecutionStepStatus.SKIPPED
+            exec_step.started_at = now
+            exec_step.completed_at = now
+            exec_step.save(update_fields=['status', 'started_at', 'completed_at'])
+            _broadcast_step(self.execution.id, exec_step)
+            if step_id is not None:
+                self._step_outputs[step_id] = {}
+            next_ids = self._get_next_step_ids(step_config, ExecutionStatus.COMPLETED)
+            return ExecutionStatus.COMPLETED, next_ids
+
         # Transition to RUNNING (state_machine validates PENDING→RUNNING)
         assert_step_transition(exec_step.status, ExecutionStepStatus.RUNNING)
         exec_step.status = ExecutionStepStatus.RUNNING
@@ -1138,19 +1153,6 @@ class ContainerWorkflowRuntime:
                 },
             )
             resolved_params = resolver.resolve(input_mapping)
-
-        # Condition evaluation
-        condition_evaluator = StepConditionEvaluator()
-        if not condition_evaluator.should_execute(step_config, self.execution):
-            now = timezone.now()
-            assert_step_transition(exec_step.status, ExecutionStepStatus.SKIPPED)
-            exec_step.status = ExecutionStepStatus.SKIPPED
-            exec_step.completed_at = now
-            exec_step.save(update_fields=['status', 'completed_at'])
-            if step_id is not None:
-                self._step_outputs[step_id] = {}
-            next_ids = self._get_next_step_ids(step_config, ExecutionStatus.COMPLETED)
-            return ExecutionStatus.COMPLETED, next_ids
 
         # Dispatch by step_type (Story 84.1 — R1 extensibilité, cohérence avec _execute_step)
         if step_type == 'platform':
