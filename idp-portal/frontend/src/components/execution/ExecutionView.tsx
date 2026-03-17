@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useCallback, useRef } from 'react';
-import { Drawer, Spin, Alert, Button, Space, Badge, Typography } from 'antd';
+import { Drawer, Spin, Alert, Button, Space, Badge, Typography, theme } from 'antd';
 import { CloseOutlined, ReloadOutlined } from '@ant-design/icons';
 import { ExecutionTimeline } from './ExecutionTimeline';
 import { WorkflowExecutionGraph } from './WorkflowExecutionGraph';
@@ -43,6 +43,7 @@ const ENV_BADGE: Record<string, { color: string; label: string }> = {
 export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggestionClick }: ExecutionViewProps) {
   // Story 38.6: DIP — use hook instead of direct service imports
   const { execution, actionDetail, loading, error, refresh, handleExecutionUpdate } = useExecutionView(executionId);
+  const { token } = theme.useToken();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   // AC1/AC10: Detect type (action simple vs workflow)
@@ -127,9 +128,9 @@ export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggest
         <div
           style={{
             padding: '16px 24px',
-            borderBottom: '1px solid #E5E7EB',
-            background: '#F5F5F5',
-            color: '#262626',
+            borderBottom: `1px solid ${token.colorBorderSecondary}`,
+            background: token.colorBgLayout,
+            color: token.colorText,
             position: 'sticky',
             top: 0,
             zIndex: 1,
@@ -141,7 +142,7 @@ export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggest
               <Space size={8} align="center">
                 {/* Story 19.5 AC1-5: Engine-specific icon with tooltip */}
                 {typeIcon}
-                <Title level={4} style={{ margin: 0, color: '#262626' }}>
+                <Title level={4} style={{ margin: 0 }}>
                   {execution.action_name ?? `Exécution #${execution.id}`}
                 </Title>
                 {/* Story 19.4 AC9: Remediation badge */}
@@ -163,25 +164,25 @@ export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggest
 
             <Space size={16} wrap>
               <Space size={4}>
-                <Text type="secondary" style={{ color: '#595959' }}>ID:</Text>
-                <Text strong style={{ color: '#262626' }}>#{execution.id}</Text>
+                <Text type="secondary">ID:</Text>
+                <Text strong>#{execution.id}</Text>
               </Space>
               <Space size={4}>
-                <Text type="secondary" style={{ color: '#595959' }}>Environnement:</Text>
-                <Badge color={envBadge.color} text={<span style={{ color: '#262626' }}>{envBadge.label}</span>} />
+                <Text type="secondary">Environnement:</Text>
+                <Badge color={envBadge.color} text={<span style={{ color: token.colorText }}>{envBadge.label}</span>} />
               </Space>
               <Space size={4}>
-                <Text type="secondary" style={{ color: '#595959' }}>Statut:</Text>
-                <Badge status={statusCfg.color} text={<span style={{ color: '#262626' }}>{statusCfg.label}</span>} />
+                <Text type="secondary">Statut:</Text>
+                <Badge status={statusCfg.color} text={<span style={{ color: token.colorText }}>{statusCfg.label}</span>} />
               </Space>
               <Space size={4}>
-                <Text type="secondary" style={{ color: '#595959' }}>Initiateur:</Text>
-                <Text style={{ color: '#262626' }}>{execution.user_display_name ?? `User #${execution.user_id}`}</Text>
+                <Text type="secondary">Initiateur:</Text>
+                <Text>{execution.user_display_name ?? `User #${execution.user_id}`}</Text>
               </Space>
               {duration && (
                 <Space size={4}>
-                  <Text type="secondary" style={{ color: '#595959' }}>{isTerminal ? 'Durée:' : 'Temps écoulé:'}</Text>
-                  <Text style={{ color: '#262626' }}>{duration}</Text>
+                  <Text type="secondary">{isTerminal ? 'Durée:' : 'Temps écoulé:'}</Text>
+                  <Text>{duration}</Text>
                 </Space>
               )}
             </Space>

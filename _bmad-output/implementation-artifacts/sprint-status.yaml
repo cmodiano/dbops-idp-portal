@@ -1086,5 +1086,5 @@ development_status:
     88-6-refactoring-code-smells: done # SMELL-BE-02, SMELL-FE-01, SMELL-FE-02 — code review 2026-03-16: F3(exc capture), F1/F2(tests audit helper), F4(JSDoc), F5(test state) corrigés
     88-7-performance-servicenow-capabilities: done # PERF-BE-01, PERF-FE-01 — code review 2026-03-16: H1(close), M1/M2(JSX indent), M3(Provider paths), L1(reuse test), L2(test assertions) corrigés
     88-8-architecture-imports-routing: done # ARCH-BE-01, ARCH-BE-02 — code review 2026-03-17: M2(fichiers frontend manquants commités), L2(typo config.yaml) corrigés
-    88-9-qualite-accessibilite-types: backlog # A11Y-FE-01/02, TYPE-FE-01
+    88-9-qualite-accessibilite-types: done # A11Y-FE-01/02, TYPE-FE-01 — code review 2026-03-17: M1(fallback #8c8c8c→token), M2(useMemo colors), L1(styles Typography redondants), L2(callback refs) corrigés
     epic-88-retrospective: optional
