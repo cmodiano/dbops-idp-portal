@@ -12,9 +12,9 @@ import type { FC } from 'react';
 import { Divider, Select, Typography } from 'antd';
 import type { WorkflowStepNodeData } from '../WorkflowStepNode';
 import { KeyValueEditor } from './KeyValueEditor';
+import type { AvailableVariablesStep } from '../../../services/output_schema_service';
 import { NotificationTemplateEditor } from './NotificationTemplateEditor';
 import { SchemaInputMappingEditor } from './SchemaInputMappingEditor';
-import { ConditionConfig } from './ConditionConfig';
 import { MappingHelpPopover } from './MappingHelpPopover';
 import { useInputMappingWarnings } from '../../../hooks/useInputMappingWarnings';
 import { useCapabilities } from '../../../hooks/useCapabilities';
@@ -32,6 +32,8 @@ export interface ServiceCallStepConfigProps {
   availableStepIds?: string[];
   /** Story 63.3: ID du workflow pour le VariablePicker. */
   workflowId?: number;
+  /** Variables locales dérivées du output_mapping des nodes en mémoire. */
+  localStepVariables?: AvailableVariablesStep[];
 }
 
 export const ServiceCallStepConfig: FC<ServiceCallStepConfigProps> = ({
@@ -41,6 +43,7 @@ export const ServiceCallStepConfig: FC<ServiceCallStepConfigProps> = ({
   availableStepOptions,
   availableStepIds,
   workflowId,
+  localStepVariables,
 }) => {
   // Story 82.6: capacités backend pour les types et opérations d'intégration
   const { capabilities, loading: capabilitiesLoading } = useCapabilities();
@@ -183,6 +186,7 @@ export const ServiceCallStepConfig: FC<ServiceCallStepConfigProps> = ({
             workflowId={workflowId}
             currentStepId={data.step_id}
             availableStepIds={availableStepIds}
+            localStepVariables={localStepVariables}
           />
         )}
       </div>
@@ -201,14 +205,6 @@ export const ServiceCallStepConfig: FC<ServiceCallStepConfigProps> = ({
         />
       </div>
 
-      <Divider style={{ margin: '8px 0' }} />
-
-      {/* Condition */}
-      <ConditionConfig
-        value={data.condition}
-        onChange={(v) => onUpdate({ condition: v })}
-        disabled={disabled}
-      />
     </div>
   );
 };

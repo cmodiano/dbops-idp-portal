@@ -13,6 +13,7 @@ import { Alert, Button, Input, Space, theme } from 'antd';
 import type { InputRef } from 'antd';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { VariablePicker } from '../workflow/VariablePicker';
+import type { AvailableVariablesStep } from '../../../services/output_schema_service';
 
 export interface KeyValueEditorProps {
   value?: Record<string, string> | null;
@@ -35,6 +36,8 @@ export interface KeyValueEditorProps {
   currentStepId?: string | null;
   /** Story 63.3: available step IDs for VariablePicker. */
   availableStepIds?: string[];
+  /** Variables locales dérivées du output_mapping des nodes en mémoire (pas de sauvegarde requise). */
+  localStepVariables?: AvailableVariablesStep[];
 }
 
 interface KvPair {
@@ -67,6 +70,7 @@ export const KeyValueEditor: FC<KeyValueEditorProps> = ({
   workflowId,
   currentStepId,
   availableStepIds,
+  localStepVariables,
 }) => {
   const { token } = theme.useToken();
   // Internal state keeps empty-key rows visible during typing
@@ -74,7 +78,7 @@ export const KeyValueEditor: FC<KeyValueEditorProps> = ({
   const valueInputRefs = useRef<(InputRef | null)[]>([]);
   // Track cursor position on blur so VariablePicker inserts at the right position
   const lastCursorPositions = useRef<Array<{ start: number; end: number } | null>>([]);
-  const showVariablePicker = workflowId !== undefined && Boolean(currentStepId);
+  const showVariablePicker = Boolean(currentStepId) && (workflowId !== undefined || (localStepVariables ?? []).length > 0);
 
   // Track last emitted value to detect external changes without triggering on our own updates
   const lastEmitted = useRef<Record<string, string> | null | undefined>(value);
@@ -196,6 +200,7 @@ export const KeyValueEditor: FC<KeyValueEditorProps> = ({
               workflowId={workflowId}
               currentStepId={currentStepId ?? ''}
               availableStepIds={availableStepIds}
+              localVariables={localStepVariables}
               onSelect={(expr) => handleVariableInsert(index, expr)}
               disabled={disabled}
             />

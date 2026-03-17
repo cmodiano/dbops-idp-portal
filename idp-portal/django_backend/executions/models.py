@@ -7,6 +7,7 @@ from django.utils import timezone
 from idp_auth.models import User
 from catalog.models import Action
 from core.utils import parse_json_field
+from core.fields import OracleJSONField
 from executions.domain.commands import VALID_COMMAND_TYPES  # noqa: F401
 
 logger = structlog.get_logger(__name__)
@@ -762,7 +763,7 @@ class WorkflowCommand(models.Model):
         max_length=50,
         db_column="COMMAND_TYPE",
     )
-    payload = models.JSONField(
+    payload = OracleJSONField(
         null=True,
         blank=True,
         db_column="PAYLOAD",
@@ -834,7 +835,7 @@ class ExecutionOutbox(models.Model):
         max_length=50,
         db_column="EVENT_TYPE",
     )
-    payload = models.JSONField(
+    payload = OracleJSONField(
         null=True,
         blank=True,
         db_column="PAYLOAD",

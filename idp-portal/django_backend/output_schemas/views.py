@@ -128,6 +128,21 @@ def sync_output_schemas(request):
     return Response({'data': stats})
 
 
+def _get_platform_convention(action, schema_registry) -> dict[str, object] | None:
+    """
+    Résout la convention de schéma d'output correspondant à la plateforme de l'action.
+    Ex: Action.platform='GitHub Actions' → get_platform_convention('github_actions').
+    Retourne None si aucune convention n'existe pour cette plateforme.
+    """
+    from platforms.registry import platform_registry  # noqa: PLC0415
+    try:
+        platform_code = platform_registry.get_by_action_platform_code(action.platform).code
+        result = schema_registry.get_platform_convention(platform_code)
+        return dict(result) if result is not None else None
+    except (KeyError, AttributeError):
+        return None
+
+
 def _resolve_action_schema(action, schema_registry) -> dict | None:
     """
     Story 63.9: Résout le schéma output d'une action.
@@ -175,10 +190,10 @@ def get_step_output_schema(request, workflow_id: int, step_id: str):
                     'output_schema', 'output_schema__inherits_from'
                 ).get(id=ref_action_id)
                 schema = _resolve_action_schema(ref_action, schema_registry)
+                if schema is None:
+                    schema = _get_platform_convention(ref_action, schema_registry)
             except Action.DoesNotExist:
                 pass
-        if schema is None:
-            schema = schema_registry.get_platform_convention('aap')
     elif step_type == 'service_call':
         integration_type = step.get('integration_type', '')
         operation = step.get('operation', '')
@@ -243,16 +258,37 @@ def get_available_variables(request, workflow_id: int):
         if step_type == 'platform':
             ref_id = step.get('referenced_action_id')
             if ref_id and ref_id in ref_actions:
-                schema = _resolve_action_schema(ref_actions[ref_id], schema_registry)
-            if schema is None:
-                schema = schema_registry.get_platform_convention('aap')
+                ref_action = ref_actions[ref_id]
+                schema = _resolve_action_schema(ref_action, schema_registry)
+                if schema is None:
+                    schema = _get_platform_convention(ref_action, schema_registry)
         elif step_type == 'service_call':
             integration_type = step.get('integration_type', '')
             operation = step.get('operation', '')
             if integration_type and operation:
                 schema = schema_registry.get_integration_schema(integration_type, operation)
 
-        if schema and schema.get('output_fields'):
+        # Priorité aux clés output_mapping déclarées par l'utilisateur.
+        # Elles représentent exactement les variables exposées à {{ steps.<id>.<key> }}.
+        output_mapping = step.get('output_mapping') or {}
+        if output_mapping:
+            variables = [
+                {
+                    'name': k,
+                    'path': v if isinstance(v, str) else str(v),
+                    'type': 'string',
+                    'description': f'output_mapping: {v}',
+                }
+                for k, v in output_mapping.items()
+                if isinstance(k, str) and k
+            ]
+            result.append({
+                'step_id': step_id,
+                'step_name': step_name,
+                'step_type': step_type,
+                'variables': variables,
+            })
+        elif schema and schema.get('output_fields'):
             result.append({
                 'step_id': step_id,
                 'step_name': step_name,

@@ -274,22 +274,153 @@ def _finalize_execution_if_done(execution: Execution, outcome: ExecutionStatus) 
 
 
 @shared_task(
+    name="executions.tasks.execute_single_runnable_step",
+    max_retries=0,
+    soft_time_limit=110,
+    time_limit=150,
+)
+def execute_single_runnable_step(runnable_step_id: int) -> dict:
+    """Execute a single claimed runnable step.
+
+    Called by process_runnable_steps for each claimed step so that parallel
+    workflow branches can execute concurrently on different Celery workers.
+    """
+    from executions.infra.work_queue import RunnableStep  # noqa: PLC0415  # type: ignore[attr-defined]
+
+    try:
+        runnable = RunnableStep.objects.get(id=runnable_step_id)
+    except RunnableStep.DoesNotExist:
+        logger.error("worker_runnable_step_not_found", runnable_step_id=runnable_step_id)
+        return {"status": "not_found", "runnable_step_id": runnable_step_id}
+
+    try:
+        exec_step = ExecutionStep.objects.select_related(
+            'execution', 'execution__action', 'execution__user',
+        ).get(id=runnable.execution_step_id)
+    except ExecutionStep.DoesNotExist:
+        logger.error(
+            "worker_execution_step_not_found",
+            runnable_id=runnable.id,
+            execution_step_id=runnable.execution_step_id,
+        )
+        WorkQueue.release(runnable.execution_step_id)
+        return {"status": "step_not_found", "execution_step_id": runnable.execution_step_id}
+
+    execution = exec_step.execution
+
+    # Heartbeat — update execution.updated_at for staleness detection
+    ExecutionRepository.touch_heartbeat(execution.id)
+
+    # Idempotency guard: skip already processed steps
+    if exec_step.status in (ExecutionStepStatus.COMPLETED, ExecutionStepStatus.FAILED, ExecutionStepStatus.SKIPPED):
+        logger.info(
+            "worker_step_already_processed",
+            execution_step_id=exec_step.id,
+            status=exec_step.status,
+        )
+        WorkQueue.release(runnable.execution_step_id)
+        return {"status": "already_processed", "execution_step_id": exec_step.id}
+
+    # Skip if execution is no longer RUNNING
+    execution.refresh_from_db(fields=['status'])
+    if execution.status != ExecutionStatus.RUNNING:
+        logger.info(
+            "worker_execution_not_running",
+            execution_id=execution.id,
+            execution_status=execution.status,
+            execution_step_id=exec_step.id,
+        )
+        WorkQueue.release(runnable.execution_step_id)
+        return {"status": "execution_not_running", "execution_id": execution.id}
+
+    # Build runtime and find step config
+    try:
+        runtime, step_config_by_id = _build_runtime_for_step(execution, exec_step)
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            "worker_runtime_build_failed",
+            execution_id=execution.id,
+            execution_step_id=exec_step.id,
+            error=str(exc),
+            exc_info=True,
+        )
+        exec_step.status = ExecutionStepStatus.FAILED
+        exec_step.completed_at = timezone.now()
+        exec_step.error_message = f"Runtime build failed: {exc}"
+        exec_step.save(update_fields=['status', 'completed_at', 'error_message'])
+        WorkQueue.release(runnable.execution_step_id)
+        _finalize_execution_if_done(execution, ExecutionStatus.FAILED)
+        return {"status": "runtime_build_failed", "execution_step_id": exec_step.id}
+
+    step_config = step_config_by_id.get(exec_step.config_step_id or "")
+    if not step_config:
+        logger.error(
+            "worker_step_config_not_found",
+            execution_id=execution.id,
+            config_step_id=exec_step.config_step_id,
+        )
+        exec_step.status = ExecutionStepStatus.FAILED
+        exec_step.completed_at = timezone.now()
+        exec_step.error_message = f"Step config not found: {exec_step.config_step_id}"
+        exec_step.save(update_fields=['status', 'completed_at', 'error_message'])
+        WorkQueue.release(runnable.execution_step_id)
+        _finalize_execution_if_done(execution, ExecutionStatus.FAILED)
+        return {"status": "config_not_found", "execution_step_id": exec_step.id}
+
+    # Execute the step
+    try:
+        outcome, next_step_ids = runtime.execute_single_step(exec_step, step_config)
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            "worker_step_execution_failed",
+            execution_id=execution.id,
+            execution_step_id=exec_step.id,
+            error=str(exc),
+            exc_info=True,
+        )
+        if exec_step.status not in (ExecutionStepStatus.COMPLETED, ExecutionStepStatus.FAILED):
+            exec_step.status = ExecutionStepStatus.FAILED
+            exec_step.completed_at = timezone.now()
+            exec_step.error_message = str(exc)
+            exec_step.set_output({"logs": f"[ERROR] {exc}"})
+            exec_step.save(update_fields=['status', 'completed_at', 'error_message', 'output'])
+        outcome = ExecutionStatus.FAILED
+        next_step_ids = []
+
+    # Dequeue the processed step
+    WorkQueue.release(runnable.execution_step_id)
+
+    # Enqueue next steps (if not WAITING / no next)
+    if next_step_ids:
+        enqueued = _enqueue_next_steps(runtime, execution, next_step_ids, step_config_by_id)
+        if enqueued == 0:
+            _finalize_execution_if_done(execution, outcome)
+    else:
+        # No next steps — check if execution is done
+        _finalize_execution_if_done(execution, outcome)
+
+    return {"status": "processed", "execution_step_id": exec_step.id, "outcome": outcome}
+
+
+@shared_task(
     bind=True,
     name="executions.tasks.process_runnable_steps",
     max_retries=0,
-    soft_time_limit=120,
-    time_limit=180,
+    soft_time_limit=30,
+    time_limit=60,
 )
 def process_runnable_steps(self: Any, batch_size: int = 5) -> dict:
-    """Claim and execute runnable steps from the queue.
+    """Claim runnable steps and dispatch each as an independent Celery task.
 
     Origine : Story 78.5 (tasks/orchestration_worker.py).
     Relocalisation : Story 85.3 (app/orchestrator.py — couche applicative).
-    Designed to be called periodically via Celery Beat or on-demand.
+
+    Each claimed step is dispatched via execute_single_runnable_step so that
+    parallel workflow branches execute concurrently on different workers.
     """
     worker_id = f"worker-{uuid.uuid4().hex[:8]}"
 
-    # Story 78.16: Emit queue depth metrics before claiming
+    # Emit queue depth metrics before claiming
     depth = get_runnable_queue_depth()
     logger.info(
         "process_runnable_steps_metrics",
@@ -302,123 +433,28 @@ def process_runnable_steps(self: Any, batch_size: int = 5) -> dict:
     claimed = WorkQueue.claim(batch_size=batch_size, worker_id=worker_id)
     if not claimed:
         return {
-            "processed": 0,
+            "dispatched": 0,
             "worker_id": worker_id,
             "runnable_queue_depth": depth["pending"] + depth["running"],
             "runnable_expired_leases": depth["expired_leases"],
         }
 
-    processed = 0
+    dispatched = 0
     for runnable in claimed:
-        try:
-            exec_step = ExecutionStep.objects.select_related(
-                'execution', 'execution__action', 'execution__user',
-            ).get(id=runnable.execution_step_id)
-        except ExecutionStep.DoesNotExist:
-            logger.error(
-                "worker_execution_step_not_found",
-                runnable_id=runnable.id,
-                execution_step_id=runnable.execution_step_id,
-            )
-            WorkQueue.release(runnable.execution_step_id)
-            continue
-
-        execution = exec_step.execution
-
-        # Story 78.5 T2: Heartbeat — update execution.updated_at for staleness detection
-        ExecutionRepository.touch_heartbeat(execution.id)
-
-        # Idempotency guard: skip already processed steps
-        if exec_step.status in (ExecutionStepStatus.COMPLETED, ExecutionStepStatus.FAILED, ExecutionStepStatus.SKIPPED):
-            logger.info(
-                "worker_step_already_processed",
-                execution_step_id=exec_step.id,
-                status=exec_step.status,
-            )
-            WorkQueue.release(runnable.execution_step_id)
-            continue
-
-        # Skip if execution is no longer RUNNING
-        execution.refresh_from_db(fields=['status'])
-        if execution.status != ExecutionStatus.RUNNING:
-            logger.info(
-                "worker_execution_not_running",
-                execution_id=execution.id,
-                execution_status=execution.status,
-                execution_step_id=exec_step.id,
-            )
-            WorkQueue.release(runnable.execution_step_id)
-            continue
-
-        # Build runtime and find step config
-        try:
-            runtime, step_config_by_id = _build_runtime_for_step(execution, exec_step)
-        except Exception as exc:  # noqa: BLE001
-            logger.error(
-                "worker_runtime_build_failed",
-                execution_id=execution.id,
-                execution_step_id=exec_step.id,
-                error=str(exc),
-                exc_info=True,
-            )
-            exec_step.status = ExecutionStepStatus.FAILED
-            exec_step.completed_at = timezone.now()
-            exec_step.error_message = f"Runtime build failed: {exc}"
-            exec_step.save(update_fields=['status', 'completed_at', 'error_message'])
-            WorkQueue.release(runnable.execution_step_id)
-            _finalize_execution_if_done(execution, ExecutionStatus.FAILED)
-            continue
-
-        step_config = step_config_by_id.get(exec_step.config_step_id or "")
-        if not step_config:
-            logger.error(
-                "worker_step_config_not_found",
-                execution_id=execution.id,
-                config_step_id=exec_step.config_step_id,
-            )
-            exec_step.status = ExecutionStepStatus.FAILED
-            exec_step.completed_at = timezone.now()
-            exec_step.error_message = f"Step config not found: {exec_step.config_step_id}"
-            exec_step.save(update_fields=['status', 'completed_at', 'error_message'])
-            WorkQueue.release(runnable.execution_step_id)
-            _finalize_execution_if_done(execution, ExecutionStatus.FAILED)
-            continue
-
-        # Execute the step
-        try:
-            outcome, next_step_ids = runtime.execute_single_step(exec_step, step_config)
-        except Exception as exc:  # noqa: BLE001
-            logger.error(
-                "worker_step_execution_failed",
-                execution_id=execution.id,
-                execution_step_id=exec_step.id,
-                error=str(exc),
-                exc_info=True,
-            )
-            if exec_step.status not in (ExecutionStepStatus.COMPLETED, ExecutionStepStatus.FAILED):
-                exec_step.status = ExecutionStepStatus.FAILED
-                exec_step.completed_at = timezone.now()
-                exec_step.error_message = str(exc)
-                exec_step.save(update_fields=['status', 'completed_at', 'error_message'])
-            outcome = ExecutionStatus.FAILED
-            next_step_ids = []
-
-        # Dequeue the processed step
-        WorkQueue.release(runnable.execution_step_id)
-
-        # Enqueue next steps (if not WAITING / no next)
-        if next_step_ids:
-            enqueued = _enqueue_next_steps(runtime, execution, next_step_ids, step_config_by_id)
-            if enqueued == 0:
-                _finalize_execution_if_done(execution, outcome)
-        else:
-            # No next steps — check if execution is done
-            _finalize_execution_if_done(execution, outcome)
-
-        processed += 1
+        execute_single_runnable_step.apply_async(
+            args=[runnable.id],
+            queue="default",
+        )
+        dispatched += 1
+        logger.info(
+            "worker_step_dispatched",
+            runnable_step_id=runnable.id,
+            execution_step_id=runnable.execution_step_id,
+            worker_id=worker_id,
+        )
 
     return {
-        "processed": processed,
+        "dispatched": dispatched,
         "worker_id": worker_id,
         "runnable_queue_depth": depth["pending"] + depth["running"],
         "runnable_expired_leases": depth["expired_leases"],

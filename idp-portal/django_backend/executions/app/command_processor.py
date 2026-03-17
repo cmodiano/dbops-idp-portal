@@ -69,7 +69,7 @@ class WorkflowCommandService:
             command = WorkflowCommand.objects.create(
                 execution_id=execution_id,
                 command_type=command_type,
-                payload=payload or {},
+                payload=payload or {},  # type: ignore[misc]
                 created_by=created_by,
             )
 
@@ -99,11 +99,21 @@ class WorkflowCommandService:
         processed = 0
 
         with transaction.atomic():
-            commands = list(
+            # Oracle does not support LIMIT/OFFSET with SELECT FOR UPDATE.
+            # Step 1: fetch candidate IDs with LIMIT (no lock).
+            candidate_ids = list(
                 WorkflowCommand.objects
                 .filter(status=WorkflowCommandStatus.PENDING)
                 .order_by("created_at")
-                .select_for_update(skip_locked=True)[:batch_size]
+                .values_list('id', flat=True)[:batch_size]
+            )
+            if not candidate_ids:
+                return 0
+            # Step 2: lock specific rows by PK (no LIMIT needed).
+            commands = list(
+                WorkflowCommand.objects
+                .filter(id__in=candidate_ids)
+                .select_for_update(skip_locked=True)
             )
 
             for cmd in commands:

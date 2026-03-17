@@ -215,7 +215,7 @@ class SimulationService:
                 for log_line in logs:
                     time.sleep(log_delay)
                     accumulated.append(log_line)
-                    step.output = "\n".join(accumulated)
+                    step.set_output({"logs": "\n".join(accumulated)})
                     step.save(update_fields=['output'])
 
                 # Decide failure (only on last step for realism)
@@ -223,7 +223,9 @@ class SimulationService:
 
                 if should_fail:
                     step.status = ExecutionStepStatus.FAILED
-                    step.output = (step.output or "") + "\n[ERROR] Échec de l'exécution (simulation)"
+                    existing = step.get_output() or {}
+                    existing_logs = existing.get("logs", "") if isinstance(existing, dict) else ""
+                    step.set_output({"logs": (existing_logs + "\n[ERROR] Échec de l'exécution (simulation)").strip()})
                     step.completed_at = timezone.now()
                     step.save(update_fields=['status', 'output', 'completed_at'])
                     cls._broadcast_step(execution.id, step)

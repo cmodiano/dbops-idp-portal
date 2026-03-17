@@ -10,7 +10,7 @@ import type { FC } from 'react';
 import { Divider, Input, InputNumber, Select, Typography } from 'antd';
 import type { WorkflowStepNodeData } from '../WorkflowStepNode';
 import { KeyValueEditor } from './KeyValueEditor';
-import { ConditionConfig } from './ConditionConfig';
+import type { AvailableVariablesStep } from '../../../services/output_schema_service';
 import { MappingHelpPopover } from './MappingHelpPopover';
 import { useInputMappingWarnings } from '../../../hooks/useInputMappingWarnings';
 
@@ -28,6 +28,8 @@ export interface HttpRequestStepConfigProps {
   availableStepIds?: string[];
   /** Story 63.3: ID du workflow pour le VariablePicker. */
   workflowId?: number;
+  /** Variables locales dérivées du output_mapping des nodes en mémoire. */
+  localStepVariables?: AvailableVariablesStep[];
 }
 
 export const HttpRequestStepConfig: FC<HttpRequestStepConfigProps> = ({
@@ -37,6 +39,7 @@ export const HttpRequestStepConfig: FC<HttpRequestStepConfigProps> = ({
   availableStepOptions,
   availableStepIds,
   workflowId,
+  localStepVariables,
 }) => {
   // Filtrer le step courant de la liste des étapes disponibles (AC4: "étapes précédentes")
   const filteredStepOptions = useMemo(
@@ -132,6 +135,7 @@ export const HttpRequestStepConfig: FC<HttpRequestStepConfigProps> = ({
           workflowId={workflowId}
           currentStepId={data.step_id}
           availableStepIds={availableStepIds}
+          localStepVariables={localStepVariables}
         />
       </div>
 
@@ -149,14 +153,6 @@ export const HttpRequestStepConfig: FC<HttpRequestStepConfigProps> = ({
         />
       </div>
 
-      <Divider style={{ margin: '8px 0' }} />
-
-      {/* Condition */}
-      <ConditionConfig
-        value={data.condition}
-        onChange={(v) => onUpdate({ condition: v })}
-        disabled={disabled}
-      />
     </div>
   );
 };

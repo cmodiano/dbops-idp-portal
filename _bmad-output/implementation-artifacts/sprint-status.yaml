@@ -1082,7 +1082,7 @@ development_status:
     88-2-quick-fixes-frontend-bugs-erreurs: done # BUG-FE-01, ERR-FE-01
     88-3-bugs-erreurs-restants: done # BUG-BE-02/03, BUG-FE-02/03, ERR-FE-02/03 — code review 2026-03-16
     88-4-securite-restante-low: done # SEC-BE-02/03, SEC-FE-01 — code review 2026-03-16
-    88-5-refactoring-god-class-container-runtime: backlog # SMELL-BE-01
+    88-5-refactoring-god-class-container-runtime: in-progress # SMELL-BE-01
     88-6-refactoring-code-smells: backlog # SMELL-BE-02, SMELL-FE-01, SMELL-FE-02
     88-7-performance-servicenow-capabilities: backlog # PERF-BE-01, PERF-FE-01
     88-8-architecture-imports-routing: backlog # ARCH-BE-01, ARCH-BE-02

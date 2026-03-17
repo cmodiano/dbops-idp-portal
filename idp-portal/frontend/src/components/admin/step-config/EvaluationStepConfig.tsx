@@ -10,7 +10,6 @@ import type { FC } from 'react';
 import { Alert, Divider, Select, Spin, Typography } from 'antd';
 import type { WorkflowStepNodeData } from '../WorkflowStepNode';
 import { KeyValueEditor } from './KeyValueEditor';
-import { ConditionConfig } from './ConditionConfig';
 import { MappingHelpPopover } from './MappingHelpPopover';
 import { useInputMappingWarnings } from '../../../hooks/useInputMappingWarnings';
 import { useBusinessRulePoliciesActive } from '../../../hooks/useBusinessRulePoliciesAdmin';
@@ -93,14 +92,6 @@ export const EvaluationStepConfig: FC<EvaluationStepConfigProps> = ({
         />
       </div>
 
-      <Divider style={{ margin: '8px 0' }} />
-
-      {/* Condition */}
-      <ConditionConfig
-        value={data.condition}
-        onChange={(v) => onUpdate({ condition: v })}
-        disabled={disabled}
-      />
     </div>
   );
 };

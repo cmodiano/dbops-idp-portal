@@ -9,12 +9,14 @@ import {
   getIntegrationsCapabilities,
   getWorkflowStepsCapabilities,
 } from '../services/capabilities_service';
-import type { PlatformCapability, ServiceCapability, WorkflowStepCapability } from '../services/capabilities_service';
+import type { PlatformCapability, ServiceCapability, WorkflowStepCapability, CommonStepSchema } from '../services/capabilities_service';
 
 export interface CapabilitiesState {
   platforms: PlatformCapability[];
   services: ServiceCapability[];
   stepTypes: WorkflowStepCapability[];
+  /** Champs communs à tous les types de steps, pilotés par le backend. */
+  commonSchema?: CommonStepSchema;
 }
 
 // Cache module-level : une seule requête par session frontend
@@ -42,6 +44,7 @@ async function fetchCapabilities(): Promise<CapabilitiesState> {
       platforms: integrations.platforms,
       services: integrations.services,
       stepTypes: workflowSteps.step_types,
+      commonSchema: workflowSteps.common_schema,
     };
     _pending = null;
     return _cache;

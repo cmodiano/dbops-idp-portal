@@ -221,6 +221,58 @@ export function workflowStepsToReactFlow(
   return { nodes: [startNode, ...workflowNodes, endNode], edges };
 }
 
+/**
+ * Compute display order for each workflow node using BFS from entry nodes.
+ * Entry nodes = workflow nodes with no incoming edges from other workflow nodes.
+ * This ensures order reflects the logical flow position, not the React Flow array position.
+ */
+function computeTopologicalOrder(
+  nodes: Node[],
+  edges: Edge[],
+): Map<string, number> {
+  const workflowNodeIds = new Set(
+    nodes
+      .filter((n) => n.id !== START_NODE_ID && n.id !== END_NODE_ID)
+      .map((n) => n.id),
+  );
+
+  // Find nodes that are targeted by other workflow nodes (have incoming edges)
+  const hasIncoming = new Set<string>();
+  for (const edge of edges) {
+    if (workflowNodeIds.has(edge.source) && workflowNodeIds.has(edge.target)) {
+      hasIncoming.add(edge.target);
+    }
+  }
+
+  // Entry nodes: workflow nodes with no incoming edges from other workflow nodes
+  const entryNodes = [...workflowNodeIds].filter((id) => !hasIncoming.has(id));
+
+  // BFS from entry nodes to assign monotonically increasing order
+  const orderMap = new Map<string, number>();
+  const queue = [...entryNodes];
+  let counter = 1;
+
+  while (queue.length > 0) {
+    const nodeId = queue.shift()!;
+    if (orderMap.has(nodeId)) continue;
+    orderMap.set(nodeId, counter++);
+    for (const edge of edges) {
+      if (edge.source === nodeId && workflowNodeIds.has(edge.target) && !orderMap.has(edge.target)) {
+        queue.push(edge.target);
+      }
+    }
+  }
+
+  // Assign remaining disconnected nodes (shouldn't happen in a valid graph, but defensive)
+  for (const id of workflowNodeIds) {
+    if (!orderMap.has(id)) {
+      orderMap.set(id, counter++);
+    }
+  }
+
+  return orderMap;
+}
+
 /** Convert React Flow nodes + edges → WorkflowStep[] (excludes start/end visual nodes) */
 export function reactFlowToWorkflowSteps(
   nodes: Node[],
@@ -230,6 +282,8 @@ export function reactFlowToWorkflowSteps(
   const workflowNodes = nodes.filter(
     (n) => n.id !== START_NODE_ID && n.id !== END_NODE_ID
   );
+
+  const topologicalOrder = computeTopologicalOrder(nodes, edges);
 
   return workflowNodes.map((node, index) => {
     const data = node.data as unknown as WorkflowStepNodeData;
@@ -245,7 +299,7 @@ export function reactFlowToWorkflowSteps(
     const stepType: WorkflowStepType = data.step_type ?? 'platform';
 
     const baseStep: WorkflowStep = {
-      order: index + 1,
+      order: topologicalOrder.get(node.id) ?? index + 1,
       step_id: node.id,
       step_type: stepType,
       name: data.name ?? null,

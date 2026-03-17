@@ -347,3 +347,21 @@ if _runnable_steps_schedule > 0:
         'task': 'executions.tasks.process_runnable_steps',
         'schedule': _runnable_steps_schedule,
     }
+
+# Story 78.5: WorkflowCommand processor — approve/reject/cancel commands written by API views.
+# Default interval = 5s for low-latency approval processing. Override with CELERY_BEAT_WORKFLOW_COMMANDS_INTERVAL.
+try:
+    _workflow_commands_schedule = float(os.getenv('CELERY_BEAT_WORKFLOW_COMMANDS_INTERVAL', '5.0'))
+except ValueError as exc:
+    logger.warning(
+        "celery_beat_invalid_workflow_commands_interval: value=%r error=%s fallback=5.0",
+        os.getenv('CELERY_BEAT_WORKFLOW_COMMANDS_INTERVAL'),
+        exc,
+    )
+    _workflow_commands_schedule = 5.0
+
+if _workflow_commands_schedule > 0:
+    app.conf.beat_schedule['process-pending-workflow-commands'] = {
+        'task': 'executions.tasks.process_pending_workflow_commands',
+        'schedule': _workflow_commands_schedule,
+    }

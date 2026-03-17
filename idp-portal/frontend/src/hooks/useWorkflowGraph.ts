@@ -8,6 +8,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import type { AvailableVariablesStep } from '../services/output_schema_service';
 import { App } from 'antd';
 import {
   addEdge,
@@ -77,6 +78,8 @@ export interface UseWorkflowGraphReturn {
   workflowStepIds: string[];
   /** Story 57.19: Pre-computed step options with readable labels (for gate context_from, step_id display) */
   workflowStepOptions: { value: string; label: string }[];
+  /** Variables locales dérivées du output_mapping des nodes en mémoire (pas de sauvegarde requise). */
+  localStepVariables: AvailableVariablesStep[];
 }
 
 /**
@@ -339,6 +342,32 @@ export function useWorkflowGraph({
     [nodes]
   );
 
+  // Variables locales dérivées du output_mapping des nodes en mémoire.
+  // Permet au VariablePicker d'afficher les outputs déclarés sans avoir à sauvegarder d'abord.
+  const localStepVariables = useMemo((): AvailableVariablesStep[] =>
+    nodes
+      .filter((n) => n.id !== START_NODE_ID && n.id !== END_NODE_ID)
+      .flatMap((n) => {
+        const data = n.data as unknown as WorkflowStepNodeData;
+        const outputMapping = data.output_mapping as Record<string, string> | null | undefined;
+        if (!outputMapping || Object.keys(outputMapping).length === 0) return [];
+        return [{
+          step_id: n.id,
+          step_name: data.name || n.id,
+          step_type: data.step_type ?? 'platform',
+          variables: Object.entries(outputMapping)
+            .filter(([k]) => Boolean(k))
+            .map(([k, v]) => ({
+              name: k,
+              path: typeof v === 'string' ? v : String(v),
+              type: 'string',
+              description: typeof v === 'string' ? v : String(v),
+            })),
+        }];
+      }),
+    [nodes],
+  );
+
   // Story 57.19: Pre-computed step options with readable labels (order derived from array index)
   const workflowStepOptions = useMemo(
     () => {
@@ -523,5 +552,6 @@ export function useWorkflowGraph({
     handleAddSpecialStep,
     workflowStepIds,
     workflowStepOptions,
+    localStepVariables,
   };
 }

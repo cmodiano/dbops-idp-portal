@@ -7,6 +7,7 @@ from executions.app.orchestrator import (  # noqa: F401
     _enqueue_next_steps,
     _finalize_execution_if_done,
     _force_finalize_execution,
+    execute_single_runnable_step,
     process_runnable_steps,
 )
 
@@ -15,5 +16,6 @@ __all__ = [
     "_enqueue_next_steps",
     "_finalize_execution_if_done",
     "_force_finalize_execution",
+    "execute_single_runnable_step",
     "process_runnable_steps",
 ]

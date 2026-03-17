@@ -165,6 +165,7 @@ function WorkflowBuilderCanvasInner({
         availableStepIds={graph.workflowStepIds}
         availableStepOptions={graph.workflowStepOptions}
         workflowId={workflowId}
+        localStepVariables={graph.localStepVariables}
         incomingEdgeCount={selectedNodeIncomingEdgeCount}
       />
 

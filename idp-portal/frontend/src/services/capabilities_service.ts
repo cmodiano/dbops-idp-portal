@@ -60,8 +60,14 @@ export interface CapabilitiesIntegrationsData {
   services: ServiceCapability[];
 }
 
+export interface CommonStepSchema {
+  properties?: Record<string, { type?: string; title?: string; description?: string; ui_widget?: string }>;
+}
+
 export interface CapabilitiesWorkflowStepsData {
   step_types: WorkflowStepCapability[];
+  /** Champs communs à tous les types de steps, pilotés par le backend. */
+  common_schema?: CommonStepSchema;
 }
 
 // ─── Functions ─────────────────────────────────────────────────────────────────
@@ -81,5 +87,5 @@ export async function getIntegrationsCapabilities(): Promise<CapabilitiesIntegra
  */
 export async function getWorkflowStepsCapabilities(): Promise<CapabilitiesWorkflowStepsData> {
   const res = await apiFetch<CapabilitiesWorkflowStepsData>('/capabilities/workflow-steps/');
-  return res ?? { step_types: [] };
+  return res ?? { step_types: [], common_schema: undefined };
 }

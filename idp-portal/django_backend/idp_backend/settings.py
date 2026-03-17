@@ -729,6 +729,18 @@ CELERY_TASK_ROUTES = {
     'executions.tasks.trigger_platform_job': {'queue': 'default'},
     # Story 57.7 — Reprise workflow après gate (approbation) — doit être sur default (worker écoute cette queue)
     'executions.tasks.resume_container_workflow_from_gate': {'queue': 'default'},
+    # Story 78.5 — WorkQueue consumer et command processor
+    'executions.tasks.process_runnable_steps': {'queue': 'default'},
+    'executions.tasks.execute_single_runnable_step': {'queue': 'default'},
+    'executions.tasks.process_pending_workflow_commands': {'queue': 'default'},
+    # Autres tasks Beat
+    'executions.tasks.reconcile_stale_executions': {'queue': 'default'},
+    'executions.tasks.process_outbox_entries': {'queue': 'default'},
+    'executions.tasks.purge_old_platform_logs': {'queue': 'default'},
+    'executions.tasks.purge_old_workflow_events': {'queue': 'default'},
+    'core.tasks.flush_splunk_logging_handler': {'queue': 'default'},
+    'integrations.tasks.health_check_all_integrations': {'queue': 'default'},
+    'integrations.tasks.warmup_vault_secrets_cache': {'queue': 'default'},
 }
 
 del _adapters_pkg, _adapter_registry  # nettoyer le namespace settings

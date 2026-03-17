@@ -655,6 +655,23 @@ def _reconcile_execution(execution: Any) -> str:
 
 
 @shared_task(
+    name="executions.tasks.process_pending_workflow_commands",
+    max_retries=0,
+    soft_time_limit=60,
+    time_limit=120,
+)
+def process_pending_workflow_commands(batch_size: int = 50) -> dict:
+    """Process pending WorkflowCommands (approve/reject/cancel) written by API views.
+
+    Scheduled frequently (default 5s) so workflow gates and approvals are
+    processed with low latency instead of waiting for reconcile (300s).
+    """
+    from executions.app.command_processor import WorkflowCommandService  # noqa: PLC0415
+    processed = WorkflowCommandService.process_pending_commands(batch_size=batch_size)
+    return {"processed": processed}
+
+
+@shared_task(
     name="executions.tasks.reconcile_stale_executions",
     soft_time_limit=_LIMITS["soft"],
     time_limit=_LIMITS["hard"],

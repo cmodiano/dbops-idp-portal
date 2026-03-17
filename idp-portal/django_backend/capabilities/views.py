@@ -98,4 +98,17 @@ def get_workflow_steps_capabilities(request: Request) -> Response:
             entry['variants'] = defn.variants_builder()
         step_types.append(entry)
 
-    return Response({'data': {'step_types': step_types}})
+    # Schéma commun à tous les types de steps — champs gérés par StepConfigPanel directement.
+    # ui_widget indique au frontend quel composant utiliser pour le rendu.
+    common_schema = {
+        'properties': {
+            'condition': {
+                'type': 'object',
+                'title': "Condition d'environnement",
+                'description': "Filtrer l'exécution selon l'environnement. Laisser vide = tous les environnements.",
+                'ui_widget': 'environment_condition',
+            },
+        },
+    }
+
+    return Response({'data': {'step_types': step_types, 'common_schema': common_schema}})
