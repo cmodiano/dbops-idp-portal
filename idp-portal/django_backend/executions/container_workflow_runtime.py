@@ -51,6 +51,9 @@ from executions.container_routing import (
 from executions.container_parallel import apply_join_policy as _parallel_apply_join_policy
 from executions.domain.state_machine import assert_execution_transition, assert_step_transition
 # Re-exports pour platform_step_executor (accès via _cwr_module pour le patching en tests)
+from executions.simulation_service import SimulationService  # noqa: F401
+from executions.tasks.trigger import trigger_platform_job  # noqa: F401
+from executions.tasks.polling import get_platform_queue  # noqa: F401
 
 logger = structlog.get_logger(__name__)
 
