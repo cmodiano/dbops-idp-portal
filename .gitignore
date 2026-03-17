@@ -22,3 +22,5 @@ idp-portal/django_backend/coverage.json
 # MkDocs build output
 site/
 
+# idp-portal
+idp-portal/django_backend/staticfiles/
