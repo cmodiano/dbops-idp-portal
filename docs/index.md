@@ -15,7 +15,9 @@ Portail développeur interne pour l'orchestration d'opérations de bases de donn
 | Guide développeur | [developer-guide.md](architecture/developer-guide.md) | Référence technique pour les développeurs |
 | API | [documentation.md](api/documentation.md) | Swagger UI, contrats, self-service |
 | Backend | [README.md](backend/README.md) | Modules Django, services, tests |
+| Extensibilite | [adding-platforms-services-gates.md](backend/adding-platforms-services-gates.md) | Ajouter des plateformes, services et gates |
 | Frontend | [README.md](frontend/README.md) | Composants React, routing, state |
+| Architecture schema-driven | [schema-driven-architecture.md](frontend/schema-driven-architecture.md) | Frontend pilote par les schemas backend |
 | Intégrations | [index.md](integrations/index.md) | AAP, ServiceNow, Terraform, GitHub, Azure |
 | Opérations | [deployment.md](operations/deployment.md) | Déploiement, exploitation production |
 | Sécurité | [architecture-global.md](security/architecture-global.md) | Architecture sécurité, compliance |
