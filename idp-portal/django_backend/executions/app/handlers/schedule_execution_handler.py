@@ -27,6 +27,7 @@ via ExecutionRequest.parameters.
 from __future__ import annotations
 
 import re
+import zoneinfo
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -55,19 +56,48 @@ def _parse_offset(offset_str: str) -> timedelta:
     return timedelta(**{_OFFSET_UNITS[unit]: amount})
 
 
-def _parse_scheduled_datetime(date_str: str, time_str: str | None = None) -> datetime:
-    """Parse date and optional time strings into a timezone-aware datetime.
+def _parse_scheduled_datetime(
+    date_str: str,
+    time_str: str | None = None,
+    tz_name: str | None = None,
+) -> datetime:
+    """Parse date and optional time strings into a UTC-aware datetime.
 
-    Supports ISO 8601 full datetime, or date + optional time separately.
+    Args:
+        date_str: Date string (YYYY-MM-DD or full ISO 8601).
+        time_str: Optional time string (HH:MM or HH:MM:SS).
+        tz_name: IANA timezone name for the input (e.g. 'America/Montreal').
+                 If None, falls back to Django settings.TIME_ZONE (UTC).
+
+    The user enters date/time in their local timezone. This function interprets
+    the naive datetime in that timezone, then converts to UTC for DB storage.
     """
     if not date_str:
         raise ValueError("scheduled_date is required")
 
+    # Resolve the user's timezone (or fall back to Django default = UTC)
+    user_tz: zoneinfo.ZoneInfo | None = None
+    if tz_name:
+        try:
+            user_tz = zoneinfo.ZoneInfo(tz_name)
+        except (KeyError, zoneinfo.ZoneInfoNotFoundError):
+            logger.warning(
+                "schedule_execution_invalid_timezone",
+                timezone=tz_name,
+            )
+            # Fall through to Django default
+
     # Try full ISO datetime first (e.g. from a previous step output)
     try:
         dt = datetime.fromisoformat(str(date_str))
-        if dt.tzinfo is None:
-            dt = timezone.make_aware(dt)
+        if dt.tzinfo is not None:
+            # Already tz-aware (e.g. "2025-07-15T22:00:00-04:00") → convert to UTC
+            return dt.astimezone(zoneinfo.ZoneInfo('UTC'))
+        # Naive ISO datetime → interpret in user's timezone
+        if user_tz:
+            dt = dt.replace(tzinfo=user_tz)
+            return dt.astimezone(zoneinfo.ZoneInfo('UTC'))
+        dt = timezone.make_aware(dt)
         return dt
     except (ValueError, TypeError):
         pass
@@ -90,8 +120,13 @@ def _parse_scheduled_datetime(date_str: str, time_str: str | None = None) -> dat
     else:
         dt = datetime.combine(base_date, datetime.min.time())
 
-    if dt.tzinfo is None:
-        dt = timezone.make_aware(dt)
+    # Interpret in user's local timezone, then convert to UTC for storage
+    if user_tz:
+        dt = dt.replace(tzinfo=user_tz)
+        return dt.astimezone(zoneinfo.ZoneInfo('UTC'))
+
+    # No user timezone provided → interpret in Django default (UTC)
+    dt = timezone.make_aware(dt)
     return dt
 
 
@@ -151,7 +186,11 @@ class ScheduleExecutionHandler:
         schedule_config = step_config.get('schedule_config', {}) or {}
 
         # --- Determine scheduled_at datetime ---
-        scheduled_at = self._resolve_scheduled_at(schedule_config, resolved_params)
+        # schedule_timezone allows the user to specify their local timezone
+        # (e.g. 'America/Montreal') so that date/time inputs are correctly
+        # converted to UTC before DB storage.
+        user_timezone = resolved_params.get('schedule_timezone')
+        scheduled_at = self._resolve_scheduled_at(schedule_config, resolved_params, user_timezone)
 
         # --- Extract scheduling metadata from resolved_params ---
         schedule_name = resolved_params.pop('schedule_name', None)
@@ -159,6 +198,8 @@ class ScheduleExecutionHandler:
         scheduled_date = resolved_params.pop('scheduled_date', None)
         scheduled_time = resolved_params.pop('scheduled_time', None)
         duration_minutes = resolved_params.pop('duration_minutes', None)
+        # Pop timezone so it doesn't leak into action parameters
+        resolved_params.pop('schedule_timezone', None)
 
         # --- Build execution parameters for the target action ---
         # parameter_mapping keys in step_config define which resolved_params
@@ -260,8 +301,14 @@ class ScheduleExecutionHandler:
         self,
         schedule_config: dict,
         resolved_params: dict,
+        user_timezone: str | None = None,
     ) -> datetime | None:
-        """Resolve the scheduled_at datetime from schedule_config and resolved_params."""
+        """Resolve the scheduled_at datetime from schedule_config and resolved_params.
+
+        All returned datetimes are UTC-aware for consistent DB storage.
+        user_timezone (IANA name, e.g. 'America/Montreal') is used to
+        interpret naive date/time inputs from the user's local timezone.
+        """
         source = schedule_config.get('schedule_source', 'input_mapping')
 
         if source == 'fixed_offset':
@@ -276,13 +323,17 @@ class ScheduleExecutionHandler:
                 raise ValueError(
                     f"schedule_source='parameter' but '{param_name}' not found in resolved_params"
                 )
-            return _parse_scheduled_datetime(str(raw_value))
+            return _parse_scheduled_datetime(str(raw_value), tz_name=user_timezone)
 
         # Default: 'input_mapping' — date/time come from resolved_params directly
         scheduled_date = resolved_params.get('scheduled_date')
         if scheduled_date:
             scheduled_time = resolved_params.get('scheduled_time')
-            return _parse_scheduled_datetime(str(scheduled_date), str(scheduled_time) if scheduled_time else None)
+            return _parse_scheduled_datetime(
+                str(scheduled_date),
+                str(scheduled_time) if scheduled_time else None,
+                tz_name=user_timezone,
+            )
 
         # No date specified — will be pending without a scheduled_at (manual trigger)
         return None

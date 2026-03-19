@@ -5,7 +5,8 @@ Teste la création de ScheduledExecution avec des paramètres issus de
 l'input_mapping (potentiellement résolus depuis des steps précédents).
 """
 import pytest
-from datetime import datetime, timedelta
+import zoneinfo
+from datetime import datetime, timedelta, timezone as dt_timezone
 from unittest.mock import patch, MagicMock, PropertyMock
 
 from executions.app.handlers.schedule_execution_handler import (
@@ -73,6 +74,50 @@ class TestParseScheduledDatetime:
     def test_invalid_time_raises(self):
         with pytest.raises(ValueError, match="Invalid scheduled_time"):
             _parse_scheduled_datetime('2025-06-15', 'not-a-time')
+
+    def test_local_timezone_converts_to_utc(self):
+        """Date/time in America/Montreal (UTC-4 in summer) should be converted to UTC."""
+        result = _parse_scheduled_datetime('2025-06-15', '22:00', tz_name='America/Montreal')
+        assert result.tzinfo == zoneinfo.ZoneInfo('UTC')
+        # 22:00 EDT (UTC-4) = 02:00 UTC next day
+        assert result.hour == 2
+        assert result.day == 16
+
+    def test_local_timezone_winter(self):
+        """America/Montreal in winter (UTC-5) should convert correctly."""
+        result = _parse_scheduled_datetime('2025-01-15', '20:00', tz_name='America/Montreal')
+        assert result.tzinfo == zoneinfo.ZoneInfo('UTC')
+        # 20:00 EST (UTC-5) = 01:00 UTC next day
+        assert result.hour == 1
+        assert result.day == 16
+
+    def test_no_timezone_uses_utc_default(self):
+        """Without timezone, naive datetime is interpreted as UTC (Django default)."""
+        result = _parse_scheduled_datetime('2025-06-15', '22:00')
+        # Should stay 22:00 UTC
+        assert result.hour == 22
+        assert result.day == 15
+
+    def test_iso_with_offset_converts_to_utc(self):
+        """ISO datetime with explicit offset should be converted to UTC."""
+        result = _parse_scheduled_datetime('2025-06-15T22:00:00-04:00')
+        assert result.tzinfo == zoneinfo.ZoneInfo('UTC')
+        assert result.hour == 2
+        assert result.day == 16
+
+    def test_invalid_timezone_falls_back_to_utc(self):
+        """Invalid timezone name should fall back to Django default (UTC)."""
+        result = _parse_scheduled_datetime('2025-06-15', '22:00', tz_name='Invalid/Zone')
+        # Falls back to UTC — hour stays 22
+        assert result.hour == 22
+
+    def test_europe_paris_timezone(self):
+        """Europe/Paris (UTC+2 in summer) should convert correctly."""
+        result = _parse_scheduled_datetime('2025-06-15', '14:00', tz_name='Europe/Paris')
+        assert result.tzinfo == zoneinfo.ZoneInfo('UTC')
+        # 14:00 CEST (UTC+2) = 12:00 UTC
+        assert result.hour == 12
+        assert result.day == 15
 
 
 class TestScheduleExecutionHandler:
