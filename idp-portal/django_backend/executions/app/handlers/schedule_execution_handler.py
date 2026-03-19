@@ -208,6 +208,13 @@ class ScheduleExecutionHandler:
         duration_minutes = resolved_params.pop('duration_minutes', None)
         # Pop timezone so it doesn't leak into action parameters
         resolved_params.pop('schedule_timezone', None)
+        # When schedule_source='parameter', the scheduling date comes from a
+        # custom key (e.g. 'planned_start_date') that isn't covered by the
+        # hardcoded pops above.  Remove it so it doesn't leak into execution
+        # parameters when no parameter_mapping is configured.
+        if schedule_config.get('schedule_source') == 'parameter':
+            param_name = schedule_config.get('schedule_parameter_name', 'scheduled_at')
+            resolved_params.pop(param_name, None)
 
         # --- Build execution parameters for the target action ---
         # parameter_mapping keys in step_config define which resolved_params
