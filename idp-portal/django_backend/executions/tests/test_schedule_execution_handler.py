@@ -9,6 +9,7 @@ import zoneinfo
 from datetime import datetime, timedelta, timezone as dt_timezone
 from unittest.mock import patch, MagicMock, PropertyMock
 
+from executions.models import ExecutionStatus
 from executions.app.handlers.schedule_execution_handler import (
     ScheduleExecutionHandler,
     _parse_offset,
@@ -192,7 +193,7 @@ class TestScheduleExecutionHandler:
         assert result['action_id'] == 42
         assert result['schedule_name'] == 'Deploy for CHG0012345'
         assert result['parameters_injected'] is True
-        assert result['status'] == 'pending'
+        assert result['status'] == ExecutionStatus.COMPLETED
 
         # Verify ScheduledExecution was created with correct args
         mock_se_class.objects.create.assert_called_once()

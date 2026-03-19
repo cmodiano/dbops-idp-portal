@@ -34,7 +34,7 @@ from typing import Any
 import structlog
 from django.utils import timezone
 
-from executions.models import Execution, ScheduledExecution, ScheduledExecutionStatus
+from executions.models import Execution, ExecutionStatus, ScheduledExecution, ScheduledExecutionStatus
 
 logger = structlog.get_logger(__name__)
 
@@ -302,7 +302,7 @@ class ScheduleExecutionHandler:
             'action_id': action_id,
             'action_name': target_action.name,
             'parameters_injected': parameters_injected,
-            'status': 'pending',
+            'status': ExecutionStatus.COMPLETED,
         }
 
     def _resolve_scheduled_at(
