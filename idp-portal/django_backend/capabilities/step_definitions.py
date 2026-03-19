@@ -196,5 +196,13 @@ workflow_step_registry.register(WorkflowStepDefinition(
             },
         ],
         'schedule_sources': ['parameter', 'fixed_offset', 'input_mapping'],
+        'supports_parameter_mapping': True,
+        'parameter_mapping_description': (
+            'Mapping des paramètres de l\'action cible. '
+            'Clés = noms des paramètres attendus par l\'action, '
+            'Valeurs = clés dans input_mapping (résolues via {{ steps.X.Y }}). '
+            'Permet de passer un numéro de changement, un hostname, etc. '
+            'depuis un step précédent vers les paramètres de l\'action planifiée.'
+        ),
     },
 ))

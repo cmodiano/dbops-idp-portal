@@ -303,6 +303,93 @@ class TestScheduleExecutionHandler:
             )
 
 
+    @patch('executions.app.handlers.schedule_execution_handler.ScheduledExecution')
+    @patch('executions.app.handlers.schedule_execution_handler.Action')
+    def test_parameter_mapping_forwards_only_mapped_keys(self, mock_action_class, mock_se_class):
+        """parameter_mapping selectively forwards resolved_params to action parameters."""
+        mock_action_class.objects.get.return_value = self._make_action()
+        created_se = MagicMock()
+        created_se.id = 200
+        mock_se_class.objects.create.return_value = created_se
+
+        step_config = {
+            'step_type': 'schedule_execution',
+            'step_id': 'schedule-with-mapping',
+            'action_id': 42,
+            'schedule_config': {'schedule_source': 'input_mapping'},
+            'parameter_mapping': {
+                'change_number': 'chg_num',       # rename: chg_num → change_number
+                'target_host': 'target_host',     # pass-through
+            },
+        }
+
+        # These come from input_mapping already resolved by StepTemplateResolver
+        resolved_params = {
+            'schedule_name': 'Deploy for CHG001',
+            'scheduled_date': '2025-07-15',
+            'scheduled_time': '22:00',
+            'chg_num': 'CHG0012345',          # from {{ steps.create_change.number }}
+            'target_host': 'db-prod-01',       # from {{ steps.discovery.hostname }}
+            'extra_data': 'should_not_pass',   # NOT in parameter_mapping → excluded
+        }
+
+        result = self.handler.execute(
+            step_config=step_config,
+            resolved_params=resolved_params,
+            execution=self._make_execution(),
+            step=step_config,
+            correlation_id='corr-mapping',
+        )
+
+        assert result['scheduled_execution_id'] == 200
+        assert result['parameters_injected'] is True
+
+        # Verify only mapped keys were forwarded
+        created_se.set_parameters.assert_called_once()
+        params = created_se.set_parameters.call_args[0][0]
+        assert params['change_number'] == 'CHG0012345'
+        assert params['target_host'] == 'db-prod-01'
+        assert 'extra_data' not in params
+        assert 'chg_num' not in params  # source key renamed to target key
+
+    @patch('executions.app.handlers.schedule_execution_handler.ScheduledExecution')
+    @patch('executions.app.handlers.schedule_execution_handler.Action')
+    def test_no_parameter_mapping_forwards_all_remaining(self, mock_action_class, mock_se_class):
+        """Without parameter_mapping, all non-scheduling keys are forwarded."""
+        mock_action_class.objects.get.return_value = self._make_action()
+        created_se = MagicMock()
+        created_se.id = 201
+        mock_se_class.objects.create.return_value = created_se
+
+        step_config = {
+            'step_type': 'schedule_execution',
+            'step_id': 'schedule-no-mapping',
+            'action_id': 42,
+            # No parameter_mapping — all remaining params forwarded
+        }
+
+        resolved_params = {
+            'scheduled_date': '2025-07-15',
+            'change_number': 'CHG001',
+            'target_host': 'db-prod-01',
+        }
+
+        result = self.handler.execute(
+            step_config=step_config,
+            resolved_params=resolved_params,
+            execution=self._make_execution(),
+            step=step_config,
+            correlation_id='corr-no-mapping',
+        )
+
+        assert result['parameters_injected'] is True
+        params = created_se.set_parameters.call_args[0][0]
+        assert params['change_number'] == 'CHG001'
+        assert params['target_host'] == 'db-prod-01'
+        # scheduling keys should have been popped
+        assert 'scheduled_date' not in params
+
+
 class TestScheduleExecutionHandlerRegistry:
     """Verify the handler is registered in the StepHandlerRegistry."""
 

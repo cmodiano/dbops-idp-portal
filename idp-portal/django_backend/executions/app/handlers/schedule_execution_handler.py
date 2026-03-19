@@ -11,9 +11,18 @@ schedule_config (dans step_config) détermine la source de la date de planificat
   - 'input_mapping' : la date et l'heure viennent directement des resolved_params
     (clés : scheduled_date, scheduled_time, duration_minutes, schedule_name)
 
-Les paramètres résolus (via {{ steps.<step_id>.<field> }}) sont transmis tels quels
-à la ScheduledExecution créée, ce qui permet au variable picker du frontend de
-référencer les outputs de steps précédents.
+parameter_mapping (dans step_config) permet de mapper les valeurs résolues depuis
+des steps précédents vers les paramètres attendus par l'action cible :
+
+    "parameter_mapping": {
+        "change_number": "{{ steps.create_change.number }}",
+        "target_server": "{{ steps.discovery.server_name }}"
+    }
+
+Ces valeurs sont résolues via le StepTemplateResolver (comme input_mapping) et
+transmises comme paramètres de la ScheduledExecution. Quand le Celery Beat
+déclenche la planification, ces paramètres sont injectés dans l'Execution créée
+via ExecutionRequest.parameters.
 """
 from __future__ import annotations
 
@@ -98,11 +107,16 @@ class ScheduleExecutionHandler:
         - scheduled_date (str) : date de planification (YYYY-MM-DD ou ISO 8601)
         - scheduled_time (str, optionnel) : heure (HH:MM ou HH:MM:SS)
         - duration_minutes (int, optionnel) : durée estimée en minutes
-        - Tout autre paramètre : transmis comme parameters de la ScheduledExecution
 
     Paramètres dans step_config :
         - action_id (int) : ID de l'action cible à planifier
         - schedule_config (dict) : configuration de la source de planification
+        - parameter_mapping (dict) : mapping des paramètres de l'action cible.
+          Les clés sont les noms de paramètres attendus par l'action, les valeurs
+          sont des templates Jinja2 résolus via input_mapping.
+          Exemple : {"change_number": "{{ steps.create_change.number }}"}
+          Ces valeurs arrivent déjà résolues dans resolved_params car le
+          StepTemplateResolver traite input_mapping avant l'appel au handler.
     """
 
     def execute(
@@ -146,8 +160,46 @@ class ScheduleExecutionHandler:
         scheduled_time = resolved_params.pop('scheduled_time', None)
         duration_minutes = resolved_params.pop('duration_minutes', None)
 
-        # Remaining resolved_params become the execution parameters
-        execution_parameters = dict(resolved_params) if resolved_params else {}
+        # --- Build execution parameters for the target action ---
+        # parameter_mapping keys in step_config define which resolved_params
+        # map to the target action's parameters. The values are already resolved
+        # by StepTemplateResolver before reaching this handler.
+        #
+        # Example step_config:
+        #   "input_mapping": {
+        #       "schedule_name": "Deploy CHG {{ steps.create_change.number }}",
+        #       "scheduled_date": "2025-06-20",
+        #       "change_number": "{{ steps.create_change.number }}",
+        #       "target_host": "{{ steps.discovery.hostname }}"
+        #   },
+        #   "parameter_mapping": {
+        #       "change_number": "change_number",
+        #       "target_host": "target_host"
+        #   }
+        #
+        # parameter_mapping tells us which resolved_params keys are action
+        # parameters (vs scheduling metadata). If parameter_mapping is absent,
+        # all non-scheduling keys in resolved_params are forwarded as-is.
+        parameter_mapping = step_config.get('parameter_mapping')
+
+        if parameter_mapping and isinstance(parameter_mapping, dict):
+            # Explicit mapping: only forward mapped keys, renaming if needed
+            # Keys = target action param name, Values = source key in resolved_params
+            execution_parameters: dict = {}
+            for target_key, source_key in parameter_mapping.items():
+                if source_key in resolved_params:
+                    execution_parameters[target_key] = resolved_params[source_key]
+                else:
+                    logger.warning(
+                        "schedule_execution_parameter_mapping_missing_source",
+                        target_key=target_key,
+                        source_key=source_key,
+                        execution_id=execution.id,
+                        correlation_id=correlation_id,
+                    )
+        else:
+            # No explicit mapping: forward all remaining resolved_params as-is
+            execution_parameters = dict(resolved_params) if resolved_params else {}
 
         # Add duration as metadata if provided
         if duration_minutes is not None:
