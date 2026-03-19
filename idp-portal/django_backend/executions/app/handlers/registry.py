@@ -15,6 +15,7 @@ from executions.app.handlers.service_call_handler import ServiceCallHandler
 from executions.app.handlers.http_request_handler import HttpRequestHandler
 from executions.app.handlers.evaluation_handler import EvaluationHandler
 from executions.app.handlers.gate_handler import GateHandler
+from executions.app.handlers.schedule_execution_handler import ScheduleExecutionHandler
 
 
 class StepHandlerRegistry:
@@ -58,3 +59,4 @@ step_handler_registry.register('service_call', ServiceCallHandler)
 step_handler_registry.register('http_request', HttpRequestHandler)
 step_handler_registry.register('evaluation', EvaluationHandler)
 step_handler_registry.register('gate', GateHandler)
+step_handler_registry.register('schedule_execution', ScheduleExecutionHandler)

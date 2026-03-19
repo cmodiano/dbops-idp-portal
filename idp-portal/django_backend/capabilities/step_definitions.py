@@ -160,4 +160,41 @@ workflow_step_registry.register(WorkflowStepDefinition(
     constraints={
         'required_fields': [{'field': 'action_id', 'message': 'Action cible requise pour le step de planification'}],
     },
+    config_schema={
+        'input_mapping_fields': [
+            {
+                'key': 'schedule_name',
+                'label': 'Nom de la cédule',
+                'type': 'string',
+                'required': False,
+                'supports_template': True,
+                'description': 'Nom descriptif pour la planification (supporte les références {{ steps.X.Y }})',
+            },
+            {
+                'key': 'scheduled_date',
+                'label': 'Date planifiée',
+                'type': 'date',
+                'required': False,
+                'supports_template': True,
+                'description': 'Date de planification (YYYY-MM-DD ou référence à un step précédent)',
+            },
+            {
+                'key': 'scheduled_time',
+                'label': 'Heure planifiée',
+                'type': 'time',
+                'required': False,
+                'supports_template': True,
+                'description': 'Heure de planification (HH:MM)',
+            },
+            {
+                'key': 'duration_minutes',
+                'label': 'Durée (minutes)',
+                'type': 'integer',
+                'required': False,
+                'supports_template': True,
+                'description': 'Durée estimée en minutes',
+            },
+        ],
+        'schedule_sources': ['parameter', 'fixed_offset', 'input_mapping'],
+    },
 ))
