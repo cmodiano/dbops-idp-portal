@@ -161,6 +161,7 @@ class ContainerWorkflowRuntime:
         'http_request': ExecutionStepType.HTTP_REQUEST,
         'evaluation': ExecutionStepType.EVALUATION,
         'gate': ExecutionStepType.GATE,
+        'schedule_execution': ExecutionStepType.SCHEDULE_EXECUTION,
     }
 
     def __init__(
