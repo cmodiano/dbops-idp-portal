@@ -9,6 +9,7 @@ import zoneinfo
 from datetime import datetime, timedelta, timezone as dt_timezone
 from unittest.mock import patch, MagicMock, PropertyMock
 
+from catalog.models import Action as RealAction
 from executions.models import ExecutionStatus
 from executions.app.handlers.schedule_execution_handler import (
     ScheduleExecutionHandler,
@@ -292,9 +293,8 @@ class TestScheduleExecutionHandler:
     @patch('catalog.models.Action')
     def test_action_not_found_raises(self, mock_action_class):
         """Non-existent action_id should raise ValueError."""
-        from catalog.models import Action
-        mock_action_class.DoesNotExist = Action.DoesNotExist
-        mock_action_class.objects.get.side_effect = Action.DoesNotExist
+        mock_action_class.DoesNotExist = RealAction.DoesNotExist
+        mock_action_class.objects.get.side_effect = RealAction.DoesNotExist
 
         step_config = {
             'step_type': 'schedule_execution',
