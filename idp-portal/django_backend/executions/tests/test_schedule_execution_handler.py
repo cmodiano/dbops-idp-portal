@@ -155,7 +155,7 @@ class TestScheduleExecutionHandler:
         return m
 
     @patch('executions.app.handlers.schedule_execution_handler.ScheduledExecution')
-    @patch('executions.app.handlers.schedule_execution_handler.Action')
+    @patch('catalog.models.Action')
     def test_basic_input_mapping_schedule(self, mock_action_class, mock_se_class):
         """Schedule with date/time from input_mapping (e.g. from variable picker)."""
         target_action = self._make_action()
@@ -208,7 +208,7 @@ class TestScheduleExecutionHandler:
         assert params['change_number'] == 'CHG0012345'
 
     @patch('executions.app.handlers.schedule_execution_handler.ScheduledExecution')
-    @patch('executions.app.handlers.schedule_execution_handler.Action')
+    @patch('catalog.models.Action')
     def test_fixed_offset_schedule(self, mock_action_class, mock_se_class):
         """Schedule with fixed_offset calculates scheduled_at from now()."""
         mock_action_class.objects.get.return_value = self._make_action()
@@ -239,7 +239,7 @@ class TestScheduleExecutionHandler:
         assert result['scheduled_at'] is not None
 
     @patch('executions.app.handlers.schedule_execution_handler.ScheduledExecution')
-    @patch('executions.app.handlers.schedule_execution_handler.Action')
+    @patch('catalog.models.Action')
     def test_parameter_source_schedule(self, mock_action_class, mock_se_class):
         """Schedule with parameter source reads date from resolved_params."""
         mock_action_class.objects.get.return_value = self._make_action()
@@ -272,7 +272,7 @@ class TestScheduleExecutionHandler:
         assert result['scheduled_execution_id'] == 101
         assert '2025-07-01' in result['scheduled_at']
 
-    @patch('executions.app.handlers.schedule_execution_handler.Action')
+    @patch('catalog.models.Action')
     def test_missing_action_id_raises(self, mock_action_class):
         """Missing action_id in step_config should raise ValueError."""
         step_config = {
@@ -289,7 +289,7 @@ class TestScheduleExecutionHandler:
                 correlation_id='corr-err',
             )
 
-    @patch('executions.app.handlers.schedule_execution_handler.Action')
+    @patch('catalog.models.Action')
     def test_action_not_found_raises(self, mock_action_class):
         """Non-existent action_id should raise ValueError."""
         from catalog.models import Action
@@ -312,7 +312,7 @@ class TestScheduleExecutionHandler:
             )
 
     @patch('executions.app.handlers.schedule_execution_handler.ScheduledExecution')
-    @patch('executions.app.handlers.schedule_execution_handler.Action')
+    @patch('catalog.models.Action')
     def test_no_date_creates_pending_without_scheduled_at(self, mock_action_class, mock_se_class):
         """No date info → scheduled_at is None (manual trigger later)."""
         mock_action_class.objects.get.return_value = self._make_action()
@@ -337,7 +337,7 @@ class TestScheduleExecutionHandler:
         assert result['scheduled_at'] is None
         assert result['parameters_injected'] is False
 
-    @patch('executions.app.handlers.schedule_execution_handler.Action')
+    @patch('catalog.models.Action')
     def test_parameter_source_missing_param_raises(self, mock_action_class):
         """parameter source with missing param should raise ValueError."""
         mock_action_class.objects.get.return_value = self._make_action()
@@ -363,7 +363,7 @@ class TestScheduleExecutionHandler:
 
 
     @patch('executions.app.handlers.schedule_execution_handler.ScheduledExecution')
-    @patch('executions.app.handlers.schedule_execution_handler.Action')
+    @patch('catalog.models.Action')
     def test_parameter_mapping_forwards_only_mapped_keys(self, mock_action_class, mock_se_class):
         """parameter_mapping selectively forwards resolved_params to action parameters."""
         mock_action_class.objects.get.return_value = self._make_action()
@@ -412,7 +412,7 @@ class TestScheduleExecutionHandler:
         assert 'chg_num' not in params  # source key renamed to target key
 
     @patch('executions.app.handlers.schedule_execution_handler.ScheduledExecution')
-    @patch('executions.app.handlers.schedule_execution_handler.Action')
+    @patch('catalog.models.Action')
     def test_no_parameter_mapping_forwards_all_remaining(self, mock_action_class, mock_se_class):
         """Without parameter_mapping, all non-scheduling keys are forwarded."""
         mock_action_class.objects.get.return_value = self._make_action()
