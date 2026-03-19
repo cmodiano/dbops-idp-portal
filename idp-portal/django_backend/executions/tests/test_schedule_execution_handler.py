@@ -59,6 +59,19 @@ class TestParseScheduledDatetime:
         assert result.hour == 14
         assert result.minute == 30
 
+    def test_date_with_time_not_silently_dropped(self):
+        """Regression: time_str must NOT be silently ignored when date_str is YYYY-MM-DD.
+
+        On Python 3.11+, datetime.fromisoformat('2025-06-15') succeeds and
+        returns midnight.  The old code early-returned from the fromisoformat
+        try-block, discarding time_str entirely.
+        """
+        result = _parse_scheduled_datetime('2025-06-15', '22:00')
+        assert result.hour == 22, (
+            f"Expected hour=22 but got {result.hour} — time_str was silently dropped"
+        )
+        assert result.minute == 0
+
     def test_date_with_time_seconds(self):
         result = _parse_scheduled_datetime('2025-06-15', '14:30:45')
         assert result.second == 45

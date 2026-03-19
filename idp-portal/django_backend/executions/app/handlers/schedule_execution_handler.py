@@ -87,20 +87,28 @@ def _parse_scheduled_datetime(
             )
             # Fall through to Django default
 
-    # Try full ISO datetime first (e.g. from a previous step output)
-    try:
-        dt = datetime.fromisoformat(str(date_str))
-        if dt.tzinfo is not None:
-            # Already tz-aware (e.g. "2025-07-15T22:00:00-04:00") → convert to UTC
-            return dt.astimezone(zoneinfo.ZoneInfo('UTC'))
-        # Naive ISO datetime → interpret in user's timezone
-        if user_tz:
-            dt = dt.replace(tzinfo=user_tz)
-            return dt.astimezone(zoneinfo.ZoneInfo('UTC'))
-        dt = timezone.make_aware(dt)
-        return dt
-    except (ValueError, TypeError):
-        pass
+    # Try full ISO datetime first (e.g. "2025-07-15T22:00:00-04:00" from a
+    # previous step output).  Only use this fast path when:
+    #   1. No separate time_str was provided (otherwise the caller expects
+    #      date_str to be date-only and time_str to carry the time component).
+    #   2. date_str contains a time component ('T' separator) so we don't
+    #      accidentally match a bare "YYYY-MM-DD" — which fromisoformat()
+    #      accepts on Python 3.11+ and silently returns midnight, discarding
+    #      any time_str the caller intended us to combine.
+    if time_str is None and 'T' in str(date_str):
+        try:
+            dt = datetime.fromisoformat(str(date_str))
+            if dt.tzinfo is not None:
+                # Already tz-aware → convert to UTC
+                return dt.astimezone(zoneinfo.ZoneInfo('UTC'))
+            # Naive ISO datetime → interpret in user's timezone
+            if user_tz:
+                dt = dt.replace(tzinfo=user_tz)
+                return dt.astimezone(zoneinfo.ZoneInfo('UTC'))
+            dt = timezone.make_aware(dt)
+            return dt
+        except (ValueError, TypeError):
+            pass
 
     # Parse date-only + optional time
     try:
