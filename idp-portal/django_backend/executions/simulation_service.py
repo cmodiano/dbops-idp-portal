@@ -182,13 +182,13 @@ class SimulationService:
             )
 
             step_duration = getattr(settings, 'SIMULATE_EXECUTION_STEP_DURATION', 2)
-            # MEDIUM-3 fix: Validate step_duration > 0
-            if step_duration <= 0:
+            # MEDIUM-3 fix: Validate step_duration >= 0
+            if step_duration < 0:
                 logger.warning(
                     "simulation_invalid_step_duration",
                     execution_id=execution_id,
                     step_duration=step_duration,
-                    message="SIMULATE_EXECUTION_STEP_DURATION must be > 0, using default 2s",
+                    message="SIMULATE_EXECUTION_STEP_DURATION must be >= 0, using default 2s",
                 )
                 step_duration = 2
 
