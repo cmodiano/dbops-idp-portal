@@ -29,7 +29,6 @@ from __future__ import annotations
 import re
 import zoneinfo
 from datetime import datetime, timedelta
-from typing import Any
 
 import structlog
 from django.utils import timezone
@@ -203,8 +202,8 @@ class ScheduleExecutionHandler:
         # --- Extract scheduling metadata from resolved_params ---
         schedule_name = resolved_params.pop('schedule_name', None)
         # Remove scheduling-specific keys from params before forwarding
-        scheduled_date = resolved_params.pop('scheduled_date', None)
-        scheduled_time = resolved_params.pop('scheduled_time', None)
+        resolved_params.pop('scheduled_date', None)
+        resolved_params.pop('scheduled_time', None)
         duration_minutes = resolved_params.pop('duration_minutes', None)
         # Pop timezone so it doesn't leak into action parameters
         resolved_params.pop('schedule_timezone', None)

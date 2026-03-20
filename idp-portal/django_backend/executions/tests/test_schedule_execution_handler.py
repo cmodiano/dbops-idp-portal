@@ -6,8 +6,8 @@ l'input_mapping (potentiellement résolus depuis des steps précédents).
 """
 import pytest
 import zoneinfo
-from datetime import datetime, timedelta, timezone as dt_timezone
-from unittest.mock import patch, MagicMock, PropertyMock
+from datetime import timedelta
+from unittest.mock import patch, MagicMock
 
 from catalog.models import Action as RealAction
 from executions.models import ExecutionStatus
