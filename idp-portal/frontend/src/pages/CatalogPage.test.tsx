@@ -153,7 +153,7 @@ describe('CatalogPage', () => {
   });
 
   it('persists view mode in localStorage (AC2)', async () => {
-    localStorage.setItem('catalog-view-mode', 'list');
+    localStorage.setItem('catalog-view-mode-v1', 'list');
     renderWithTheme(<CatalogPage />);
 
     await waitFor(() => {
@@ -162,13 +162,13 @@ describe('CatalogPage', () => {
 
     const listButton = screen.getByLabelText('Vue liste');
     expect(listButton).toHaveAttribute('class', expect.stringContaining('primary'));
-    expect(localStorage.getItem('catalog-view-mode')).toBe('list');
+    expect(localStorage.getItem('catalog-view-mode-v1')).toBe('list');
 
     const gridButton = screen.getByLabelText('Vue grille');
     await userEvent.click(gridButton);
-    expect(localStorage.getItem('catalog-view-mode')).toBe('grid');
+    expect(localStorage.getItem('catalog-view-mode-v1')).toBe('grid');
 
-    localStorage.removeItem('catalog-view-mode');
+    localStorage.removeItem('catalog-view-mode-v1');
   });
 
   it('displays action count (AC6)', async () => {
@@ -575,15 +575,15 @@ describe('CatalogPage', () => {
   // Story 8.10: Table View for List Mode
   describe('Story 8.10 - Table View', () => {
     beforeEach(() => {
-      localStorage.removeItem('catalog-view-mode');
+      localStorage.removeItem('catalog-view-mode-v1');
     });
 
     afterEach(() => {
-      localStorage.removeItem('catalog-view-mode');
+      localStorage.removeItem('catalog-view-mode-v1');
     });
 
     it('displays ActionTable when viewMode is list (AC1)', async () => {
-      localStorage.setItem('catalog-view-mode', 'list');
+      localStorage.setItem('catalog-view-mode-v1', 'list');
       renderWithTheme(<CatalogPage />);
 
       await waitFor(() => {
@@ -593,7 +593,7 @@ describe('CatalogPage', () => {
     });
 
     it('table receives filteredActions data (AC1)', async () => {
-      localStorage.setItem('catalog-view-mode', 'list');
+      localStorage.setItem('catalog-view-mode-v1', 'list');
       renderWithTheme(<CatalogPage />);
 
       await waitFor(() => {
@@ -605,7 +605,7 @@ describe('CatalogPage', () => {
     });
 
     it('table shows execution count formatted (AC6)', async () => {
-      localStorage.setItem('catalog-view-mode', 'list');
+      localStorage.setItem('catalog-view-mode-v1', 'list');
       renderWithTheme(<CatalogPage />);
 
       await waitFor(() => {
@@ -617,7 +617,7 @@ describe('CatalogPage', () => {
     });
 
     it('table shows loading skeleton during fetch (AC11)', async () => {
-      localStorage.setItem('catalog-view-mode', 'list');
+      localStorage.setItem('catalog-view-mode-v1', 'list');
       vi.mocked(catalogService.fetchCatalogActions).mockImplementation(
         () => new Promise((resolve) => setTimeout(() => resolve(mockActions), 500))
       );
@@ -633,7 +633,7 @@ describe('CatalogPage', () => {
     });
 
     it('clicking table row opens drawer (AC8)', async () => {
-      localStorage.setItem('catalog-view-mode', 'list');
+      localStorage.setItem('catalog-view-mode-v1', 'list');
       renderWithTheme(<CatalogPage />);
 
       await waitFor(() => {
@@ -650,7 +650,7 @@ describe('CatalogPage', () => {
     });
 
     it('toggle favorite from table works (AC7)', async () => {
-      localStorage.setItem('catalog-view-mode', 'list');
+      localStorage.setItem('catalog-view-mode-v1', 'list');
       renderWithTheme(<CatalogPage />);
 
       await waitFor(() => {
@@ -670,7 +670,7 @@ describe('CatalogPage', () => {
     });
 
     it('table shows favorite indicators (AC7)', async () => {
-      localStorage.setItem('catalog-view-mode', 'list');
+      localStorage.setItem('catalog-view-mode-v1', 'list');
       renderWithTheme(<CatalogPage />);
 
       await waitFor(() => {

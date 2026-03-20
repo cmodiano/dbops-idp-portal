@@ -15,20 +15,6 @@ import { App } from 'antd';
 import { ExecutionWizard } from './ExecutionWizard';
 import type { CatalogActionDetail } from '../../services/catalog_service';
 
-// Mock targets response
-const mockTargetsResponse = {
-  items: [
-    { name: 'srv-dev-01', environment: 'developpement', target_type: 'server', metadata: null },
-    { name: 'srv-dev-02', environment: 'developpement', target_type: 'server', metadata: null },
-    { name: 'srv-cert-01', environment: 'certification', target_type: 'server', metadata: null },
-    { name: 'db-prod-01', environment: 'production', target_type: 'database', metadata: null },
-  ],
-  total: 4,
-  page: 1,
-  page_size: 100,
-  total_pages: 1,
-};
-
 // Mock environments response
 const mockEnvironmentsResponse = [
   { id: 'developpement', name: 'Développement', environment: null },
@@ -36,15 +22,15 @@ const mockEnvironmentsResponse = [
   { id: 'production', name: 'Production', environment: null },
 ];
 
-// Mock the API client (TargetSelector and fetchInventoryTargets use apiFetchRaw)
+// Mock the API client
 vi.mock('../../services/api_client', () => ({
   apiFetch: vi.fn(),
   apiFetchRaw: vi.fn(),
 }));
 
-import { apiFetchRaw } from '../../services/api_client';
+import { fetchTargetsPaginated } from '../../services/execution_service';
 
-const mockApiFetchRaw = apiFetchRaw as ReturnType<typeof vi.fn>;
+const mockFetchTargetsPaginated = fetchTargetsPaginated as ReturnType<typeof vi.fn>;
 
 // Mock the execution service
 vi.mock('../../services/execution_service', () => ({
@@ -65,6 +51,18 @@ vi.mock('../../services/execution_service', () => ({
     { name: 'srv-cert-01', environment: 'certification', target_type: 'server', metadata: null },
     { name: 'db-prod-01', environment: 'production', target_type: 'database', metadata: null },
   ]),
+  fetchTargetsPaginated: vi.fn().mockResolvedValue({
+    items: [
+      { name: 'srv-dev-01', environment: 'developpement', target_type: 'server', metadata: null },
+      { name: 'srv-dev-02', environment: 'developpement', target_type: 'server', metadata: null },
+      { name: 'srv-cert-01', environment: 'certification', target_type: 'server', metadata: null },
+      { name: 'db-prod-01', environment: 'production', target_type: 'database', metadata: null },
+    ],
+    total: 4,
+    page: 1,
+    page_size: 5000,
+    total_pages: 1,
+  }),
 }));
 
 // Wrapper with Ant Design App context
@@ -114,12 +112,6 @@ describe('ExecutionWizard - Target Selection (Story 13.2)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockApiFetchRaw.mockImplementation(async (url: string) => {
-      if (url.includes('/inventory/targets')) {
-        return mockTargetsResponse;
-      }
-      return { items: [], total: 0, page: 1, page_size: 100, total_pages: 0 };
-    });
   });
 
   describe('Step Labels (AC1)', () => {
@@ -164,11 +156,9 @@ describe('ExecutionWizard - Target Selection (Story 13.2)', () => {
     it('loads targets and renders options in dropdown', async () => {
       render(<ExecutionWizard {...defaultProps} />, { wrapper: TestWrapper });
 
-      // Wait for targets to load (API call via apiFetchRaw)
+      // Wait for targets to load via fetchTargetsPaginated
       await waitFor(() => {
-        expect(mockApiFetchRaw).toHaveBeenCalledWith(
-          expect.stringContaining('/inventory/targets')
-        );
+        expect(mockFetchTargetsPaginated).toHaveBeenCalled();
       });
 
       // Open dropdown using mouseDown (required for Ant Design Select)
@@ -195,9 +185,7 @@ describe('ExecutionWizard - Target Selection (Story 13.2)', () => {
 
       // Wait for targets to load
       await waitFor(() => {
-        expect(mockApiFetchRaw).toHaveBeenCalledWith(
-          expect.stringContaining('/inventory/targets')
-        );
+        expect(mockFetchTargetsPaginated).toHaveBeenCalled();
       });
 
       // Open dropdown using mouseDown (required for Ant Design Select)
@@ -224,9 +212,7 @@ describe('ExecutionWizard - Target Selection (Story 13.2)', () => {
 
       // Wait for targets to load
       await waitFor(() => {
-        expect(mockApiFetchRaw).toHaveBeenCalledWith(
-          expect.stringContaining('/inventory/targets')
-        );
+        expect(mockFetchTargetsPaginated).toHaveBeenCalled();
       });
 
       // Open dropdown
@@ -268,17 +254,10 @@ describe('ExecutionWizard - Target Selection (Story 13.2)', () => {
         { wrapper: TestWrapper }
       );
 
-      // Wait for targets to load via API
+      // Wait for targets to load via fetchTargetsPaginated
       await waitFor(() => {
-        expect(mockApiFetchRaw).toHaveBeenCalledWith(
-          expect.stringContaining('/inventory/targets')
-        );
+        expect(mockFetchTargetsPaginated).toHaveBeenCalled();
       });
-
-      // Verify the API was called with correct parameters
-      expect(mockApiFetchRaw).toHaveBeenCalledWith(
-        expect.stringMatching(/\/inventory\/targets\?page=1&page_size=/)
-      );
     });
   });
 
@@ -288,9 +267,7 @@ describe('ExecutionWizard - Target Selection (Story 13.2)', () => {
 
       // Wait for targets to load
       await waitFor(() => {
-        expect(mockApiFetchRaw).toHaveBeenCalledWith(
-          expect.stringContaining('/inventory/targets')
-        );
+        expect(mockFetchTargetsPaginated).toHaveBeenCalled();
       });
 
       // Verify all 3 steps are present

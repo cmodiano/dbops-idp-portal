@@ -6,6 +6,9 @@ import type { ActionDetail } from '../../types/api';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 
 // Mock the admin_service module (Story 2.6: getTags, updateActionTags). Story 2.14: updateActionRbac removed.
+const { mockCheckActionNameAvailable } = vi.hoisted(() => ({
+  mockCheckActionNameAvailable: vi.fn().mockResolvedValue(true),
+}));
 vi.mock('../../services/admin_service', () => ({
   updateActionSteps: vi.fn().mockResolvedValue({}),
   getTags: vi.fn().mockResolvedValue([]),
@@ -13,7 +16,7 @@ vi.mock('../../services/admin_service', () => ({
   updateRemediationRules: vi.fn().mockResolvedValue({}),
   updateBusinessRulePolicies: vi.fn().mockResolvedValue({}),
   patchAction: vi.fn().mockResolvedValue({}),
-  checkActionNameAvailable: vi.fn().mockResolvedValue(true),
+  checkActionNameAvailable: mockCheckActionNameAvailable,
 }));
 
 // Mock useMediaQuery so layout is stable in tests (split view)
@@ -88,6 +91,7 @@ const defaultProps = {
 describe('ActionForm', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockCheckActionNameAvailable.mockResolvedValue(true);
   });
 
   describe('Split View Layout (Story 2.5, AC #3)', () => {
@@ -750,6 +754,8 @@ describe('ActionForm — coverage extension', () => {
   });
 
   it('handleFinish shows validation error when edit mode has no steps', async () => {
+    // Ensure name availability check won't block form submission
+    mockCheckActionNameAvailable.mockResolvedValue(true);
     const user = userEvent.setup();
     const editActionNoSteps: ActionDetail = {
       id: 1,
@@ -775,11 +781,16 @@ describe('ActionForm — coverage extension', () => {
       render(<ActionForm {...defaultProps} editAction={editActionNoSteps} />);
     });
 
+    // Wait for form to be populated with edit action values before submitting
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('No Steps')).toBeInTheDocument();
+    });
+
     await user.click(screen.getByText('Enregistrer'));
 
     await waitFor(() => {
       expect(screen.getByText(/Au moins une étape est requise/i)).toBeInTheDocument();
-    });
+    }, { timeout: 5000 });
     expect(mockOnSubmit).not.toHaveBeenCalled();
   });
 

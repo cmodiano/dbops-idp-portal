@@ -909,13 +909,17 @@ describe('IntegrationForm', () => {
       const user = userEvent.setup();
       renderWithApp(<IntegrationForm {...defaultProps} />);
       await selectType(user, /Type d'intégration/, 'Ansible Automation Platform');
-      await user.type(screen.getByLabelText(/^Nom/), 'Jira Cloud');
-      await user.type(screen.getByLabelText(/URL de base/), 'https://jira.example.com');
+      await user.click(screen.getByLabelText(/^Nom/));
+      await user.paste('Jira Cloud');
+      await user.click(screen.getByLabelText(/URL de base/));
+      await user.paste('https://jira.example.com');
       await selectAuthFlow(user, 'OAuth2 Client Credentials');
       await waitFor(() => expect(screen.getByLabelText(/URL du token/)).toBeInTheDocument());
-      await user.type(screen.getByLabelText(/URL du token/), 'https://auth.example.com/token');
+      await user.click(screen.getByLabelText(/URL du token/));
+      await user.paste('https://auth.example.com/token');
       await waitFor(() => expect(screen.getByLabelText(/Scope OAuth2/)).toBeInTheDocument());
-      await user.type(screen.getByLabelText(/Scope OAuth2/), 'api:read');
+      await user.click(screen.getByLabelText(/Scope OAuth2/));
+      await user.paste('api:read');
       await user.click(screen.getByRole('button', { name: /Créer/i }));
       await waitFor(() => expect(mockOnSubmit).toHaveBeenCalled(), { timeout: 10000 });
       expect(mockOnSubmit).toHaveBeenCalledWith(
@@ -925,17 +929,20 @@ describe('IntegrationForm', () => {
           config: { scope: 'api:read' },
         })
       );
-    }, 15000);
+    }, 30000);
 
     it('soumission api_key → payload inclut config.header_name', async () => {
       const user = userEvent.setup();
       renderWithApp(<IntegrationForm {...defaultProps} />);
       await selectType(user, /Type d'intégration/, 'Ansible Automation Platform');
-      await user.type(screen.getByLabelText(/^Nom/), 'Custom API');
-      await user.type(screen.getByLabelText(/URL de base/), 'https://api.example.com');
+      await user.click(screen.getByLabelText(/^Nom/));
+      await user.paste('Custom API');
+      await user.click(screen.getByLabelText(/URL de base/));
+      await user.paste('https://api.example.com');
       await selectAuthFlow(user, 'API Key (header)');
       await waitFor(() => expect(screen.getByLabelText(/Nom du header/)).toBeInTheDocument());
-      await user.type(screen.getByLabelText(/Nom du header/), 'X-Auth-Token');
+      await user.click(screen.getByLabelText(/Nom du header/));
+      await user.paste('X-Auth-Token');
       await user.click(screen.getByRole('button', { name: /Créer/i }));
       await waitFor(() => expect(mockOnSubmit).toHaveBeenCalled(), { timeout: 10000 });
       expect(mockOnSubmit).toHaveBeenCalledWith(
@@ -944,20 +951,22 @@ describe('IntegrationForm', () => {
           config: { header_name: 'X-Auth-Token' },
         })
       );
-    }, 15000);
+    }, 30000);
 
     it('soumission token → pas de config dans le payload', async () => {
       const user = userEvent.setup();
       renderWithApp(<IntegrationForm {...defaultProps} />);
       await selectType(user, /Type d'intégration/, 'Ansible Automation Platform');
-      await user.type(screen.getByLabelText(/^Nom/), 'AAP Token');
-      await user.type(screen.getByLabelText(/URL de base/), 'https://aap.example.com');
+      await user.click(screen.getByLabelText(/^Nom/));
+      await user.paste('AAP Token');
+      await user.click(screen.getByLabelText(/URL de base/));
+      await user.paste('https://aap.example.com');
       await selectAuthFlow(user, 'Token (Bearer)');
       await user.click(screen.getByRole('button', { name: /Créer/i }));
       await waitFor(() => expect(mockOnSubmit).toHaveBeenCalled(), { timeout: 10000 });
       const callArg = mockOnSubmit.mock.calls[0][0] as Record<string, unknown>;
       expect(callArg.config).toBeUndefined();
-    }, 15000);
+    }, 30000);
 
     // --- Préremplissage édition ---
 

@@ -63,11 +63,11 @@ describe('useCatalogState', () => {
       can_execute: true,
       allowed_environments: ['DEV'],
     });
-    localStorage.removeItem('catalog-view-mode');
+    localStorage.removeItem('catalog-view-mode-v1');
   });
 
   afterEach(() => {
-    localStorage.removeItem('catalog-view-mode');
+    localStorage.removeItem('catalog-view-mode-v1');
   });
 
   it('filteredActions: "mes-actions" retourne uniquement les favoris', async () => {
@@ -139,7 +139,7 @@ describe('useCatalogState', () => {
 
     // Mode par défaut : grid
     expect(result.current.viewMode).toBe('grid');
-    expect(localStorage.getItem('catalog-view-mode')).toBeNull();
+    expect(localStorage.getItem('catalog-view-mode-v1')).toBeNull();
 
     // Passer en mode list
     act(() => {
@@ -147,7 +147,7 @@ describe('useCatalogState', () => {
     });
 
     expect(result.current.viewMode).toBe('list');
-    expect(localStorage.getItem('catalog-view-mode')).toBe('list');
+    expect(localStorage.getItem('catalog-view-mode-v1')).toBe('list');
 
     // Repasser en mode grid
     act(() => {
@@ -155,7 +155,7 @@ describe('useCatalogState', () => {
     });
 
     expect(result.current.viewMode).toBe('grid');
-    expect(localStorage.getItem('catalog-view-mode')).toBe('grid');
+    expect(localStorage.getItem('catalog-view-mode-v1')).toBe('grid');
   });
 
   it('hasActiveFilters: true quand un filtre actif, false sinon', async () => {

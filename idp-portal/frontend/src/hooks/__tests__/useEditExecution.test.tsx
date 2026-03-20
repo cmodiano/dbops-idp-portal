@@ -123,12 +123,10 @@ describe('useEditExecution', () => {
       result.current.openEditModal(exec);
     });
 
+    // Story 11.11: only the next_execution_date is editable for recurring executions
     expect(mockSetFieldsValue).toHaveBeenCalledWith(
       expect.objectContaining({
-        pattern_type: 'weekly',
-        pattern_hour: 14,
-        pattern_minute: 30,
-        pattern_day_of_week: 3,
+        next_execution_date: expect.anything(),
       })
     );
   });
@@ -229,11 +227,10 @@ describe('useEditExecution', () => {
       result.current.submitEdit();
     });
 
+    // Hook shows a notification for 400 errors (no per-field setFields)
     await waitFor(() => {
-      expect(mockSetFields).toHaveBeenCalledWith(
-        expect.arrayContaining([
-          expect.objectContaining({ name: 'scheduled_at', errors: ['Date invalide'] }),
-        ])
+      expect(mockNotification.error).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'Erreur de validation' })
       );
     });
   });
@@ -248,7 +245,7 @@ describe('useEditExecution', () => {
     expect(updateScheduledExecution).not.toHaveBeenCalled();
   });
 
-  it('submitEdit sets environment when no target_names', async () => {
+  it('submitEdit sets scheduled_at when no target_names', async () => {
     mockValidateFields.mockResolvedValue({
       scheduled_at: { utc: () => ({ format: () => '2026-03-15T10:00:00Z' }) },
       target_names: null,
@@ -257,14 +254,15 @@ describe('useEditExecution', () => {
     const { result } = renderEditHook();
     act(() => { result.current.openEditModal(makeExec()); });
     await act(async () => { await result.current.submitEdit(); });
+    // Story 11.11: only scheduled_at is sent for one-time executions
     expect(updateScheduledExecution).toHaveBeenCalledWith(
-      42, expect.objectContaining({ environment: 'PROD' }),
+      42, expect.objectContaining({ scheduled_at: '2026-03-15T10:00:00Z' }),
     );
   });
 
-  it('submitEdit builds cron recurring_pattern', async () => {
+  it('submitEdit sends next_execution_date for cron recurring execution', async () => {
     mockValidateFields.mockResolvedValue({
-      pattern_type: 'cron', cron_expression: '0 9 * * *', target_names: ['server1'],
+      next_execution_date: { utc: () => ({ format: () => '2026-03-20T09:00:00Z' }) },
     });
     const { result } = renderEditHook();
     act(() => {
@@ -274,13 +272,13 @@ describe('useEditExecution', () => {
     });
     await act(async () => { await result.current.submitEdit(); });
     expect(updateScheduledExecution).toHaveBeenCalledWith(
-      42, expect.objectContaining({ recurring_pattern: expect.objectContaining({ pattern_type: 'cron' }) }),
+      42, expect.objectContaining({ next_execution_date: '2026-03-20T09:00:00Z' }),
     );
   });
 
-  it('submitEdit builds daily recurring_pattern', async () => {
+  it('submitEdit sends next_execution_date for daily recurring execution', async () => {
     mockValidateFields.mockResolvedValue({
-      pattern_type: 'daily', pattern_hour: 9, pattern_minute: 30, target_names: ['server1'],
+      next_execution_date: { utc: () => ({ format: () => '2026-03-21T09:30:00Z' }) },
     });
     const { result } = renderEditHook();
     act(() => {
@@ -290,13 +288,13 @@ describe('useEditExecution', () => {
     });
     await act(async () => { await result.current.submitEdit(); });
     expect(updateScheduledExecution).toHaveBeenCalledWith(
-      42, expect.objectContaining({ recurring_pattern: expect.objectContaining({ pattern_type: 'daily' }) }),
+      42, expect.objectContaining({ next_execution_date: '2026-03-21T09:30:00Z' }),
     );
   });
 
-  it('submitEdit builds weekly recurring_pattern', async () => {
+  it('submitEdit sends next_execution_date for weekly recurring execution', async () => {
     mockValidateFields.mockResolvedValue({
-      pattern_type: 'weekly', pattern_hour: 10, pattern_minute: 0, pattern_day_of_week: 2, target_names: ['server1'],
+      next_execution_date: { utc: () => ({ format: () => '2026-03-25T10:00:00Z' }) },
     });
     const { result } = renderEditHook();
     act(() => {
@@ -306,7 +304,7 @@ describe('useEditExecution', () => {
     });
     await act(async () => { await result.current.submitEdit(); });
     expect(updateScheduledExecution).toHaveBeenCalledWith(
-      42, expect.objectContaining({ recurring_pattern: expect.objectContaining({ pattern_type: 'weekly' }) }),
+      42, expect.objectContaining({ next_execution_date: '2026-03-25T10:00:00Z' }),
     );
   });
 

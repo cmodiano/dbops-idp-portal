@@ -864,8 +864,10 @@ describe('Story 18.3 — Visual display when loading', () => {
     ];
     const { edges } = workflowStepsToReactFlow(steps);
     const startEdges = edges.filter((e) => e.source === START_NODE_ID);
-    expect(startEdges).toHaveLength(1);
-    expect(startEdges[0].target).toBe('a');
+    // Both steps 'a' and 'b' are entry nodes (no incoming edges from other steps),
+    // so the conversion creates a Start edge to each one.
+    expect(startEdges).toHaveLength(2);
+    expect(startEdges.map((e) => e.target).sort()).toEqual(['a', 'b']);
   });
 
   it('draws edges to End for steps with null success/error (end of workflow)', () => {

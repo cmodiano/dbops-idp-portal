@@ -79,7 +79,7 @@ describe('dashboard_service', () => {
       await dashboardService.fetchStats({ status: 'FAILED' });
 
       const url = vi.mocked(apiClient.apiFetch).mock.calls[0][0] as string;
-      expect(url).toContain('status=failed');
+      expect(url).toContain('status=FAILED');
     });
   });
 

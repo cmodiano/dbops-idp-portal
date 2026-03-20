@@ -73,7 +73,7 @@ describe('audit_service', () => {
       expect(callArg).toContain('action_id=5');
       expect(callArg).toContain('engine_type=oracle');
       expect(callArg).toContain('user_id=john');
-      expect(callArg).toContain('status=SUCCESS');
+      expect(callArg).toContain('status=success');
       expect(callArg).toContain('correlation_id=corr-123');
       expect(callArg).toContain('entity_type=server');
       expect(callArg).toContain('action_type=patch');
@@ -113,7 +113,7 @@ describe('audit_service', () => {
 
       const blobCallArg = (apiClient.apiFetchBlob as ReturnType<typeof vi.spyOn>).mock.calls[0][0] as string;
       expect(blobCallArg).toContain('fmt=pdf');
-      expect(blobCallArg).toContain('status=FAILED');
+      expect(blobCallArg).toContain('status=failed');
     });
   });
 });

@@ -103,7 +103,7 @@ describe('AdminPage', () => {
       await waitFor(
         () => {
           expect(
-            screen.getByText('Gérez les actions, profils, intégrations, règles métier et configurations du portail')
+            screen.getByText('Gérez les actions, profils, intégrations et règles métier du portail')
           ).toBeInTheDocument();
         },
         { timeout: 5000 }

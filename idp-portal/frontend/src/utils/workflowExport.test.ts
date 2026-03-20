@@ -213,13 +213,13 @@ describe('validateWorkflowImport', () => {
     expect(errors.some((e) => e.includes('doublon'))).toBe(true);
   });
 
-  it('rejects invalid on_success_step_id reference', () => {
+  it('rejects invalid on_success_step_ids reference', () => {
     const data = {
       version: '1.0',
       workflow: {
         name: 'Test',
         steps: [
-          { step_id: 'a', referenced_action_id: 1, name: 'A', on_success_step_id: 'nonexistent' },
+          { step_id: 'a', referenced_action_id: 1, name: 'A', on_success_step_ids: ['nonexistent'] },
         ],
       },
     };
@@ -227,13 +227,13 @@ describe('validateWorkflowImport', () => {
     expect(errors.some((e) => e.includes('inexistant'))).toBe(true);
   });
 
-  it('rejects self-referencing on_success_step_id', () => {
+  it('rejects self-referencing on_success_step_ids', () => {
     const data = {
       version: '1.0',
       workflow: {
         name: 'Test',
         steps: [
-          { step_id: 'a', referenced_action_id: 1, name: 'A', on_success_step_id: 'a' },
+          { step_id: 'a', referenced_action_id: 1, name: 'A', on_success_step_ids: ['a'] },
         ],
       },
     };
@@ -241,13 +241,13 @@ describe('validateWorkflowImport', () => {
     expect(errors.some((e) => e.includes('auto-référence'))).toBe(true);
   });
 
-  it('rejects self-referencing on_error_step_id', () => {
+  it('rejects self-referencing on_error_step_ids', () => {
     const data = {
       version: '1.0',
       workflow: {
         name: 'Test',
         steps: [
-          { step_id: 'a', referenced_action_id: 1, name: 'A', on_error_step_id: 'a' },
+          { step_id: 'a', referenced_action_id: 1, name: 'A', on_error_step_ids: ['a'] },
         ],
       },
     };
