@@ -106,22 +106,18 @@ describe('help_service', () => {
     });
 
     // ERR-FE-02 tests
-    it('logs console.warn when apiFetchRaw throws', async () => {
+    it('silently returns fallback when apiFetchRaw throws (no console.warn)', async () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       vi.mocked(apiClient.apiFetchRaw).mockRejectedValue(new Error('API error'));
 
-      await getHelpContent('test-topic');
+      const result = await getHelpContent('test-topic');
 
-      expect(warnSpy).toHaveBeenCalledWith(
-        'help_service: failed to fetch help content for topic',
-        'test-topic',
-        expect.any(Error)
-      );
+      expect(result).toEqual({ topic_id: 'test-topic', short: '', markdown: '' });
+      expect(warnSpy).not.toHaveBeenCalled();
       warnSpy.mockRestore();
     });
 
-    it('returns fallback object after error even when console.warn is called', async () => {
-      vi.spyOn(console, 'warn').mockImplementation(() => {});
+    it('returns fallback object after error without logging', async () => {
       vi.mocked(apiClient.apiFetchRaw).mockRejectedValue(new Error('timeout'));
 
       const result = await getHelpContent('my-topic');

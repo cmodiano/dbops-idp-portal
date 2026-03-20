@@ -926,8 +926,8 @@ describe('ActionWizard', () => {
       await act(async () => { render(<ActionWizard {...defaultProps} />); });
       await navigateToStep2WithAAP(user);
       await waitFor(() => {
-        // Form.Item label is used (no htmlFor without name prop) — check label text presence
-        expect(screen.getByText('Template AAP')).toBeInTheDocument();
+        // AAPTemplateIdRenderer renders a Select with aria-label="Template AAP" (non-fallback mode)
+        expect(screen.getByLabelText('Template AAP')).toBeInTheDocument();
       });
     }, 20000);
 
@@ -1567,8 +1567,9 @@ describe('ActionWizard — capabilities-driven connectorType (Story 82.7)', () =
     await waitFor(() => expect(screen.getByLabelText("Nom de l'action")).toHaveValue('Action AAP'));
     const nextBtn = await screen.findByRole('button', { name: /Suivant/i });
     await userEvent.setup().click(nextBtn);
+    // Story 84-6: "Quel automatisme appeler" supprimé — SchemaFormRenderer rend "Type de ressource" depuis le schema
     await waitFor(() => {
-      expect(screen.getByText(/Quel automatisme appeler/i)).toBeInTheDocument();
+      expect(screen.getByText(/Type de ressource/i)).toBeInTheDocument();
     }, { timeout: 8000 });
   });
 
@@ -1619,8 +1620,8 @@ describe('ActionWizard — capabilities-driven connectorType (Story 82.7)', () =
             action_config_schema: {
               type: 'object',
               properties: {
-                resource_type: { type: 'string', enum: ['job_template', 'workflow_job'] },
-                template_id: { type: 'integer', minimum: 1 },
+                resource_type: { type: 'string', enum: ['job_template', 'workflow_job'], title: 'Type de ressource' },
+                template_id: { type: 'integer', title: 'ID du template', minimum: 1 },
               },
             },
           },
@@ -1658,8 +1659,9 @@ describe('ActionWizard — capabilities-driven connectorType (Story 82.7)', () =
     const nextBtn = await screen.findByRole('button', { name: /Suivant/i });
     await userEvent.setup().click(nextBtn);
     // Si capabilities prime (connector_type='aap'), la section AAP doit être visible
+    // Story 84-6: "Quel automatisme appeler" supprimé — SchemaFormRenderer rend "Type de ressource" depuis le schema
     await waitFor(() => {
-      expect(screen.getByText(/Quel automatisme appeler/i)).toBeInTheDocument();
+      expect(screen.getByText(/Type de ressource/i)).toBeInTheDocument();
     }, { timeout: 8000 });
   });
 
@@ -1693,8 +1695,8 @@ describe('ActionWizard — capabilities-driven connectorType (Story 82.7)', () =
     const nextBtn = await screen.findByRole('button', { name: /Suivant/i });
     await userEvent.setup().click(nextBtn);
     // Tower (connector_type=aap + schéma non vide) → WizardAAPTemplateSection doit être rendu
+    // Story 84-6: "Quel automatisme appeler" supprimé — SchemaFormRenderer rend "Type de ressource" depuis le schema
     await waitFor(() => {
-      expect(screen.getByText(/Quel automatisme appeler/i)).toBeInTheDocument();
       expect(screen.getByText(/Type de ressource/i)).toBeInTheDocument();
     }, { timeout: 8000 });
   });

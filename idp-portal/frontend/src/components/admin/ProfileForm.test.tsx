@@ -204,46 +204,49 @@ describe('ProfileForm', () => {
       expect(screen.getByText('Pattern de serveurs')).toBeInTheDocument();
     });
 
-    it('calls putProfileActions and putProfileTargets on submit when editing', async () => {
+    it('calls onSubmit with consolidated action_permissions and target_permissions when editing', async () => {
       const user = userEvent.setup();
       render(<ProfileForm {...defaultProps} editProfile={editProfile} />);
       await waitFor(() => expect(screen.getByText('Actions autorisées')).toBeInTheDocument());
       await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
       await waitFor(() => expect(mockOnSubmit).toHaveBeenCalled());
-      await waitFor(() =>
-        expect(profilesService.putProfileActions).toHaveBeenCalledWith(
-          1,
-          expect.objectContaining({
-            actions_type: 'all',
-            action_ids: [],
-            tag_patterns: [],
-            environments: [],
-          })
-        )
-      );
-      await waitFor(() =>
-        expect(profilesService.putProfileTargets).toHaveBeenCalledWith(
-          1,
-          expect.objectContaining({
-            targets_type: 'all',
-            target_names: [],
-            target_patterns: [],
-          })
-        )
-      );
+
+      const expectedPayload = {
+        name: 'Assurance',
+        description: 'X',
+        ad_group: 'GRP-X',
+        is_admin: false,
+        is_auditor: true,
+        action_permissions: {
+          actions_type: 'all',
+          action_ids: [] as number[],
+          tag_patterns: [] as string[],
+          environments: [] as string[],
+        },
+        target_permissions: {
+          targets_type: 'all',
+          target_names: [] as string[],
+          target_patterns: [] as string[],
+          filter_by_attribute: null,
+          exclusion_patterns: [] as string[],
+        },
+      };
+      expect(mockOnSubmit).toHaveBeenCalledWith(expectedPayload);
+
+      // Legacy helpers must not be invoked — consolidated flow uses onSubmit only
+      expect(profilesService.putProfileActions).not.toHaveBeenCalled();
+      expect(profilesService.putProfileTargets).not.toHaveBeenCalled();
     });
 
-    it('shows warning when putProfileActions fails but profile update succeeds', async () => {
-      vi.spyOn(profilesService, 'putProfileActions').mockRejectedValue(new Error('Network error'));
+    it('shows warning when onSubmit rejects with an error message', async () => {
+      mockOnSubmit.mockRejectedValueOnce(new Error('Network error'));
       const user = userEvent.setup();
       render(<ProfileForm {...defaultProps} editProfile={editProfile} />);
       await waitFor(() => expect(screen.getByText('Actions autorisées')).toBeInTheDocument());
       await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
-      await waitFor(() => expect(mockOnSubmit).toHaveBeenCalled());
       await waitFor(() =>
-        expect(screen.getByText(/Profil mis à jour, mais erreur/)).toBeInTheDocument()
+        expect(screen.getByText('Network error')).toBeInTheDocument()
       );
-      expect(mockOnSuccess).toHaveBeenCalled();
     });
 
     it('loads and displays targets permissions when editing', async () => {
@@ -532,11 +535,13 @@ describe('ProfileForm', () => {
       await user.click(screen.getByText('Tous les serveurs Oracle'));
       await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
       await waitFor(() => {
-        expect(profilesService.putProfileTargets).toHaveBeenCalledWith(1, expect.objectContaining({
-          targets_type: 'all',
-          target_names: [],
-          target_patterns: [],
-          filter_by_attribute: { engine_type: ['oracle'] },
+        expect(mockOnSubmit).toHaveBeenCalledWith(expect.objectContaining({
+          target_permissions: expect.objectContaining({
+            targets_type: 'all',
+            target_names: [],
+            target_patterns: [],
+            filter_by_attribute: { engine_type: ['oracle'] },
+          }),
         }));
       });
     });
@@ -556,11 +561,13 @@ describe('ProfileForm', () => {
       await user.click(screen.getByText('Tous les serveurs SQL'));
       await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
       await waitFor(() => {
-        expect(profilesService.putProfileTargets).toHaveBeenCalledWith(1, expect.objectContaining({
-          targets_type: 'all',
-          target_names: [],
-          target_patterns: [],
-          filter_by_attribute: { engine_type: ['sqlserver'] },
+        expect(mockOnSubmit).toHaveBeenCalledWith(expect.objectContaining({
+          target_permissions: expect.objectContaining({
+            targets_type: 'all',
+            target_names: [],
+            target_patterns: [],
+            filter_by_attribute: { engine_type: ['sqlserver'] },
+          }),
         }));
       });
     });
@@ -579,11 +586,13 @@ describe('ProfileForm', () => {
       });
       await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
       await waitFor(() => {
-        expect(profilesService.putProfileTargets).toHaveBeenCalledWith(1, expect.objectContaining({
-          targets_type: 'all',
-          target_names: [],
-          target_patterns: [],
-          filter_by_attribute: null,
+        expect(mockOnSubmit).toHaveBeenCalledWith(expect.objectContaining({
+          target_permissions: expect.objectContaining({
+            targets_type: 'all',
+            target_names: [],
+            target_patterns: [],
+            filter_by_attribute: null,
+          }),
         }));
       });
     });
@@ -615,7 +624,7 @@ describe('ProfileForm', () => {
         target_patterns: [],
         filter_by_attribute: null,
       });
-      vi.spyOn(profilesService, 'putProfileTargets').mockRejectedValue(new Error('Invalid filter'));
+      mockOnSubmit.mockRejectedValueOnce(new Error('Invalid filter'));
       const user = userEvent.setup();
       render(<ProfileForm {...defaultProps} editProfile={editProfile} />);
       await waitFor(() => {
@@ -624,7 +633,7 @@ describe('ProfileForm', () => {
       await user.click(screen.getByText('Tous les serveurs Oracle'));
       await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
       await waitFor(() => {
-        expect(screen.getByText(/Profil mis à jour, mais erreur/)).toBeInTheDocument();
+        expect(screen.getByText('Invalid filter')).toBeInTheDocument();
       });
     });
 
@@ -681,11 +690,13 @@ describe('ProfileForm', () => {
       await user.click(screen.getByText('Tous les serveurs SQL'));
       await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
       await waitFor(() => {
-        expect(profilesService.putProfileTargets).toHaveBeenCalledWith(1, expect.objectContaining({
-          targets_type: 'all',
-          target_names: [],
-          target_patterns: [],
-          filter_by_attribute: { engine_type: ['sqlserver'] },
+        expect(mockOnSubmit).toHaveBeenCalledWith(expect.objectContaining({
+          target_permissions: expect.objectContaining({
+            targets_type: 'all',
+            target_names: [],
+            target_patterns: [],
+            filter_by_attribute: { engine_type: ['sqlserver'] },
+          }),
         }));
       });
     });
@@ -705,11 +716,13 @@ describe('ProfileForm', () => {
       await user.click(screen.getByText('Tous les serveurs Oracle'));
       await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
       await waitFor(() => {
-        expect(profilesService.putProfileTargets).toHaveBeenCalledWith(1, expect.objectContaining({
-          targets_type: 'all',
-          target_names: [],
-          target_patterns: [],
-          filter_by_attribute: { engine_type: ['oracle'] },
+        expect(mockOnSubmit).toHaveBeenCalledWith(expect.objectContaining({
+          target_permissions: expect.objectContaining({
+            targets_type: 'all',
+            target_names: [],
+            target_patterns: [],
+            filter_by_attribute: { engine_type: ['oracle'] },
+          }),
         }));
       });
     });
@@ -729,11 +742,13 @@ describe('ProfileForm', () => {
       await user.click(screen.getByText('Tous les serveurs'));
       await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
       await waitFor(() => {
-        expect(profilesService.putProfileTargets).toHaveBeenCalledWith(1, expect.objectContaining({
-          targets_type: 'all',
-          target_names: [],
-          target_patterns: [],
-          filter_by_attribute: null,
+        expect(mockOnSubmit).toHaveBeenCalledWith(expect.objectContaining({
+          target_permissions: expect.objectContaining({
+            targets_type: 'all',
+            target_names: [],
+            target_patterns: [],
+            filter_by_attribute: null,
+          }),
         }));
       });
     });

@@ -59,6 +59,13 @@ vi.mock('../../services/execution_service', () => ({
     return [];
   }),
   fetchInventoryTargets: vi.fn().mockResolvedValue([]),
+  fetchTargetsPaginated: vi.fn().mockResolvedValue({
+    items: [],
+    total: 0,
+    page: 1,
+    page_size: 5000,
+    total_pages: 0,
+  }),
 }));
 
 vi.mock('../../services/scheduled_execution_service', () => ({

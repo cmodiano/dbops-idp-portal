@@ -127,17 +127,17 @@ describe('executionsColumns', () => {
 
   // --- 1. Column count for scope='mine' ---
   describe('getExecutionsColumns column count', () => {
-    it('returns 8 columns for scope="mine" (no Utilisateur)', () => {
+    it('returns 9 columns for scope="mine" (no Utilisateur)', () => {
       const columns = getExecutionsColumns(defaultHandlers, makeState({ activeScope: 'mine' }));
-      expect(columns).toHaveLength(8);
+      expect(columns).toHaveLength(9);
       const keys = columns!.map((c) => c.key);
       expect(keys).not.toContain('user_display_name');
     });
 
     // --- 2. Column count for scope='all' ---
-    it('returns 9 columns for scope="all" (includes Utilisateur)', () => {
+    it('returns 10 columns for scope="all" (includes Utilisateur)', () => {
       const columns = getExecutionsColumns(defaultHandlers, makeState({ activeScope: 'all' }));
-      expect(columns).toHaveLength(9);
+      expect(columns).toHaveLength(10);
       const keys = columns!.map((c) => c.key);
       expect(keys).toContain('user_display_name');
     });
@@ -318,7 +318,9 @@ describe('executionsColumns', () => {
       expect(screen.getByText('Technologie')).toBeInTheDocument();
       expect(screen.getByText('Plateforme')).toBeInTheDocument();
       expect(screen.getByText('Environnement')).toBeInTheDocument();
-      expect(screen.getByText('Date')).toBeInTheDocument();
+      expect(screen.getByText('Début')).toBeInTheDocument();
+      expect(screen.getByText('Fin')).toBeInTheDocument();
+      expect(screen.getByText('Durée')).toBeInTheDocument();
       expect(screen.getByText('Actions')).toBeInTheDocument();
       expect(screen.queryByText('Utilisateur')).not.toBeInTheDocument();
     });
@@ -334,8 +336,8 @@ describe('executionsColumns', () => {
 
       // Action name
       expect(screen.getByText('Deploy DB')).toBeInTheDocument();
-      // Environment (uppercased)
-      expect(screen.getByText('DEV')).toBeInTheDocument();
+      // Environment (mapped via getEnvironmentLabel)
+      expect(screen.getByText('Développement')).toBeInTheDocument();
       // Duration: 5 minutes
       expect(screen.getByText('5m')).toBeInTheDocument();
       // Status indicator (mocked)

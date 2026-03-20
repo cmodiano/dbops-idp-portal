@@ -162,7 +162,7 @@ puremagic==2.0.0
     # via idp-portal-backend (pyproject.toml)
 py-ubjson==0.16.1
     # via autobahn
-pyasn1==0.6.2
+pyasn1==0.6.3
     # via
     #   ldap3
     #   pyasn1-modules
@@ -173,7 +173,7 @@ pyasn1-modules==0.4.2
     # via service-identity
 pycparser==3.0
     # via cffi
-pyopenssl==25.3.0
+pyopenssl==26.0.0
     # via twisted
 python-dateutil==2.9.0.post0
     # via
@@ -240,7 +240,7 @@ tzdata==2025.3
     # via kombu
 tzlocal==5.3.1
     # via celery
-ujson==5.11.0
+ujson==5.12.0
     # via autobahn
 uritemplate==4.2.0
     # via drf-spectacular

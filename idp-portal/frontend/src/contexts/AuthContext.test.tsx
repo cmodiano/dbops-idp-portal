@@ -582,10 +582,10 @@ describe('AuthProvider', () => {
 
       expect(errorSpy).toHaveBeenCalledWith(
         expect.stringContaining('[AuthContext] VITE_DEV_AUTH=true détecté hors mode développement'),
-        expect.stringContaining('production'),
-        expect.any(String),
-        expect.any(String),
       );
+      // Verify mode is included in the structured JSON output
+      const callArg = errorSpy.mock.calls[0][0] as string;
+      expect(callArg).toContain('"mode":"production"');
 
       errorSpy.mockRestore();
     });
@@ -600,10 +600,10 @@ describe('AuthProvider', () => {
 
       expect(errorSpy).toHaveBeenCalledWith(
         expect.stringContaining('[AuthContext] VITE_DEV_AUTH=true détecté hors mode développement'),
-        expect.stringContaining('test'),
-        expect.any(String),
-        expect.any(String),
       );
+      // Verify mode is included in the structured JSON output
+      const callArg = errorSpy.mock.calls[0][0] as string;
+      expect(callArg).toContain('"mode":"test"');
 
       errorSpy.mockRestore();
     });

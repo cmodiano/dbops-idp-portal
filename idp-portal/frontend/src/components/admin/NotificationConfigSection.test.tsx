@@ -126,7 +126,7 @@ describe('NotificationConfigSection', () => {
     expect(screen.getByLabelText('Activer les notifications email')).not.toBeChecked();
     expect(screen.getByLabelText('Activer les notifications Teams')).not.toBeChecked();
     expect(screen.getByLabelText('Activer le page individuel')).not.toBeChecked();
-    expect(screen.getByLabelText('Activer le page DBA')).not.toBeChecked();
+    expect(screen.getByLabelText('Activer le page on-call')).not.toBeChecked();
   });
 
   it('shows on-call API URL input when page_oncall is enabled', () => {

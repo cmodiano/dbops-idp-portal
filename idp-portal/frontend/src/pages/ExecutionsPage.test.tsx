@@ -299,10 +299,10 @@ describe('ExecutionsPage', () => {
       expect(screen.getByText('Apply Patch')).toBeInTheDocument();
       expect(screen.getByText('Backup Database')).toBeInTheDocument();
 
-      // Check environments (uppercase)
-      expect(screen.getByText('DEV')).toBeInTheDocument();
-      expect(screen.getByText('PROD')).toBeInTheDocument();
-      expect(screen.getByText('STAGING')).toBeInTheDocument();
+      // Check environments (mapped via getEnvironmentLabel)
+      expect(screen.getByText('Développement')).toBeInTheDocument();
+      expect(screen.getByText('Production')).toBeInTheDocument();
+      expect(screen.getByText('Staging')).toBeInTheDocument();
     });
 
     it('displays status badges with tooltips (Story 9.9 AC1-AC3)', async () => {
@@ -706,9 +706,19 @@ describe('ExecutionsPage', () => {
         pagination: { page: 1, page_size: 50, total: 1, total_pages: 1 },
       });
 
+      const user = userEvent.setup();
       await act(async () => {
         renderWithProviders();
       });
+
+      // Wait for the pending approvals section to render
+      await waitFor(() => {
+        expect(screen.getByText('Approbations en attente')).toBeInTheDocument();
+      });
+
+      // Click "Voir" to open the approval modal
+      const voirBtn = screen.getByText('Voir');
+      await user.click(voirBtn);
 
       await waitFor(() => {
         expect(screen.getByText('Approuver')).toBeInTheDocument();
@@ -1750,6 +1760,14 @@ describe('ExecutionsPage', () => {
 
         vi.mocked(executionService.listExecutions).mockClear();
 
+        // Open the approval modal by clicking "Voir"
+        const voirBtn = screen.getByText('Voir');
+        await user.click(voirBtn);
+
+        await waitFor(() => {
+          expect(screen.getByText('Approuver')).toBeInTheDocument();
+        });
+
         // Now simulate approval complete (clicking Approuver triggers onActionComplete)
         const approveBtn = screen.getByText('Approuver');
         await user.click(approveBtn);
@@ -1898,6 +1916,14 @@ describe('ExecutionsPage', () => {
         });
 
         vi.mocked(executionService.listExecutions).mockClear();
+
+        // Open the approval modal by clicking "Voir"
+        const voirBtn = screen.getByText('Voir');
+        await user.click(voirBtn);
+
+        await waitFor(() => {
+          expect(screen.getByText('Approuver')).toBeInTheDocument();
+        });
 
         // Trigger approval callback
         const approveBtn = screen.getByText('Approuver');
