@@ -274,4 +274,82 @@ describe('useExecutionDetail', () => {
     expect(result.current.error).toBeNull();
     expect(result.current.loading).toBe(false);
   });
+
+  // --- BUG-FE-02 tests ---
+
+  it('sets actionDetailUnavailable=true when fetchCatalogActionById fails', async () => {
+    const execution = makeExecution({ item_type: 'workflow', action_id: 10 });
+    const steps = [makeStep()];
+
+    mockedGetExecution.mockResolvedValue(execution);
+    mockedGetExecutionSteps.mockResolvedValue(steps);
+    mockedFetchCatalogActionById.mockRejectedValue(new Error('Network error'));
+
+    const { result } = renderHook(() => useExecutionDetail(), {
+      wrapper: createWrapper(),
+    });
+
+    await act(async () => {
+      await result.current.openExecution(execution);
+    });
+
+    expect(result.current.actionDetailUnavailable).toBe(true);
+  });
+
+  it('still returns selectedExecution and selectedSteps when action detail fetch fails', async () => {
+    const execution = makeExecution({ item_type: 'workflow', action_id: 10 });
+    const steps = [makeStep(), makeStep({ id: 2, step_order: 2 })];
+
+    mockedGetExecution.mockResolvedValue(execution);
+    mockedGetExecutionSteps.mockResolvedValue(steps);
+    mockedFetchCatalogActionById.mockRejectedValue(new Error('Forbidden'));
+
+    const { result } = renderHook(() => useExecutionDetail(), {
+      wrapper: createWrapper(),
+    });
+
+    await act(async () => {
+      await result.current.openExecution(execution);
+    });
+
+    expect(result.current.selectedExecution).toEqual(execution);
+    expect(result.current.selectedSteps).toEqual(steps);
+    expect(result.current.actionDetailUnavailable).toBe(true);
+    expect(result.current.error).toBeNull();
+  });
+
+  it('actionDetailUnavailable is false on initial state and resets on new load', async () => {
+    const execution = makeExecution({ item_type: 'workflow', action_id: 10 });
+    const steps = [makeStep()];
+    const actionDetail = { id: 10, name: 'Workflow Action' } as unknown as CatalogActionDetail;
+
+    const { result } = renderHook(() => useExecutionDetail(), {
+      wrapper: createWrapper(),
+    });
+
+    // Initial state: false
+    expect(result.current.actionDetailUnavailable).toBe(false);
+
+    // First call: fails
+    mockedGetExecution.mockResolvedValue(execution);
+    mockedGetExecutionSteps.mockResolvedValue(steps);
+    mockedFetchCatalogActionById.mockRejectedValue(new Error('err'));
+
+    await act(async () => {
+      await result.current.openExecution(execution);
+    });
+    expect(result.current.actionDetailUnavailable).toBe(true);
+
+    // Second call: succeeds — should reset to false
+    mockedFetchCatalogActionById.mockResolvedValue({
+      data: actionDetail,
+      can_execute: true,
+      allowed_environments: ['DEV'],
+    });
+
+    await act(async () => {
+      await result.current.openExecution(execution);
+    });
+    expect(result.current.actionDetailUnavailable).toBe(false);
+  });
 });

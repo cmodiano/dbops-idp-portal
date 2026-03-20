@@ -57,6 +57,7 @@ function mockUseCapabilities(overrides = {}) {
     },
     loading: false,
     error: null,
+    retryCount: 0,
     ...overrides,
   });
 }

@@ -825,9 +825,10 @@ class TestContainerWorkflowChildSteps:
         SIMULATE_EXECUTION_STEP_DURATION=-5,  # Invalid negative duration
         SIMULATE_EXECUTION_FAILURE_RATE=0,
     )
+    @patch('executions.simulation_service.time.sleep')
     @patch('executions.simulation_service.logger')
     @patch('executions.container_workflow_runtime.AuditService')
-    def test_invalid_step_duration_uses_default_fallback(self, mock_audit, mock_logger):
+    def test_invalid_step_duration_uses_default_fallback(self, mock_audit, mock_logger, mock_sleep):
         """MEDIUM-3: Negative or zero step_duration falls back to 2s default."""
         execution = self._create_execution()
         runtime = ContainerWorkflowRuntime(execution)

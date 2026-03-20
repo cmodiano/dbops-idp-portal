@@ -1,5 +1,5 @@
 import { type FC, type ReactNode } from 'react';
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { Input, InputNumber, Select, Switch, Button } from 'antd';
 import { Typography } from 'antd';
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
@@ -237,6 +237,15 @@ const MappingEditor: FC<MappingEditorProps> = ({ value, onChange, disabled = fal
   const [rows, setRows] = useState<{ id: number; k: string; v: string }[]>(() =>
     Object.entries(value).map(([k, v]) => ({ id: nextIdRef.current++, k, v }))
   );
+  const prevValueRef = useRef<Record<string, string>>(value);
+
+  useEffect(() => {
+    if (JSON.stringify(value) !== JSON.stringify(prevValueRef.current)) {
+      prevValueRef.current = value;
+      nextIdRef.current = 0;
+      setRows(Object.entries(value).map(([k, v]) => ({ id: nextIdRef.current++, k, v })));
+    }
+  }, [value]);
 
   const emit = (newRows: { id: number; k: string; v: string }[]) => {
     const obj: Record<string, string> = {};

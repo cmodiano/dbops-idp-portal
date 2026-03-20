@@ -23,10 +23,9 @@ class TestCancelExecutionByInitiator:
         self.client.force_authenticate(user=self.user)
 
     def test_cancel_submitted_execution_by_initiator(self):
-        """2.1: Cancel SUBMITTED execution by owner -> commande écrite (202 accepted).
+        """2.1: Cancel SUBMITTED execution by owner -> synchronous cancel (200 OK).
 
-        Story 78.5: L'endpoint écrit une commande durable et retourne 202.
-        L'exécution reste SUBMITTED jusqu'au traitement par le command processor.
+        The view updates status to CANCELLED synchronously and returns 200.
         """
         execution = ExecutionFactory.create(
             action=self.action, user=self.user,
@@ -35,17 +34,16 @@ class TestCancelExecutionByInitiator:
         url = f'/api/v1/executions/{execution.id}/cancel/'
         response = self.client.patch(url)
 
-        assert response.status_code == 202
+        assert response.status_code == 200
         data = response.json()['data']
-        assert data['status'] == 'accepted'
-        assert 'command_id' in data
+        assert data['status'] == 'CANCELLED'
 
-        # Story 78.5: commande écrite, pas traitée inline — statut inchangé
+        # Synchronous cancel: status updated immediately
         execution.refresh_from_db()
-        assert execution.status == ExecutionStatus.SUBMITTED
+        assert execution.status == ExecutionStatus.CANCELLED
 
     def test_cancel_running_execution_by_initiator(self):
-        """2.2: Cancel RUNNING execution by owner -> 202 accepted (commande écrite, story 78.5)."""
+        """2.2: Cancel RUNNING execution by owner -> 200 OK (synchronous cancel)."""
         execution = ExecutionFactory.create(
             action=self.action, user=self.user,
             status=ExecutionStatus.RUNNING, environment='dev',
@@ -53,8 +51,8 @@ class TestCancelExecutionByInitiator:
         url = f'/api/v1/executions/{execution.id}/cancel/'
         response = self.client.patch(url)
 
-        assert response.status_code == 202
-        assert response.json()['data']['status'] == 'accepted'
+        assert response.status_code == 200
+        assert response.json()['data']['status'] == 'CANCELLED'
 
 
 @pytest.mark.django_db
@@ -69,7 +67,7 @@ class TestCancelExecutionByAdmin:
         self.action = ActionFactory.create(status='published', integration=self.integration)
 
     def test_cancel_by_dbops_admin(self):
-        """2.3: DBOPS admin can cancel another user's RUNNING execution (commande écrite, story 78.5)."""
+        """2.3: DBOPS admin can cancel another user's RUNNING execution (synchronous cancel)."""
         execution = ExecutionFactory.create(
             action=self.action, user=self.owner,
             status=ExecutionStatus.RUNNING, environment='dev',
@@ -78,11 +76,11 @@ class TestCancelExecutionByAdmin:
         url = f'/api/v1/executions/{execution.id}/cancel/'
         response = self.client.patch(url)
 
-        assert response.status_code == 202
-        assert response.json()['data']['status'] == 'accepted'
+        assert response.status_code == 200
+        assert response.json()['data']['status'] == 'CANCELLED'
 
     def test_cancel_by_dba_admin(self):
-        """DBOPS profile user can cancel another user's execution (commande écrite, story 78.5)."""
+        """DBOPS profile user can cancel another user's execution (synchronous cancel)."""
         dbops_admin = UserFactory.create(profile='DBOPS', username='dbops_admin')
         execution = ExecutionFactory.create(
             action=self.action, user=self.owner,
@@ -92,8 +90,8 @@ class TestCancelExecutionByAdmin:
         url = f'/api/v1/executions/{execution.id}/cancel/'
         response = self.client.patch(url)
 
-        assert response.status_code == 202
-        assert response.json()['data']['status'] == 'accepted'
+        assert response.status_code == 200
+        assert response.json()['data']['status'] == 'CANCELLED'
 
 
 @pytest.mark.django_db
@@ -182,10 +180,9 @@ class TestCancelRemoteExecution:
         self.client.force_authenticate(user=self.user)
 
     def test_remote_cancel_called_for_running_with_job_id(self):
-        """2.6a: Cancel RUNNING execution avec platform_job_id → commande écrite (story 78.5).
+        """2.6a: Cancel RUNNING execution avec platform_job_id -> synchronous cancel (200 OK).
 
-        Story 78.5: L'endpoint écrit une commande durable ; la suppression distante
-        est déléguée au command processor (non testée ici).
+        Remote cancellation is attempted best-effort during the synchronous cancel.
         """
         execution = ExecutionFactory.create(
             action=self.action, user=self.user,
@@ -197,11 +194,11 @@ class TestCancelRemoteExecution:
         url = f'/api/v1/executions/{execution.id}/cancel/'
         response = self.client.patch(url)
 
-        assert response.status_code == 202
-        assert response.json()['data']['status'] == 'accepted'
+        assert response.status_code == 200
+        assert response.json()['data']['status'] == 'CANCELLED'
 
     def test_remote_cancel_failure_still_cancels_locally(self):
-        """2.6b: Cancel RUNNING execution avec platform_job_id → 202 accepted (story 78.5)."""
+        """2.6b: Cancel RUNNING execution avec platform_job_id -> 200 OK (synchronous cancel)."""
         execution = ExecutionFactory.create(
             action=self.action, user=self.user,
             status=ExecutionStatus.RUNNING, environment='dev',
@@ -212,11 +209,11 @@ class TestCancelRemoteExecution:
         url = f'/api/v1/executions/{execution.id}/cancel/'
         response = self.client.patch(url)
 
-        assert response.status_code == 202
-        assert response.json()['data']['status'] == 'accepted'
+        assert response.status_code == 200
+        assert response.json()['data']['status'] == 'CANCELLED'
 
     def test_remote_cancel_not_implemented_still_cancels(self):
-        """2.6c: Cancel RUNNING execution → 202 accepted même sans job_id (story 78.5)."""
+        """2.6c: Cancel RUNNING execution -> 200 OK even without job_id (synchronous cancel)."""
         execution = ExecutionFactory.create(
             action=self.action, user=self.user,
             status=ExecutionStatus.RUNNING, environment='dev',
@@ -227,8 +224,8 @@ class TestCancelRemoteExecution:
         url = f'/api/v1/executions/{execution.id}/cancel/'
         response = self.client.patch(url)
 
-        assert response.status_code == 202
-        assert response.json()['data']['status'] == 'accepted'
+        assert response.status_code == 200
+        assert response.json()['data']['status'] == 'CANCELLED'
 
     def test_no_remote_cancel_for_submitted(self):
         """Remote cancel NOT attempted for SUBMITTED (only RUNNING)."""
@@ -241,7 +238,7 @@ class TestCancelRemoteExecution:
         with patch('executions.views.execution_views.get_platform_adapter') as MockAdapter:
             response = self.client.patch(url)
 
-        assert response.status_code == 202
+        assert response.status_code == 200
         MockAdapter.assert_not_called()
 
 
@@ -257,11 +254,11 @@ class TestConcurrentCancellation:
         self.action = ActionFactory.create(status='published', integration=self.integration)
 
     def test_concurrent_cancel_attempts(self):
-        """Deux admins annulent la même exécution — les deux reçoivent 202 (story 78.5).
+        """Deux admins annulent la meme execution — le premier recoit 200, le second 400.
 
-        Story 78.5: L'endpoint écrit des commandes durables sans modifier le statut
-        en ligne. Deux requêtes concurrentes écrivent deux commandes ; le command
-        processor déduplique l'annulation (idempotence côté worker).
+        The view uses CAS (Compare-And-Swap): the first cancel succeeds and sets
+        status to CANCELLED. The second cancel fails because the status is no longer
+        SUBMITTED/RUNNING.
         """
         owner = UserFactory.create(profile='DBA', username='owner')
         execution = ExecutionFactory.create(
@@ -270,12 +267,12 @@ class TestConcurrentCancellation:
         )
         url = f'/api/v1/executions/{execution.id}/cancel/'
 
-        # Premier cancel : commande écrite
+        # Premier cancel : succeeds
         self.client.force_authenticate(user=self.user1)
         response1 = self.client.patch(url)
-        assert response1.status_code == 202
+        assert response1.status_code == 200
 
-        # Deuxième cancel : exécution toujours RUNNING (pas encore traitée) → 202 aussi
+        # Deuxieme cancel : execution already CANCELLED -> 400
         self.client.force_authenticate(user=self.user2)
         response2 = self.client.patch(url)
-        assert response2.status_code == 202
+        assert response2.status_code == 400

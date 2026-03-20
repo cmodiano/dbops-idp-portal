@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ActionWizard } from './ActionWizard';
 import type { ActionDetail } from '../../types/api';
@@ -64,6 +64,7 @@ vi.mock('../../hooks/useEngines', () => ({
     ],
     loading: false,
     error: null,
+    retryCount: 0,
   }),
   invalidateEnginesCache: vi.fn(),
 }));
@@ -83,6 +84,7 @@ vi.mock('../../hooks/usePlatformIntegrations', () => ({
     ],
     loading: false,
     error: null,
+    retryCount: 0,
     getIntegrationById: (id: number) => {
       if (id === 1) return { id: 1, type: 'aap', name: 'AAP-PROD', status: 'valid', base_url: 'https://aap.local', credential_ref: null, icon: null, auth_flow: null, created_at: '', updated_at: '' };
       if (id === 2) return { id: 2, type: 'github_actions', name: 'GitHub CI', status: 'valid', base_url: 'https://github.com', credential_ref: null, icon: null, auth_flow: null, created_at: '', updated_at: '' };
@@ -179,6 +181,7 @@ const defaultAAPMockWizard = {
   loading: false,
   fallback: true,
   error: null,
+  retryCount: 0,
 };
 
 const mockOnSubmit = vi.fn().mockResolvedValue({ id: 1 });
@@ -191,6 +194,7 @@ const defaultProps = {
   onSubmit: mockOnSubmit,
   loading: false,
   error: null,
+  retryCount: 0,
   editAction: null,
   onSuccess: mockOnSuccess,
 };
@@ -201,7 +205,7 @@ describe('ActionWizard', () => {
     // M3 fix: default AAP mock (fallback = manual input)
     mockUseAAPTemplates.mockReturnValue(defaultAAPMockWizard);
     // Story 82.7: default capabilities mock
-    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilities, loading: false, error: null });
+    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilities, loading: false, error: null, retryCount: 0 });
   });
 
   describe('AC1: Ouverture du wizard', () => {
@@ -916,6 +920,7 @@ describe('ActionWizard', () => {
         loading: false,
         fallback: false,
         error: null,
+        retryCount: 0,
       });
       const user = userEvent.setup();
       await act(async () => { render(<ActionWizard {...defaultProps} />); });
@@ -942,6 +947,7 @@ describe('ActionWizard', () => {
         loading: false,
         fallback: true,
         error: 'API indisponible',
+        retryCount: 0,
       });
       const user = userEvent.setup();
       await act(async () => { render(<ActionWizard {...defaultProps} />); });
@@ -962,6 +968,7 @@ describe('ActionWizard — additional coverage', () => {
       loading: false,
       fallback: true,
       error: null,
+      retryCount: 0,
     });
   });
 
@@ -1522,7 +1529,7 @@ describe('ActionWizard — capabilities-driven connectorType (Story 82.7)', () =
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseAAPTemplates.mockReturnValue(defaultAAPMockWizard);
-    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilities, loading: false, error: null });
+    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilities, loading: false, error: null, retryCount: 0 });
   });
 
   const aapEditAction: ActionDetail = {
@@ -1579,7 +1586,7 @@ describe('ActionWizard — capabilities-driven connectorType (Story 82.7)', () =
 
   it('T8.3 — capabilities null → connectorType = "none" → section AAP non visible', async () => {
     // Capabilities null → connectorType = 'none' (pas de fallback integrationHelpers)
-    mockUseCapabilities.mockReturnValue({ capabilities: null, loading: false, error: null });
+    mockUseCapabilities.mockReturnValue({ capabilities: null, loading: false, error: null, retryCount: 0 });
     await act(async () => {
       render(<ActionWizard {...defaultProps} editAction={aapEditAction} />);
     });
@@ -1621,6 +1628,7 @@ describe('ActionWizard — capabilities-driven connectorType (Story 82.7)', () =
       },
       loading: false,
       error: null,
+      retryCount: 0,
     });
     // Integration id 2 → type 'github_actions' — un mapping local retournerait 'github_actions'
     // mais capabilities retourne 'aap' → section AAP doit être VISIBLE (capabilities prime)
@@ -1690,5 +1698,136 @@ describe('ActionWizard — capabilities-driven connectorType (Story 82.7)', () =
       expect(screen.getByText(/Type de ressource/i)).toBeInTheDocument();
     }, { timeout: 8000 });
   });
+});
+
+// Story 88-2 BUG-FE-01: Tests for tag comparison fix
+describe('ActionWizard — BUG-FE-01 tag comparison', () => {
+  const mockOnSubmitLocal = vi.fn().mockResolvedValue({ id: 10 });
+  const mockOnCancelLocal = vi.fn();
+  const mockOnSuccessLocal = vi.fn();
+
+  const bugFixProps = {
+    open: true,
+    onCancel: mockOnCancelLocal,
+    onSubmit: mockOnSubmitLocal,
+    loading: false,
+    error: null,
+    retryCount: 0,
+    editAction: null,
+    onSuccess: mockOnSuccessLocal,
+  };
+
+  const makeEditActionBugFix = (overrides: Partial<import('../../types/api').ActionDetail> = {}): import('../../types/api').ActionDetail => ({
+    id: 10,
+    name: 'Test Action',
+    description: 'Desc',
+    item_type: 'action' as const,
+    engine: 'Oracle',
+    platform: 'AAP',
+    integration_id: 1,
+    parameters_schema: null,
+    impact_rules: null,
+    default_impact_level: null,
+    status: 'draft' as const,
+    created_by: null,
+    created_at: '',
+    updated_at: null,
+    execution_steps: [],
+    workflow_steps: null,
+    tags: ['tag-a', 'tag-b'],
+    ...overrides,
+  });
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    // Required mocks (same as main describe)
+    mockUseAAPTemplates.mockReturnValue(defaultAAPMockWizard);
+    mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilities, loading: false, error: null, retryCount: 0 });
+    // Reset admin_service mocks for tags
+    const { updateActionTags, updateActionSteps } = await import('../../services/admin_service');
+    vi.mocked(updateActionTags).mockResolvedValue({} as unknown as ActionDetail);
+    vi.mocked(updateActionSteps).mockResolvedValue({} as unknown as ActionDetail);
+  });
+
+  it('1.3 — updateActionTags n\'est PAS appelé quand les tags sont identiques à l\'initial', async () => {
+    const { updateActionTags } = await import('../../services/admin_service');
+    vi.mocked(updateActionTags).mockResolvedValue({} as unknown as ActionDetail);
+
+    const user = userEvent.setup();
+    const editAction = makeEditActionBugFix({ tags: ['tag-a', 'tag-b'] });
+
+    await act(async () => {
+      render(<ActionWizard {...bugFixProps} editAction={editAction} />);
+    });
+
+    await waitFor(() => expect(screen.getByLabelText("Nom de l'action")).toHaveValue('Test Action'));
+
+    // Navigate to step 2
+    await user.click(await screen.findByRole('button', { name: /Suivant/i }));
+    await waitFor(() => expect(screen.getByLabelText('ID template AAP')).toBeInTheDocument());
+    await user.type(screen.getByLabelText('ID template AAP'), '5');
+
+    // Navigate to step 3
+    await user.click(await screen.findByRole('button', { name: /Suivant/i }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /Enregistrer/i })).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
+
+    await waitFor(() => {
+      expect(mockOnSubmitLocal).toHaveBeenCalledTimes(1);
+    }, { timeout: 5000 });
+
+    // Tags unchanged → updateActionTags must NOT be called
+    expect(updateActionTags).not.toHaveBeenCalled();
+  }, 30000);
+
+  it('1.4 — updateActionTags EST appelé quand les tags diffèrent de l\'initial', async () => {
+    const { updateActionTags } = await import('../../services/admin_service');
+    vi.mocked(updateActionTags).mockResolvedValue({} as unknown as ActionDetail);
+
+    const user = userEvent.setup();
+    // editAction starts with empty tags — user will add a tag on step 1
+    const editAction = makeEditActionBugFix({ tags: [] });
+
+    await act(async () => {
+      render(<ActionWizard {...bugFixProps} editAction={editAction} />);
+    });
+
+    await waitFor(() => expect(screen.getByLabelText("Nom de l'action")).toHaveValue('Test Action'));
+
+    // Add a new tag on step 1 via the Ant Design Select (mode="tags")
+    // In Ant Design v5, aria-label is applied to the internal combobox <input>
+    // Use role="combobox" to find the actual input element
+    const allComboboxes = screen.getAllByRole('combobox');
+    // The Tags combobox has aria-label="Tags"
+    const tagsInput = allComboboxes.find(el => el.getAttribute('aria-label') === 'Tags') ?? screen.getByLabelText('Tags');
+
+    await act(async () => {
+      fireEvent.change(tagsInput, { target: { value: 'new-tag' } });
+    });
+    await act(async () => {
+      fireEvent.keyDown(tagsInput, { key: 'Enter', code: 'Enter', keyCode: 13 });
+    });
+
+    // Navigate to step 2
+    await user.click(await screen.findByRole('button', { name: /Suivant/i }));
+    await waitFor(() => expect(screen.getByLabelText('ID template AAP')).toBeInTheDocument());
+    await user.type(screen.getByLabelText('ID template AAP'), '5');
+
+    // Navigate to step 3
+    await user.click(await screen.findByRole('button', { name: /Suivant/i }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /Enregistrer/i })).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
+
+    await waitFor(() => {
+      expect(mockOnSubmitLocal).toHaveBeenCalledTimes(1);
+    }, { timeout: 5000 });
+
+    // Tags changed ([] → ['new-tag']) → updateActionTags MUST be called
+    await waitFor(() => {
+      expect(updateActionTags).toHaveBeenCalled();
+    }, { timeout: 5000 });
+  }, 30000);
 });
 

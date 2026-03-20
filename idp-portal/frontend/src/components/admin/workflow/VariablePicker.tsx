@@ -10,6 +10,7 @@ import type { FC, ReactNode } from 'react';
 import { Popover, Input, Tooltip, Spin, Empty, Typography, theme } from 'antd';
 import { CodeOutlined, ThunderboltOutlined, ApiOutlined, GlobalOutlined } from '@ant-design/icons';
 import { useOutputSchemas } from '../../../hooks/useOutputSchemas';
+import type { AvailableVariablesStep } from '../../../services/output_schema_service';
 
 const { Text } = Typography;
 
@@ -26,6 +27,8 @@ export interface VariablePickerProps {
   disabled?: boolean;
   /** Step IDs disponibles (filtrage des steps précédents). */
   availableStepIds?: string[];
+  /** Variables locales dérivées du output_mapping en mémoire — fusionnées avec l'API, sans sauvegarde requise. */
+  localVariables?: AvailableVariablesStep[];
 }
 
 export const VariablePicker: FC<VariablePickerProps> = ({
@@ -34,6 +37,7 @@ export const VariablePicker: FC<VariablePickerProps> = ({
   onSelect,
   disabled = false,
   availableStepIds,
+  localVariables,
 }) => {
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState(false);
@@ -41,13 +45,27 @@ export const VariablePicker: FC<VariablePickerProps> = ({
   const { token } = theme.useToken();
   const { availableVariables, loading } = useOutputSchemas(workflowId);
 
+  // Fusionner variables API + variables locales (output_mapping en mémoire).
+  // Les variables locales ont priorité pour le même step_id : elles reflètent l'état courant
+  // du canvas sans nécessiter de sauvegarde.
+  const mergedVariables = useMemo(() => {
+    const apiMap = new Map((availableVariables ?? []).map((s) => [s.step_id, s]));
+    const localMap = new Map((localVariables ?? []).map((s) => [s.step_id, s]));
+    // Partir de l'API, écraser/compléter avec le local
+    const merged = new Map(apiMap);
+    for (const [id, local] of localMap) {
+      merged.set(id, local);
+    }
+    return Array.from(merged.values());
+  }, [availableVariables, localVariables]);
+
   const filtered = useMemo(() => {
     // Si availableStepIds est fourni, filtrer pour n'inclure que les steps précédents (pas le step courant).
     // Si availableStepIds est undefined, pas de filtrage (montrer tous les steps).
     const precedingIds = availableStepIds != null
       ? availableStepIds.filter((id) => id !== currentStepId)
       : null;
-    return (availableVariables ?? [])
+    return mergedVariables
       .filter((step) => precedingIds == null || precedingIds.includes(step.step_id))
       .map((step) => ({
         ...step,
@@ -59,7 +77,7 @@ export const VariablePicker: FC<VariablePickerProps> = ({
         ),
       }))
       .filter((step) => step.variables.length > 0);
-  }, [availableVariables, availableStepIds, currentStepId, search]);
+  }, [mergedVariables, availableStepIds, currentStepId, search]);
 
   const content = (
     <div style={{ width: 300, maxHeight: 400, overflowY: 'auto' }}>

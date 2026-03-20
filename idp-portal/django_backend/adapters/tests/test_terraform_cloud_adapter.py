@@ -283,10 +283,11 @@ class TestTrigger:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
+        from core.exceptions import AdapterTimeoutError
         with patch("adapters.terraform_cloud_adapter.httpx.AsyncClient", return_value=mock_client):
-            with pytest.raises(ServiceUnavailableError) as exc_info:
+            with pytest.raises(AdapterTimeoutError) as exc_info:
                 await adapter.trigger(workspace_id="ws-test")
-            assert exc_info.value.code == "TERRAFORM_TIMEOUT"
+            assert exc_info.value.code == "ADAPTER_TIMEOUT"
 
     @pytest.mark.asyncio
     async def test_trigger_workspace_locked(self, adapter: TerraformCloudAdapter) -> None:
@@ -439,10 +440,11 @@ class TestGetStatus:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
+        from core.exceptions import AdapterTimeoutError
         with patch("adapters.terraform_cloud_adapter.httpx.AsyncClient", return_value=mock_client):
-            with pytest.raises(ServiceUnavailableError) as exc_info:
+            with pytest.raises(AdapterTimeoutError) as exc_info:
                 await adapter.get_status("run-abc")
-            assert exc_info.value.code == "TERRAFORM_TIMEOUT"
+            assert exc_info.value.code == "ADAPTER_TIMEOUT"
 
 
 # ---------------------------------------------------------------------------

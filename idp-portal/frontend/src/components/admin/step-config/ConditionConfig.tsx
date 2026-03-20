@@ -1,10 +1,11 @@
 /**
  * ConditionConfig — Configuration de condition environment_in (Story 57.13).
- * Multi-select libre d'environnements (l'utilisateur saisit les noms).
+ * Multi-select chargé depuis l'API inventaire avec saisie libre en fallback.
  */
 
 import type { FC } from 'react';
 import { Select, Typography } from 'antd';
+import { useEnvironments } from '../../../hooks/useEnvironments';
 
 const { Text } = Typography;
 
@@ -20,6 +21,7 @@ export const ConditionConfig: FC<ConditionConfigProps> = ({
   disabled = false,
 }) => {
   const currentEnvs = value?.environment_in ?? [];
+  const { environmentOptions, loading } = useEnvironments();
 
   const handleChange = (envs: string[]) => {
     if (envs.length === 0) {
@@ -35,15 +37,17 @@ export const ConditionConfig: FC<ConditionConfigProps> = ({
         Filtrer par environnement (optionnel)
       </Text>
       <Select
-        mode="tags"
+        mode="multiple"
         size="small"
         style={{ width: '100%' }}
         value={currentEnvs}
         onChange={handleChange}
-        placeholder="ex: PROD, STAGING"
+        placeholder="Tous les environnements"
         disabled={disabled}
+        loading={loading}
         aria-label="Filtrer par environnement"
-        tokenSeparators={[',']}
+        options={environmentOptions}
+        optionFilterProp="label"
       />
       <Text type="secondary" style={{ fontSize: 11, marginTop: 4, display: 'block' }}>
         Laisser vide pour exécuter dans tous les environnements

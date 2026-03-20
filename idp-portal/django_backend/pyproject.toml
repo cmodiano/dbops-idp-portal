@@ -51,6 +51,7 @@ dependencies = [
     "django-jazzmin>=3.0.0,<4.0.0",
     "ldap3>=2.9.0",
     "jinja2>=3.1.0",
+    "tenacity>=8.2.0",
 ]
 
 [project.optional-dependencies]
@@ -176,6 +177,11 @@ module = [
     "jose.*",
     "croniter.*",
 ]
+ignore_missing_imports = true
+
+# tenacity — no type stubs; used by service_call_handler, gate strategies
+[[tool.mypy.overrides]]
+module = "tenacity"
 ignore_missing_imports = true
 
 # Story 78.10–78.15: Normalized models (managed=False) — django-stubs false positives

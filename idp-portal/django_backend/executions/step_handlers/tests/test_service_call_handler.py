@@ -37,7 +37,7 @@ class TestAllowedOperations:
         handler = _make_handler()
         execution = _make_execution()
 
-        with patch("executions.step_handlers.service_call_handler.get_service_client") as mock_gsc:
+        with patch("executions.app.handlers.service_call_handler.get_service_client") as mock_gsc:
             mock_service = MagicMock()
             mock_service.send_email.return_value = None
             mock_gsc.return_value = mock_service
@@ -56,7 +56,7 @@ class TestAllowedOperations:
         handler = _make_handler()
         execution = _make_execution()
 
-        with patch("executions.step_handlers.service_call_handler.get_service_client") as mock_gsc:
+        with patch("executions.app.handlers.service_call_handler.get_service_client") as mock_gsc:
             mock_service = MagicMock()
             mock_service.send_teams.return_value = None
             mock_gsc.return_value = mock_service
@@ -75,7 +75,7 @@ class TestAllowedOperations:
         handler = _make_handler()
         execution = _make_execution()
 
-        with patch("executions.step_handlers.service_call_handler.get_service_client") as mock_gsc:
+        with patch("executions.app.handlers.service_call_handler.get_service_client") as mock_gsc:
             mock_service = MagicMock()
             mock_service.notify_execution_event.return_value = None
             mock_gsc.return_value = mock_service
@@ -114,8 +114,8 @@ class TestCredentialFreeType:
         handler = _make_handler()
         execution = _make_execution()
 
-        with patch("executions.step_handlers.service_call_handler.get_service_client") as mock_gsc, \
-             patch("executions.step_handlers.service_call_handler.IntegrationService") as mock_is:
+        with patch("executions.app.handlers.service_call_handler.get_service_client") as mock_gsc, \
+             patch("executions.app.handlers.service_call_handler.IntegrationService") as mock_is:
             mock_service = MagicMock()
             mock_service.send_email.return_value = None
             mock_gsc.return_value = mock_service
@@ -136,7 +136,7 @@ class TestCredentialFreeType:
         handler = _make_handler()
         execution = _make_execution()
 
-        with patch("executions.step_handlers.service_call_handler.get_service_client") as mock_gsc:
+        with patch("executions.app.handlers.service_call_handler.get_service_client") as mock_gsc:
             mock_service = MagicMock()
             mock_service.send_email.return_value = None
             mock_gsc.return_value = mock_service
@@ -156,7 +156,7 @@ class TestCredentialFreeType:
         handler = _make_handler()
         execution = _make_execution()
 
-        with patch("executions.step_handlers.service_call_handler.get_service_client") as mock_gsc:
+        with patch("executions.app.handlers.service_call_handler.get_service_client") as mock_gsc:
             mock_service = MagicMock()
             mock_service.send_email.return_value = None
             mock_gsc.return_value = mock_service
@@ -182,7 +182,7 @@ class TestSendEmail:
         handler = _make_handler()
         execution = _make_execution()
 
-        with patch("executions.step_handlers.service_call_handler.get_service_client") as mock_gsc:
+        with patch("executions.app.handlers.service_call_handler.get_service_client") as mock_gsc:
             mock_service = MagicMock()
             mock_service.send_email.return_value = None
             mock_gsc.return_value = mock_service
@@ -211,7 +211,7 @@ class TestSendEmail:
         handler = _make_handler()
         execution = _make_execution()
 
-        with patch("executions.step_handlers.service_call_handler.get_service_client") as mock_gsc:
+        with patch("executions.app.handlers.service_call_handler.get_service_client") as mock_gsc:
             mock_service = MagicMock()
             mock_service.send_email.return_value = None
             mock_gsc.return_value = mock_service
@@ -237,7 +237,7 @@ class TestSendTeams:
         handler = _make_handler()
         execution = _make_execution()
 
-        with patch("executions.step_handlers.service_call_handler.get_service_client") as mock_gsc:
+        with patch("executions.app.handlers.service_call_handler.get_service_client") as mock_gsc:
             mock_service = MagicMock()
             mock_service.send_teams.return_value = None
             mock_gsc.return_value = mock_service
@@ -264,7 +264,7 @@ class TestSendTeams:
         handler = _make_handler()
         execution = _make_execution()
 
-        with patch("executions.step_handlers.service_call_handler.get_service_client") as mock_gsc:
+        with patch("executions.app.handlers.service_call_handler.get_service_client") as mock_gsc:
             mock_service = MagicMock()
             mock_service.send_teams.return_value = None
             mock_gsc.return_value = mock_service
@@ -301,7 +301,7 @@ class TestNotifyExecutionEvent:
         execution = _make_execution()
         action = execution.action
 
-        with patch("executions.step_handlers.service_call_handler.get_service_client") as mock_gsc:
+        with patch("executions.app.handlers.service_call_handler.get_service_client") as mock_gsc:
             mock_service = MagicMock()
             mock_service.notify_execution_event.return_value = None
             mock_gsc.return_value = mock_service
@@ -327,7 +327,7 @@ class TestNotifyExecutionEvent:
         handler = _make_handler()
         execution = _make_execution()
 
-        with patch("executions.step_handlers.service_call_handler.get_service_client") as mock_gsc:
+        with patch("executions.app.handlers.service_call_handler.get_service_client") as mock_gsc:
             mock_service = MagicMock()
             mock_service.notify_execution_event.return_value = None
             mock_gsc.return_value = mock_service
@@ -351,7 +351,7 @@ class TestNotifyExecutionEvent:
         handler = _make_handler()
         execution = _make_execution()
 
-        with patch("executions.step_handlers.service_call_handler.get_service_client") as mock_gsc:
+        with patch("executions.app.handlers.service_call_handler.get_service_client") as mock_gsc:
             mock_service = MagicMock()
             mock_service.notify_execution_event.return_value = None
             mock_gsc.return_value = mock_service
@@ -374,7 +374,7 @@ class TestNotifyExecutionEvent:
         fake_execution.id = 999
         fake_action = MagicMock()
 
-        with patch("executions.step_handlers.service_call_handler.get_service_client") as mock_gsc:
+        with patch("executions.app.handlers.service_call_handler.get_service_client") as mock_gsc:
             mock_service = MagicMock()
             mock_service.notify_execution_event.return_value = None
             mock_gsc.return_value = mock_service
@@ -427,7 +427,7 @@ class TestNonRegression:
         handler = _make_handler()
         execution = _make_execution()
 
-        with patch("executions.step_handlers.service_call_handler.IntegrationService") as mock_is:
+        with patch("executions.app.handlers.service_call_handler.IntegrationService") as mock_is:
             mock_integration_service = MagicMock()
             mock_is.return_value = mock_integration_service
             mock_integration_service.get_by_id.return_value = None

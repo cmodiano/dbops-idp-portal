@@ -11,9 +11,11 @@ from datetime import datetime, timezone
 import httpx
 import structlog
 
+from django.conf import settings
+
 from adapters.base_adapter import BaseAdapter
 from adapters.status_mappers import AAP_STATUS_MAP, AAP_TOWER_TERMINAL_STATUSES  # noqa: F401 — re-exported for backward compat
-from core.exceptions import ServiceUnavailableError
+from core.exceptions import AdapterTimeoutError, ServiceUnavailableError
 from integrations.health_check import HealthCheckResult, HealthCheckStatus, IHealthCheckable
 
 logger = structlog.get_logger(__name__)
@@ -34,13 +36,14 @@ class AAPAdapter(BaseAdapter, IHealthCheckable):
         self,
         base_url: str,
         auth_headers: dict[str, str],
-        timeout: float = AAP_DEFAULT_TIMEOUT,
+        timeout: float | None = None,
         ssl_verify: bool = True,
         ca_bundle_path: str | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.auth_headers = auth_headers
-        self.timeout = timeout
+        default_timeout = getattr(settings, 'AAP_SOCKET_TIMEOUT', AAP_DEFAULT_TIMEOUT)
+        self.timeout = timeout if timeout is not None else default_timeout
         # verify: use CA bundle path if set, otherwise ssl_verify boolean
         self._verify = (ca_bundle_path or "").strip() or ssl_verify
         if self._verify is False:
@@ -76,7 +79,8 @@ class AAPAdapter(BaseAdapter, IHealthCheckable):
             Dict with 'platform_job_id', 'status', 'url'.
 
         Raises:
-            ServiceUnavailableError: If AAP is unreachable or returns error.
+            AdapterTimeoutError: If AAP does not respond within the configured timeout.
+            ServiceUnavailableError: If AAP returns an HTTP error or connection fails.
         """
         if resource_type == "workflow_job":
             url = f"{self.base_url}/api/v2/workflow_job_templates/{template_id}/launch/"
@@ -113,10 +117,9 @@ class AAPAdapter(BaseAdapter, IHealthCheckable):
                 correlation_id=correlation_id,
                 error=str(exc),
             )
-            raise ServiceUnavailableError(
-                code="AAP_TIMEOUT",
+            raise AdapterTimeoutError(
+                adapter_type="aap",
                 message="AAP did not respond in time",
-                details={"url": url},
             ) from exc
         except httpx.HTTPStatusError as exc:
             logger.error(
@@ -185,7 +188,8 @@ class AAPAdapter(BaseAdapter, IHealthCheckable):
             'elapsed', 'artifacts', 'failed_tasks', 'changed_hosts'.
 
         Raises:
-            ServiceUnavailableError: If AAP is unreachable.
+            AdapterTimeoutError: If AAP does not respond within the configured timeout.
+            ServiceUnavailableError: If AAP returns an HTTP error or connection fails.
         """
         if resource_type == "workflow_job":
             url = f"{self.base_url}/api/v2/workflow_jobs/{platform_job_id}/"
@@ -232,7 +236,7 @@ class AAPAdapter(BaseAdapter, IHealthCheckable):
                         )
         except httpx.TimeoutException as exc:
             logger.error("aap_get_status_timeout", platform_job_id=platform_job_id, correlation_id=correlation_id, error=str(exc))
-            raise ServiceUnavailableError(code="AAP_TIMEOUT", message="AAP status check timed out", details={"platform_job_id": platform_job_id}) from exc
+            raise AdapterTimeoutError(adapter_type="aap", message="AAP status check timed out", platform_job_id=platform_job_id) from exc
         except httpx.HTTPStatusError as exc:
             logger.error("aap_get_status_http_error", platform_job_id=platform_job_id, status_code=exc.response.status_code, correlation_id=correlation_id, error=str(exc))
             raise ServiceUnavailableError(code="AAP_HTTP_ERROR", message=f"AAP returned HTTP {exc.response.status_code}", details={"platform_job_id": platform_job_id, "status_code": exc.response.status_code}) from exc
@@ -463,10 +467,9 @@ class AAPAdapter(BaseAdapter, IHealthCheckable):
                 ]
         except httpx.TimeoutException as exc:
             logger.warning("aap_list_templates_timeout", url=url, error=str(exc))
-            raise ServiceUnavailableError(
-                code="AAP_TIMEOUT",
+            raise AdapterTimeoutError(
+                adapter_type="aap",
                 message="AAP API timeout",
-                details={"url": url},
             ) from exc
         except httpx.HTTPStatusError as exc:
             logger.warning(

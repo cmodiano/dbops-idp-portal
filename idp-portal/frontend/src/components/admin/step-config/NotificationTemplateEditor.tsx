@@ -12,6 +12,7 @@ import { Button, Input, Space, Typography } from 'antd';
 import type { InputRef } from 'antd';
 
 import { VariablePicker } from '../workflow/VariablePicker';
+import type { AvailableVariablesStep } from '../../../services/output_schema_service';
 
 type TextAreaRef = ElementRef<typeof Input.TextArea>;
 
@@ -25,6 +26,8 @@ export interface NotificationTemplateEditorProps {
   workflowId?: number;
   currentStepId: string;
   availableStepIds?: string[];
+  /** Variables locales dérivées du output_mapping des nodes en mémoire. */
+  localVariables?: AvailableVariablesStep[];
   /** Story 83-10: widened to string for full declarative support via ui_hints.input_renderer */
   operation: string;
 }
@@ -74,6 +77,7 @@ export const NotificationTemplateEditor: FC<NotificationTemplateEditorProps> = (
   workflowId,
   currentStepId,
   availableStepIds,
+  localVariables,
   operation,
 }) => {
   const current = value ?? {};
@@ -144,6 +148,7 @@ export const NotificationTemplateEditor: FC<NotificationTemplateEditorProps> = (
               workflowId={workflowId}
               currentStepId={currentStepId}
               availableStepIds={availableStepIds}
+              localVariables={localVariables}
               disabled={disabled}
               onSelect={(expr) => insertAtCursor(recipientRef, 'recipient_email', expr)}
             />
@@ -167,6 +172,7 @@ export const NotificationTemplateEditor: FC<NotificationTemplateEditorProps> = (
               workflowId={workflowId}
               currentStepId={currentStepId}
               availableStepIds={availableStepIds}
+              localVariables={localVariables}
               disabled={disabled}
               onSelect={(expr) => insertAtCursor(ccRef, 'cc', expr)}
             />
@@ -190,6 +196,7 @@ export const NotificationTemplateEditor: FC<NotificationTemplateEditorProps> = (
               workflowId={workflowId}
               currentStepId={currentStepId}
               availableStepIds={availableStepIds}
+              localVariables={localVariables}
               disabled={disabled}
               onSelect={(expr) => insertAtCursor(subjectRef, 'subject', expr)}
             />
@@ -213,6 +220,7 @@ export const NotificationTemplateEditor: FC<NotificationTemplateEditorProps> = (
               workflowId={workflowId}
               currentStepId={currentStepId}
               availableStepIds={availableStepIds}
+              localVariables={localVariables}
               disabled={disabled}
               onSelect={(expr) => insertAtCursor(bodyRef, 'body', expr)}
             />
@@ -236,6 +244,7 @@ export const NotificationTemplateEditor: FC<NotificationTemplateEditorProps> = (
               workflowId={workflowId}
               currentStepId={currentStepId}
               availableStepIds={availableStepIds}
+              localVariables={localVariables}
               disabled={disabled}
               onSelect={(expr) => insertAtCursor(attachmentsRef, 'attachments', expr)}
             />

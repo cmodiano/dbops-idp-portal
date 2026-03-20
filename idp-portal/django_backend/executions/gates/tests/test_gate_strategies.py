@@ -1,7 +1,7 @@
 """
-Tests unitaires — Story 83-2: GateEvaluationStrategy et dispatch dans GateEvaluator.
+Tests unitaires — Stories 83-2 / 86-4: GateEvaluationStrategy et dispatch dans GateEvaluator.
 
-Tests couverts :
+Tests couverts (Story 83-2) :
 - MaintenanceWindowEvaluationStrategy.evaluate() avec requires_maintenance_window=False → court-circuit
 - MaintenanceWindowEvaluationStrategy.evaluate() avec target en fenêtre → satisfied=True
 - MaintenanceWindowEvaluationStrategy.evaluate() avec target hors fenêtre → satisfied=False
@@ -10,8 +10,13 @@ Tests couverts :
 - GateEvaluator avec gate ayant requires_manual_resolution=True
   → satisfied=False, reason="En attente d'approbation explicite"
 - GateEvaluator dispatch vers strategy (mock) via evaluation_strategy
+
+Tests couverts (Story 86-4) :
+- Retry tenacity sur get_next_maintenance_window : succès au 2e appel, épuisement, RuntimeError, log WARNING
 """
+import pytest
 from unittest.mock import MagicMock, patch
+from tenacity import wait_none
 
 from executions.gate_evaluator import GateEvaluator
 from executions.gates.definitions import (
@@ -143,7 +148,8 @@ class TestMaintenanceWindowEvaluationStrategy:
             "Connection refused"
         )
 
-        satisfied, context = strategy.evaluate(ctx)
+        with patch.object(MaintenanceWindowEvaluationStrategy, '_retry_wait', wait_none()):
+            satisfied, context = strategy.evaluate(ctx)
 
         assert satisfied is False
         detail = context['details'][0]
@@ -285,3 +291,78 @@ class TestGateEvaluatorDispatch:
         assert ctx_arg.step is step
         gate = status['gates'][0]
         assert gate['reason'] == 'Mock OK'
+
+
+# ─────────────────────────────────────────────────────────────
+# Tests : Retry tenacity sur get_next_maintenance_window
+# ─────────────────────────────────────────────────────────────
+
+class TestMaintenanceWindowRetry:
+    """Tests de la logique de retry tenacity — Story 86-4."""
+
+    def test_retry_on_inventory_error_succeeds_on_second_attempt(self):
+        """Premier appel lève InventoryServiceError, deuxième retourne fenêtre active → satisfied=True."""
+        strategy = MaintenanceWindowEvaluationStrategy()
+        target = _make_target('SRV1')
+        ctx = _make_ctx(requires_maintenance_window=True, targets=[target])
+        ctx.inventory_service.get_next_maintenance_window.side_effect = [
+            InventoryServiceError("timeout"),
+            {'is_active': True},
+        ]
+
+        with patch.object(MaintenanceWindowEvaluationStrategy, '_retry_wait', wait_none()):
+            satisfied, context = strategy.evaluate(ctx)
+
+        assert satisfied is True
+        assert ctx.inventory_service.get_next_maintenance_window.call_count == 2
+
+    def test_retry_exhausted_returns_unsatisfied(self):
+        """Tous les appels lèvent InventoryServiceError → satisfied=False, 4 appels."""
+        strategy = MaintenanceWindowEvaluationStrategy()
+        target = _make_target('SRV1')
+        ctx = _make_ctx(requires_maintenance_window=True, targets=[target])
+        ctx.inventory_service.get_next_maintenance_window.side_effect = InventoryServiceError(
+            "always fails"
+        )
+
+        with patch.object(MaintenanceWindowEvaluationStrategy, '_retry_wait', wait_none()):
+            satisfied, context = strategy.evaluate(ctx)
+
+        assert satisfied is False
+        assert ctx.inventory_service.get_next_maintenance_window.call_count == 4
+        detail = context['details'][0]
+        assert 'Inventory service error' in detail['reason']
+
+    def test_no_retry_on_unexpected_exception(self):
+        """RuntimeError non capturée par le retry → remontée immédiatement, 1 seul appel."""
+        strategy = MaintenanceWindowEvaluationStrategy()
+        target = _make_target('SRV1')
+        ctx = _make_ctx(requires_maintenance_window=True, targets=[target])
+        ctx.inventory_service.get_next_maintenance_window.side_effect = RuntimeError("unexpected")
+
+        with pytest.raises(RuntimeError):
+            strategy.evaluate(ctx)
+
+        assert ctx.inventory_service.get_next_maintenance_window.call_count == 1
+
+    def test_warning_logged_on_retry(self):
+        """Un log WARNING 'inventory_retry_maintenance_window' est émis lors d'un retry."""
+        strategy = MaintenanceWindowEvaluationStrategy()
+        target = _make_target('SRV1')
+        ctx = _make_ctx(requires_maintenance_window=True, targets=[target])
+        ctx.inventory_service.get_next_maintenance_window.side_effect = [
+            InventoryServiceError("timeout"),
+            {'is_active': True},
+        ]
+
+        with patch.object(MaintenanceWindowEvaluationStrategy, '_retry_wait', wait_none()), \
+                patch('executions.gates.strategies.logger') as mock_logger:
+            strategy.evaluate(ctx)
+
+        mock_logger.warning.assert_called_once()
+        call_args = mock_logger.warning.call_args
+        assert call_args.args[0] == 'inventory_retry_maintenance_window'
+        assert call_args.kwargs.get('target_id') == 'SRV1'
+        assert call_args.kwargs.get('attempt') == 1  # attempt that just failed (observability convention)
+        assert call_args.kwargs.get('error') == 'timeout'
+        assert 'wait_seconds' in call_args.kwargs

@@ -57,6 +57,29 @@ function getStepTypeErrors(
     }
   }
 
+  // Validation des champs requis pour les service_call de type notification (send_email / send_teams)
+  if (stepType === 'service_call') {
+    const inputMapping = (data.input_mapping ?? {}) as Record<string, unknown>;
+    if (data.operation === 'send_email') {
+      if (!inputMapping.recipient_email) {
+        errors.push({ nodeId, type: 'error', message: "Adresse e-mail destinataire requise (recipient_email)" });
+      }
+      if (!inputMapping.subject) {
+        errors.push({ nodeId, type: 'error', message: "Sujet de l'e-mail requis (subject)" });
+      }
+      if (!inputMapping.body) {
+        errors.push({ nodeId, type: 'error', message: "Corps de l'e-mail requis (body)" });
+      }
+    } else if (data.operation === 'send_teams') {
+      if (!inputMapping.webhook_url) {
+        errors.push({ nodeId, type: 'error', message: "URL du webhook Teams requise (webhook_url)" });
+      }
+      if (!inputMapping.message && !inputMapping.title) {
+        errors.push({ nodeId, type: 'error', message: "Message ou titre requis pour la notification Teams" });
+      }
+    }
+  }
+
   // Story 84.3 (AC6): validation UI complexe — schedule_execution uniquement (non dérivable par required_fields)
   if (stepType === 'schedule_execution') {
     const config = data.schedule_config;

@@ -235,6 +235,8 @@ DB_RETRY_BACKOFF_BASE = float(os.getenv('DB_RETRY_BACKOFF_BASE', '0.5'))
 # Story 32.4: Max total duration for all retry attempts (seconds).
 # Aligns with Data Guard FSFO < 1 min — default 120s is a generous upper bound.
 DB_RETRY_TIME_WINDOW_SECONDS = int(os.getenv('DB_RETRY_TIME_WINDOW_SECONDS', '120'))
+# Story 86.7: Max retry attempts for transient ServiceNow errors (429/503) in service_call handler
+SERVICENOW_MAX_RETRIES = int(os.getenv('SERVICENOW_MAX_RETRIES', '3'))
 
 DATABASES = {
     'default': {
@@ -727,6 +729,18 @@ CELERY_TASK_ROUTES = {
     'executions.tasks.trigger_platform_job': {'queue': 'default'},
     # Story 57.7 — Reprise workflow après gate (approbation) — doit être sur default (worker écoute cette queue)
     'executions.tasks.resume_container_workflow_from_gate': {'queue': 'default'},
+    # Story 78.5 — WorkQueue consumer et command processor
+    'executions.tasks.process_runnable_steps': {'queue': 'default'},
+    'executions.tasks.execute_single_runnable_step': {'queue': 'default'},
+    'executions.tasks.process_pending_workflow_commands': {'queue': 'default'},
+    # Autres tasks Beat
+    'executions.tasks.reconcile_stale_executions': {'queue': 'default'},
+    'executions.tasks.process_outbox_entries': {'queue': 'default'},
+    'executions.tasks.purge_old_platform_logs': {'queue': 'default'},
+    'executions.tasks.purge_old_workflow_events': {'queue': 'default'},
+    'core.tasks.flush_splunk_logging_handler': {'queue': 'default'},
+    'integrations.tasks.health_check_all_integrations': {'queue': 'default'},
+    'integrations.tasks.warmup_vault_secrets_cache': {'queue': 'default'},
 }
 
 del _adapters_pkg, _adapter_registry  # nettoyer le namespace settings
@@ -748,6 +762,7 @@ CELERY_TASK_TIME_LIMITS = {
     "health_check_all_integrations": {"soft": 300, "hard": 330},           # 5min — dispatch
     "warmup_vault_secrets_cache": {"soft": 120, "hard": 150},              # 2min — cache warmup
     "reconcile_stale_executions": {"soft": 120, "hard": 150},              # 2min — startup reconciliation
+    "flush_splunk_logging_handler": {"soft": 30, "hard": 60},              # 30s — in-process flush
 }
 
 # ============================================================================
@@ -835,6 +850,23 @@ ALLOWED_HTTP_REQUEST_HOSTS: list[str] = [
 ]
 del _allowed_http_hosts_env
 
+# SEC-BE-02 — Bypass health check configurable (Story 88-4)
+# Hôtes Vault à bypasser dans le health check (comma-separated)
+_hc_vault_skip_env = os.getenv('HEALTH_CHECK_VAULT_SKIP_HOSTS', 'localhost')
+HEALTH_CHECK_VAULT_SKIP_HOSTS: list[str] = [
+    h.strip() for h in _hc_vault_skip_env.split(',') if h.strip()
+]
+del _hc_vault_skip_env
+# Domaines ServiceNow à bypasser dans le health check (comma-separated)
+_hc_sn_skip_env = os.getenv('HEALTH_CHECK_SERVICENOW_SKIP_DOMAINS', 'instance.service-now.com')
+HEALTH_CHECK_SERVICENOW_SKIP_DOMAINS: list[str] = [
+    d.strip() for d in _hc_sn_skip_env.split(',') if d.strip()
+]
+del _hc_sn_skip_env
+
+# SEC-BE-03 — Plafond timeout HTTP (Story 88-4)
+MAX_HTTP_REQUEST_TIMEOUT = int(os.getenv('MAX_HTTP_REQUEST_TIMEOUT', '300'))
+
 # Epic 56 — Décorrélation : schéma/synonyme Oracle fallback pour l'inventaire
 INVENTORY_FALLBACK_SCHEMA = os.getenv('INVENTORY_FALLBACK_SCHEMA', 'DBOPS_INVENTORY')
 
@@ -846,3 +878,52 @@ PARALLEL_GROUP_MAX_WORKERS = int(os.environ.get('PARALLEL_GROUP_MAX_WORKERS', '5
 # Évite un hang silencieux si un thread fils accroche alors que SoftTimeLimitExceeded est reçu
 # dans le thread principal — doit être inférieur au soft_time_limit Celery de la tâche (600s).
 PARALLEL_GROUP_STEP_TIMEOUT_S = int(os.environ.get('PARALLEL_GROUP_STEP_TIMEOUT_S', '300'))
+
+# Story 86.10: Limite de transitions de steps pour la détection de boucle infinie
+# Configurable via env var MAX_STEP_TRANSITIONS (défaut: 100).
+# WARNING loggé à 80% de cette limite dans ContainerWorkflowRuntime.
+MAX_STEP_TRANSITIONS = int(os.environ.get('MAX_STEP_TRANSITIONS', '100'))
+
+# Story 86.8: Global deadline for concurrent external health checks (seconds)
+HEALTH_CHECK_GLOBAL_TIMEOUT = int(os.getenv('HEALTH_CHECK_GLOBAL_TIMEOUT', '10'))
+
+# Story 86.1 — Adapter socket timeouts (configurable per adapter via env vars)
+def _parse_adapter_timeout(name: str, default: str) -> float:
+    raw = os.environ.get(name, default)
+    try:
+        val = float(raw)
+        if val <= 0:
+            raise ValueError("must be positive")
+        return val
+    except (ValueError, TypeError):
+        raise ImproperlyConfigured(
+            f"{name} must be a valid positive number (seconds). "
+            f"Current value: {raw!r}"
+        )
+
+
+AAP_SOCKET_TIMEOUT: float = _parse_adapter_timeout('AAP_SOCKET_TIMEOUT', '30')
+TOWER_SOCKET_TIMEOUT: float = _parse_adapter_timeout('TOWER_SOCKET_TIMEOUT', '30')
+GITHUB_ACTIONS_SOCKET_TIMEOUT: float = _parse_adapter_timeout('GITHUB_ACTIONS_SOCKET_TIMEOUT', '30')
+AZURE_DEVOPS_SOCKET_TIMEOUT: float = _parse_adapter_timeout('AZURE_DEVOPS_SOCKET_TIMEOUT', '30')
+TERRAFORM_CLOUD_SOCKET_TIMEOUT: float = _parse_adapter_timeout('TERRAFORM_CLOUD_SOCKET_TIMEOUT', '30')
+
+# Story 86.3 — Gate polling backoff (configurable via env vars)
+def _parse_gate_poll_setting(name: str, default: str) -> float:
+    """Parse a gate polling setting from env var. Must be a positive float."""
+    raw = os.environ.get(name, default)
+    try:
+        val = float(raw)
+        if val <= 0:
+            raise ValueError("must be positive")
+        return val
+    except (ValueError, TypeError):
+        raise ImproperlyConfigured(
+            f"{name} must be a valid positive number. "
+            f"Current value: {raw!r}"
+        )
+
+
+GATE_BASE_POLL_INTERVAL: float = _parse_gate_poll_setting('GATE_BASE_POLL_INTERVAL', '30')
+GATE_MAX_POLL_INTERVAL: float = _parse_gate_poll_setting('GATE_MAX_POLL_INTERVAL', '300')
+GATE_POLL_BACKOFF_FACTOR: float = _parse_gate_poll_setting('GATE_POLL_BACKOFF_FACTOR', '1.5')

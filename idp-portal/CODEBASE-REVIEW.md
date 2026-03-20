@@ -1,6 +1,6 @@
 # Revue Exhaustive du Codebase — IDP Portal
 
-**Date :** 2026-03-10 (mise à jour — audit #6 qualité & nettoyage) — 2026-03-11 (mise à jour — clôture Epic 71 + audit #7 pré-release complémentaire)
+**Date :** 2026-03-10 (mise à jour — audit #6 qualité & nettoyage) — 2026-03-11 (mise à jour — clôture Epic 71 + audit #7 pré-release complémentaire) — 2026-03-16 (mise à jour — audit #8 post-refactoring stories 83–87)
 **Scope :** Backend Django + Frontend React
 **Auteur :** Claude Code (revue automatisée)
 
@@ -34,6 +34,7 @@
 24. [Audit #6 — Qualité implémentation & nettoyage pré-release (2026-03-10)](#24-audit-6--qualité-implémentation--nettoyage-pré-release-2026-03-10)
 25. [Clôture Epic 71 — Bilan final (2026-03-11)](#25-clôture-epic-71--bilan-final-2026-03-11)
 26. [Audit #7 — Revue pré-release complémentaire (2026-03-11)](#26-audit-7--revue-pré-release-complémentaire-2026-03-11)
+27. [Audit #8 — Revue post-refactoring Stories 83–87 (2026-03-16)](#27-audit-8--revue-post-refactoring-stories-8387-2026-03-16)
 
 ---
 
@@ -1207,6 +1208,225 @@ Cet audit se concentre sur la suppression du code rétrocompatible accumulé (AD
 | **VERDICT GLOBAL** | **✅ CODEBASE SAIN — AUDIT #7 CLÔTURÉ** |
 
 ---
+
+## 27. Audit #8 — Revue post-refactoring Stories 83–87 (2026-03-16)
+
+**Date :** 2026-03-16
+**Scope :** Backend Django + Frontend React — revue complète post-refactoring majeur (~156 commits depuis le dernier audit)
+**Auteur :** Claude Code (revue automatisée)
+**Stories couvertes :** 83.x (catalog refactoring), 84.x (workflow UI schema-driven), 85.x (extraction domaine exécutions), 86.x (résilience/retry), 87.x (documentation)
+
+---
+
+### 27.1 Nouveaux findings Backend
+
+#### Sécurité
+
+| # | Sévérité | Fichier | Description | Statut |
+|---|----------|---------|-------------|--------|
+| **SEC-BE-01** | MEDIUM | `executions/tasks/polling.py:65-73` | **Mise à jour de statut non-atomique dans `_mark_execution_polling_exhausted`.** Utilise `execution.save()` (full save) sans `transaction.atomic()` ni CAS. Deux tâches de polling concurrentes détectant l'épuisement peuvent entrer en course. Le code voisin dans `orchestrator.py` utilise correctement les patterns CAS. | OUVERT |
+| **SEC-BE-02** | LOW | `core/views.py:154,160` | **Bypass health check hardcodé pour Vault/ServiceNow locaux.** `if vault_addr != 'http://localhost:8200'` et `'instance.service-now.com'` — adresses en dur. Un Vault réel sur localhost passerait silencieusement le health check. | OUVERT |
+| **SEC-BE-03** | LOW | `executions/app/handlers/http_request_handler.py:150-160` | **Timeout HTTP non borné.** Chaque step HTTP crée un `httpx.Client` avec `timeout` pris directement de la config sans plafond. Un workflow malicieux pourrait configurer `timeout=999999`. | OUVERT |
+
+#### Bugs & erreurs logiques
+
+| # | Sévérité | Fichier | Description | Statut |
+|---|----------|---------|-------------|--------|
+| **BUG-BE-01** | HIGH | `executions/app/orchestrator.py:232-238` | **Variable `updated` utilisée hors du scope `transaction.atomic()`.** Assignée dans le bloc `with transaction.atomic()` mais référencée après. Si le `update()` lève une exception DB, `updated` n'est jamais assignée → `NameError`. Même pattern pour `final_status`. | OUVERT |
+| **BUG-BE-02** | MEDIUM | `executions/app/orchestrator.py:159-160,176-177` | **Exceptions avalées silencieusement dans `_force_finalize_execution`.** Deux blocs `except Exception: pass` sans aucun logging pour `_broadcast_terminal` et `AuditService.create_entry`. Les échecs d'audit trail sont invisibles. | OUVERT |
+| **BUG-BE-03** | MEDIUM | `executions/app/orchestrator.py:248-250,269` | **Même avalage silencieux dans `_finalize_execution_if_done`.** Les blocs broadcast et audit utilisent `except Exception: pass` sans log. | OUVERT |
+
+#### Performance
+
+| # | Sévérité | Fichier | Description | Statut |
+|---|----------|---------|-------------|--------|
+| **PERF-BE-01** | LOW | `services/servicenow_service.py` | **Nouveau `httpx.Client` par appel de méthode.** `create_change`, `update_change`, `get_change_status` créent chacun un nouveau client HTTP. Le pool de connexions est perdu. | OUVERT |
+
+#### Code smells
+
+| # | Sévérité | Fichier | Description | Statut |
+|---|----------|---------|-------------|--------|
+| **SMELL-BE-01** | HIGH | `executions/container_workflow_runtime.py` (1928 LOC) | **God class.** Malgré la documentation en en-tête, 1928 lignes dépassent largement le seuil de 600 LOC. Mélange orchestration, gestion d'exécutions enfant, dispatch plateforme, extraction d'output, broadcast, intégration ServiceNow. | OUVERT |
+| **SMELL-BE-02** | MEDIUM | `executions/tasks/trigger.py:159-301` | **God method avec gestion d'erreurs dupliquée.** `trigger_platform_job` contient trois blocs quasi-identiques (SoftTimeLimitExceeded, AdapterTimeoutError, Exception) chacun faisant : mark step FAILED + mark execution INTEGRATION_ERROR + audit. ~140 LOC de patterns dupliqués. | OUVERT |
+
+#### Celery / Async
+
+| # | Sévérité | Fichier | Description | Statut |
+|---|----------|---------|-------------|--------|
+| **CELERY-BE-01** | MEDIUM | `core/tasks.py:17-21` | **`flush_splunk_logging_handler` sans time limits.** La tâche a `max_retries=0` mais pas de `soft_time_limit` ni `time_limit` malgré la configuration dans `CELERY_TASK_TIME_LIMITS`. Les autres tâches référencent ces limites explicitement. | OUVERT |
+
+#### Gestion d'erreurs
+
+| # | Sévérité | Fichier | Description | Statut |
+|---|----------|---------|-------------|--------|
+| **ERR-BE-01** | MEDIUM | `executions/app/orchestrator.py:159,176,249,269` | **4 × `except Exception: pass` sans logging.** Bien que annotés `noqa: BLE001`, l'absence totale de logging rend le debugging très difficile. | OUVERT |
+
+#### Architecture / SOLID
+
+| # | Sévérité | Fichier | Description | Statut |
+|---|----------|---------|-------------|--------|
+| **ARCH-BE-01** | LOW | `executions/container_workflow_runtime.py:49-50` | **Imports depuis les anciens shims.** Importe depuis `executions.step_handlers.condition_evaluator` et `executions.step_handlers.registry` (shims) au lieu des chemins canoniques `executions.app.handlers.*` post-Story 85.4. | OUVERT |
+| **ARCH-BE-02** | LOW | `executions/container_routing.py` vs `executions/domain/workflow_graph.py` | **Modules de routage dupliqués.** Logique chevauchante (`get_next_step_ids`, `apply_join_policy`). Story 85.1 a extrait les fonctions domaine mais `container_routing.py` est toujours importé par `container_workflow_runtime.py`. | OUVERT |
+
+#### Tests manquants
+
+| # | Sévérité | Fichier | Description | Statut |
+|---|----------|---------|-------------|--------|
+| **TEST-BE-01** | MEDIUM | `executions/app/orchestrator.py` | **Pas de test pour le edge case `NameError` de `_finalize_execution_if_done`.** Si le `update()` DB dans le bloc atomic échoue, le code post-commit crasherait. | OUVERT |
+
+---
+
+### 27.2 Nouveaux findings Frontend
+
+#### Sécurité
+
+| # | Sévérité | Fichier | Description | Statut |
+|---|----------|---------|-------------|--------|
+| **SEC-FE-01** | LOW | `contexts/AuthContext.tsx:22-23` | **Token mock dev dans le source.** `DEV_MOCK_TOKEN = 'dev-mock-token-for-testing'` avec permissions admin complètes. Protégé par `VITE_DEV_AUTH` mais une misconfiguration en staging contournerait toute l'auth. | OUVERT |
+
+#### Bugs & erreurs logiques
+
+| # | Sévérité | Fichier | Description | Statut |
+|---|----------|---------|-------------|--------|
+| **BUG-FE-01** | MEDIUM | `components/admin/ActionWizard.tsx:376` | **Condition toujours vraie pour la mise à jour des tags.** `selectedTags.length >= 0` est toujours vrai (tout array a une longueur >= 0). Les tags sont mis à jour à chaque sauvegarde même si inchangés. | OUVERT |
+| **BUG-FE-02** | MEDIUM | `hooks/useExecutionDetail.ts:62-63` | **Catch silencieux sur le fetch de détail d'action.** L'erreur est avalée sans logging. L'utilisateur voit une timeline sans indication que la vue graphe workflow est indisponible. | OUVERT |
+| **BUG-FE-03** | LOW | `components/shared/SchemaFormRenderer.tsx:237-238` | **Désynchronisation d'état interne du MappingEditor.** `rows` initialisé depuis la prop `value` en `useState(() => ...)` mais jamais resynchronisé si le parent change `value` externalement. | OUVERT |
+
+#### Performance
+
+| # | Sévérité | Fichier | Description | Statut |
+|---|----------|---------|-------------|--------|
+| **PERF-FE-01** | MEDIUM | `components/admin/WorkflowStepNode.tsx:101-358` | **`useCapabilities()` appelé par nœud.** Chaque instance de `WorkflowStepNode` appelle `useCapabilities()`. Avec 20+ nœuds, cela crée 20+ instances de hooks `useState`/`useEffect` malgré le cache module-level. | OUVERT |
+
+#### Code smells
+
+| # | Sévérité | Fichier | Description | Statut |
+|---|----------|---------|-------------|--------|
+| **SMELL-FE-01** | MEDIUM | `components/admin/ActionWizard.tsx` (604 LOC) | **God component.** 12+ variables d'état, logique de sauvegarde complexe (~120 lignes). La validation est déjà extraite (`useActionWizardValidation`) mais le handler de sauvegarde ne l'est pas. | OUVERT |
+| **SMELL-FE-02** | MEDIUM | `hooks/useWorkflowGraph.ts` (527 LOC) | **Hook volumineux.** Combine gestion d'état graphe, event handlers, validation, et manipulation de nœuds. La complexité est inhérente à l'API React Flow. | OUVERT |
+
+#### Gestion d'erreurs
+
+| # | Sévérité | Fichier | Description | Statut |
+|---|----------|---------|-------------|--------|
+| **ERR-FE-01** | MEDIUM | `hooks/useCapabilities.ts:65-81` | **Pas de retry sur l'échec du fetch capabilities.** Les capabilities sont fondamentales pour l'UI. Un échec réseau unique force le rechargement complet de la page. | OUVERT |
+| **ERR-FE-02** | LOW | `services/help_service.ts:46-48` | **Erreur silencieusement transformée en contenu vide.** Le service retourne `{ short: '', markdown: '' }` sans logging. | OUVERT |
+| **ERR-FE-03** | LOW | `services/execution_inventory.ts:93-122` | **Mutation d'objet Error complexe.** L'erreur 503 utilise des type assertions multiples pour ajouter `code`, `useCache`, `cachedItems`. Devrait être une classe `InventoryUnavailableError`. | OUVERT |
+
+#### Accessibilité
+
+| # | Sévérité | Fichier | Description | Statut |
+|---|----------|---------|-------------|--------|
+| **A11Y-FE-01** | LOW | `components/execution/ExecutionView.tsx` | **Couleurs hex hardcodées** (`#E5E7EB`, `#F5F5F5`, `#262626`, `#595959`) au lieu des design tokens Ant Design. Problème potentiel en dark mode. | OUVERT |
+| **A11Y-FE-02** | LOW | `components/admin/WorkflowStepNode.tsx` | **Palette de couleurs hardcodée** dans `STEP_TYPE_COLORS` et `executionBorderColors`. Pas de variante dark mode. | OUVERT |
+
+#### Types
+
+| # | Sévérité | Fichier | Description | Statut |
+|---|----------|---------|-------------|--------|
+| **TYPE-FE-01** | LOW | `components/catalog/TargetSelector.tsx:40`, `TargetSelectionStep.tsx:77` | **`any` dans les types de ref.** `React.Ref<any>` et `useRef<any>(null)` au lieu de types spécifiques (`HTMLInputElement`, `InputRef`). | OUVERT |
+
+---
+
+### 27.3 Points positifs confirmés (audit #8)
+
+**Backend :**
+- **Machine à états formalisée** (`executions/domain/state_machine.py`) : Séparation propre de la validation de transition et de la logique métier. Patterns CAS utilisés systématiquement dans l'orchestration.
+- **Protection SSRF excellente** (`http_request_handler.py`) : Allowlist/blocklist complète avec résolution DNS, gestion IPv4-mapped-IPv6, fail-closed sur hostnames non résolus.
+- **Retry tenacity bien conçu** (Stories 86.4, 86.7, 86.11) : Full jitter via `wait_random_exponential`, attribut `_retry_wait` par classe pour override en test.
+- **Cache d'annulation propre** (`cancellation_cache.py`) : Ne cache que `True` (annulé), jamais `False` — évite correctement le problème stale-negative. Fallback gracieux sur DB en cas d'échec Redis.
+- **Extraction domaine clean** (Story 85.x) : Layering `domain/`, `app/`, `infra/` suivant les principes d'architecture hexagonale. Shims de compatibilité descendante documentés.
+- **Pattern outbox** (`infra/outbox.py`) : Vérifie `transaction.atomic()` au runtime, garantissant que l'écriture outbox est dans la même transaction que la mutation métier.
+- **Audit trail cohérent** : Chaque transition d'état (approve, reject, cancel, timeout, finalize) crée une entrée d'audit avec propagation de `correlation_id`.
+
+**Frontend :**
+- **Zéro `dangerouslySetInnerHTML`** dans tout le frontend.
+- **Zéro `console.log`** en code de production — tout utilise le service `logger` structuré.
+- **Pattern DIP cohérent** : Les composants utilisent des hooks (pas d'imports de services directs). Les seuls imports de services dans les composants sont `import type` (couplage uniquement au compile-time).
+- **UI schema-driven** : `SchemaFormRenderer` et `SchemaInputMappingEditor` bien conçus. Les renderers custom permettent la spécialisation sans perdre le pattern générique.
+- **Architecture capabilities** : Cache module-level dans `useCapabilities` avec fetch singleton. Les step definitions backend-driven éliminent les constantes frontend hardcodées.
+- **Retry full jitter** : `calculateRetryDelay` dans `api_client.ts` implémente un backoff exponentiel avec full jitter et correlation IDs.
+- **Bons patterns de cleanup** : La majorité des hooks `useEffect` async utilisent des flags `cancelled` ou `isMountedRef`.
+- **Attributs ARIA** : `aria-label`, `role="alert"`, régions `aria-live` utilisés de manière cohérente.
+
+---
+
+### 27.4 Statistiques Audit #8
+
+| Catégorie | CRITICAL | HIGH | MEDIUM | LOW | Total |
+|-----------|----------|------|--------|-----|-------|
+| **Backend — Sécurité** | 0 | 0 | 1 | 2 | 3 |
+| **Backend — Bugs** | 0 | 1 | 2 | 0 | 3 |
+| **Backend — Performance** | 0 | 0 | 0 | 1 | 1 |
+| **Backend — Code smells** | 0 | 1 | 1 | 0 | 2 |
+| **Backend — Celery** | 0 | 0 | 1 | 0 | 1 |
+| **Backend — Erreurs** | 0 | 0 | 1 | 0 | 1 |
+| **Backend — Architecture** | 0 | 0 | 0 | 2 | 2 |
+| **Backend — Tests** | 0 | 0 | 1 | 0 | 1 |
+| **Frontend — Sécurité** | 0 | 0 | 0 | 1 | 1 |
+| **Frontend — Bugs** | 0 | 0 | 2 | 1 | 3 |
+| **Frontend — Performance** | 0 | 0 | 1 | 0 | 1 |
+| **Frontend — Code smells** | 0 | 0 | 2 | 0 | 2 |
+| **Frontend — Erreurs** | 0 | 0 | 1 | 2 | 3 |
+| **Frontend — Accessibilité** | 0 | 0 | 0 | 2 | 2 |
+| **Frontend — Types** | 0 | 0 | 0 | 1 | 1 |
+| **TOTAL** | **0** | **2** | **13** | **12** | **27** |
+
+---
+
+### 27.5 Priorités de correction recommandées
+
+**Sprint immédiat (quick wins) :**
+1. **BUG-BE-01** (HIGH) — Initialiser `updated = 0` et `final_status = None` avant le bloc `with transaction.atomic()` dans `_finalize_execution_if_done`
+2. **ERR-BE-01** (MEDIUM) — Remplacer les 4 × `except Exception: pass` par `logger.debug("...", exc_info=True)` dans `orchestrator.py`
+3. **CELERY-BE-01** (MEDIUM) — Ajouter `soft_time_limit` et `time_limit` sur `flush_splunk_logging_handler`
+4. **SEC-BE-01** (MEDIUM) — Pattern CAS pour `_mark_execution_polling_exhausted`
+5. **BUG-FE-01** (MEDIUM) — Corriger `selectedTags.length >= 0` → `selectedTags.length > 0` ou comparaison avec tags originaux
+6. **ERR-FE-01** (MEDIUM) — Ajouter retry automatique (1-2 tentatives) sur le fetch capabilities
+
+**Refactoring structurel (effort moyen) :**
+1. **SMELL-BE-01** (HIGH) — Extraire le dispatch plateforme de `container_workflow_runtime.py` vers un `PlatformStepExecutor` dédié
+2. **SMELL-BE-02** (MEDIUM) — Extraire un helper `_handle_trigger_error()` dans `trigger.py`
+3. **SMELL-FE-01** (MEDIUM) — Extraire `handleSave` de `ActionWizard` dans un hook `useActionWizardSave`
+4. **PERF-FE-01** (MEDIUM) — Passer capabilities via contexte plutôt que hook par nœud dans `WorkflowStepNode`
+
+**Backlog (effort faible) :**
+1. **ARCH-BE-01/02** (LOW) — Migrer imports vers chemins canoniques `domain/` et `app/handlers/`
+2. **A11Y-FE-01/02** (LOW) — Migrer couleurs hardcodées vers design tokens
+3. **TYPE-FE-01** (LOW) — Remplacer `any` par types spécifiques dans les refs
+
+---
+
+### 27.6 Comparaison avec les audits précédents
+
+| Métrique | Audit #7 (11/03) | Audit #8 (16/03) | Évolution |
+|----------|-------------------|-------------------|-----------|
+| Issues CRITICAL | 0 | 0 | = |
+| Issues HIGH | 0 | 2 | +2 (NameError orchestrator, god class 1928 LOC) |
+| Issues MEDIUM | 0 | 13 | +13 (nouveaux findings post-refactoring) |
+| Issues LOW | 0 | 12 | +12 |
+| Total findings | 0 ouvertes | 27 | +27 (nouvelle revue complète) |
+| Posture sécurité | 0 ouvertes | 1 MEDIUM + 3 LOW | +4 (non-atomicité polling, health check bypass, timeout non borné, mock token dev) |
+| God classes (>600 LOC) | 0 | 1 (container_workflow_runtime 1928 LOC) | +1 |
+| God components (>400 LOC) | 0 | 1 (ActionWizard 604 LOC) | +1 |
+
+---
+
+### 27.7 Bilan cumulatif final
+
+**Bilan cumulatif (2026-03-16, post-Audit #8) :** Les 133 findings historiques (§1–§22) : **131 résolus** (98.5%) + 2 acceptés (INCON-2, PERF-4). L'Epic 66 (~246 findings) : ~100% résolus. L'Audit #6 (17 findings) : 100% résolus. L'Audit #7 (23 findings) : 100% traités. L'Audit #8 (27 findings) : **27 OUVERTS** (0 CRITICAL, 2 HIGH, 13 MEDIUM, 12 LOW).
+
+| Critère | Statut |
+|---------|--------|
+| Zéro finding CRITICAL | ✅ |
+| Findings HIGH ouverts | ⚠ 2 (BUG-BE-01, SMELL-BE-01) |
+| Posture sécurité | ✅ Pas de CRITICAL/HIGH sécurité — 1 MEDIUM (non-atomicité polling) |
+| Architecture SOLID | ✅ Excellente (hexagonal, registries, DIP hooks, ISP adapters) |
+| Couverture tests | ✅ 340+ fichiers BE, 208+ fichiers FE |
+| UI schema-driven (Stories 84.x) | ✅ Bien implémenté |
+| Extraction domaine (Stories 85.x) | ✅ Layering domain/app/infra propre |
+| Résilience (Stories 86.x) | ✅ Retry tenacity, backoff full jitter, cancellation cache Redis |
+| **VERDICT GLOBAL** | **✅ CODEBASE SAIN — 2 HIGH à corriger (quick fixes)** |
 
 ## 27. Audit #8 — Revue exhaustive pré-release (2026-03-11)
 

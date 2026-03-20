@@ -287,7 +287,7 @@ class TestAC2OrchestrationWorker:
         from executions.tasks.orchestration_worker import process_runnable_steps
         result = process_runnable_steps(batch_size=1)
 
-        assert result["processed"] == 1
+        assert result["dispatched"] == 1
         exec_step.refresh_from_db()
         assert exec_step.status == ExecutionStepStatus.COMPLETED
 
@@ -395,13 +395,13 @@ class TestAC2OrchestrationWorker:
         """Worker returns 0 processed when no steps to claim."""
         from executions.tasks.orchestration_worker import process_runnable_steps
         result = process_runnable_steps(batch_size=5)
-        assert result["processed"] == 0
+        assert result["dispatched"] == 0
 
     def test_worker_via_celery_apply(self):
         """Worker invoked via Celery .apply() (bind=True passes self)."""
         from executions.tasks.orchestration_worker import process_runnable_steps
         result = process_runnable_steps.apply(kwargs={"batch_size": 5})
-        assert result.result["processed"] == 0
+        assert result.result["dispatched"] == 0
 
     @patch('executions.step_handlers.evaluation_handler.EvaluationHandler.execute')
     def test_worker_skips_non_running_execution(self, mock_execute):

@@ -6,6 +6,7 @@ Story 67.1: Multi-target support — on_success_step_ids / on_error_step_ids (ar
 Story 67.3: join_policy validation — all_success | one_success | all_done.
 Story 67.8: all_failed | one_failed.
 Story 77.7: Reject gate steps inside parallel branches (fan-out) at validation time.
+Story 86.5: Validate gate_type against gate_registry at workflow definition time.
 """
 
 from collections import deque
@@ -27,6 +28,10 @@ def validate_workflow_steps(steps: list[dict[str, Any]], action_id: int | None =
 
     Story 67.1: Uses on_success_step_ids/on_error_step_ids (arrays) for branching.
 
+    Story 86.5: For steps with step_type='gate', validates that gate_type is present
+    and is a registered type in gate_registry. Raises ValidationError with the list of
+    valid types if the gate_type is missing or unknown.
+
     Args:
         steps: List of workflow step dicts
         action_id: Optional action ID for error messages
@@ -39,6 +44,9 @@ def validate_workflow_steps(steps: list[dict[str, Any]], action_id: int | None =
     """
     if not steps:
         return steps
+
+    # Story 86.5: Lazy import at function scope to avoid Django init issues (no top-level import)
+    from executions.gates.registry import gate_registry  # noqa: PLC0415
 
     # Basic shape validation: platform steps must reference an action (Story 57.13)
     # gate, service_call, evaluation, http_request have their own required fields
@@ -96,6 +104,7 @@ def validate_workflow_steps(steps: list[dict[str, Any]], action_id: int | None =
     # Validate each step
     for i, step in enumerate(steps):
         step_id = step.get('step_id')
+        step_type = step.get('step_type') or 'platform'
         retry_enabled = step.get('retry_enabled', False)
         retry_max_attempts = step.get('retry_max_attempts')
         retry_interval_seconds = step.get('retry_interval_seconds')
@@ -168,6 +177,21 @@ def validate_workflow_steps(steps: list[dict[str, Any]], action_id: int | None =
                 f"Step '{step_id}': join_policy must be one of "
                 f"{sorted(VALID_JOIN_POLICIES)}, got '{join_policy}'"
             )
+
+        # Story 86.5: Validate gate_type for gate steps
+        if step_type == 'gate':
+            gate_type_val = step.get('gate_type')
+            if not gate_type_val or not gate_type_val.strip():
+                raise serializers.ValidationError(
+                    f"Step {i} (step_id={step_id}): gate_type est requis pour les steps de type 'gate'"
+                )
+            gate_type_val = gate_type_val.strip()
+            if not gate_registry.is_registered(gate_type_val):
+                valid_types = gate_registry.list_types()
+                raise serializers.ValidationError(
+                    f"Step {i} (step_id={step_id}): gate_type '{gate_type_val}' invalide. "
+                    f"Types valides : {', '.join(sorted(valid_types))}"
+                )
 
         # AC4: Validate retry_max_attempts >= 1 if retry_enabled
         if retry_enabled:

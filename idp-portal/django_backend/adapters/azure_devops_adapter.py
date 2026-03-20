@@ -20,12 +20,14 @@ from datetime import datetime, timezone
 import httpx
 import structlog
 
+from django.conf import settings
+
 from adapters.base_adapter import BaseAdapter
 from adapters.status_mappers import (
     AZURE_DEVOPS_TERMINAL_RESULTS,
     map_azure_devops_status,
 )
-from core.exceptions import ServiceUnavailableError
+from core.exceptions import AdapterTimeoutError, ServiceUnavailableError
 from integrations.health_check import HealthCheckResult, HealthCheckStatus, IHealthCheckable
 
 logger = structlog.get_logger(__name__)
@@ -51,12 +53,13 @@ class AzureDevOpsAdapter(BaseAdapter, IHealthCheckable):
         self,
         base_url: str,
         auth_headers: dict[str, str],
-        timeout: float = AZURE_DEVOPS_DEFAULT_TIMEOUT,
+        timeout: float | None = None,
         verify_ssl: bool = True,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.auth_headers = auth_headers
-        self.timeout = timeout
+        default_timeout = getattr(settings, 'AZURE_DEVOPS_SOCKET_TIMEOUT', AZURE_DEVOPS_DEFAULT_TIMEOUT)
+        self.timeout = timeout if timeout is not None else default_timeout
         self.verify_ssl = verify_ssl
 
     # ------------------------------------------------------------------
@@ -87,7 +90,8 @@ class AzureDevOpsAdapter(BaseAdapter, IHealthCheckable):
 
         Raises:
             ValueError: If pipeline_id is not numeric.
-            ServiceUnavailableError: If Azure DevOps is unreachable or returns error.
+            AdapterTimeoutError: If Azure DevOps does not respond within the configured timeout.
+            ServiceUnavailableError: If Azure DevOps returns an HTTP error or connection fails.
         """
         # MEDIUM-5 FIX: Validate pipeline_id format (must be numeric)
         if not pipeline_id.isdigit():
@@ -135,10 +139,9 @@ class AzureDevOpsAdapter(BaseAdapter, IHealthCheckable):
                 correlation_id=correlation_id,
                 error=str(exc),
             )
-            raise ServiceUnavailableError(
-                code="AZURE_DEVOPS_TIMEOUT",
+            raise AdapterTimeoutError(
+                adapter_type="azure_devops",
                 message="Azure DevOps did not respond in time",
-                details={"url": url},
             ) from exc
         except httpx.HTTPStatusError as exc:
             logger.error(
@@ -216,7 +219,8 @@ class AzureDevOpsAdapter(BaseAdapter, IHealthCheckable):
             'azure_devops_result', 'createdDate', 'finishedDate'.
 
         Raises:
-            ServiceUnavailableError: If Azure DevOps is unreachable.
+            AdapterTimeoutError: If Azure DevOps does not respond within the configured timeout.
+            ServiceUnavailableError: If Azure DevOps returns an HTTP error or connection fails.
         """
         url = (
             f"{self.base_url}/_apis/pipelines/{pipeline_id}"
@@ -246,10 +250,10 @@ class AzureDevOpsAdapter(BaseAdapter, IHealthCheckable):
                 correlation_id=correlation_id,
                 error=str(exc),
             )
-            raise ServiceUnavailableError(
-                code="AZURE_DEVOPS_TIMEOUT",
+            raise AdapterTimeoutError(
+                adapter_type="azure_devops",
                 message="Azure DevOps status check timed out",
-                details={"platform_job_id": platform_job_id},
+                platform_job_id=platform_job_id,
             ) from exc
         except httpx.HTTPStatusError as exc:
             status_code = exc.response.status_code

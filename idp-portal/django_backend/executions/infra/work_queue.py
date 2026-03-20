@@ -20,6 +20,8 @@ from typing import TYPE_CHECKING
 from executions.models import RunnableStep
 from executions.services.runnable_steps import RunnableStepService
 
+__all__ = ["WorkQueue", "RunnableStep"]
+
 if TYPE_CHECKING:
     from executions.models import ExecutionStep
 

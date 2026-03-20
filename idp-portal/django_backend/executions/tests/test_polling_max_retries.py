@@ -845,3 +845,94 @@ class TestPollPlatformJobStatusTerminal:
 
         assert result["outcome"] == "polling"
         mock_apply.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Story 88.1 — SEC-BE-01: CAS pattern in _mark_execution_polling_exhausted
+# ---------------------------------------------------------------------------
+
+
+class TestMarkPollingExhaustedCAS:
+    """SEC-BE-01: _mark_execution_polling_exhausted uses atomic + CAS."""
+
+    @patch("executions.tasks.polling.AuditService.create_entry")
+    @patch("executions.tasks.polling.sanitize_audit_changes", return_value={})
+    def test_terminal_execution_not_updated(
+        self,
+        mock_sanitize: MagicMock,
+        mock_audit: MagicMock,
+    ) -> None:
+        """If execution is already terminal (COMPLETED), CAS filter matches 0 rows."""
+        mock_execution = MagicMock()
+        mock_execution.id = 99
+        mock_execution.status = ExecutionStatus.COMPLETED
+        mock_execution.user_id = "user-1"
+        mock_execution.correlation_id = "corr-1"
+
+        # Execution.objects.get() returns a terminal execution
+        # Execution.objects.filter().exclude().update() returns 0 (CAS miss)
+        mock_exec_qs = MagicMock()
+        mock_exec_exclude = MagicMock()
+        mock_exec_qs.exclude.return_value = mock_exec_exclude
+        mock_exec_exclude.update.return_value = 0
+
+        # ExecutionStep.objects.filter().exclude().update() should NOT be called
+        mock_step_qs = MagicMock()
+        mock_step_exclude = MagicMock()
+        mock_step_qs.exclude.return_value = mock_step_exclude
+
+        with patch("executions.tasks.polling.Execution.objects.get", return_value=mock_execution), \
+             patch("executions.tasks.polling.Execution.objects.filter", return_value=mock_exec_qs), \
+             patch("executions.tasks.polling.ExecutionStep.objects.filter", return_value=mock_step_qs):
+            _mark_execution_polling_exhausted(
+                execution_id=99,
+                platform_job_id="job-1",
+                retry_count=20,
+                error="timeout",
+                correlation_id="corr-1",
+            )
+
+        # CAS returned 0 → step should NOT have been updated
+        mock_step_exclude.update.assert_not_called()
+        # CAS returned 0 → audit should NOT be created (no actual change)
+        mock_audit.assert_not_called()
+
+    @patch("executions.tasks.polling.AuditService.create_entry")
+    @patch("executions.tasks.polling.sanitize_audit_changes", return_value={})
+    def test_running_execution_updated_atomically(
+        self,
+        mock_sanitize: MagicMock,
+        mock_audit: MagicMock,
+    ) -> None:
+        """If execution is RUNNING, both execution and step are updated in CAS."""
+        mock_execution = MagicMock()
+        mock_execution.id = 99
+        mock_execution.status = ExecutionStatus.RUNNING
+        mock_execution.user_id = "user-1"
+        mock_execution.correlation_id = "corr-1"
+
+        mock_exec_qs = MagicMock()
+        mock_exec_exclude = MagicMock()
+        mock_exec_qs.exclude.return_value = mock_exec_exclude
+        mock_exec_exclude.update.return_value = 1  # CAS matched
+
+        mock_step_qs = MagicMock()
+        mock_step_exclude = MagicMock()
+        mock_step_qs.exclude.return_value = mock_step_exclude
+        mock_step_exclude.update.return_value = 1
+
+        with patch("executions.tasks.polling.Execution.objects.get", return_value=mock_execution), \
+             patch("executions.tasks.polling.Execution.objects.filter", return_value=mock_exec_qs), \
+             patch("executions.tasks.polling.ExecutionStep.objects.filter", return_value=mock_step_qs):
+            _mark_execution_polling_exhausted(
+                execution_id=99,
+                platform_job_id="job-1",
+                retry_count=20,
+                error="timeout",
+                correlation_id="corr-1",
+            )
+
+        # Both CAS updates should have been called
+        mock_exec_exclude.update.assert_called_once()
+        mock_step_exclude.update.assert_called_once()
+        mock_audit.assert_called_once()

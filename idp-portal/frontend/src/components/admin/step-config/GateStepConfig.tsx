@@ -94,7 +94,7 @@ export const GateStepConfig: FC<GateStepConfigProps> = ({
         options={approverProfileOptions}
       />
     ),
-  }), [stepOptions, approverProfileOptions, approverProfilesLoading, disabled]);
+  }), [stepOptions, approverProfileOptions, approverProfilesLoading]);
 
   return (
     <div data-testid="gate-step-config">

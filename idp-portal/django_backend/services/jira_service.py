@@ -7,6 +7,7 @@ Supports Jira Cloud (REST API v3) and Server/Data Center (REST API v2).
 from __future__ import annotations
 
 import asyncio
+import random
 
 import httpx
 import structlog
@@ -326,7 +327,7 @@ class JiraService(IHealthCheckable):
                             details={"status_code": status_code},
                         )
                         if attempt < MAX_RETRIES - 1:
-                            delay = 2 ** (attempt + 1)
+                            delay = random.uniform(0, 2 ** (attempt + 1))
                             logger.warning(
                                 "jira_transient_error_retry",
                                 status_code=status_code,
@@ -361,7 +362,7 @@ class JiraService(IHealthCheckable):
             except httpx.TimeoutException as exc:
                 last_exc = exc
                 if attempt < MAX_RETRIES - 1:
-                    delay = 2 ** (attempt + 1)
+                    delay = random.uniform(0, 2 ** (attempt + 1))
                     logger.warning(
                         "jira_timeout_retry",
                         attempt=attempt + 1,

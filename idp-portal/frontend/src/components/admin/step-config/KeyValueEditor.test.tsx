@@ -5,6 +5,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { KeyValueEditor } from './KeyValueEditor';
 
 describe('KeyValueEditor — helpContent prop (Story 57.20)', () => {
@@ -91,5 +92,72 @@ describe('KeyValueEditor — warnings prop (Story 57.20, Task 5)', () => {
       />
     );
     expect(screen.queryByTestId('test-editor-warning')).not.toBeInTheDocument();
+  });
+});
+
+describe('KeyValueEditor — add, edit, remove', () => {
+  it('adds new row when clicking Ajouter une entrée', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<KeyValueEditor value={{ a: '1' }} onChange={onChange} />);
+
+    await user.click(screen.getByText('Ajouter une entrée'));
+
+    // New empty row is added (not emitted until key is filled)
+    expect(screen.getAllByPlaceholderText('Clé')).toHaveLength(2);
+  });
+
+  it('emits onChange when editing key', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<KeyValueEditor value={{ a: '1' }} onChange={onChange} />);
+
+    const keyInput = screen.getByDisplayValue('a');
+    await user.clear(keyInput);
+    await user.type(keyInput, 'b');
+
+    expect(onChange).toHaveBeenCalledWith({ b: '1' });
+  });
+
+  it('emits onChange when editing value', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<KeyValueEditor value={{ a: '1' }} onChange={onChange} />);
+
+    const valueInput = screen.getByDisplayValue('1');
+    await user.clear(valueInput);
+    await user.type(valueInput, '2');
+
+    expect(onChange).toHaveBeenCalledWith({ a: '2' });
+  });
+
+  it('emits onChange when removing row', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<KeyValueEditor value={{ a: '1', b: '2' }} onChange={onChange} />);
+
+    const deleteButtons = screen.getAllByLabelText(/Supprimer l'entrée/);
+    await user.click(deleteButtons[0]);
+
+    expect(onChange).toHaveBeenCalledWith({ b: '2' });
+  });
+
+  it('renders with custom placeholders', () => {
+    render(
+      <KeyValueEditor
+        value={{ x: 'y' }}
+        onChange={vi.fn()}
+        keyPlaceholder="Header"
+        valuePlaceholder="Value"
+      />
+    );
+    expect(screen.getByPlaceholderText('Header')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Value')).toBeInTheDocument();
+  });
+
+  it('does not show add/remove when disabled', () => {
+    render(<KeyValueEditor value={{ a: '1' }} onChange={vi.fn()} disabled />);
+    expect(screen.queryByText('Ajouter une entrée')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Supprimer/)).not.toBeInTheDocument();
   });
 });

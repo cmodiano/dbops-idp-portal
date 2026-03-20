@@ -9,6 +9,7 @@ Helpers internes : _transition_step_to_running, _update_waiting_context,
 import json
 import os
 from collections.abc import Iterable
+from datetime import datetime, timedelta, timezone as dt_timezone
 from typing import Any
 
 import structlog
@@ -133,15 +134,30 @@ def evaluate_waiting_gates(self: Any) -> dict:
     )
 
     if step_count == 0:
-        return {'waiting_steps': 0, 'unblocked': 0, 'still_waiting': 0, 'errors': 0}
+        return {'waiting_steps': 0, 'unblocked': 0, 'still_waiting': 0, 'skipped': 0, 'errors': 0}
 
     evaluator = GateEvaluator()
     unblocked = 0
     still_waiting = 0
+    skipped = 0
     errors = 0
 
     processed = 0
     for step in waiting_steps:
+        # Story 86.3: Backoff — skip si next_poll_at est dans le futur.
+        step_output = step.get_output() or {}
+        next_poll_at_str = step_output.get('next_poll_at')
+        if next_poll_at_str:
+            try:
+                npa = datetime.fromisoformat(next_poll_at_str)
+                if npa.tzinfo is None:
+                    npa = npa.replace(tzinfo=dt_timezone.utc)
+                if timezone.now() < npa:
+                    skipped += 1
+                    continue
+            except (ValueError, TypeError):
+                pass  # Timestamp invalide → évaluer quand même
+
         # Story 72.1 (AC3): Utiliser execution.correlation_id pour chaque step.
         # get_correlation_id() retourne None dans les workers Celery (pas de contexte HTTP).
         step_correlation_id = step.execution.correlation_id or task_correlation_id or None
@@ -172,6 +188,7 @@ def evaluate_waiting_gates(self: Any) -> dict:
                 total=step_count,
                 unblocked=unblocked,
                 still_waiting=still_waiting,
+                skipped=skipped,
                 errors=errors,
                 correlation_id=task_correlation_id,
             )
@@ -179,6 +196,7 @@ def evaluate_waiting_gates(self: Any) -> dict:
                 'waiting_steps': step_count,
                 'unblocked': unblocked,
                 'still_waiting': still_waiting,
+                'skipped': skipped,
                 'errors': errors,
                 'status': 'partial_timeout',
                 'processed': processed,
@@ -223,6 +241,7 @@ def evaluate_waiting_gates(self: Any) -> dict:
         waiting_step_count=step_count,
         unblocked=unblocked,
         still_waiting=still_waiting,
+        skipped=skipped,
         errors=errors,
         correlation_id=task_correlation_id,
     )
@@ -231,6 +250,7 @@ def evaluate_waiting_gates(self: Any) -> dict:
         'waiting_steps': step_count,
         'unblocked': unblocked,
         'still_waiting': still_waiting,
+        'skipped': skipped,
         'errors': errors,
     }
 
@@ -324,6 +344,9 @@ def _update_waiting_context(step: ExecutionStep, gate_status: dict, correlation_
     Update the waiting context for a step whose conditions are NOT yet satisfied.
 
     Story 25.3: Updates ExecutionStep.output with the latest gate_status evaluation.
+    Story 86.3: Persists poll_attempt (int) and next_poll_at (ISO 8601 UTC str) for
+                exponential backoff. poll_attempt increments after each unsatisfied evaluation.
+                next_poll_at = now + min(BASE * FACTOR^poll_attempt, MAX).
     """
     output = step.get_output() or {}
     gate_conditions = output.get('gate_conditions', [])
@@ -348,8 +371,16 @@ def _update_waiting_context(step: ExecutionStep, gate_status: dict, correlation_
     if next_possible_at:
         output['next_possible_at'] = next_possible_at
 
-    # Compare BEFORE setting last_evaluated_at — otherwise the timestamp always differs
-    # and output_changed would be True every time, defeating the skip-unnecessary-save optimization.
+    # Story 86.3: Calcul du backoff AVANT la comparaison (pour ne pas polluer output_changed).
+    poll_attempt = int(output.get('poll_attempt', 0))
+    base = getattr(settings, 'GATE_BASE_POLL_INTERVAL', 30.0)
+    factor = getattr(settings, 'GATE_POLL_BACKOFF_FACTOR', 1.5)
+    max_interval = getattr(settings, 'GATE_MAX_POLL_INTERVAL', 300.0)
+    interval = min(base * (factor ** poll_attempt), max_interval)
+
+    # Compare BEFORE setting last_evaluated_at/next_poll_at — otherwise the timestamp always
+    # differs and output_changed would be True every time, defeating the skip-unnecessary-save
+    # optimization. next_poll_at is intentionally excluded from _comparable_output.
     def _comparable_output(o: dict) -> dict:
         return {k: o.get(k) for k in ('gate_status', 'next_possible_at', 'evaluation_error')}
 
@@ -359,28 +390,36 @@ def _update_waiting_context(step: ExecutionStep, gate_status: dict, correlation_
         or _comparable_output(old_output) != _comparable_output(output)
     )
 
-    output['last_evaluated_at'] = timezone.now().isoformat()
+    # Write timestamps AFTER comparison so they don't affect output_changed.
+    # Single timezone.now() call ensures last_evaluated_at and next_poll_at are consistent.
+    now = timezone.now()
+    output['last_evaluated_at'] = now.isoformat()
+    output['next_poll_at'] = (now + timedelta(seconds=interval)).isoformat()
+    output['poll_attempt'] = poll_attempt + 1
 
-    updated = 0
-    if output_changed:
-        # CAS write: only persist while still WAITING to avoid status regression.
-        updated = ExecutionStep.objects.filter(
-            id=step.id,
-            status=ExecutionStepStatus.WAITING,
-        ).update(output=json.dumps(output))
-        if updated == 0:
-            logger.debug(
-                "evaluate_waiting_gates_step_context_skipped_not_waiting",
-                step_id=step.id,
-                execution_id=step.execution_id,
-                correlation_id=correlation_id,
-            )
-            return
-        step.output = json.dumps(output)
+    # Always persist output — poll_attempt and next_poll_at (backoff state) must be saved on
+    # every unsatisfied evaluation, regardless of whether gate_status changed (output_changed).
+    # Without this, poll_attempt stays stuck at 1 after the first stable-gate evaluation and
+    # next_poll_at is never advanced, breaking the backoff progression entirely.
+    # output_changed only gates the WorkflowEventService emit (significant-change detection).
+    # CAS write: only persist while still WAITING to avoid status regression.
+    updated = ExecutionStep.objects.filter(
+        id=step.id,
+        status=ExecutionStepStatus.WAITING,
+    ).update(output=json.dumps(output))
+    if updated == 0:
+        logger.debug(
+            "evaluate_waiting_gates_step_context_skipped_not_waiting",
+            step_id=step.id,
+            execution_id=step.execution_id,
+            correlation_id=correlation_id,
+        )
+        return
+    step.output = json.dumps(output)
 
     # V113: Durable event so UI can refresh gate status on reconnect.
     # Skip for manual gates — no meaningful change until user resolves.
-    if output_changed and updated == 1 and not is_manual_gate:
+    if output_changed and not is_manual_gate:
         try:
             from executions.services.workflow_events import WorkflowEventService  # noqa: PLC0415
             WorkflowEventService.emit_step_output_updated(step.execution_id, step)

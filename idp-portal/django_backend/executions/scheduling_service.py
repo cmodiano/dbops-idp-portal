@@ -272,8 +272,14 @@ class SchedulingService:
         scheduled_execution.save()
         
         # If it's a recurring pattern, deactivate it
-        if hasattr(scheduled_execution, 'recurringpattern'):
+        # MED-03: Use try/except instead of hasattr() — Django OneToOne raises DoesNotExist,
+        # not AttributeError, so hasattr() is unreliable for optional reverse relations.
+        pattern = None
+        try:
             pattern = scheduled_execution.recurringpattern
+        except RecurringPattern.DoesNotExist:
+            pass
+        if pattern is not None:
             pattern.is_active = 0
             pattern.updated_at = timezone.now()
             pattern.save()

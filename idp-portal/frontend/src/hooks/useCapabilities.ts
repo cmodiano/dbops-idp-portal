@@ -9,12 +9,14 @@ import {
   getIntegrationsCapabilities,
   getWorkflowStepsCapabilities,
 } from '../services/capabilities_service';
-import type { PlatformCapability, ServiceCapability, WorkflowStepCapability } from '../services/capabilities_service';
+import type { PlatformCapability, ServiceCapability, WorkflowStepCapability, CommonStepSchema } from '../services/capabilities_service';
 
 export interface CapabilitiesState {
   platforms: PlatformCapability[];
   services: ServiceCapability[];
   stepTypes: WorkflowStepCapability[];
+  /** Champs communs à tous les types de steps, pilotés par le backend. */
+  commonSchema?: CommonStepSchema;
 }
 
 // Cache module-level : une seule requête par session frontend
@@ -42,6 +44,7 @@ async function fetchCapabilities(): Promise<CapabilitiesState> {
       platforms: integrations.platforms,
       services: integrations.services,
       stepTypes: workflowSteps.step_types,
+      commonSchema: workflowSteps.common_schema,
     };
     _pending = null;
     return _cache;
@@ -53,14 +56,22 @@ async function fetchCapabilities(): Promise<CapabilitiesState> {
   return _pending;
 }
 
+// Story 88-2 ERR-FE-01: Retry config for fetch capabilities
+const MAX_RETRIES = 2;
+const RETRY_DELAY_MS = 1000;
+
 export function useCapabilities(): {
   capabilities: CapabilitiesState | null;
   loading: boolean;
   error: string | null;
+  /** Story 88-2 Task 2.3: nombre de retries effectués (0 = succès au premier essai). */
+  retryCount: number;
 } {
   const [capabilities, setCapabilities] = useState<CapabilitiesState | null>(_cache);
   const [loading, setLoading] = useState(!_cache);
   const [error, setError] = useState<string | null>(null);
+  // Story 88-2 Task 2.3: état retryCount pour traçabilité et message d'épuisement
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     if (_cache) {
@@ -68,17 +79,42 @@ export function useCapabilities(): {
       setLoading(false);
       return;
     }
-    setLoading(true);
-    fetchCapabilities()
-      .then((data) => {
-        setCapabilities(data);
-        setLoading(false);
-      })
-      .catch((err: unknown) => {
-        setError((err as Error)?.message ?? 'Erreur chargement capacités');
-        setLoading(false);
-      });
+
+    let cancelled = false;
+
+    const loadWithRetry = async (attempt = 0) => {
+      try {
+        setLoading(true);
+        const data = await fetchCapabilities();
+        if (!cancelled) {
+          setCapabilities(data);
+          setLoading(false);
+        }
+      } catch (err: unknown) {
+        if (cancelled) return;
+        if (attempt < MAX_RETRIES) {
+          // Reset _pending to allow a new fetch attempt
+          _pending = null;
+          if (!cancelled) setRetryCount(attempt + 1);
+          await new Promise(r => setTimeout(r, RETRY_DELAY_MS * Math.pow(2, attempt)));
+          if (!cancelled) await loadWithRetry(attempt + 1);
+        } else {
+          // Message approprié après épuisement des tentatives (Task 2.3)
+          const totalAttempts = attempt + 1;
+          const baseMessage = (err as Error)?.message ?? 'erreur inconnue';
+          setError(
+            totalAttempts > 1
+              ? `Erreur chargement capacités (${totalAttempts} tentatives) : ${baseMessage}`
+              : `Erreur chargement capacités : ${baseMessage}`,
+          );
+          setLoading(false);
+        }
+      }
+    };
+
+    loadWithRetry();
+    return () => { cancelled = true; };
   }, []);
 
-  return { capabilities, loading, error };
+  return { capabilities, loading, error, retryCount };
 }

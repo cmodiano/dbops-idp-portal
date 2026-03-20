@@ -25,3 +25,8 @@ node_modules/
 # MkDocs build output
 site/
 
+# Node
+node_modules/
+
+# idp-portal
+idp-portal/django_backend/staticfiles/

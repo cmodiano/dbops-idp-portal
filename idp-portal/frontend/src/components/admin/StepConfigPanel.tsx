@@ -12,6 +12,7 @@
 
 import { useMemo } from 'react';
 import type { FC } from 'react';
+import type { AvailableVariablesStep } from '../../services/output_schema_service';
 import { Drawer, Input, Switch, InputNumber, Typography, Space, Button, Divider, Alert, Select } from 'antd';
 import { DeleteOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import type { Node } from '@xyflow/react';
@@ -22,6 +23,7 @@ import { EvaluationStepConfig } from './step-config/EvaluationStepConfig';
 import { GateStepConfig } from './step-config/GateStepConfig';
 import { HttpRequestStepConfig } from './step-config/HttpRequestStepConfig';
 import { ScheduleStepConfig } from './step-config/ScheduleStepConfig';
+import { ConditionConfig } from './step-config/ConditionConfig';
 import { KeyValueEditor } from './step-config/KeyValueEditor';
 import { MappingHelpPopover } from './step-config/MappingHelpPopover';
 import { useInputMappingWarnings } from '../../hooks/useInputMappingWarnings';
@@ -44,6 +46,8 @@ export interface StepConfigPanelProps {
   availableStepOptions?: { value: string; label: string }[];
   /** Story 63.3: ID du workflow pour le VariablePicker. */
   workflowId?: number;
+  /** Variables locales dérivées du output_mapping des nodes en mémoire (pas de sauvegarde requise). */
+  localStepVariables?: AvailableVariablesStep[];
   /** Story 67.4: Nombre de connexions entrantes — affiche le sélecteur join_policy si ≥ 2 */
   incomingEdgeCount?: number;
 }
@@ -58,6 +62,7 @@ export const StepConfigPanel: FC<StepConfigPanelProps> = ({
   availableStepIds = [],
   availableStepOptions,
   workflowId,
+  localStepVariables,
   incomingEdgeCount = 0,
 }) => {
   const data = node?.data as unknown as WorkflowStepNodeData | undefined;
@@ -294,6 +299,7 @@ export const StepConfigPanel: FC<StepConfigPanelProps> = ({
                 workflowId={workflowId}
                 currentStepId={data.step_id ?? node.id}
                 availableStepIds={availableStepIds}
+                localStepVariables={localStepVariables}
               />
             </div>
 
@@ -322,6 +328,7 @@ export const StepConfigPanel: FC<StepConfigPanelProps> = ({
             availableStepOptions={availableStepOptions}
             availableStepIds={availableStepIds}
             workflowId={workflowId}
+            localStepVariables={localStepVariables}
           />
         )}
 
@@ -355,12 +362,25 @@ export const StepConfigPanel: FC<StepConfigPanelProps> = ({
             availableStepOptions={availableStepOptions}
             availableStepIds={availableStepIds}
             workflowId={workflowId}
+            localStepVariables={localStepVariables}
           />
         )}
 
         {/* schedule_execution — Story 57.16 */}
         {stepType === 'schedule_execution' && (
           <ScheduleStepConfig data={data} onUpdate={handleUpdate} disabled={disabled} />
+        )}
+
+        {/* Condition environnement — commun à tous les types, piloté par capabilities.commonSchema */}
+        {capabilities?.commonSchema?.properties?.condition && (
+          <>
+            <Divider style={{ margin: '8px 0' }} />
+            <ConditionConfig
+              value={data.condition ?? null}
+              onChange={(cond) => handleUpdate({ condition: cond })}
+              disabled={disabled}
+            />
+          </>
         )}
 
         <Divider style={{ margin: '8px 0' }} />

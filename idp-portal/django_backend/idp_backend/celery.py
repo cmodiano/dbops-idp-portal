@@ -4,6 +4,7 @@ Story 20.3: Asynchronous retry with Celery.
 Story 25.3: Celery Beat schedule for evaluate_waiting_gates.
 Story 42.1: Celery Beat schedule for process_pending_scheduled_executions.
 Story 51.3: Celery Beat schedule for health_check_all_integrations.
+Story 78.5: Celery Beat schedule for process_runnable_steps (WorkQueue consumer).
 """
 
 import os
@@ -309,4 +310,58 @@ if _outbox_schedule > 0:
     app.conf.beat_schedule['process-outbox-entries'] = {
         'task': 'executions.tasks.process_outbox_entries',
         'schedule': _outbox_schedule,
+    }
+
+# Story 86.9: Splunk batch durability — periodic safety flush for Celery workers
+# Default interval = 30s. Set CELERY_BEAT_SPLUNK_FLUSH_INTERVAL env var to override (seconds).
+try:
+    _splunk_flush_schedule = float(os.getenv('CELERY_BEAT_SPLUNK_FLUSH_INTERVAL', '30.0'))
+except ValueError as exc:
+    logger.warning(
+        "celery_beat_invalid_splunk_flush_interval: value=%r error=%s fallback=30.0",
+        os.getenv('CELERY_BEAT_SPLUNK_FLUSH_INTERVAL'),
+        exc,
+    )
+    _splunk_flush_schedule = 30.0
+
+if _splunk_flush_schedule > 0:
+    app.conf.beat_schedule['flush-splunk-logging-handler'] = {
+        'task': 'core.tasks.flush_splunk_logging_handler',
+        'schedule': _splunk_flush_schedule,
+    }
+
+# Story 78.5: WorkQueue consumer — claim and execute PENDING runnable steps (gates, platform steps).
+# Default interval = 5s for low-latency gate processing. Override with CELERY_BEAT_RUNNABLE_STEPS_INTERVAL.
+try:
+    _runnable_steps_schedule = float(os.getenv('CELERY_BEAT_RUNNABLE_STEPS_INTERVAL', '5.0'))
+except ValueError as exc:
+    logger.warning(
+        "celery_beat_invalid_runnable_steps_interval: value=%r error=%s fallback=5.0",
+        os.getenv('CELERY_BEAT_RUNNABLE_STEPS_INTERVAL'),
+        exc,
+    )
+    _runnable_steps_schedule = 5.0
+
+if _runnable_steps_schedule > 0:
+    app.conf.beat_schedule['process-runnable-steps'] = {
+        'task': 'executions.tasks.process_runnable_steps',
+        'schedule': _runnable_steps_schedule,
+    }
+
+# Story 78.5: WorkflowCommand processor — approve/reject/cancel commands written by API views.
+# Default interval = 5s for low-latency approval processing. Override with CELERY_BEAT_WORKFLOW_COMMANDS_INTERVAL.
+try:
+    _workflow_commands_schedule = float(os.getenv('CELERY_BEAT_WORKFLOW_COMMANDS_INTERVAL', '5.0'))
+except ValueError as exc:
+    logger.warning(
+        "celery_beat_invalid_workflow_commands_interval: value=%r error=%s fallback=5.0",
+        os.getenv('CELERY_BEAT_WORKFLOW_COMMANDS_INTERVAL'),
+        exc,
+    )
+    _workflow_commands_schedule = 5.0
+
+if _workflow_commands_schedule > 0:
+    app.conf.beat_schedule['process-pending-workflow-commands'] = {
+        'task': 'executions.tasks.process_pending_workflow_commands',
+        'schedule': _workflow_commands_schedule,
     }

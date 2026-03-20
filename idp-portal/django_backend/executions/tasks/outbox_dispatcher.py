@@ -48,15 +48,23 @@ def process_outbox_entries(batch_size: int = 50) -> dict:
     failed = 0
 
     with transaction.atomic():
-        entries = list(
+        # Oracle does not support LIMIT/OFFSET with SELECT FOR UPDATE.
+        # Step 1: fetch candidate IDs with LIMIT (no lock).
+        candidate_ids = list(
             ExecutionOutbox.objects
             .filter(
                 status=OutboxEntryStatus.PENDING,
                 attempt_no__lt=F("max_attempts"),
             )
             .order_by("created_at")
-            .select_for_update(skip_locked=True)[:batch_size]
+            .values_list('id', flat=True)[:batch_size]
         )
+        # Step 2: lock specific rows by PK (no LIMIT needed).
+        entries = list(
+            ExecutionOutbox.objects
+            .filter(id__in=candidate_ids)
+            .select_for_update(skip_locked=True)
+        ) if candidate_ids else []
 
         for entry in entries:
             try:

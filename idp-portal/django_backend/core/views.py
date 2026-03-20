@@ -5,8 +5,9 @@ Story M.8 - Task 6: Enhanced health check for observability.
 
 from __future__ import annotations
 
+from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError as FuturesTimeoutError, as_completed
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
 import requests
 import structlog
@@ -26,6 +27,57 @@ logger = structlog.get_logger(__name__)
 # Timeout for external service health checks (in seconds)
 HEALTH_CHECK_TIMEOUT = getattr(settings, 'HEALTH_CHECK_TIMEOUT', 5)
 
+# Story 86.8: Global deadline for concurrent external health checks (seconds)
+HEALTH_CHECK_GLOBAL_TIMEOUT = getattr(settings, 'HEALTH_CHECK_GLOBAL_TIMEOUT', 10)
+
+
+def _check_vault(correlation_id: str | None = None) -> str:
+    """Check Vault reachability. Returns 'reachable' or 'unreachable'."""
+    vault_addr = getattr(settings, 'VAULT_ADDR', None)
+    try:
+        response = requests.get(
+            f"{vault_addr}/v1/sys/health",
+            timeout=HEALTH_CHECK_TIMEOUT
+        )
+        if response.status_code == 200:
+            return "reachable"
+        raise ConnectionError(f"Vault returned {response.status_code}")
+    except Exception as exc:  # noqa: BLE001 — graceful-degradation: health check reports degraded status on any Vault error
+        logger.warning(
+            "health_check_failed",
+            service="vault",
+            error=str(exc),
+            error_type=type(exc).__name__,
+            correlation_id=correlation_id,
+            exc_info=True,
+        )
+        return "unreachable"
+
+
+def _check_servicenow(correlation_id: str | None = None) -> str:
+    """Check ServiceNow reachability. Returns 'reachable' or 'unreachable'."""
+    servicenow_url = getattr(settings, 'SERVICENOW_INSTANCE_URL', None)
+    try:
+        response = requests.get(
+            f"{servicenow_url}/api/now/table/sys_metadata",
+            headers={"Accept": "application/json"},
+            timeout=HEALTH_CHECK_TIMEOUT
+        )
+        if response.status_code in (200, 401):
+            # 401 means ServiceNow is reachable but requires auth (expected)
+            return "reachable"
+        raise ConnectionError(f"ServiceNow returned {response.status_code}")
+    except Exception as exc:  # noqa: BLE001 — graceful-degradation: health check reports degraded status on any ServiceNow error
+        logger.warning(
+            "health_check_failed",
+            service="servicenow",
+            error=str(exc),
+            error_type=type(exc).__name__,
+            correlation_id=correlation_id,
+            exc_info=True,
+        )
+        return "unreachable"
+
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
@@ -35,8 +87,8 @@ def health_check(request: Any) -> Response:
 
     Checks:
     - Oracle database connection
-    - Vault service reachability (optional)
-    - ServiceNow service reachability (optional)
+    - Vault service reachability (optional, concurrent)
+    - ServiceNow service reachability (optional, concurrent)
 
     Returns:
         Response format:
@@ -50,8 +102,8 @@ def health_check(request: Any) -> Response:
                     "conn_health_checks": true,
                     "connection_usable": true
                 },
-                "vault": "reachable" | "unreachable",
-                "servicenow": "reachable" | "unreachable"
+                "vault": "reachable" | "unreachable" | "timeout",
+                "servicenow": "reachable" | "unreachable" | "timeout"
             }
         }
         Status code: 200 if healthy, 503 if degraded
@@ -93,63 +145,73 @@ def health_check(request: Any) -> Response:
             "connection_usable": False,
         }
 
-    # Test Vault connection (optional - only if configured)
+    # Story 86.8: Build concurrent external checks (Vault + ServiceNow)
     vault_addr = getattr(settings, 'VAULT_ADDR', None)
-    if vault_addr and vault_addr != 'http://localhost:8200':
-        try:
-            response = requests.get(
-                f"{vault_addr}/v1/sys/health",
-                timeout=HEALTH_CHECK_TIMEOUT
-            )
-            if response.status_code == 200:
-                health_data["vault"] = "reachable"
-            else:
-                raise ConnectionError(f"Vault returned {response.status_code}")
-        except Exception as e:  # noqa: BLE001 — graceful-degradation: health check reports degraded status on any Vault error
-            # Story 17.6: Justified broad catch - Health check must handle any connectivity issue
-            logger.warning(
-                "health_check_failed",
-                service="vault",
-                error=str(e),
-                error_type=type(e).__name__,
-                correlation_id=correlation_id,
-                exc_info=True,
-            )
-            health_data["vault"] = "unreachable"
-            health_data["status"] = "degraded"
+    servicenow_url = getattr(settings, 'SERVICENOW_INSTANCE_URL', None)
+
+    checks: dict[str, Callable[[], str]] = {}
+
+    vault_skip_hosts = getattr(settings, 'HEALTH_CHECK_VAULT_SKIP_HOSTS', ['localhost'])
+    sn_skip_domains = getattr(settings, 'HEALTH_CHECK_SERVICENOW_SKIP_DOMAINS', ['instance.service-now.com'])
+
+    if vault_addr and not any(skip_host in vault_addr for skip_host in vault_skip_hosts):
+        checks["vault"] = lambda: _check_vault(correlation_id)
     else:
-        # Vault not configured - mark as reachable to not fail health check
+        vault_skip_reason = "not_configured" if not vault_addr else "skip_host_match"
+        logger.debug("health_check_vault_skipped", vault_addr=vault_addr, reason=vault_skip_reason)
         health_data["vault"] = "reachable"
 
-    # Test ServiceNow connection (optional - only if configured)
-    servicenow_url = getattr(settings, 'SERVICENOW_INSTANCE_URL', None)
-    if servicenow_url and 'instance.service-now.com' not in servicenow_url:
-        try:
-            response = requests.get(
-                f"{servicenow_url}/api/now/table/sys_metadata",
-                headers={"Accept": "application/json"},
-                timeout=HEALTH_CHECK_TIMEOUT
-            )
-            if response.status_code in (200, 401):
-                # 401 means ServiceNow is reachable but requires auth (expected)
-                health_data["servicenow"] = "reachable"
-            else:
-                raise ConnectionError(f"ServiceNow returned {response.status_code}")
-        except Exception as e:  # noqa: BLE001 — graceful-degradation: health check reports degraded status on any ServiceNow error
-            # Story 17.6: Justified broad catch - Health check must handle any connectivity issue
-            logger.warning(
-                "health_check_failed",
-                service="servicenow",
-                error=str(e),
-                error_type=type(e).__name__,
-                correlation_id=correlation_id,
-                exc_info=True,
-            )
-            health_data["servicenow"] = "unreachable"
-            health_data["status"] = "degraded"
+    if servicenow_url and not any(skip_domain in servicenow_url for skip_domain in sn_skip_domains):
+        checks["servicenow"] = lambda: _check_servicenow(correlation_id)
     else:
-        # ServiceNow not configured - mark as reachable to not fail health check
+        sn_skip_reason = "not_configured" if not servicenow_url else "skip_domain_match"
+        logger.debug("health_check_servicenow_skipped", servicenow_url=servicenow_url, reason=sn_skip_reason)
         health_data["servicenow"] = "reachable"
+
+    # Execute external checks concurrently with global deadline
+    if checks:
+        future_to_name: dict[Future[str], str] = {}
+        executor = ThreadPoolExecutor(max_workers=len(checks))
+        try:
+            for name, fn in checks.items():
+                future_to_name[executor.submit(fn)] = name
+            try:
+                for future in as_completed(future_to_name, timeout=HEALTH_CHECK_GLOBAL_TIMEOUT):
+                    name = future_to_name[future]
+                    try:
+                        health_data[name] = future.result()
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "health_check_failed",
+                            service=name,
+                            error=str(exc),
+                            error_type=type(exc).__name__,
+                            correlation_id=correlation_id,
+                            exc_info=True,
+                        )
+                        health_data[name] = "unreachable"
+                        health_data["status"] = "degraded"
+            except FuturesTimeoutError:
+                # Deadline global dépassé — marquer les checks non terminés comme "timeout"
+                # shutdown(wait=False) ci-dessous permet de répondre sans attendre les threads bloqués
+                for future, name in future_to_name.items():
+                    if name not in health_data:
+                        logger.warning(
+                            "health_check_timeout",
+                            service=name,
+                            deadline_seconds=HEALTH_CHECK_GLOBAL_TIMEOUT,
+                            correlation_id=correlation_id,
+                        )
+                        health_data[name] = "timeout"
+                        health_data["status"] = "degraded"
+        finally:
+            # wait=False : ne pas bloquer sur les threads encore en cours après le deadline global
+            executor.shutdown(wait=False)
+
+    # Mark degraded if any external service is unreachable
+    for key in ("vault", "servicenow"):
+        if health_data.get(key) == "unreachable":
+            health_data["status"] = "degraded"
 
     # Format response with envelope
     response_data = {"data": health_data}

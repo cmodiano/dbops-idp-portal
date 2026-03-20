@@ -185,48 +185,36 @@ interface CatalogFilters {
 
 **Fichier :** `src/services/execution_service.ts`
 
-Exécutions et remédiation.
+Fichier barrel (façade) — réexporte toutes les fonctions des 3 sous-modules spécialisés. Toutes les fonctions restent accessibles depuis ce module par backward compatibility.
 
 ```typescript
-// Soumettre une nouvelle exécution
-submitExecution(request: ExecutionCreateRequest): Promise<ExecutionCreateResponse>
-// POST /api/v1/executions
+// Réexporte depuis execution_core.ts :
+submitExecution, getExecution, getExecutionSteps, getStepLogs,
+listExecutions, listPendingApprovals, getPendingApprovalsCount,
+approveExecution, rejectExecution, cancelExecution,
+fetchRemediationSuggestions, fetchRemediationContext, buildFilterParams
 
-// Détail d'une exécution
-getExecution(executionId: number): Promise<ExecutionResponse>
-// GET /api/v1/executions/{id}
+// Réexporte depuis execution_dashboard.ts :
+fetchExecutionStats, fetchExecutionTimeSeries, fetchExecutionTags
 
-// Étapes d'une exécution
-getExecutionSteps(executionId: number): Promise<ExecutionStepResponse[]>
-// GET /api/v1/executions/{id}/steps
+// Réexporte depuis execution_inventory.ts :
+fetchInventoryItems, fetchInventorySchema, fetchInventoryTargets, fetchTargetsPaginated
+```
 
-// Logs d'une étape
-getStepLogs(executionId: number, stepId: number): Promise<StepLogsResponse>
-// GET /api/v1/executions/{id}/steps/{stepId}/logs
+Voir les sections dédiées ci-dessous pour le détail des signatures. Fonctions clés :
 
-// Liste des exécutions (paginée)
-listExecutions(page?: number, pageSize?: number, scope?: string, filters?: ExecutionFilters): Promise<ListExecutionsResponse>
-// GET /api/v1/executions?page=...&page_size=...&scope=...
+```typescript
+// Liste des exécutions (paginée par limit/offset)
+listExecutions(limit?: number, offset?: number, scope?: string, filters?: ExecutionFilters): Promise<ListExecutionsResponse>
+// GET /api/v1/executions?limit=...&offset=...&scope=...
 
 // Suggestions de remédiation
 fetchRemediationSuggestions(executionId: number): Promise<RemediationSuggestion[]>
 // GET /api/v1/executions/{id}/remediation-suggestions
 
-// Déclencher une action corrective
-triggerRemediation(executionId: number, suggestionId: number): Promise<ExecutionCreateResponse>
-// POST /api/v1/executions/{id}/remediate/{suggestionId}
-
-// Données inventaire pour formulaire dynamique
-fetchInventory(type: string, params?: Record<string, string>): Promise<InventoryItem[]>
-// GET /api/v1/inventory/{type}?param=...
-
-// Statistiques globales
-fetchDashboardStats(filters?: ExecutionFilters): Promise<DashboardStats>
-// GET /api/v1/executions/stats
-
-// Données timeseries
-fetchDashboardTimeSeries(filters?: ExecutionFilters): Promise<DashboardTimeSeriesPoint[]>
-// GET /api/v1/executions/timeseries
+// Contexte de remédiation
+fetchRemediationContext(executionId: number): Promise<RemediationContext>
+// GET /api/v1/executions/{id}/remediation-context
 ```
 
 ---
@@ -389,6 +377,317 @@ cancelScheduledExecution(id: number): Promise<void>
 
 toggleRecurringPattern(id: number, isActive: boolean): Promise<void>
 // PATCH /api/v1/scheduled-executions/{id}/recurring
+```
+
+---
+
+### reference_service.ts
+
+**Fichier :** `src/services/reference_service.ts`
+
+Données de référence (engines actifs, environnements disponibles).
+
+```typescript
+// Moteurs actifs depuis REF_ENGINES
+fetchEngines(): Promise<RefEngine[]>
+// GET /api/v1/reference/engines?active_only=true
+
+// Environnements depuis l'inventaire (avec cache global en mémoire)
+fetchEnvironments(): Promise<string[]>
+// GET /api/v1/inventory/environments
+// Cache global : évite les appels API dupliqués — partagé avec fetchInventoryItems('environments')
+```
+
+**Note cache :** `fetchEnvironments()` implémente un cache global avec Promise partagée pour éviter les appels simultanés redondants. Fallback sur `['dev', 'staging', 'prod']` si l'endpoint est indisponible.
+
+---
+
+### categories_service.ts
+
+**Fichier :** `src/services/categories_service.ts`
+
+CRUD sur les catégories d'actions (table `REF_CATEGORIES`).
+
+```typescript
+// Liste des catégories actives
+getCategories(activeOnly?: boolean): Promise<RefCategory[]>
+// GET /api/v1/reference/categories?active_only=true
+
+// Créer une catégorie (admin DBOPS uniquement)
+createCategory(data: { code, label, display_order, is_active }): Promise<RefCategory>
+// POST /api/v1/admin/categories/
+
+// Mettre à jour une catégorie
+updateCategory(id: number, data: Partial<...>): Promise<RefCategory>
+// PATCH /api/v1/admin/categories/{id}/
+
+// Soft-delete (set is_active=0)
+deleteCategory(id: number): Promise<void>
+// DELETE /api/v1/admin/categories/{id}/delete/
+```
+
+---
+
+### business_rules_service.ts
+
+**Fichier :** `src/services/business_rules_service.ts`
+
+Gestion des politiques de règles métier (validation avant exécution de steps).
+
+```typescript
+// Liste avec filtres (step_type, platform, is_active, pagination)
+getBusinessRulePolicies(filters?: BusinessRulePolicyFilters): Promise<BusinessRulePolicyListResponse>
+// GET /api/v1/admin/business-rule-policies/
+
+// Détail d'une politique
+getBusinessRulePolicy(id: number): Promise<BusinessRulePolicyDetail>
+// GET /api/v1/admin/business-rule-policies/{id}/
+
+// Créer une politique
+createBusinessRulePolicy(payload: BusinessRulePolicyPayload): Promise<BusinessRulePolicyDetail>
+// POST /api/v1/admin/business-rule-policies/
+
+// Mettre à jour
+updateBusinessRulePolicy(id: number, payload: Partial<...>): Promise<BusinessRulePolicyDetail>
+// PATCH /api/v1/admin/business-rule-policies/{id}/
+
+// Supprimer
+deleteBusinessRulePolicy(id: number): Promise<void>
+// DELETE /api/v1/admin/business-rule-policies/{id}/
+```
+
+---
+
+### capabilities_service.ts
+
+**Fichier :** `src/services/capabilities_service.ts`
+
+Capacités backend pour le builder workflow (plateformes d'intégration et types de steps disponibles).
+
+```typescript
+// Plateformes + services disponibles
+getIntegrationsCapabilities(): Promise<CapabilitiesIntegrationsData>
+// GET /api/v1/capabilities/integrations/
+// → { platforms: PlatformCapability[], services: ServiceCapability[] }
+
+// Types de steps workflow avec schémas de configuration
+getWorkflowStepsCapabilities(): Promise<CapabilitiesWorkflowStepsData>
+// GET /api/v1/capabilities/workflow-steps/
+// → { step_types: WorkflowStepCapability[] }
+```
+
+**Types clés :**
+
+```typescript
+interface PlatformCapability {
+  code: string;
+  display_name: string;
+  connector_type: string;
+  action_config_schema: Record<string, unknown>; // schéma JSON de configuration
+  supports_health_check: boolean;
+}
+
+interface ServiceCapability {
+  code: string;
+  display_name: string;
+  credential_mode: 'integration' | 'credential_free';
+  operations: ServiceOperation[]; // avec input_schema, output_schema, ui_hints
+}
+```
+
+---
+
+### engines_service.ts
+
+**Fichier :** `src/services/engines_service.ts`
+
+Gestion admin des moteurs de base de données (Oracle, SQL Server, DB2).
+
+```typescript
+// Tous les engines (y compris inactifs) pour l'admin
+fetchEnginesForAdmin(activeOnly?: boolean): Promise<RefEngine[]>
+// GET /api/v1/reference/engines?active_only=false
+
+// Mettre à jour un engine (icône, label, ordre, actif)
+updateEngine(id: number, payload: Partial<RefEngine>): Promise<RefEngine>
+// PATCH /api/v1/admin/engines/{id}/
+```
+
+**Différence avec `reference_service.ts` :** `engines_service.ts` cible les endpoints admin et retourne tous les engines (incluant inactifs) par défaut.
+
+---
+
+### output_schema_service.ts
+
+**Fichier :** `src/services/output_schema_service.ts`
+
+Schémas de sortie des actions — utilisés dans le builder workflow pour mapper les variables.
+
+```typescript
+// Variables disponibles pour un workflow donné (par step)
+fetchAvailableVariables(workflowId: number): Promise<AvailableVariablesStep[]>
+// GET /api/v1/output-schemas/workflows/{id}/available-variables/
+
+// Liste des OutputSchema filtrés par type
+fetchOutputSchemasList(schemaType?: string): Promise<OutputSchemaListItem[]>
+// GET /api/v1/output-schemas/?schema_type=...
+```
+
+```typescript
+interface AvailableVariablesStep {
+  step_id: string;
+  step_name: string;
+  step_type: string;
+  variables: OutputField[]; // { name, path, type, description }
+}
+```
+
+---
+
+### api_keys_service.ts
+
+**Fichier :** `src/services/api_keys_service.ts`
+
+Gestion des clés API personnelles de l'utilisateur connecté.
+
+```typescript
+// Lister ses clés
+listApiKeys(): Promise<ApiKeyListItem[]>
+// GET /api/v1/auth/api-keys/
+
+// Créer une clé (retourne raw_key, affiché une seule fois)
+createApiKey(payload: ApiKeyCreateRequest): Promise<ApiKeyCreateResponse>
+// POST /api/v1/auth/api-keys/
+
+// Révoquer une clé
+revokeApiKey(id: number): Promise<void>
+// DELETE /api/v1/auth/api-keys/{id}/
+```
+
+**Scopes disponibles :** `'executions'` | `'catalog'` | `'full'`
+
+---
+
+### help_service.ts
+
+**Fichier :** `src/services/help_service.ts`
+
+Aide contextuelle par topic. Cache `sessionStorage` de 10 minutes.
+
+```typescript
+getHelpContent(topicId: string): Promise<HelpContent>
+// GET /api/v1/help/{topicId}/
+// → { topic_id: string, short: string, markdown: string }
+// Fallback silencieux si endpoint indisponible (retourne strings vides)
+```
+
+**Cache :** Chaque topic est mis en cache dans `sessionStorage` pendant 10 min. Évite les appels répétés lors de la navigation.
+
+---
+
+### feature_flag_service.ts
+
+**Fichier :** `src/services/feature_flag_service.ts`
+
+Accès aux feature flags (lecture utilisateur + administration).
+
+```typescript
+// Status des flags pour l'utilisateur courant
+fetchFeatureFlagsStatus(): Promise<FeatureFlagsStatus>
+// GET /api/v1/feature-flags/status
+// → Record<string, boolean>
+
+// Liste complète (admin uniquement)
+fetchFeatureFlags(): Promise<FeatureFlagListResponse>
+// GET /api/v1/feature-flags
+// → { data: FeatureFlagDetail[], source: string }
+
+// Mettre à jour un flag (admin)
+updateFeatureFlag(flagKey: string, data: { enabled?, rollout_percent? }): Promise<FeatureFlagDetail>
+// PATCH /api/v1/feature-flags/{flagKey}
+```
+
+---
+
+### Services d'exécution refactorisés
+
+`execution_service.ts` est une **façade** qui réexporte les fonctions des 3 sous-modules spécialisés.
+
+#### execution_core.ts
+
+**Fichier :** `src/services/execution_core.ts`
+
+Opérations CRUD de base, approbation, annulation et remédiation.
+
+```typescript
+submitExecution(request: ExecutionCreateRequest): Promise<ExecutionCreateResponse>
+// POST /api/v1/executions
+
+getExecution(executionId: number): Promise<ExecutionResponse>
+// GET /api/v1/executions/{id}
+
+getExecutionSteps(executionId: number): Promise<ExecutionStepResponse[]>
+// GET /api/v1/executions/{id}/steps
+
+getStepLogs(executionId: number, stepId: number): Promise<StepLogsResponse>
+// GET /api/v1/executions/{id}/steps/{stepId}/logs
+
+listExecutions(limit?, offset?, scope?, filters?): Promise<ListExecutionsResponse>
+// GET /api/v1/executions?limit=...&offset=...&scope=...
+
+listPendingApprovals(limit?, offset?): Promise<PendingApprovalsResponse>
+// GET /api/v1/executions/pending-approvals
+
+approveExecution(executionId: number, comment?: string): Promise<ApproveExecutionResponse>
+// POST /api/v1/executions/{id}/approve
+
+rejectExecution(executionId: number, comment?: string): Promise<RejectExecutionResponse>
+// POST /api/v1/executions/{id}/reject
+
+cancelExecution(executionId: number): Promise<ExecutionResponse>
+// PATCH /api/v1/executions/{id}/cancel
+
+fetchRemediationSuggestions(executionId: number): Promise<RemediationSuggestion[]>
+// GET /api/v1/executions/{id}/remediation
+```
+
+#### execution_dashboard.ts
+
+**Fichier :** `src/services/execution_dashboard.ts`
+
+Statistiques et données temporelles des exécutions.
+
+```typescript
+fetchExecutionStats(scope?, filters?): Promise<DashboardStats>
+// GET /api/v1/executions/stats?scope=...
+
+fetchExecutionTimeSeries(scope?, filters?): Promise<DashboardTimeSeriesPoint[]>
+// GET /api/v1/executions/timeseries?scope=...
+
+fetchExecutionTags(): Promise<string[]>
+// GET /api/v1/executions/tags
+```
+
+#### execution_inventory.ts
+
+**Fichier :** `src/services/execution_inventory.ts`
+
+Données d'inventaire pour les formulaires dynamiques. Cache mémoire 5 min + sessionStorage.
+
+```typescript
+fetchInventoryItems(
+  type: 'databases' | 'servers' | 'instances' | 'environments',
+  environment?: string,
+  options?: { server_names?: string[]; engine_type?: string }
+): Promise<InventoryItem[]>
+// GET /api/v1/inventory/{type}?environment=...
+// Cache mémoire 5 min ; fallback sessionStorage si 503
+
+fetchInventoryTargets(search?: string): Promise<InventoryTarget[]>
+// GET /api/v1/inventory/targets?page=1&page_size=5000
+
+fetchInventorySchema(): Promise<InventorySchema>
+// GET /api/v1/inventory/schema
 ```
 
 ---

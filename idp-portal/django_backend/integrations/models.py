@@ -2,6 +2,7 @@ import json
 import structlog
 from django.db import models
 from django.core.exceptions import ValidationError
+from core.utils import parse_json_field
 
 logger = structlog.get_logger(__name__)
 
@@ -189,13 +190,22 @@ class Integration(models.Model):
     # JSON field helper for config
     def get_config(self):
         """Deserialize JSON from CLOB."""
-        if self.config:
-            try:
-                return json.loads(self.config)
-            except (json.JSONDecodeError, TypeError) as e:
-                logger.warning(f"Failed to deserialize config for Integration {self.id}: {e}")
-                return None
-        return None
+        raw: object = self.config  # Oracle CLOB may arrive as a LOB object or auto-parsed dict
+        if raw is None:
+            return None
+        # oracledb may return NCLOB columns containing valid JSON as a dict directly
+        if isinstance(raw, dict):
+            return raw
+        # Coerce LOB / non-str to str
+        if not isinstance(raw, str):
+            raw = raw.read() if hasattr(raw, 'read') else str(raw)
+        if not raw:
+            return None
+        try:
+            return json.loads(raw)
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.warning("get_config_deserialize_failed", integration_id=self.id, config_type=type(self.config).__name__, error=str(e))
+            return None
     
     def set_config(self, value):
         """Serialize JSON to CLOB."""
@@ -272,9 +282,9 @@ class IntegrationAction(models.Model):
         """Deserialize required_params JSON."""
         if self.required_params:
             try:
-                return json.loads(self.required_params)
+                return parse_json_field(self.required_params, fallback={})
             except (json.JSONDecodeError, TypeError) as e:
-                logger.warning(f"Failed to deserialize required_params for IntegrationAction {self.id}: {e}")
+                logger.warning("get_required_params_deserialize_failed", action_id=self.id, error=str(e))
                 return {}
         return {}
 
@@ -288,9 +298,9 @@ class IntegrationAction(models.Model):
         """Deserialize optional_params JSON."""
         if self.optional_params:
             try:
-                return json.loads(self.optional_params)
+                return parse_json_field(self.optional_params, fallback={})
             except (json.JSONDecodeError, TypeError) as e:
-                logger.warning(f"Failed to deserialize optional_params for IntegrationAction {self.id}: {e}")
+                logger.warning("get_optional_params_deserialize_failed", action_id=self.id, error=str(e))
                 return {}
         return {}
 
@@ -304,9 +314,9 @@ class IntegrationAction(models.Model):
         """Deserialize response_format JSON."""
         if self.response_format:
             try:
-                return json.loads(self.response_format)
+                return parse_json_field(self.response_format, fallback={})
             except (json.JSONDecodeError, TypeError) as e:
-                logger.warning(f"Failed to deserialize response_format for IntegrationAction {self.id}: {e}")
+                logger.warning("get_response_format_deserialize_failed", action_id=self.id, error=str(e))
                 return {}
         return {}
 

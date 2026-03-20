@@ -43,7 +43,8 @@ export async function getHelpContent(topicId: string): Promise<HelpContent> {
       JSON.stringify({ data, timestamp: Date.now() })
     );
     return data;
-  } catch {
+  } catch (err) {
+    void err; // help content unavailable for topic, returning empty
     return { topic_id: topicId, short: '', markdown: '' };
   }
 }

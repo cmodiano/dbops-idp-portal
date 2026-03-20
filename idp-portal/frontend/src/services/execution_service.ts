@@ -42,5 +42,6 @@ export {
   fetchInventoryTargets,
   fetchInventoryItems,
   fetchInventorySchema,
+  InventoryUnavailableError,
 } from './execution_inventory';
 export type { InventoryTarget, TargetsResponse } from './execution_inventory';

@@ -117,11 +117,12 @@ class TestTriggerCoverage:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
+        from core.exceptions import AdapterTimeoutError
         with patch("adapters.aap_adapter.httpx.AsyncClient", return_value=mock_client):
-            with pytest.raises(ServiceUnavailableError) as exc_info:
+            with pytest.raises(AdapterTimeoutError) as exc_info:
                 await adapter.trigger("42", correlation_id="corr-1")
 
-        assert exc_info.value.code == "AAP_TIMEOUT"
+        assert exc_info.value.code == "ADAPTER_TIMEOUT"
         assert "AAP did not respond in time" in exc_info.value.message
 
     @pytest.mark.asyncio
@@ -531,11 +532,12 @@ class TestGetStatusHappyPath:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
+        from core.exceptions import AdapterTimeoutError
         with patch("adapters.aap_adapter.httpx.AsyncClient", return_value=mock_client):
-            with pytest.raises(ServiceUnavailableError) as exc_info:
+            with pytest.raises(AdapterTimeoutError) as exc_info:
                 await adapter.get_status("123")
 
-        assert exc_info.value.code == "AAP_TIMEOUT"
+        assert exc_info.value.code == "ADAPTER_TIMEOUT"
 
 
 class TestGetJobLogsHappyPath:
@@ -754,7 +756,7 @@ class TestListTemplatesHappyPath:
             with pytest.raises(ServiceUnavailableError) as exc_info:
                 await adapter.list_templates()
 
-        assert exc_info.value.code == "AAP_TIMEOUT"
+        assert exc_info.value.code == "ADAPTER_TIMEOUT"
 
     @pytest.mark.asyncio
     async def test_list_templates_http_error(self, adapter: AAPAdapter) -> None:

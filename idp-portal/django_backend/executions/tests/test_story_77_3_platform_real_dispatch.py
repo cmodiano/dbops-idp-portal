@@ -577,7 +577,8 @@ class TestPollingTimeout:
 
     @pytest.mark.django_db
     @patch('executions.container_workflow_runtime.AuditService')
-    @patch('executions.container_workflow_runtime.PLATFORM_ACTION_MAX_WAIT_SECONDS', 0)
+    @patch('executions.platform_step_executor.PLATFORM_ACTION_MAX_WAIT_SECONDS', 0)
+    @patch('executions.platform_step_executor.PLATFORM_ACTION_POLL_INTERVAL_SECONDS', 0)
     @patch('executions.container_workflow_runtime.trigger_platform_job')
     @patch('executions.container_workflow_runtime.get_platform_queue', return_value='default')
     def test_timeout_marks_child_failed_with_message(self, mock_queue, mock_trigger, mock_audit):

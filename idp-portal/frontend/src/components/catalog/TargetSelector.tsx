@@ -12,7 +12,7 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { Select, Badge, Alert, Spin, Empty } from 'antd';
-import type { SelectProps } from 'antd';
+import type { SelectProps, RefSelectProps } from 'antd';
 
 import { useTargetsPaginated } from '../../hooks/useTargetInventory';
 import type { InventoryTarget } from '../../hooks/useTargetInventory';
@@ -36,8 +36,7 @@ export interface TargetSelectorProps {
   /** Accessible label */
   ariaLabel?: string;
   /** Ref to focus element */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  inputRef?: React.Ref<any>;
+  inputRef?: React.Ref<RefSelectProps>;
 }
 
 export function TargetSelector({

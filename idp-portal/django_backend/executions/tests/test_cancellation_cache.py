@@ -1,8 +1,9 @@
 """
-Unit tests for cancellation cache — Story 20.3 AC5
+Unit tests for cancellation cache — Story 20.3 AC5, Story 86.6
 
 Tests the Redis-based cancellation cache that reduces database queries
 for high-volume retry workflows.
+Story 86.6: clé `cancellation:{execution_id}`, TTL 24h, tests multi-worker.
 """
 
 import pytest
@@ -92,7 +93,7 @@ class TestCancellationCacheEnabled:
         execution.save()
 
         result2 = is_cancelled(execution.id)
-        # Still True because cached value is True (TTL 60s)
+        # Still True because cached value is True (TTL 24h)
         assert result2 is True
 
     @override_settings(WORKFLOW_RETRY_USE_CANCELLATION_CACHE=True)
@@ -113,6 +114,29 @@ class TestCancellationCacheEnabled:
         assert is_cancelled(execution.id) is True
 
     @override_settings(WORKFLOW_RETRY_USE_CANCELLATION_CACHE=True)
+    def test_is_cancelled_caches_cancelled_result_with_24h_ttl(self):
+        """is_cancelled popule le cache avec timeout=86400 pour une exécution annulée."""
+        execution = Execution.objects.create(
+            action=self.action, user=self.user,
+            environment="dev", status=ExecutionStatus.CANCELLED,
+        )
+        with patch("executions.cancellation_cache.cache.set") as mock_set:
+            with patch("executions.cancellation_cache.cache.get", return_value=None):
+                is_cancelled(execution.id)
+        mock_set.assert_called_once_with(f"cancellation:{execution.id}", True, timeout=86400)
+
+    @override_settings(WORKFLOW_RETRY_USE_CANCELLATION_CACHE=True)
+    def test_mark_cancelled_logs_and_survives_redis_failure(self):
+        """mark_cancelled log un warning sans propager l'exception Redis."""
+        execution = Execution.objects.create(
+            action=self.action, user=self.user,
+            environment="dev", status=ExecutionStatus.RUNNING,
+        )
+        with patch("executions.cancellation_cache.cache.set", side_effect=Exception("Redis down")):
+            # Should not raise — Redis failure must be silent
+            mark_cancelled(execution.id)
+
+    @override_settings(WORKFLOW_RETRY_USE_CANCELLATION_CACHE=True)
     def test_cache_fallback_on_error(self):
         """If cache raises exception, falls back to DB."""
         execution = Execution.objects.create(
@@ -125,3 +149,63 @@ class TestCancellationCacheEnabled:
 
         # Should still return True (from DB fallback)
         assert result is True
+
+
+@pytest.mark.django_db
+class TestCancellationCacheMultiWorker:
+    """Tests du comportement multi-worker du cache d'annulation — Story 86.6."""
+
+    def setup_method(self):
+        from django.core.cache import cache
+        cache.clear()
+        self.user = UserFactory(username="multi_worker_user")
+        self.action = ActionFactory(
+            name="Multi Worker Test Action",
+            category="Administration",
+            engine="Oracle",
+            platform="AAP",
+            status=ActionStatus.PUBLISHED,
+        )
+
+    @override_settings(WORKFLOW_RETRY_USE_CANCELLATION_CACHE=True)
+    def test_mark_in_worker1_visible_in_worker2(self):
+        """Worker 1 marque annulé → Worker 2 lit depuis cache sans DB."""
+        execution = Execution.objects.create(
+            action=self.action, user=self.user,
+            environment="dev", status=ExecutionStatus.RUNNING,
+        )
+        # Worker 1: marque l'annulation
+        mark_cancelled(execution.id)
+
+        # Worker 2: lit le statut — doit venir du cache (pas de DB query)
+        with patch("executions.cancellation_cache._check_db") as mock_db:
+            result = is_cancelled(execution.id)
+
+        assert result is True
+        mock_db.assert_not_called()  # cache hit — aucune requête DB
+
+    @override_settings(WORKFLOW_RETRY_USE_CANCELLATION_CACHE=True)
+    def test_cancel_persists_across_multiple_reads(self):
+        """mark_cancelled + 3× is_cancelled → tous True, _check_db jamais appelée."""
+        execution = Execution.objects.create(
+            action=self.action, user=self.user,
+            environment="dev", status=ExecutionStatus.RUNNING,
+        )
+        mark_cancelled(execution.id)
+
+        with patch("executions.cancellation_cache._check_db") as mock_db:
+            results = [is_cancelled(execution.id) for _ in range(3)]
+
+        assert all(r is True for r in results)
+        mock_db.assert_not_called()  # cache hits — aucune requête DB après mark_cancelled
+
+    @override_settings(WORKFLOW_RETRY_USE_CANCELLATION_CACHE=True)
+    def test_ttl_is_24h(self):
+        """cache.set est appelé avec timeout=86400."""
+        execution = Execution.objects.create(
+            action=self.action, user=self.user,
+            environment="dev", status=ExecutionStatus.RUNNING,
+        )
+        with patch("executions.cancellation_cache.cache.set") as mock_set:
+            mark_cancelled(execution.id)
+        mock_set.assert_called_once_with(f"cancellation:{execution.id}", True, timeout=86400)

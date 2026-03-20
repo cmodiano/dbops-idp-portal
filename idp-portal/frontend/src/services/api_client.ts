@@ -77,7 +77,8 @@ export function buildHeaders(
 
 /**
  * Calculate retry delay for HTTP 429 responses.
- * Uses Retry-After header value (seconds) if available, otherwise exponential backoff (1s, 2s, 4s).
+ * Uses Retry-After header value (seconds) if available, otherwise full-jitter
+ * exponential backoff: random delay in [0, 2^retryCount * 1000ms].
  * @internal Exported for testing only - not part of public API
  */
 export function calculateRetryDelay(retryCount: number, retryAfter?: string | null): number {
@@ -87,8 +88,8 @@ export function calculateRetryDelay(retryCount: number, retryAfter?: string | nu
       return seconds * 1000;
     }
   }
-  // Exponential backoff: 1s, 2s, 4s
-  return Math.pow(2, retryCount) * 1000;
+  // Full jitter: délai aléatoire dans [0, 2^n] pour éviter le thundering herd
+  return Math.random() * Math.pow(2, retryCount) * 1000;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -115,7 +116,8 @@ export async function isDbUnavailable503(response: Response): Promise<boolean> {
  * Fetch with automatic 401 retry after token refresh and 429 retry with backoff.
  *
  * On HTTP 429 (rate limited), retries up to {@link MAX_429_RETRIES} times using the
- * `Retry-After` header (seconds) when present, or exponential backoff (1s, 2s, 4s).
+ * `Retry-After` header (seconds) when present, or full-jitter exponential backoff:
+ * random delay in [0, 2^retryCount * 1000ms] to avoid thundering herd.
  * Each retry attempt is logged via `logger.warn()` with correlation_id for traceability.
  *
  * @throws {ApiError} When rate limit persists after all retries (status 429)

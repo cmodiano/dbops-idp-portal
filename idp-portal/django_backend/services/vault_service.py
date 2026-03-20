@@ -9,6 +9,7 @@ circuit breaker, thread-safe TTL cache.
 from __future__ import annotations
 
 import os
+import random
 import re
 import time
 from dataclasses import dataclass, field
@@ -380,7 +381,7 @@ class VaultService(IHealthCheckable):
                     if attempt < self._max_retries - 1:
                         backoff = 2**attempt
                         log.warning("vault_transient_error_retry", status_code=response.status_code, backoff=backoff)
-                        time.sleep(backoff)
+                        time.sleep(random.uniform(0, backoff))
                         continue
                     raise last_exception
 
@@ -390,7 +391,13 @@ class VaultService(IHealthCheckable):
                     details={"status_code": response.status_code},
                 )
                 if attempt < self._max_retries - 1:
-                    time.sleep(2**attempt)
+                    backoff_unexpected = 2**attempt
+                    log.warning(
+                        "vault_unexpected_status_retry",
+                        status_code=response.status_code,
+                        backoff=backoff_unexpected,
+                    )
+                    time.sleep(random.uniform(0, backoff_unexpected))
                     continue
                 raise last_exception
 
@@ -402,7 +409,7 @@ class VaultService(IHealthCheckable):
                 if attempt < self._max_retries - 1:
                     backoff = 2**attempt
                     log.warning("vault_connection_error_retry", error=str(exc), backoff=backoff)
-                    time.sleep(backoff)
+                    time.sleep(random.uniform(0, backoff))
                     continue
                 raise last_exception from exc
 

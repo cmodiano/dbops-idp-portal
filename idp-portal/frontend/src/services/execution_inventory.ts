@@ -7,6 +7,23 @@ import { apiFetch, apiFetchRaw } from './api_client';
 import logger from './logger';
 import type { InventoryItem, InventorySchema } from '../types/api';
 
+export class InventoryUnavailableError extends Error {
+  readonly code = 'INVENTORY_UNAVAILABLE' as const;
+  readonly useCache: boolean;
+  readonly cachedItems: InventoryItem[];
+
+  constructor(
+    message: string,
+    useCache: boolean,
+    cachedItems: InventoryItem[],
+  ) {
+    super(message);
+    this.name = 'InventoryUnavailableError';
+    this.useCache = useCache;
+    this.cachedItems = cachedItems;
+  }
+}
+
 /** Target from inventory API (for pattern/manual resolution). */
 export interface InventoryTarget {
   name: string;
@@ -104,19 +121,21 @@ export async function fetchInventoryItems(
               const cacheTime = cachedData.timestamp;
               const now = Date.now();
               if (now - cacheTime < CACHE_TTL) {
-                const error = new Error('Inventaire temporairement indisponible — dernières valeurs en cache');
-                (error as Error & { code: string }).code = 'INVENTORY_UNAVAILABLE';
-                (error as Error & { useCache: boolean }).useCache = true;
-                (error as Error & { cachedItems: InventoryItem[] }).cachedItems = cachedData.items;
-                throw error;
+                throw new InventoryUnavailableError(
+                  'Inventaire temporairement indisponible — dernières valeurs en cache',
+                  true,
+                  cachedData.items,
+                );
               }
             } else if (cachedData) {
               logger.warn('Invalid inventory cache structure (missing timestamp or items array)');
             }
           }
-          const error = new Error('Inventaire temporairement indisponible — dernières valeurs en cache');
-          (error as Error & { code: string }).code = 'INVENTORY_UNAVAILABLE';
-          throw error;
+          throw new InventoryUnavailableError(
+            'Inventaire temporairement indisponible',
+            false,
+            [],
+          );
         }
         throw fetchError;
       }

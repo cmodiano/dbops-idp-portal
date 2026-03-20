@@ -5,11 +5,16 @@
  * - Retry badge display
  * - Tooltip with retry details and exit paths (Story 16.7)
  * - ARIA labels and accessibility
+ *
+ * Story 88-7 PERF-FE-01: WorkflowStepNode consomme désormais useCapabilitiesContext() (Context)
+ * plutôt que useCapabilities() (hook). Tests adaptés : wrapper CapabilitiesContext.Provider.
  */
 
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import type { CapabilitiesState } from '../../hooks/useCapabilities';
+import { CapabilitiesContext } from '../../contexts/CapabilitiesContext';
 
 // Mock @xyflow/react before importing the component
 vi.mock('@xyflow/react', () => ({
@@ -18,13 +23,20 @@ vi.mock('@xyflow/react', () => ({
   Position: { Top: 'top', Bottom: 'bottom', Left: 'left', Right: 'right' },
 }));
 
-vi.mock('../../hooks/useCapabilities');
-
 // Import after mocks
 import WorkflowStepNode from './WorkflowStepNode';
-import * as useCapabilitiesModule from '../../hooks/useCapabilities';
 
-const mockUseCapabilities = vi.mocked(useCapabilitiesModule.useCapabilities);
+/** Helper : rend WorkflowStepNode dans un CapabilitiesContext.Provider. */
+function renderWithCapabilities(
+  element: React.ReactElement,
+  capabilities: CapabilitiesState | null = null,
+) {
+  return render(
+    <CapabilitiesContext.Provider value={capabilities}>
+      {element}
+    </CapabilitiesContext.Provider>,
+  );
+}
 
 const defaultData = {
   action_id: 100,
@@ -56,31 +68,30 @@ const makeProps = (dataOverrides: Record<string, unknown> = {}, selected = false
 describe('WorkflowStepNode', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseCapabilities.mockReturnValue({ capabilities: null, loading: false, error: null });
   });
 
   it('renders action name', () => {
-    render(<WorkflowStepNode {...makeProps()} />);
+    renderWithCapabilities(<WorkflowStepNode {...makeProps()} />);
     expect(screen.getByText('Create PDB')).toBeInTheDocument();
   });
 
   it('renders engine and platform', () => {
-    render(<WorkflowStepNode {...makeProps()} />);
+    renderWithCapabilities(<WorkflowStepNode {...makeProps()} />);
     expect(screen.getByText('Oracle / Linux')).toBeInTheDocument();
   });
 
   it('renders custom display name when provided', () => {
-    render(<WorkflowStepNode {...makeProps({ name: 'Mon étape' })} />);
+    renderWithCapabilities(<WorkflowStepNode {...makeProps({ name: 'Mon étape' })} />);
     expect(screen.getByText('Mon étape')).toBeInTheDocument();
   });
 
   it('renders ARIA label with step name', () => {
-    render(<WorkflowStepNode {...makeProps()} />);
+    renderWithCapabilities(<WorkflowStepNode {...makeProps()} />);
     expect(screen.getByRole('img', { name: 'Étape: Create PDB' })).toBeInTheDocument();
   });
 
   it('displays retry badge "Réessai: 5×" when retry is enabled', () => {
-    render(
+    renderWithCapabilities(
       <WorkflowStepNode
         {...makeProps({
           retry_enabled: true,
@@ -95,7 +106,7 @@ describe('WorkflowStepNode', () => {
   });
 
   it('displays retry badge "Réessai: 3×" with default attempts', () => {
-    render(
+    renderWithCapabilities(
       <WorkflowStepNode
         {...makeProps({
           retry_enabled: true,
@@ -108,7 +119,7 @@ describe('WorkflowStepNode', () => {
   });
 
   it('handles retry_max_attempts = 0 by using default value 3', () => {
-    render(
+    renderWithCapabilities(
       <WorkflowStepNode
         {...makeProps({
           retry_enabled: true,
@@ -121,19 +132,19 @@ describe('WorkflowStepNode', () => {
   });
 
   it('does not display retry badge when retry is disabled', () => {
-    render(<WorkflowStepNode {...makeProps({ retry_enabled: false })} />);
+    renderWithCapabilities(<WorkflowStepNode {...makeProps({ retry_enabled: false })} />);
     expect(screen.queryByText(/Réessai:/)).not.toBeInTheDocument();
   });
 
   it('renders three handles (input, success, error)', () => {
-    render(<WorkflowStepNode {...makeProps()} />);
+    renderWithCapabilities(<WorkflowStepNode {...makeProps()} />);
     expect(screen.getByTestId('handle-input')).toBeInTheDocument();
     expect(screen.getByTestId('handle-success')).toBeInTheDocument();
     expect(screen.getByTestId('handle-error')).toBeInTheDocument();
   });
 
   it('displays validation error message', () => {
-    render(
+    renderWithCapabilities(
       <WorkflowStepNode
         {...makeProps({
           validationStatus: 'error',
@@ -147,7 +158,7 @@ describe('WorkflowStepNode', () => {
   });
 
   it('does not display validation message when null', () => {
-    render(<WorkflowStepNode {...makeProps({ validationMessage: null })} />);
+    renderWithCapabilities(<WorkflowStepNode {...makeProps({ validationMessage: null })} />);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
@@ -157,7 +168,7 @@ describe('WorkflowStepNode', () => {
       // Note: Ant Design Tooltip renders title content in the DOM.
       // The tooltip content is rendered as part of the component tree.
       // We test the node rendering which includes the data for tooltip.
-      render(
+      renderWithCapabilities(
         <WorkflowStepNode
           {...makeProps({
             on_success_step_id: 'step-2',
@@ -170,7 +181,7 @@ describe('WorkflowStepNode', () => {
     });
 
     it('renders node with exit path data available for tooltip', () => {
-      render(
+      renderWithCapabilities(
         <WorkflowStepNode
           {...makeProps({
             on_success_step_id: null,
@@ -182,7 +193,7 @@ describe('WorkflowStepNode', () => {
     });
 
     it('preserves retry tooltip when both retry and exit paths are set', () => {
-      render(
+      renderWithCapabilities(
         <WorkflowStepNode
           {...makeProps({
             retry_enabled: true,
@@ -202,7 +213,7 @@ describe('WorkflowStepNode', () => {
   // Story 19.2: Execution status tooltip
   describe('execution status tooltip (Story 19.2)', () => {
     it('AC10: renders node with executionStatus data', () => {
-      render(
+      renderWithCapabilities(
         <WorkflowStepNode
           {...makeProps({
             executionStatus: 'COMPLETED',
@@ -215,7 +226,7 @@ describe('WorkflowStepNode', () => {
     });
 
     it('AC10: renders node with RUNNING status', () => {
-      render(
+      renderWithCapabilities(
         <WorkflowStepNode
           {...makeProps({
             executionStatus: 'RUNNING',
@@ -227,7 +238,7 @@ describe('WorkflowStepNode', () => {
     });
 
     it('AC10: renders node with PENDING status (no duration)', () => {
-      render(
+      renderWithCapabilities(
         <WorkflowStepNode
           {...makeProps({
             executionStatus: 'PENDING',
@@ -241,7 +252,7 @@ describe('WorkflowStepNode', () => {
   // Story 18.3, AC4: Real action name display
   describe('action name display (Story 18.3)', () => {
     it('displays real action_name "Apply Oracle Patch"', () => {
-      render(
+      renderWithCapabilities(
         <WorkflowStepNode
           {...makeProps({ action_name: 'Apply Oracle Patch', action_id: 12 })}
         />,
@@ -251,7 +262,7 @@ describe('WorkflowStepNode', () => {
     });
 
     it('falls back to action_name when name is null', () => {
-      render(
+      renderWithCapabilities(
         <WorkflowStepNode
           {...makeProps({ action_name: 'Backup DB', name: null })}
         />,
@@ -260,7 +271,7 @@ describe('WorkflowStepNode', () => {
     });
 
     it('displays custom name over action_name when both present', () => {
-      render(
+      renderWithCapabilities(
         <WorkflowStepNode
           {...makeProps({ action_name: 'Apply Oracle Patch', name: 'Mon étape' })}
         />,
@@ -272,7 +283,7 @@ describe('WorkflowStepNode', () => {
     });
 
     it('truncates long action names with ellipsis via CSS', () => {
-      render(
+      renderWithCapabilities(
         <WorkflowStepNode
           {...makeProps({ action_name: 'A very long action name that exceeds thirty characters easily' })}
         />,
@@ -284,17 +295,33 @@ describe('WorkflowStepNode', () => {
 
   // Story 57.16: schedule_execution step rendering
   describe('schedule_execution step (Story 57.16)', () => {
+    const mockCapabilitiesWithSchedule: CapabilitiesState = {
+      platforms: [],
+      services: [],
+      stepTypes: [
+        {
+          code: 'schedule_execution',
+          label: 'Planifier',
+          category: 'utility',
+          config_schema: {},
+          constraints: {},
+          variants: [],
+        },
+      ],
+    };
+
     it('affiche le label "Planifier" pour schedule_execution', () => {
-      render(
+      renderWithCapabilities(
         <WorkflowStepNode
           {...makeProps({ step_type: 'schedule_execution', name: 'Mon step' })}
         />,
+        mockCapabilitiesWithSchedule,
       );
       expect(screen.getByText('Planifier')).toBeInTheDocument();
     });
 
     it('utilise le nom du step pour le titre principal', () => {
-      render(
+      renderWithCapabilities(
         <WorkflowStepNode
           {...makeProps({ step_type: 'schedule_execution', name: 'Planifier l\'app' })}
         />,
@@ -303,7 +330,7 @@ describe('WorkflowStepNode', () => {
     });
 
     it('utilise action_name comme fallback si name est null', () => {
-      render(
+      renderWithCapabilities(
         <WorkflowStepNode
           {...makeProps({ step_type: 'schedule_execution', name: null, action_name: 'Deploy App' })}
         />,
@@ -312,7 +339,7 @@ describe('WorkflowStepNode', () => {
     });
 
     it('affiche "Planifier une exécution" si name et action_name sont null', () => {
-      render(
+      renderWithCapabilities(
         <WorkflowStepNode
           {...makeProps({ step_type: 'schedule_execution', name: null, action_name: undefined })}
         />,
@@ -321,7 +348,7 @@ describe('WorkflowStepNode', () => {
     });
 
     it('affiche le badge schedule_source "Paramètre utilisateur" pour source=parameter', () => {
-      render(
+      renderWithCapabilities(
         <WorkflowStepNode
           {...makeProps({
             step_type: 'schedule_execution',
@@ -334,7 +361,7 @@ describe('WorkflowStepNode', () => {
     });
 
     it('affiche le badge offset pour source=fixed_offset', () => {
-      render(
+      renderWithCapabilities(
         <WorkflowStepNode
           {...makeProps({
             step_type: 'schedule_execution',
@@ -347,7 +374,7 @@ describe('WorkflowStepNode', () => {
     });
 
     it('affiche le badge "Récurrent" pour source=recurring', () => {
-      render(
+      renderWithCapabilities(
         <WorkflowStepNode
           {...makeProps({
             step_type: 'schedule_execution',
@@ -363,7 +390,7 @@ describe('WorkflowStepNode', () => {
     });
 
     it('n\'affiche pas de badge quand schedule_config est null', () => {
-      render(
+      renderWithCapabilities(
         <WorkflowStepNode
           {...makeProps({ step_type: 'schedule_execution', name: null, schedule_config: null })}
         />,
@@ -375,7 +402,7 @@ describe('WorkflowStepNode', () => {
 
   // Story 83-11: WorkflowStepNode — labels et badge de gate dérivés du backend
   describe('Story 83-11: gate labels dérivés des capabilities', () => {
-    const mockCapabilitiesWithGates = {
+    const mockCapabilitiesWithGates: CapabilitiesState = {
       platforms: [],
       services: [],
       stepTypes: [
@@ -394,12 +421,11 @@ describe('WorkflowStepNode', () => {
     };
 
     it('affiche_le_variant_label_maintenance_window_depuis_capabilities', () => {
-      mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithGates, loading: false, error: null });
-
-      render(
+      renderWithCapabilities(
         <WorkflowStepNode
           {...makeProps({ step_type: 'gate', gate_type: 'maintenance_window', name: null })}
         />,
+        mockCapabilitiesWithGates,
       );
 
       // Doit apparaître au moins 2 fois : une fois comme titre, une fois comme badge
@@ -407,12 +433,11 @@ describe('WorkflowStepNode', () => {
     });
 
     it('affiche_le_variant_label_approval_depuis_capabilities', () => {
-      mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithGates, loading: false, error: null });
-
-      render(
+      renderWithCapabilities(
         <WorkflowStepNode
           {...makeProps({ step_type: 'gate', gate_type: 'approval', name: null })}
         />,
+        mockCapabilitiesWithGates,
       );
 
       // Doit apparaître au moins 2 fois : une fois comme titre, une fois comme badge
@@ -420,12 +445,11 @@ describe('WorkflowStepNode', () => {
     });
 
     it('gate_type_inconnu_fallback_gate', () => {
-      mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithGates, loading: false, error: null });
-
-      render(
+      renderWithCapabilities(
         <WorkflowStepNode
           {...makeProps({ step_type: 'gate', gate_type: 'futur_gate', name: null })}
         />,
+        mockCapabilitiesWithGates,
       );
 
       expect(screen.getByText('Gate')).toBeInTheDocument();
@@ -433,25 +457,24 @@ describe('WorkflowStepNode', () => {
     });
 
     it('capabilities_null_gate_fallback', () => {
-      mockUseCapabilities.mockReturnValue({ capabilities: null, loading: false, error: null });
-
-      render(
+      renderWithCapabilities(
         <WorkflowStepNode
           {...makeProps({ step_type: 'gate', gate_type: 'approval', name: null })}
         />,
+        null,
       );
 
+      // Avec capabilities=null : titre fallback 'Gate' (hardcodé), badge = code brut 'gate'
       expect(screen.getByText('Gate')).toBeInTheDocument();
-      expect(screen.getByText('Attendre')).toBeInTheDocument();
+      expect(screen.getByText('gate')).toBeInTheDocument();
     });
 
     it('gate_name_utilisateur_prioritaire_sur_variant', () => {
-      mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithGates, loading: false, error: null });
-
-      render(
+      renderWithCapabilities(
         <WorkflowStepNode
           {...makeProps({ step_type: 'gate', gate_type: 'approval', name: 'Mon approbation' })}
         />,
+        mockCapabilitiesWithGates,
       );
 
       expect(screen.getByText('Mon approbation')).toBeInTheDocument();
@@ -459,12 +482,11 @@ describe('WorkflowStepNode', () => {
     });
 
     it('gate_type_null_fallback_gate', () => {
-      mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilitiesWithGates, loading: false, error: null });
-
-      render(
+      renderWithCapabilities(
         <WorkflowStepNode
           {...makeProps({ step_type: 'gate', gate_type: null, name: null })}
         />,
+        mockCapabilitiesWithGates,
       );
 
       // gate_type null (step gate nouvellement créé) → fallback titre 'Gate', badge 'Attendre'
@@ -475,7 +497,7 @@ describe('WorkflowStepNode', () => {
 
   // Story 82.8: WorkflowStepNode — labels service depuis capabilities
   describe('Story 82.8: WorkflowStepNode service_call labels depuis capabilities', () => {
-    const mockCapabilities = {
+    const mockCapabilities: CapabilitiesState = {
       platforms: [],
       services: [
         {
@@ -502,9 +524,7 @@ describe('WorkflowStepNode', () => {
     };
 
     it('T6.4 — step service_call avec capabilities mock → label intégration = display_name depuis capabilities', () => {
-      mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilities, loading: false, error: null });
-
-      render(
+      renderWithCapabilities(
         <WorkflowStepNode
           {...makeProps({
             step_type: 'service_call',
@@ -513,6 +533,7 @@ describe('WorkflowStepNode', () => {
             name: null,
           })}
         />,
+        mockCapabilities,
       );
 
       // display_name 'ServiceNow' doit apparaître dans le primaryTitle
@@ -520,9 +541,7 @@ describe('WorkflowStepNode', () => {
     });
 
     it('T6.5 — step service_call avec capabilities mock → label opération depuis operations[]', () => {
-      mockUseCapabilities.mockReturnValue({ capabilities: mockCapabilities, loading: false, error: null });
-
-      render(
+      renderWithCapabilities(
         <WorkflowStepNode
           {...makeProps({
             step_type: 'service_call',
@@ -531,6 +550,7 @@ describe('WorkflowStepNode', () => {
             name: null,
           })}
         />,
+        mockCapabilities,
       );
 
       // 'Créer un change' est le label de l'opération — pas le code brut 'create_change'
@@ -539,9 +559,7 @@ describe('WorkflowStepNode', () => {
     });
 
     it('T6.6 — capabilities null → label intégration = code brut (pas de fallback INTEGRATION_LABELS)', () => {
-      mockUseCapabilities.mockReturnValue({ capabilities: null, loading: false, error: null });
-
-      render(
+      renderWithCapabilities(
         <WorkflowStepNode
           {...makeProps({
             step_type: 'service_call',
@@ -550,6 +568,7 @@ describe('WorkflowStepNode', () => {
             name: null,
           })}
         />,
+        null,
       );
 
       // Avec capabilities null :

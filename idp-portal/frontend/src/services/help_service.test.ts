@@ -104,5 +104,29 @@ describe('help_service', () => {
         markdown: '',
       });
     });
+
+    // ERR-FE-02 tests
+    it('logs console.warn when apiFetchRaw throws', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      vi.mocked(apiClient.apiFetchRaw).mockRejectedValue(new Error('API error'));
+
+      await getHelpContent('test-topic');
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        'help_service: failed to fetch help content for topic',
+        'test-topic',
+        expect.any(Error)
+      );
+      warnSpy.mockRestore();
+    });
+
+    it('returns fallback object after error even when console.warn is called', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      vi.mocked(apiClient.apiFetchRaw).mockRejectedValue(new Error('timeout'));
+
+      const result = await getHelpContent('my-topic');
+
+      expect(result).toEqual({ topic_id: 'my-topic', short: '', markdown: '' });
+    });
   });
 });

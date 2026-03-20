@@ -14,6 +14,7 @@ import structlog
 from celery import shared_task  # type: ignore[import-untyped]
 from celery.exceptions import SoftTimeLimitExceeded  # type: ignore[import-untyped]
 from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
 
 from executions.models import (
@@ -66,40 +67,44 @@ def _mark_execution_polling_exhausted(
         execution = Execution.objects.get(id=execution_id)
         terminal_statuses = {ExecutionStatus.COMPLETED, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED}
 
-        old_status = execution.status
-        if execution.status not in terminal_statuses:
-            execution.status = ExecutionStatus.FAILED
-            execution.completed_at = timezone.now()
-            execution.save()
+        with transaction.atomic():
+            old_status = Execution.objects.filter(id=execution_id).values_list('status', flat=True).first()
+            updated = Execution.objects.filter(
+                id=execution_id,
+            ).exclude(
+                status__in=terminal_statuses,
+            ).update(
+                status=ExecutionStatus.FAILED,
+                completed_at=timezone.now(),
+            )
+            if updated > 0:
+                ExecutionStep.objects.filter(
+                    execution_id=execution_id,
+                    platform_job_id=platform_job_id,
+                ).exclude(
+                    status__in={ExecutionStepStatus.COMPLETED, ExecutionStepStatus.FAILED},
+                ).update(
+                    status=ExecutionStepStatus.FAILED,
+                    error_message=f"Polling exhausted after {retry_count} retries: {error}",
+                    completed_at=timezone.now(),
+                )
 
-        # Update the platform step with error
-        platform_step = ExecutionStep.objects.filter(
-            execution_id=execution_id,
-            platform_job_id=platform_job_id,
-        ).first()
-        if platform_step and platform_step.status not in {
-            ExecutionStepStatus.COMPLETED, ExecutionStepStatus.FAILED
-        }:
-            platform_step.status = ExecutionStepStatus.FAILED
-            platform_step.error_message = f"Polling exhausted after {retry_count} retries: {error}"
-            platform_step.completed_at = timezone.now()
-            platform_step.save()
-
-        changes = sanitize_audit_changes({'status': {'old': old_status, 'new': ExecutionStatus.FAILED}})
-        AuditService.create_entry(
-            user_id=str(execution.user_id),
-            action_type=AuditActionType.EXECUTION_POLLING_EXHAUSTED,
-            entity_type=AuditEntityType.EXECUTION,
-            entity_id=execution_id,
-            details={
-                'platform_job_id': platform_job_id,
-                'retry_count': retry_count,
-                'max_retries': MAX_POLLING_RETRIES,
-                'last_error': error,
-                'changes': changes,
-            },
-            correlation_id=correlation_id,
-        )
+        if updated > 0:
+            changes = sanitize_audit_changes({'status': {'old': old_status, 'new': ExecutionStatus.FAILED}})
+            AuditService.create_entry(
+                user_id=str(execution.user_id),
+                action_type=AuditActionType.EXECUTION_POLLING_EXHAUSTED,
+                entity_type=AuditEntityType.EXECUTION,
+                entity_id=execution_id,
+                details={
+                    'platform_job_id': platform_job_id,
+                    'retry_count': retry_count,
+                    'max_retries': MAX_POLLING_RETRIES,
+                    'last_error': error,
+                    'changes': changes,
+                },
+                correlation_id=correlation_id,
+            )
     except Execution.DoesNotExist:
         logger.warning(
             "polling_exhausted_execution_not_found",
@@ -475,18 +480,29 @@ def poll_platform_job_status(
         raise
 
     except Exception as e:  # noqa: BLE001 — resilience-boundary: adapter error logged, polling returns error outcome
-        logger.error(
-            "poll_platform_job_status_adapter_error",
-            execution_id=execution_id,
-            platform_job_id=platform_job_id,
-            platform_type=platform_type,
-            error=str(e),
-            error_type=type(e).__name__,
-            retry_count=retry_count,
-            max_retries=MAX_POLLING_RETRIES,
-            correlation_id=correlation_id,
-            exc_info=True,
-        )
+        from core.exceptions import AdapterTimeoutError  # noqa: PLC0415
+        if isinstance(e, AdapterTimeoutError):
+            logger.error(
+                "poll_platform_job_adapter_timeout",
+                adapter_type=e.details.get("adapter_type"),
+                execution_id=execution_id,
+                platform_job_id=platform_job_id,
+                retry_count=retry_count,
+                correlation_id=correlation_id,
+            )
+        else:
+            logger.error(
+                "poll_platform_job_status_adapter_error",
+                execution_id=execution_id,
+                platform_job_id=platform_job_id,
+                platform_type=platform_type,
+                error=str(e),
+                error_type=type(e).__name__,
+                retry_count=retry_count,
+                max_retries=MAX_POLLING_RETRIES,
+                correlation_id=correlation_id,
+                exc_info=True,
+            )
         # Story 30.7 (RACE-1): Check max retries before re-scheduling
         if retry_count >= MAX_POLLING_RETRIES:
             _tasks._mark_execution_polling_exhausted(

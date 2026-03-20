@@ -15,19 +15,11 @@ import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Badge, Divider, Tag, Tooltip, theme } from 'antd';
 import { CheckCircleOutlined, CloseCircleOutlined, HourglassOutlined, LoadingOutlined, MinusCircleOutlined } from '@ant-design/icons';
 import type { WorkflowStepType, ScheduleStepConfig } from '../../types/api';
-import { useCapabilities } from '../../hooks/useCapabilities';
+import { useCapabilitiesContext } from '../../contexts/CapabilitiesContext';
 
 // Story 57.13: Color codes per step type (UI concern, non dérivable du backend)
 // Story 84.3 (AC4/T6.4): type adapté en Partial<Record<string, string>> pour AC7
-const STEP_TYPE_COLORS: Partial<Record<string, string>> = {
-  platform:           '#1677ff',  // bleu Ant Design Primary
-  service_call:       '#fa8c16',  // orange
-  evaluation:         '#722ed1',  // violet
-  gate:               '#faad14',  // ambre/jaune
-  http_request:       '#13c2c2',  // cyan
-  schedule_execution: '#4f46e5',  // indigo (Story 57.16)
-  parallel_group:     '#52c41a',  // vert (deprecated, rétro-compat)
-};
+// Story 88.9 (A11Y-FE-02): STEP_TYPE_COLORS déplacé dans le composant pour accéder aux tokens sémantiques antd
 
 // Story 84.3 (AC4/W2): STEP_TYPE_LABELS supprimé — labels dérivés de capabilities.stepTypes via useCapabilities()
 // Le badge label est calculé dans stepTypeBadgeLabel (useMemo) ci-dessous.
@@ -101,9 +93,31 @@ export interface WorkflowStepNodeData {
 const WorkflowStepNode: FC<NodeProps> = ({ data, selected }) => {
   const { token } = theme.useToken();
   const nodeData = data as unknown as WorkflowStepNodeData;
-  const { capabilities } = useCapabilities();
+  const capabilities = useCapabilitiesContext();
 
   const stepType: WorkflowStepType = nodeData.step_type ?? 'platform';
+
+  // Story 88.9 (A11Y-FE-02): Déplacé ici pour accéder aux tokens sémantiques antd
+  // Couleurs avec équivalent sémantique antd migrées ; hex conservés pour types sans équivalent
+  const STEP_TYPE_COLORS = useMemo((): Partial<Record<string, string>> => ({
+    platform:           token.colorPrimary,   // bleu Ant Design Primary (migré)
+    service_call:       '#fa8c16',            // orange — pas d'équivalent sémantique exact
+    evaluation:         '#722ed1',            // violet — pas d'équivalent sémantique
+    gate:               '#faad14',            // ambre/jaune — pas d'équivalent sémantique
+    http_request:       '#13c2c2',            // cyan — pas d'équivalent sémantique
+    schedule_execution: '#4f46e5',            // indigo — pas d'équivalent sémantique (Story 57.16)
+    parallel_group:     token.colorSuccess,   // vert (deprecated, rétro-compat) (migré)
+  }), [token]);
+
+  // Story 88.9 (A11Y-FE-02): Statuts d'exécution migrés vers tokens sémantiques
+  const executionBorderColors = useMemo((): Record<string, string> => ({
+    RUNNING:   token.colorWarning,
+    COMPLETED: token.colorSuccessActive,
+    FAILED:    token.colorErrorActive,
+    SKIPPED:   token.colorTextDisabled,
+    PENDING:   token.colorBorderSecondary,
+    WAITING:   token.colorWarningActive,
+  }), [token]);
 
   // Story 57.13: Primary title for non-platform steps
   const primaryTitle = useMemo(() => {
@@ -150,23 +164,14 @@ const WorkflowStepNode: FC<NodeProps> = ({ data, selected }) => {
     return capabilities?.stepTypes?.find((s) => s.code === stepType)?.label ?? stepType;
   }, [stepType, capabilities, nodeData.gate_type]);
 
-  // Execution status colors — subtle, professional palette
-  const executionBorderColors: Record<string, string> = {
-    RUNNING: '#fa8c16',
-    COMPLETED: '#389e0d', // Slightly muted green (ant design green-7)
-    FAILED: '#cf1322',    // Slightly muted red (ant design red-7)
-    SKIPPED: '#8c8c8c',
-    PENDING: token.colorBorderSecondary,
-    WAITING: '#d46b08',   // Story 58.3: orange foncé — en attente d'approbation (gate)
-  };
 
   const borderColor =
     nodeData.executionStatus && nodeData.executionStatus !== 'PENDING'
       ? executionBorderColors[nodeData.executionStatus] ?? token.colorBorderSecondary
     : nodeData.validationStatus === 'error'
-      ? '#ff4d4f'
+      ? token.colorError
       : nodeData.validationStatus === 'warning'
-        ? '#fa8c16'
+        ? token.colorWarning
         : selected
           ? token.colorPrimary
           : token.colorBorderSecondary;
@@ -174,7 +179,7 @@ const WorkflowStepNode: FC<NodeProps> = ({ data, selected }) => {
   // Subtle 2px border for all states, no heavy glow
   const borderWidth = 2;
   const boxShadowNode = nodeData.executionStatus === 'RUNNING'
-    ? '0 0 6px #fa8c1640'
+    ? `0 0 6px ${token.colorWarning}40`
     : selected
       ? `0 0 0 2px ${token.colorPrimary}40`
       : token.boxShadowTertiary;
@@ -215,11 +220,11 @@ const WorkflowStepNode: FC<NodeProps> = ({ data, selected }) => {
           <>
             <div style={{ marginBottom: 4, fontWeight: 600 }}>{primaryTitle}</div>
             <div>
-              <CheckCircleOutlined style={{ color: '#52c41a', marginRight: 4 }} />
+              <CheckCircleOutlined style={{ color: token.colorSuccess, marginRight: 4 }} />
               Succès → {nodeData.on_success_step_name || nodeData.on_success_step_id || 'Fin'}
             </div>
             <div>
-              <CloseCircleOutlined style={{ color: '#ff4d4f', marginRight: 4 }} />
+              <CloseCircleOutlined style={{ color: token.colorError, marginRight: 4 }} />
               Erreur → {nodeData.on_error_step_name || nodeData.on_error_step_id || 'Fin'}
             </div>
           </>
@@ -235,7 +240,7 @@ const WorkflowStepNode: FC<NodeProps> = ({ data, selected }) => {
         )}
       </div>
     );
-  }, [nodeData, primaryTitle, stepType]);
+  }, [nodeData, primaryTitle, stepType, token]);
 
   return (
     <Tooltip title={tooltipContent} placement="top">
@@ -264,7 +269,7 @@ const WorkflowStepNode: FC<NodeProps> = ({ data, selected }) => {
 
         {/* Story 57.13: Step type badge — Story 83-11: badge label dérivé du variant de gate */}
         <Tag
-          color={STEP_TYPE_COLORS[stepType] ?? '#8c8c8c'}
+          color={STEP_TYPE_COLORS[stepType] ?? token.colorTextDisabled}
           style={{ fontSize: 10, padding: '0 4px', marginBottom: 4, display: 'inline-block', lineHeight: '16px' }}
         >
           {stepTypeBadgeLabel}
@@ -296,19 +301,19 @@ const WorkflowStepNode: FC<NodeProps> = ({ data, selected }) => {
 
         {/* Execution status icon — small, top-right */}
         {nodeData.executionStatus === 'COMPLETED' && (
-          <CheckCircleOutlined style={{ position: 'absolute', top: 8, right: 8, color: '#389e0d', fontSize: 13 }} />
+          <CheckCircleOutlined style={{ position: 'absolute', top: 8, right: 8, color: token.colorSuccessActive, fontSize: 13 }} />
         )}
         {nodeData.executionStatus === 'FAILED' && (
-          <CloseCircleOutlined style={{ position: 'absolute', top: 8, right: 8, color: '#cf1322', fontSize: 13 }} />
+          <CloseCircleOutlined style={{ position: 'absolute', top: 8, right: 8, color: token.colorErrorActive, fontSize: 13 }} />
         )}
         {nodeData.executionStatus === 'RUNNING' && (
-          <LoadingOutlined spin style={{ position: 'absolute', top: 8, right: 8, color: '#fa8c16', fontSize: 13 }} />
+          <LoadingOutlined spin style={{ position: 'absolute', top: 8, right: 8, color: token.colorWarning, fontSize: 13 }} />
         )}
         {nodeData.executionStatus === 'SKIPPED' && (
-          <MinusCircleOutlined style={{ position: 'absolute', top: 8, right: 8, color: '#8c8c8c', fontSize: 13 }} />
+          <MinusCircleOutlined style={{ position: 'absolute', top: 8, right: 8, color: token.colorTextDisabled, fontSize: 13 }} />
         )}
         {nodeData.executionStatus === 'WAITING' && (
-          <HourglassOutlined style={{ position: 'absolute', top: 8, right: 8, color: '#d46b08', fontSize: 13 }} />
+          <HourglassOutlined style={{ position: 'absolute', top: 8, right: 8, color: token.colorWarningActive, fontSize: 13 }} />
         )}
 
         {/* Story 16.6, AC3: Retry badge visible on the node (platform only) */}
@@ -329,7 +334,7 @@ const WorkflowStepNode: FC<NodeProps> = ({ data, selected }) => {
           <div
             style={{
               fontSize: 10,
-              color: nodeData.validationStatus === 'error' ? '#ff4d4f' : '#fa8c16',
+              color: nodeData.validationStatus === 'error' ? token.colorError : token.colorWarning,
               marginTop: 4,
             }}
             role="alert"
@@ -342,14 +347,14 @@ const WorkflowStepNode: FC<NodeProps> = ({ data, selected }) => {
           type="source"
           position={Position.Bottom}
           id="success"
-          style={{ left: '30%', background: '#52c41a' }}
+          style={{ left: '30%', background: token.colorSuccess }}
           aria-label="Sortie succès"
         />
         <Handle
           type="source"
           position={Position.Bottom}
           id="error"
-          style={{ left: '70%', background: '#ff4d4f' }}
+          style={{ left: '70%', background: token.colorError }}
           aria-label="Sortie erreur"
         />
       </div>

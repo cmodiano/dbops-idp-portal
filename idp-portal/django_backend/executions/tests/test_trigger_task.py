@@ -393,3 +393,125 @@ class TestTriggerFailurePropagatesIntegrationError:
         # COMPLETED ne doit pas être écrasé par INTEGRATION_ERROR
         execution.refresh_from_db()
         assert execution.status == ExecutionStatus.COMPLETED
+
+
+# ---------------------------------------------------------------------------
+# Story 88-6 — Tests directs du helper _handle_trigger_error (SMELL-BE-02)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestHandleTriggerErrorHelper:
+    """Tests directs de _handle_trigger_error (story 88-6, AC #3)."""
+
+    def test_handle_trigger_error_marks_step_failed_and_execution_integration_error(self):
+        """Cas nominal : step FAILED + execution INTEGRATION_ERROR."""
+        from executions.tasks.trigger import _handle_trigger_error
+
+        execution = ExecutionFactory.create(status=ExecutionStatus.RUNNING)
+        step = ExecutionStepFactory.create(
+            execution=execution, status=ExecutionStepStatus.RUNNING,
+        )
+
+        _handle_trigger_error(
+            exc=RuntimeError("test error"),
+            error_type="RuntimeError",
+            error_message="RuntimeError: test error",
+            execution_step=step,
+            execution_id=execution.id,
+            correlation_id="test-corr-helper",
+            include_audit=False,
+        )
+
+        step.refresh_from_db()
+        assert step.status == ExecutionStepStatus.FAILED
+        assert step.error_message == "RuntimeError: test error"
+        assert step.completed_at is not None
+
+        execution.refresh_from_db()
+        assert execution.status == ExecutionStatus.INTEGRATION_ERROR
+
+    def test_handle_trigger_error_does_not_overwrite_terminal_execution_status(self):
+        """Exécution déjà en statut terminal → statut non écrasé par le helper."""
+        from executions.tasks.trigger import _handle_trigger_error
+
+        execution = ExecutionFactory.create(status=ExecutionStatus.COMPLETED)
+        step = ExecutionStepFactory.create(
+            execution=execution, status=ExecutionStepStatus.RUNNING,
+        )
+
+        _handle_trigger_error(
+            exc=RuntimeError("late error"),
+            error_type="RuntimeError",
+            error_message="RuntimeError: late error",
+            execution_step=step,
+            execution_id=execution.id,
+            correlation_id="test-corr-terminal-helper",
+            include_audit=False,
+        )
+
+        # Step doit être FAILED même si execution était terminale
+        step.refresh_from_db()
+        assert step.status == ExecutionStepStatus.FAILED
+
+        # Execution COMPLETED ne doit pas être écrasée
+        execution.refresh_from_db()
+        assert execution.status == ExecutionStatus.COMPLETED
+
+    @patch("core.services.AuditService.create_entry")
+    def test_handle_trigger_error_with_audit_creates_audit_entry(self, mock_audit):
+        """include_audit=True → AuditService.create_entry appelé avec les détails corrects."""
+        from executions.tasks.trigger import _handle_trigger_error
+        from core.models import AuditActionType, AuditEntityType
+
+        execution = ExecutionFactory.create(status=ExecutionStatus.RUNNING)
+        step = ExecutionStepFactory.create(
+            execution=execution, status=ExecutionStepStatus.RUNNING,
+        )
+        exc = RuntimeError("adapter failure")
+
+        _handle_trigger_error(
+            exc=exc,
+            error_type="RuntimeError",
+            error_message="RuntimeError: adapter failure",
+            execution_step=step,
+            execution_id=execution.id,
+            correlation_id="test-corr-audit-helper",
+            include_audit=True,
+            step_id=step.id,
+            adapter="test_adapter",
+        )
+
+        mock_audit.assert_called_once()
+        call_kwargs = mock_audit.call_args.kwargs
+        assert call_kwargs["action_type"] == AuditActionType.EXECUTION_INTEGRATION_ERROR
+        assert call_kwargs["entity_type"] == AuditEntityType.EXECUTION
+        assert call_kwargs["entity_id"] == execution.id
+        assert call_kwargs["details"]["error_type"] == "RuntimeError"
+        assert "adapter failure" in call_kwargs["details"]["error"]
+        assert call_kwargs["details"]["step_id"] == step.id
+        assert call_kwargs["details"]["adapter"] == "test_adapter"
+
+    @patch("core.services.AuditService.create_entry")
+    def test_handle_trigger_error_audit_skipped_for_terminal_execution(self, mock_audit):
+        """include_audit=True mais execution déjà terminale → audit NON créé."""
+        from executions.tasks.trigger import _handle_trigger_error
+
+        execution = ExecutionFactory.create(status=ExecutionStatus.COMPLETED)
+        step = ExecutionStepFactory.create(
+            execution=execution, status=ExecutionStepStatus.RUNNING,
+        )
+
+        _handle_trigger_error(
+            exc=RuntimeError("late failure"),
+            error_type="RuntimeError",
+            error_message="RuntimeError: late failure",
+            execution_step=step,
+            execution_id=execution.id,
+            correlation_id="test-corr-terminal-audit",
+            include_audit=True,
+            step_id=step.id,
+            adapter="test_adapter",
+        )
+
+        # Audit ne doit pas être créé si l'execution était déjà terminale
+        mock_audit.assert_not_called()

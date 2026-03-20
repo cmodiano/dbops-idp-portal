@@ -207,11 +207,12 @@ def make_workflow(name, steps=None):
     )
 
 
-def make_action_catalog(name):
+def make_action_catalog(name, platform='AAP'):
     """Créer une Action de type action pour les tests."""
     return Action.objects.create(
         name=name,
         item_type=ActionItemType.ACTION,
+        platform=platform,
     )
 
 
@@ -359,7 +360,7 @@ class TestGetStepOutputSchema:
         assert response.data['schema'] is None
 
     def test_step_platform_action_does_not_exist_falls_back_to_aap_convention(self):
-        """AC1 + Tâche 1 subtask: Action.DoesNotExist → fallback convention AAP."""
+        """AC1 + Tâche 1 subtask: Action.DoesNotExist → schema null (pas d'action pour résoudre la plateforme)."""
         OutputSchema.objects.create(
             name='aap-standard',
             schema_type=SchemaType.PLATFORM_CONVENTION,
@@ -384,13 +385,11 @@ class TestGetStepOutputSchema:
         response = self.client.get(url)
         assert response.status_code == 200
         assert response.data['step_id'] == 'step-aap'
-        assert response.data['schema'] is not None
-        field_names = [f['name'] for f in response.data['schema']['output_fields']]
-        assert 'platform_job_id' in field_names
-        assert 'job_status' in field_names
+        # Action supprimée → pas d'objet Action pour résoudre la plateforme → schema null
+        assert response.data['schema'] is None
 
     def test_step_platform_no_referenced_action_falls_back_to_aap_convention(self):
-        """Dev Notes: Step platform sans referenced_action_id → fallback convention AAP."""
+        """Dev Notes: Step platform sans referenced_action_id → schema null (pas d'action pour résoudre la plateforme)."""
         OutputSchema.objects.create(
             name='aap-standard',
             schema_type=SchemaType.PLATFORM_CONVENTION,
@@ -412,9 +411,8 @@ class TestGetStepOutputSchema:
         response = self.client.get(url)
         assert response.status_code == 200
         assert response.data['step_id'] == 'step-aap'
-        assert response.data['schema'] is not None
-        field_names = [f['name'] for f in response.data['schema']['output_fields']]
-        assert 'platform_job_id' in field_names
+        # Pas de referenced_action_id → pas d'action pour résoudre la plateforme → schema null
+        assert response.data['schema'] is None
 
 
 @pytest.mark.django_db
@@ -534,7 +532,7 @@ class TestGetAvailableVariables:
         assert response.data == []
 
     def test_available_variables_platform_no_referenced_action_falls_back_to_convention(self):
-        """Dev Notes: Step platform sans referenced_action_id → fallback convention AAP dans le résultat."""
+        """Dev Notes: Step platform sans referenced_action_id → step exclu (pas d'action pour résoudre la plateforme)."""
         OutputSchema.objects.create(
             name='aap-standard',
             schema_type=SchemaType.PLATFORM_CONVENTION,
@@ -555,7 +553,5 @@ class TestGetAvailableVariables:
         url = f'/api/v1/output-schemas/workflows/{workflow.id}/available-variables/'
         response = self.client.get(url)
         assert response.status_code == 200
-        assert len(response.data) == 1
-        assert response.data[0]['step_id'] == 'step-aap'
-        var_names = [v['name'] for v in response.data[0]['variables']]
-        assert 'platform_job_id' in var_names
+        # Pas de referenced_action_id → pas d'action pour résoudre la plateforme → step exclu
+        assert response.data == []

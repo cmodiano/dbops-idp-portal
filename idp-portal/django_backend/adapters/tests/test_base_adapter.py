@@ -164,3 +164,54 @@ class TestAttemptRemoteCancellationISP:
         full_adapter.cancel_execution.assert_called_once()
         call_args = full_adapter.cancel_execution.call_args
         assert call_args[0][0] == 'job-non-cancellable'
+
+
+# ---------------------------------------------------------------------------
+# Story 86.1: AdapterTimeoutError class tests
+# ---------------------------------------------------------------------------
+
+class TestAdapterTimeoutError:
+    """Story 86.1 — 5.1: Validate AdapterTimeoutError class."""
+
+    def test_is_subclass_of_service_unavailable_error(self) -> None:
+        """AdapterTimeoutError is subclass of ServiceUnavailableError."""
+        from core.exceptions import AdapterTimeoutError, ServiceUnavailableError
+        assert issubclass(AdapterTimeoutError, ServiceUnavailableError)
+
+    def test_code_is_adapter_timeout(self) -> None:
+        """code == 'ADAPTER_TIMEOUT'."""
+        from core.exceptions import AdapterTimeoutError
+        exc = AdapterTimeoutError(adapter_type="aap")
+        assert exc.code == "ADAPTER_TIMEOUT"
+
+    def test_details_contains_adapter_type(self) -> None:
+        """details dict contains adapter_type."""
+        from core.exceptions import AdapterTimeoutError
+        exc = AdapterTimeoutError(adapter_type="aap")
+        assert exc.details.get("adapter_type") == "aap"
+
+    def test_with_platform_job_id(self) -> None:
+        """platform_job_id is included in details when provided."""
+        from core.exceptions import AdapterTimeoutError
+        exc = AdapterTimeoutError(adapter_type="tower", platform_job_id="job-123")
+        assert exc.details.get("platform_job_id") == "job-123"
+        assert exc.details.get("adapter_type") == "tower"
+
+    def test_default_message(self) -> None:
+        """Default message is 'Adapter call timed out'."""
+        from core.exceptions import AdapterTimeoutError
+        exc = AdapterTimeoutError(adapter_type="github_actions")
+        assert exc.message == "Adapter call timed out"
+
+    def test_custom_message(self) -> None:
+        """Custom message overrides default."""
+        from core.exceptions import AdapterTimeoutError
+        exc = AdapterTimeoutError(adapter_type="azure_devops", message="Custom timeout msg")
+        assert exc.message == "Custom timeout msg"
+
+    def test_extra_details_merged(self) -> None:
+        """Additional details dict is merged."""
+        from core.exceptions import AdapterTimeoutError
+        exc = AdapterTimeoutError(adapter_type="terraform_cloud", details={"url": "https://example.com"})
+        assert exc.details.get("url") == "https://example.com"
+        assert exc.details.get("adapter_type") == "terraform_cloud"

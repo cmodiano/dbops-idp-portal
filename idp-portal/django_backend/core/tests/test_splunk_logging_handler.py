@@ -3,17 +3,19 @@ Tests for SplunkLoggingHandler — structlog sink for Splunk HEC.
 
 Story 27.8, AC8: 10+ tests covering buffer management, flush behavior,
 enrichment, thread safety, error handling, and disabled handler.
+
+Story 86.9, AC9: Tests for _dropped_count, dropped_count property, get_splunk_handler_stats().
 """
 from __future__ import annotations
 
 import json
 import logging
 import threading
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
-from core.splunk_logging_handler import SplunkLoggingHandler
+from core.splunk_logging_handler import SplunkLoggingHandler, get_splunk_handler_stats
 
 
 @pytest.fixture
@@ -147,7 +149,7 @@ class TestErrorHandling:
         assert handler._buffer.qsize() == 0
 
     def test_send_to_splunk_exception_drops_events(self, handler: SplunkLoggingHandler) -> None:
-        """Splunk unavailable: events are dropped with warning log."""
+        """Splunk unavailable: events are dropped with structlog warning."""
         events = [{"event": "test"}]
 
         # Mock SplunkAdapter.send_batch to raise exception
@@ -158,11 +160,11 @@ class TestErrorHandling:
             mock_adapter = MockAdapter.return_value
             mock_adapter.send_batch = mock_send_batch_error
 
-            with patch("core.splunk_logging_handler.logging.getLogger") as mock_get_logger:
-                mock_logger = MagicMock()
-                mock_get_logger.return_value = mock_logger
+            with patch("core.splunk_logging_handler._internal_logger") as mock_logger:
                 handler._send_to_splunk(events)
                 mock_logger.warning.assert_called_once()
+                call_args = mock_logger.warning.call_args
+                assert "splunk_events_dropped" in call_args[0][0]
 
 
 class TestEnrichment:
@@ -373,6 +375,9 @@ class TestEmitBufferFull:
             record = _make_log_record("new event")
             # Should not raise — queue.Empty is silently caught
             h.emit(record)
+            # _dropped_count must NOT be incremented when get_nowait raised Empty
+            # (no event was actually removed from the buffer)
+            assert h._dropped_count == 0
         finally:
             h.close()
 
@@ -443,3 +448,115 @@ class TestFlushQueueEmpty:
             handler.flush()
             # Should have called send with whatever was collected before Empty
             mock_send.assert_called_once()
+
+
+# ============================================================================
+# Story 86.9 — Tests AC#1, #2, #3, #4
+# ============================================================================
+
+
+class TestDroppedCount:
+    """Story 86.9 AC#1/#3: _dropped_count increments and dropped_count property."""
+
+    def test_dropped_count_increments_on_buffer_full(self) -> None:
+        """AC#1: emit() when buffer full increments _dropped_count by 1."""
+        h = SplunkLoggingHandler(
+            hec_url="https://splunk.example.com:8088",
+            hec_token="token",
+            max_buffer_size=3,
+            batch_size=1000,  # Prevent auto-flush
+        )
+        if h._timer:
+            h._timer.cancel()
+
+        try:
+            # Fill the buffer to capacity
+            for i in range(3):
+                h.emit(_make_log_record(f"event_{i}"))
+
+            assert h._buffer.qsize() == 3
+            assert h.dropped_count == 0
+
+            # Emit one more — buffer full, oldest dropped, _dropped_count += 1
+            h.emit(_make_log_record("overflow_event"))
+
+            assert h.dropped_count == 1
+        finally:
+            h.close()
+
+    def test_dropped_count_increments_on_send_failure(self) -> None:
+        """AC#1: _send_to_splunk() failure increments _dropped_count by len(events)."""
+        h = SplunkLoggingHandler(
+            hec_url="https://splunk.example.com:8088",
+            hec_token="token",
+            max_buffer_size=1000,
+            batch_size=1000,
+        )
+        if h._timer:
+            h._timer.cancel()
+
+        try:
+            for i in range(3):
+                h.emit(_make_log_record(f"event_{i}"))
+
+            assert h._buffer.qsize() == 3
+            assert h.dropped_count == 0
+
+            # Mock send_batch to raise exception
+            async def mock_send_batch_error(*args, **kwargs):
+                raise Exception("HEC unavailable")
+
+            with patch("services.splunk_service.SplunkService") as MockAdapter:
+                mock_adapter = MockAdapter.return_value
+                mock_adapter.send_batch = mock_send_batch_error
+                h.flush()
+
+            assert h.dropped_count == 3
+        finally:
+            h.close()
+
+    def test_dropped_count_property(self, handler: SplunkLoggingHandler) -> None:
+        """AC#3: dropped_count property returns same value as _dropped_count."""
+        assert handler.dropped_count == handler._dropped_count
+        handler._dropped_count = 42
+        assert handler.dropped_count == 42
+
+
+class TestGetSplunkHandlerStats:
+    """Story 86.9 AC#4: get_splunk_handler_stats() returns correct fields."""
+
+    def test_get_splunk_handler_stats_with_handler(self) -> None:
+        """AC#4: handler registered → buffer_qsize, dropped_count, enabled returned."""
+        import logging as _logging
+
+        h = SplunkLoggingHandler(
+            hec_url="https://splunk.example.com:8088",
+            hec_token="token",
+            max_buffer_size=1000,
+            batch_size=1000,
+        )
+        if h._timer:
+            h._timer.cancel()
+
+        try:
+            h.emit(_make_log_record("event_1"))
+            h.emit(_make_log_record("event_2"))
+
+            with patch.object(_logging.root, "handlers", [h]):
+                stats = get_splunk_handler_stats()
+
+            assert stats["buffer_qsize"] == 2
+            assert stats["dropped_count"] == 0
+            assert stats["enabled"] is True
+        finally:
+            h.close()
+
+    def test_get_splunk_handler_stats_no_handler(self) -> None:
+        """AC#4: no handler registered → zeros/False returned."""
+        import logging as _logging
+
+        with patch.object(_logging.root, "handlers", []):
+            with patch.object(_logging.Logger.manager, "loggerDict", {}):
+                stats = get_splunk_handler_stats()
+
+        assert stats == {"buffer_qsize": 0, "dropped_count": 0, "enabled": False}

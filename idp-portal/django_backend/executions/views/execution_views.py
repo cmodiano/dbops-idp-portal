@@ -18,7 +18,7 @@ from core.middleware import get_correlation_id, get_client_ip
 from core.throttling import ExecutionThrottle, GeneralAPIThrottle
 from core.utils import ensure_utc_isoformat
 from executions.builders.response_builder import ExecutionResponseBuilder
-from executions.models import Execution, ExecutionStep, ExecutionStatus
+from executions.models import Execution, ExecutionStep, ExecutionStatus, ExecutionStepStatus
 from executions.serializers import ExecutionSerializer, ExecutionStepSerializer
 from executions.dtos import ExecutionRequest
 from executions.services import ExecutionService
@@ -300,7 +300,7 @@ class ExecutionCancelView(APIView):
         """Return an ExecutionService instance (overridable in tests)."""
         return self._execution_service_class()
 
-    @extend_schema(tags=['executions'], summary='Annuler une exécution', responses={202: ExecutionSerializer})
+    @extend_schema(tags=['executions'], summary='Annuler une exécution', responses={200: ExecutionSerializer})
     def patch(self, request: Request, execution_id: int) -> Response:
         try:
             execution = Execution.objects.select_related("action", "user", "action__integration").prefetch_related("targets").get(id=execution_id)
@@ -318,29 +318,82 @@ class ExecutionCancelView(APIView):
                 details={"execution_id": execution_id, "current_status": execution.status},
             )
 
-        # Story 78.5: Write durable cancel command instead of inline processing
-        from executions.services.workflow_commands import WorkflowCommandService  # noqa: PLC0415
-        user_id = str(request.user.id)
-        cmd = WorkflowCommandService.write_command(
-            execution_id=execution_id,
-            command_type="cancel",
-            payload={},
-            created_by=user_id,
+        # Synchronous cancel: update status immediately so the UI reflects it.
+        # Uses CAS (Compare-And-Swap) to avoid race conditions.
+        from django.utils import timezone as tz  # noqa: PLC0415
+        previous_status = execution.status
+
+        updated = Execution.objects.filter(
+            id=execution.id,
+            status__in=[ExecutionStatus.SUBMITTED, ExecutionStatus.RUNNING],
+        ).update(
+            status=ExecutionStatus.CANCELLED,
+            completed_at=tz.now(),
         )
 
+        if updated == 0:
+            raise BadRequestError(
+                code="INVALID_STATUS",
+                message="L'exécution a changé de statut entre-temps",
+                details={"execution_id": execution_id},
+            )
+
+        # Cascade cancel child executions
+        Execution.objects.filter(
+            parent_execution_id=execution.id,
+            status__in=[ExecutionStatus.SUBMITTED, ExecutionStatus.RUNNING],
+        ).update(
+            status=ExecutionStatus.CANCELLED,
+            completed_at=tz.now(),
+        )
+
+        # Cancel pending/running/waiting steps
+        ExecutionStep.objects.filter(
+            execution_id=execution.id,
+            status__in=[ExecutionStepStatus.PENDING, ExecutionStepStatus.RUNNING, ExecutionStepStatus.WAITING],
+        ).update(
+            status=ExecutionStepStatus.FAILED,
+            completed_at=tz.now(),
+            error_message="Execution cancelled",
+        )
+
+        # Dequeue runnable steps
+        from executions.infra.work_queue import WorkQueue  # noqa: PLC0415
+        WorkQueue.delete_for_execution(execution.id)
+
+        # Mark in cancellation cache
+        from executions.cancellation_cache import mark_cancelled  # noqa: PLC0415
+        mark_cancelled(execution.id)
+
+        # Best-effort remote cancellation (AAP, etc.)
+        self._attempt_remote_cancellation(execution)
+
+        # Audit trail
+        try:
+            from core.services import AuditService  # noqa: PLC0415
+            from core.models import AuditActionType, AuditEntityType  # noqa: PLC0415
+            AuditService.create_entry(
+                user_id=str(request.user.id),
+                action_type=AuditActionType.EXECUTION_CANCELLED,
+                entity_type=AuditEntityType.EXECUTION,
+                entity_id=execution.id,
+                details={"cancelled_by": str(request.user.id), "previous_status": previous_status},
+                correlation_id=get_correlation_id(),
+            )
+        except Exception:  # noqa: BLE001
+            exec_logger.warning("cancel_audit_failed", execution_id=execution.id)
+
         exec_logger.info(
-            "execution_cancel_command_written",
+            "execution_cancelled",
             execution_id=execution_id,
-            command_id=cmd.id,
             cancelled_by=request.user.id,
-            previous_status=execution.status,
+            previous_status=previous_status,
             correlation_id=get_correlation_id(),
         )
 
-        return Response(
-            {"data": {"command_id": cmd.id, "status": "accepted"}},
-            status=202,
-        )
+        # Reload and return the updated execution
+        execution.refresh_from_db()
+        return Response({"data": ExecutionSerializer(execution).data})
 
     def _attempt_remote_cancellation(self, execution: Any) -> None:
         """Best-effort remote cancellation on execution engine.

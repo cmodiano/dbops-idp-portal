@@ -7,8 +7,16 @@ import logger from '../services/logger';
 
 // DEV MODE: Skip SAML authentication and use a mock DBOPS user
 // Enable by setting VITE_DEV_AUTH=true in .env.local or environment
-// Disabled in test mode to allow proper auth testing
-const DEV_AUTH_ENABLED = import.meta.env.VITE_DEV_AUTH === 'true' && import.meta.env.MODE !== 'test';
+// Only active in development mode (SEC-FE-01, Story 88-4)
+const DEV_AUTH_ENABLED = import.meta.env.VITE_DEV_AUTH === 'true' && import.meta.env.MODE === 'development';
+
+// Détection de misconfiguration : avertir si VITE_DEV_AUTH=true hors développement (SEC-FE-01)
+if (import.meta.env.VITE_DEV_AUTH === 'true' && import.meta.env.MODE !== 'development') {
+  logger.error('[AuthContext] VITE_DEV_AUTH=true détecté hors mode développement', {
+    mode: import.meta.env.MODE,
+    warning: 'Ce flag ne doit jamais être activé en staging ou production.',
+  });
+}
 
 const DEV_MOCK_USER: User = {
   id: 1,
