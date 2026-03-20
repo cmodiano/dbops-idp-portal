@@ -238,7 +238,7 @@ py-serializable==2.1.0
     # via cyclonedx-python-lib
 py-ubjson==0.16.1
     # via autobahn
-pyasn1==0.6.2
+pyasn1==0.6.3
     # via
     #   ldap3
     #   pyasn1-modules
@@ -253,7 +253,7 @@ pygments==2.19.2
     # via
     #   pytest
     #   rich
-pyopenssl==25.3.0
+pyopenssl==26.0.0
     # via twisted
 pyparsing==3.3.2
     # via pip-requirements-parser
@@ -380,7 +380,7 @@ tzdata==2025.3
     # via kombu
 tzlocal==5.3.1
     # via celery
-ujson==5.11.0
+ujson==5.12.0
     # via autobahn
 uritemplate==4.2.0
     # via drf-spectacular
