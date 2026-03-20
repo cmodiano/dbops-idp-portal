@@ -210,21 +210,32 @@ describe('ProfileForm', () => {
       await waitFor(() => expect(screen.getByText('Actions autorisées')).toBeInTheDocument());
       await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
       await waitFor(() => expect(mockOnSubmit).toHaveBeenCalled());
-      expect(mockOnSubmit).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action_permissions: expect.objectContaining({
-            actions_type: 'all',
-            action_ids: [],
-            tag_patterns: [],
-            environments: [],
-          }),
-          target_permissions: expect.objectContaining({
-            targets_type: 'all',
-            target_names: [],
-            target_patterns: [],
-          }),
-        })
-      );
+
+      const expectedPayload = {
+        name: 'Assurance',
+        description: 'X',
+        ad_group: 'GRP-X',
+        is_admin: false,
+        is_auditor: true,
+        action_permissions: {
+          actions_type: 'all',
+          action_ids: [] as number[],
+          tag_patterns: [] as string[],
+          environments: [] as string[],
+        },
+        target_permissions: {
+          targets_type: 'all',
+          target_names: [] as string[],
+          target_patterns: [] as string[],
+          filter_by_attribute: null,
+          exclusion_patterns: [] as string[],
+        },
+      };
+      expect(mockOnSubmit).toHaveBeenCalledWith(expectedPayload);
+
+      // Legacy helpers must not be invoked — consolidated flow uses onSubmit only
+      expect(profilesService.putProfileActions).not.toHaveBeenCalled();
+      expect(profilesService.putProfileTargets).not.toHaveBeenCalled();
     });
 
     it('shows warning when onSubmit rejects with an error message', async () => {
