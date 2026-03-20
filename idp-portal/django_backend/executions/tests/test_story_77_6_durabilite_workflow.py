@@ -163,9 +163,9 @@ class TestAC3HttpRequestMaintenanceWindowResume:
             SIMULATE_EXECUTION_FAILURE_RATE=0,
         ):
             with patch(
-                'executions.container_workflow_runtime.ContainerWorkflowRuntime._run_child_execution'
+                'executions.platform_step_executor.PlatformStepExecutor._run_child_execution'
             ) as mock_run:
-                mock_run.side_effect = lambda child_exec: None
+                mock_run.side_effect = lambda *args, **kwargs: None
                 result = resume_container_workflow_from_gate.run(
                     execution.id,
                     ['use-token'],
@@ -427,9 +427,9 @@ class TestAC2ServiceCallAfterApprovalGate:
             SIMULATE_EXECUTION_FAILURE_RATE=0,
         ):
             with patch(
-                'executions.container_workflow_runtime.ContainerWorkflowRuntime._run_child_execution'
+                'executions.platform_step_executor.PlatformStepExecutor._run_child_execution'
             ) as mock_run:
-                mock_run.side_effect = lambda child_exec: None
+                mock_run.side_effect = lambda *args, **kwargs: None
                 result = resume_container_workflow_from_gate.run(
                     execution.id,
                     ['consume-change'],

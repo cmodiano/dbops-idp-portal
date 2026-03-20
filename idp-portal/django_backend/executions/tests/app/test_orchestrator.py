@@ -25,7 +25,7 @@ def test_process_runnable_steps_empty_queue():
     with patch("executions.app.orchestrator.get_runnable_queue_depth", return_value=mock_depth), \
          patch("executions.app.orchestrator.WorkQueue.claim", return_value=[]):
         result = process_runnable_steps()
-    assert result["processed"] == 0
+    assert result["dispatched"] == 0
     assert "worker_id" in result
     assert result["runnable_queue_depth"] == 0
     assert result["runnable_expired_leases"] == 0

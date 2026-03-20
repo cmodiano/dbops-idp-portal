@@ -165,7 +165,7 @@ class TestExecutionCancelViewCoverage(TestCase):
         force_authenticate(request, user=self.user)
         view = ExecutionCancelView.as_view()
         response = view(request, execution_id=execution.id)
-        self.assertIn(response.status_code, [202, 400])  # 202 Accepted (async), 400 if transition fails
+        self.assertEqual(response.status_code, 200)
 
     def test_cancel_execution_running_attempts_remote_cancel(self):
         """Ligne 370 — statut RUNNING → _attempt_remote_cancellation."""
@@ -179,7 +179,7 @@ class TestExecutionCancelViewCoverage(TestCase):
         view = ExecutionCancelView.as_view()
         with patch.object(ExecutionCancelView, '_attempt_remote_cancellation'):
             response = view(request, execution_id=execution.id)
-        self.assertIn(response.status_code, [202, 400])
+        self.assertEqual(response.status_code, 200)
 
 
 # ─── Tests ExecutionStepsView ─────────────────────────────────────────────────
@@ -767,25 +767,25 @@ class TestExecutionCancelViewAdditional(TestCase):
         force_authenticate(request, user=no_perm)
         from executions.views.execution_views import ExecutionCancelView
         response = ExecutionCancelView.as_view()(request, execution_id=execution.id)
-        self.assertIn(response.status_code, [403, 202])
+        self.assertIn(response.status_code, [403, 200])
 
     def test_cancel_execution_update_status_raises_value_error(self):
-        """Story 78.5: Cancel writes command and returns 202 — update_status path removed."""
+        """Cancel SUBMITTED execution -> synchronous cancel returns 200."""
         execution = ExecutionFactory(action=self.action, user=self.user, status='SUBMITTED')
         request = self.rf.patch(f'/executions/{execution.id}/cancel/')
         force_authenticate(request, user=self.user)
         from executions.views.execution_views import ExecutionCancelView
         response = ExecutionCancelView.as_view()(request, execution_id=execution.id)
-        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.status_code, 200)
 
     def test_cancel_execution_update_status_returns_none(self):
-        """Story 78.5: Cancel writes command and returns 202 — update_status path removed."""
+        """Cancel SUBMITTED execution -> synchronous cancel returns 200."""
         execution = ExecutionFactory(action=self.action, user=self.user, status='SUBMITTED')
         request = self.rf.patch(f'/executions/{execution.id}/cancel/')
         force_authenticate(request, user=self.user)
         from executions.views.execution_views import ExecutionCancelView
         response = ExecutionCancelView.as_view()(request, execution_id=execution.id)
-        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.status_code, 200)
 
 
 # ─── Tests _attempt_remote_cancellation ───────────────────────────────────────

@@ -247,4 +247,4 @@ class TestProcessRunnableStepsMetrics:
             result = process_runnable_steps()
 
             assert result["runnable_queue_depth"] == 5
-            assert result["processed"] == 0
+            assert result["dispatched"] == 0

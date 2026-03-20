@@ -651,8 +651,8 @@ class TestAC3EndToEndServiceCallGateConsumer:
             SIMULATE_EXECUTION_STEP_DURATION=0,
             SIMULATE_EXECUTION_FAILURE_RATE=0,
         ):
-            with patch('executions.container_workflow_runtime.ContainerWorkflowRuntime._run_child_execution') as mock_run:
-                mock_run.side_effect = lambda child_exec: None
+            with patch('executions.platform_step_executor.PlatformStepExecutor._run_child_execution') as mock_run:
+                mock_run.side_effect = lambda *args, **kwargs: None
 
                 result = resume_container_workflow_from_gate.run(
                     execution.id,  # execution_id
